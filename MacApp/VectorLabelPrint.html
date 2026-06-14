@@ -38,6 +38,38 @@ label.lbl{font-size:10px;color:#8888a8;display:block;margin-bottom:3px}
 .cb.partial{background:#2a2a42;border-color:#6C8EF5}
 .check-tick{color:#fff;font-size:9px;line-height:1}
 .print-info{background:#252538;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:12px 14px}
+
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:#13131a;color:#e8e8f0;font-family:system-ui,sans-serif;font-size:13px}
+input,select,button,textarea{font-family:system-ui,sans-serif;font-size:12px}
+.inp{background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#e8e8f0;border-radius:4px;padding:4px 8px;outline:none;width:100%}
+.inp:focus{border-color:#6C8EF5}
+.btn{background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#8888a8;border-radius:4px;padding:4px 9px;cursor:pointer;font-size:11px;white-space:nowrap}
+.btn:hover{background:#333350}
+.btn.on{background:#6C8EF5;border-color:#6C8EF5;color:#fff}
+.tbtn{display:flex;flex-direction:column;align-items:center;gap:2px;background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#8888a8;border-radius:5px;padding:6px 0;cursor:pointer;font-size:10px;width:56px}
+.tbtn:hover{background:#333350}
+.fbtn{background:#1a1a28;border:1px solid rgba(255,255,255,0.07);color:#8888a8;border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer}
+.fbtn:hover{background:#2a2a42;color:#e8e8f0}
+.recrow{cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.05)}
+.recrow:hover td{background:rgba(108,142,245,0.06)}
+.recrow.selrow td{background:rgba(108,142,245,0.14)}
+label.lbl{font-size:10px;color:#8888a8;display:block;margin-bottom:3px}
+.sec{color:#8888a8;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;margin-top:2px}
+.fmt-btn{background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#8888a8;border-radius:3px;padding:3px 7px;cursor:pointer;font-size:12px;font-weight:700;min-width:26px}
+.fmt-btn:hover{background:#333350}
+.fmt-btn.on{background:#6C8EF5;border-color:#6C8EF5;color:#fff}
+.divider{border:none;border-top:1px solid rgba(255,255,255,0.07);margin:10px 0}
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.65);display:flex;align-items:center;justify-content:center;z-index:1000}
+.modal{background:#1a1a28;border:1px solid rgba(255,255,255,0.13);border-radius:8px;padding:24px;min-width:420px;max-width:560px;box-shadow:0 8px 40px rgba(0,0,0,0.6)}
+.modal-title{font-size:15px;font-weight:600;color:#e8e8f0;margin-bottom:16px;letter-spacing:-.2px}
+.modal-row{margin-bottom:14px}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;border-top:1px solid rgba(255,255,255,0.07);padding-top:16px}
+.tpl-card{background:#252538;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:12px 14px;cursor:pointer;display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.tpl-card:hover{background:#2d2d48;border-color:#6C8EF5}
+.tpl-card.active{border-color:#6C8EF5;background:#2a2a42}
+.tpl-preview{width:60px;height:20px;background:#fff;border:1px solid #ccc;border-radius:2px;flex-shrink:0;position:relative;overflow:hidden}
 </style>
 </head>
 <body>
@@ -489,7 +521,7 @@ function parseCSV(text){
 
 // ── Main render ───────────────────────────────────────────────────────────────
 function R(){
-  if(P.view==="editor"){renderEditor();return;}
+  if(P.view==="editor"){return;} // editor managed by initDesigner
   const t=tpl();
   document.getElementById("app").innerHTML=`
     <!-- Top bar -->
@@ -566,245 +598,898 @@ function R(){
   `;
 }
 
-// ── Editor integration ────────────────────────────────────────────────────────
+
+
+
+// ── Editor open/close ────────────────────────────────────────────────────────
 function openEditor(){
-  // Copy the active template into editor state so changes are isolated until saved
-  P._editingTpl=JSON.parse(JSON.stringify(P.templates[P.activeTpl]));
+  const tplCopy=JSON.parse(JSON.stringify(P.templates[P.activeTpl]));
   P.view="editor";
-  R();
+  initDesigner({
+    template: tplCopy,
+    records: P.records,
+    onSaveReturn: function(updatedTpl){
+      P.templates[P.activeTpl]=updatedTpl;
+      window._editorOnSave=null;
+      window._editorOnDiscard=null;
+      P.view="print";
+      R();
+    },
+    onDiscard: function(){
+      window._editorOnSave=null;
+      window._editorOnDiscard=null;
+      P.view="print";
+      R();
+    }
+  });
 }
 
-function closeEditor(save){
-  if(save&&P._editingTpl){
-    // Persist changes back to the template list
-    P.templates[P.activeTpl]=JSON.parse(JSON.stringify(P._editingTpl));
-  }
-  P._editingTpl=null;
+function closeEditor(){
+  window._editorOnSave=null;
+  window._editorOnDiscard=null;
   P.view="print";
   R();
 }
 
-function renderEditor(){
-  const app=document.getElementById("app");
+// ── Designer engine (shared) ──────────────────────────────────────────────────
+function initDesigner(opts){
+  // opts: { template, records, onSaveReturn(tpl), onDiscard }
+  // Reinitialize designer state from opts
+  const _initTpl = opts.template || {name:"Untitled",specN:"BM-32-427",objs:[]};
+  const _initRecs = opts.records || RX;
 
-  // ── Inline mini-designer ──────────────────────────────────────────────────
-  const tpl=P._editingTpl;
-  const specObj=BL.find(l=>l.n===tpl.specN)||BL[1];
-  const rec=P.records[P.previewIdx]||{};
+  // Patch S initial values
+  S.tplName = _initTpl.name || "Untitled";
+  S.spec = BL.find(l=>l.n===_initTpl.specN) || BL[1];
+  S.objs = JSON.parse(JSON.stringify(_initTpl.objs || []));
+  S.selId = null;
+  S._ef = undefined;
+  S.modal = null;
 
-  // Editor state lives on P._ed
-  if(!P._ed||P._ed.tplId!==P.activeTpl){
-    P._ed={
-      tplId:P.activeTpl,
-      objs:JSON.parse(JSON.stringify(tpl.objs)),
-      selId:null,
-      zoom:1,
-      wrap:false,
-      showFields:false,
-      snapGrid:true,
-      snapObjects:true,
-      gridSize:0.05,
-      _snapLines:[],
-      _ef:undefined,
-      recIdx:P.previewIdx,
-      history:[]
-    };
+  // Override RX for this session with the print window's records
+  // We do this by monkey-patching the designer's record array
+  // The designer uses RX directly in buildRecordTable and sample preview
+  // Simplest: just call renderDesigner() which reads S and the module-level RX
+  // For preview records in editor, we'll use opts.records via a global bridge
+
+  window._editorRecords = _initRecs;
+  window._editorOnSave = opts.onSaveReturn;
+  window._editorOnDiscard = opts.onDiscard;
+
+  // Expose renderDesigner as R for onclick handlers
+  window.R = renderDesigner;
+
+  renderDesigner();
+}
+
+const FONTS=["Helvetica Neue","Arial","Arial Narrow","Verdana","Tahoma","Courier New","Georgia","Impact"];
+const BL=[
+  {n:"BM-31-427",tw:1,th:1.5,pw:1,ph:.5,lb:'BM-31-427 — 1"×1.5"'},
+  {n:"BM-32-427",tw:1.5,th:1.5,pw:1.5,ph:.5,lb:'BM-32-427 — 1.5"×1.5"'},
+  {n:"BM-33-427",tw:4,th:1.5,pw:1.5,ph:1.5,lb:'BM-33-427 — 4"×1.5" (1.5" printable)'}
+];
+const FD=[
+  {f:"Number",c:"Number"},{f:"Cable Name",c:"Cable"},{f:"Signal",c:"Signal"},
+  {f:"Connector",c:"Connector"},{f:"Device Name",c:"Device_Name"},{f:"Device Tag",c:"Device_Tag"},
+  {f:"Socket Name",c:"Socket_Name"},{f:"Socket Tag",c:"Socket_Tag"},
+  {f:"Other Device",c:"Other_Device"},{f:"Other Socket",c:"Other_Socket"},
+  {f:"Other Connector",c:"Other_Connector"},{f:"Rack",c:"Rack"},{f:"Room",c:"Room"},
+  {f:"Rack U",c:"RackU"},{f:"Side",c:"_Side"},{f:"Cable Type",c:"Cable_Type"},{f:"Cable Length",c:"CableLength"}
+];
+const RX=[
+  {_Side:"Source",Number:"N044",Cable:"RIO 1 PRI",Signal:"LAN",Connector:"EC-6A",Device_Name:"SWITCH 6.01",Device_Tag:"SWITCH 6.01",Socket_Name:"LAN 1",Socket_Tag:"LAN 1",Other_Device:"IO 1.01",Other_Socket:"DANTE PRI",Other_Connector:"EC-6A",Rack:"",Room:"",RackU:"",Cable_Type:"---",CableLength:"Auto"},
+  {_Side:"Destination",Number:"N044",Cable:"RIO 1 PRI",Signal:"LAN",Connector:"EC-6A",Device_Name:"IO 1.01",Device_Tag:"IO 1.01",Socket_Name:"DANTE PRI",Socket_Tag:"DANTE PRI",Other_Device:"SWITCH 6.01",Other_Socket:"LAN 1",Other_Connector:"EC-6A",Rack:"RIO RACK",Room:"PORTABLE",RackU:"22",Cable_Type:"---",CableLength:"Auto"},
+  {_Side:"Source",Number:"N045",Cable:"RIO 2 PRI",Signal:"LAN",Connector:"EC-6A",Device_Name:"SWITCH 6.01",Device_Tag:"SWITCH 6.01",Socket_Name:"LAN 2",Socket_Tag:"LAN 2",Other_Device:"IO 1.02",Other_Socket:"DANTE PRI",Other_Connector:"EC-6A",Rack:"",Room:"",RackU:"",Cable_Type:"---",CableLength:"Auto"},
+  {_Side:"Destination",Number:"N045",Cable:"RIO 2 PRI",Signal:"LAN",Connector:"EC-6A",Device_Name:"IO 1.02",Device_Tag:"IO 1.02",Socket_Name:"DANTE PRI",Socket_Tag:"DANTE PRI",Other_Device:"SWITCH 6.01",Other_Socket:"LAN 2",Other_Connector:"EC-6A",Rack:"RIO RACK",Room:"PORTABLE",RackU:"16",Cable_Type:"---",CableLength:"Auto"}
+];
+
+// ── Formula engine ────────────────────────────────────────────────────────────
+function tokenize(expr){
+  const t=[];let i=0;
+  while(i<expr.length){
+    if(/\s/.test(expr[i])){i++;continue;}
+    if(expr[i]==='"'){let j=i+1,s="";while(j<expr.length&&expr[j]!=='"')s+=expr[j++];t.push({k:"s",v:s});i=j+1;continue;}
+    if(/\d/.test(expr[i])){let j=i;while(j<expr.length&&/[\d.]/.test(expr[j]))j++;t.push({k:"n",v:parseFloat(expr.slice(i,j))});i=j;continue;}
+    if(expr[i]==='&'){t.push({k:"a"});i++;continue;}
+    if(expr[i]==='<'&&expr[i+1]==='>'){t.push({k:"ne"});i+=2;continue;}
+    if(expr[i]==='='){t.push({k:"eq"});i++;continue;}
+    if(expr[i]===','){t.push({k:"cm"});i++;continue;}
+    if(expr[i]==='('){t.push({k:"lp"});i++;continue;}
+    if(expr[i]===')'){ t.push({k:"rp"});i++;continue;}
+    if(/[A-Za-z_]/.test(expr[i])){let j=i;while(j<expr.length&&/[A-Za-z0-9_ ]/.test(expr[j]))j++;t.push({k:"id",v:expr.slice(i,j).trimEnd()});i=j;continue;}
+    i++;
   }
+  return t;
+}
+function evalToks(toks,vars){
+  let p=0;const pk=()=>toks[p],cs=()=>toks[p++];
+  function rv(n){if(n in vars)return vars[n];const f=FD.find(x=>x.f.toLowerCase()===n.toLowerCase()||x.c.toLowerCase()===n.toLowerCase());return f?(vars[f.c]??""):n;}
+  function pp(){
+    const t=pk();if(!t)return"";
+    if(t.k==="s"){cs();return t.v;}
+    if(t.k==="n"){cs();return t.v;}
+    if(t.k==="id"){
+      const name=t.v;cs();
+      if(pk()?.k==="lp"){
+        cs();const args=[];
+        while(pk()&&pk().k!=="rp"){args.push(pe());if(pk()?.k==="cm")cs();}cs();
+        const fn=name.toUpperCase();
+        if(fn==="IF")return args[0]?(args[1]??""):(args[2]??"");
+        if(fn==="LEFT")return String(args[0]??"").slice(0,args[1]??1);
+        if(fn==="RIGHT"){const s=String(args[0]??"");return s.slice(s.length-(args[1]??1));}
+        if(fn==="LEN")return String(args[0]??"").length;
+        if(fn==="UPPER")return String(args[0]??"").toUpperCase();
+        if(fn==="LOWER")return String(args[0]??"").toLowerCase();
+        if(fn==="TRIM")return String(args[0]??"").trim();
+        if(fn==="MID")return String(args[0]??"").slice((args[1]??1)-1,((args[1]??1)-1)+(args[2]??1));
+        return"";}
+      if(pk()?.k==="ne"||pk()?.k==="eq"){const op=cs().k;const r=pp();const l=rv(name);return op==="ne"?l!==String(r):l===String(r);}
+      return rv(name);}
+    if(t.k==="lp"){cs();const v=pe();if(pk()?.k==="rp")cs();return v;}
+    cs();return"";
+  }
+  function pe(){let l=pp();while(pk()?.k==="a"){cs();l=String(l??"")+String(pp()??"");}return l;}
+  return pe();
+}
+function evalF(formula,rec){
+  if(!formula||!formula.trim())return{v:"",e:null};
+  if(!formula.startsWith("="))return{v:formula,e:null};
+  const m={};FD.forEach(f=>{m[f.f]=rec[f.c]??"";m[f.c]=rec[f.c]??""});
+  try{return{v:String(evalToks(tokenize(formula.slice(1)),m)??""),e:null};}
+  catch(err){return{v:"",e:err.message};}
+}
 
-  const ed=P._ed;
-  const selObj=ed.selId?ed.objs.find(o=>o.id===ed.selId):null;
-  const FONTS=["Helvetica Neue","Arial","Arial Narrow","Verdana","Tahoma","Courier New","Georgia","Impact"];
+// ── State ─────────────────────────────────────────────────────────────────────
+let nid=1;const mid=()=>`o${nid++}`;
+let S={
+  spec:BL[1],selId:null,recIdx:0,wrap:true,showFields:false,zoom:1.0,
+  snapGrid:true,snapObjects:true,gridSize:0.05,
+  tplName:'Untitled Template',modal:null,
+  objs:[
+    {id:mid(),t:"tx",x:.02,y:.03,w:.44,h:.28,f:'=IF(Connector<>"",Connector,"")',al:"left",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100},
+    {id:mid(),t:"tx",x:.62,y:.03,w:.36,h:.28,f:'=IF(Rack<>"",Rack,"")',al:"right",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100},
+    {id:mid(),t:"tx",x:.02,y:.08,w:.96,h:.34,f:'=IF(Number<>"",Number&IF(Cable<>""," - "&Cable,""),IF(Cable<>"",Cable,""))',al:"center",valign:"middle",fs:19,bold:true,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100},
+    {id:mid(),t:"ln",x:0,y:.44,w:1,h:0,lw:1},
+    {id:mid(),t:"tx",x:.02,y:.47,w:.96,h:.24,f:'=IF(Other_Device<>"","@ "&Other_Device&IF(Other_Socket<>""," : "&Other_Socket,""),"")',al:"center",valign:"middle",fs:12,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100}
+  ]
+};
+function gobj(id){return S.objs.find(o=>o.id===id);}
+function uobj(id,p){S.objs=S.objs.map(o=>o.id===id?Object.assign({},o,p):o);}
 
-  // Commit formula bar value back to object
-  function commitF(){if(ed.selId&&ed._ef!==undefined){const o=ed.objs.find(x=>x.id===ed.selId);if(o)o.f=ed._ef;ed._ef=undefined;}}
+// ── Canvas ────────────────────────────────────────────────────────────────────
+const SC=185;
 
-  // Snap helpers (simplified, no cross-object snap indicators for brevity)
-  function sg(v){if(!ed.snapGrid)return v;return Math.round(v/ed.gridSize)*ed.gridSize;}
+// ── Snap helpers ──────────────────────────────────────────────────────────────
+const SNAP_PX=4; // screen pixels threshold for smart snap
+S._snapLines=[];
 
-  const SC=185;
+function snapToGrid(val){
+  if(!S.snapGrid)return val;
+  return Math.round(val/S.gridSize)*S.gridSize;
+}
+
+function snapX(x,w,excludeId){
+  if(!S.snapObjects)return{v:x,lines:[]};
+  const others=S.objs.filter(o=>o.id!==excludeId);
+  const pw=S.spec.pw;
+  const thr=SNAP_PX/(SC*S.zoom);
+  let best=x,bestD=thr,lines=[];
+  [[x,0],[x+w,1]].forEach(([ce,ci])=>{
+    others.forEach(o=>{
+      [o.x,o.x+o.w].forEach(oe=>{
+        const d=Math.abs(ce-oe);
+        if(d<bestD){bestD=d;best=ci===0?oe:oe-w;lines=[{axis:'x',pos:oe}];}
+      });
+    });
+    [0,pw].forEach(le=>{
+      const d=Math.abs(ce-le);
+      if(d<bestD){bestD=d;best=ci===0?le:le-w;lines=[{axis:'x',pos:le}];}
+    });
+  });
+  return{v:best,lines};
+}
+
+function snapY(y,h,excludeId){
+  if(!S.snapObjects)return{v:y,lines:[]};
+  const others=S.objs.filter(o=>o.id!==excludeId);
+  const ph=S.spec.ph;
+  const thr=SNAP_PX/(SC*S.zoom);
+  let best=y,bestD=thr,lines=[];
+  [[y,0],[y+h,1]].forEach(([ce,ci])=>{
+    others.forEach(o=>{
+      [o.y,o.y+(o.h||0)].forEach(oe=>{
+        const d=Math.abs(ce-oe);
+        if(d<bestD){bestD=d;best=ci===0?oe:oe-h;lines=[{axis:'y',pos:oe}];}
+      });
+    });
+    [0,ph].forEach(le=>{
+      const d=Math.abs(ce-le);
+      if(d<bestD){bestD=d;best=ci===0?le:le-h;lines=[{axis:'y',pos:le}];}
+    });
+  });
+  return{v:best,lines};
+}
+
+function applySnap(x,y,w,h,id){
+  let nx=snapToGrid(x);
+  let ny=snapToGrid(y);
+  const rx=snapX(nx,w,id);
+  const ry=snapY(ny,h,id);
+  S._snapLines=[...rx.lines,...ry.lines];
+  return{x:Math.max(0,rx.v),y:Math.max(0,ry.v)};
+}
+function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
   const sc=SC;
-  const pw=specObj.pw*sc,ph=specObj.ph*sc;
+  const pw=spec.pw*sc,ph=spec.ph*sc;
+  const cw=(spec.tw-spec.pw)*sc,ch=(spec.th-spec.ph)*sc;
+  const tw=pw,th=wrap?spec.th*sc:ph;
 
-  // Grid SVG
-  const gridLines=[];
-  if(ed.snapGrid){const gs=ed.gridSize*sc;for(let x=0;x<pw;x+=gs)gridLines.push(`<line x1="${x.toFixed(1)}" y1="0" x2="${x.toFixed(1)}" y2="${ph}" stroke="rgba(108,142,245,0.18)" stroke-width="0.5"/>`);for(let y=0;y<ph;y+=gs)gridLines.push(`<line x1="0" y1="${y.toFixed(1)}" x2="${pw}" y2="${y.toFixed(1)}" stroke="rgba(108,142,245,0.18)" stroke-width="0.5"/>`);}
-  const gridSvg=gridLines.length?`<svg style="position:absolute;top:0;left:0;width:${pw}px;height:${ph}px;pointer-events:none;z-index:0" width="${pw}" height="${ph}">${gridLines.join("")}</svg>`:"";
+  // Printable zone is always on top; clear wrap zone shown below
+  const wrapZone=wrap&&(cw>0||ch>0)?`
+    <div style="width:${pw}px;height:${ch>0?ch:ph}px;background:rgba(140,140,180,0.1);border:1px dashed #44445a;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+      <span style="color:#44445a;font-size:9px;white-space:nowrap">clear wrap zone</span>
+    </div>`:"";
 
-  // Objects HTML
-  function objHtml(o){
-    const x=o.x*sc,y=o.y*sc,w=(o.w||1)*sc,h=(o.h||0)*sc;
-    const sel=o.id===ed.selId;
-    const ss=sel?`outline:1.5px solid #6C8EF5;outline-offset:1px;`:"";
+  const objsHtml=objs.map(o=>{
+    const x=o.x*SC,y=o.y*SC,w=(o.w||1)*SC,h=(o.h||0)*SC;
+    const sel=o.id===selId;
+    const ss=sel?"outline:1.5px solid #6C8EF5;outline-offset:1px;":"";
+    const drag=readOnly?"":`onmousedown="startDrag(event,'${o.id}')"`;
+
     if(o.t==="tx"){
-      const {v,e}=evalF(o.f,rec);
+      const {v,e}=rec?evalF(o.f,rec):{v:(o.f||"").replace(/^=/,""),e:null};
       const va=o.valign==="top"?"flex-start":o.valign==="bottom"?"flex-end":"center";
       const fz=Math.max(7,(o.fs||14)*(sc/100));
-      const col=e?"#f56c6c":"#000";
-      const txt=(e?`⚠ ${e}`:v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-      const rb=sel?`<div onmousedown="edResz(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:#6C8EF5;border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";
-      return `<div onmousedown="edDrag(event,'${o.id}')" style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${Math.max(h,12)}px;${ss}border-radius:2px;cursor:move;overflow:hidden;display:flex;align-items:${va};padding:0 2px;box-sizing:border-box">
-        <div style="width:100%;font-family:'${o.font||"Helvetica Neue"}',Arial,sans-serif;font-size:${fz}px;font-weight:${o.bold?700:400};font-style:${o.italic?"italic":"normal"};text-decoration:${o.underline?"underline":"none"};color:${col};white-space:${o.wrapText?"normal":"nowrap"};overflow:hidden;text-overflow:ellipsis;line-height:1.15;text-align:${o.al||"left"};transform:scaleX(${(o.stretch||100)/100});transform-origin:left center">${txt}</div>${rb}</div>`;
+      const fontStyle=o.italic?"italic":"normal";
+      const fontWeight=o.bold?700:400;
+      const textDecoration=o.underline?"underline":"none";
+      const wordBreak=o.wrapText?"break-word":"normal";
+      const whiteSpace=o.wrapText?"normal":"nowrap";
+      const letterSpacing=o.tracking?`${o.tracking}px`:"normal";
+      const scaleX=(o.stretch||100)/100;
+      const txtColor=e?"#f56c6c":"#000";
+      const textAlign=o.al||"left";
+      const dispVal=e?`⚠ ${e.substring(0,40)}`:v.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+      const rb=sel&&!readOnly?`<div onmousedown="startResize(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:#6C8EF5;border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";
+      return `<div ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${Math.max(h,12)}px;${ss}border-radius:2px;cursor:${readOnly?"default":"move"};overflow:hidden;display:flex;align-items:${va};padding:0 2px;box-sizing:border-box">
+        <div style="width:100%;font-family:'${o.font||"Helvetica Neue"}',Arial,sans-serif;font-size:${fz}px;font-weight:${fontWeight};font-style:${fontStyle};text-decoration:${textDecoration};color:${txtColor};white-space:${whiteSpace};word-break:${wordBreak};overflow:hidden;text-overflow:${o.wrapText?"clip":"ellipsis"};line-height:1.15;letter-spacing:${letterSpacing};text-align:${textAlign};transform:scaleX(${scaleX});transform-origin:left center">${dispVal}</div>
+        ${rb}</div>`;
     }
-    if(o.t==="ln")return`<div onmousedown="edDrag(event,'${o.id}')" style="position:absolute;left:${x}px;top:${y}px;width:${(o.w||1)*sc}px;height:${Math.max(1,o.lw||1)}px;background:#000;cursor:move;${ss}"></div>`;
-    if(o.t==="rc"){const rb=sel?`<div onmousedown="edResz(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:#6C8EF5;border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";return`<div onmousedown="edDrag(event,'${o.id}')" style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border:${o.lw||1}px solid #000;background:transparent;cursor:move;${ss}">${rb}</div>`;}
+    if(o.t==="ln") return `<div ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${(o.w||1)*sc}px;height:${Math.max(1,o.lw||1)}px;background:#000;cursor:${readOnly?"default":"move"};${ss}"></div>`;
+    if(o.t==="rc"){
+      const rb=sel&&!readOnly?`<div onmousedown="startResize(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:#6C8EF5;border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";
+      return `<div ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border:${o.lw||1}px solid #000;background:transparent;cursor:${readOnly?"default":"move"};${ss}">${rb}</div>`;
+    }
     return"";
+  }).join("");
+
+  // Grid overlay
+  const gridLines=[];
+  if(S.snapGrid){
+    const gs=S.gridSize*sc;
+    for(let gx=0;gx<pw;gx+=gs) gridLines.push(`<line x1="${gx.toFixed(1)}" y1="0" x2="${gx.toFixed(1)}" y2="${ph}" stroke="rgba(108,142,245,0.18)" stroke-width="0.5"/>`);
+    for(let gy=0;gy<ph;gy+=gs) gridLines.push(`<line x1="0" y1="${gy.toFixed(1)}" x2="${pw}" y2="${gy.toFixed(1)}" stroke="rgba(108,142,245,0.18)" stroke-width="0.5"/>`);
+  }
+  const gridSvg=gridLines.length?`<svg style="position:absolute;top:0;left:0;width:${pw}px;height:${ph}px;pointer-events:none;z-index:0" width="${pw}" height="${ph}">${gridLines.join("")}</svg>`:"";
+
+  // Snap indicator lines — drawn during drag only
+  const snapSvgLines=(S._snapLines||[]).map(l=>{
+    if(l.axis==='x'){
+      const px=(l.pos*sc).toFixed(1);
+      return '<line x1="'+px+'" y1="0" x2="'+px+'" y2="'+ph+'" stroke="#FF4D6A" stroke-width="1.5" stroke-dasharray="4,3"/><circle cx="'+px+'" cy="'+(ph/2)+'" r="3.5" fill="#FF4D6A"/>';
+    }else{
+      const py=(l.pos*sc).toFixed(1);
+      return '<line x1="0" y1="'+py+'" x2="'+pw+'" y2="'+py+'" stroke="#FF4D6A" stroke-width="1.5" stroke-dasharray="4,3"/><circle cx="'+(pw/2)+'" cy="'+py+'" r="3.5" fill="#FF4D6A"/>';
+    }
+  }).join("");
+  const snapSvg=snapSvgLines?'<svg style="position:absolute;top:0;left:0;width:'+pw+'px;height:'+ph+'px;pointer-events:none;z-index:5" width="'+pw+'" height="'+ph+'">'+snapSvgLines+'</svg>':"";
+
+
+  return `<div style="display:flex;flex-direction:column;align-items:flex-start;flex-shrink:0">
+    <div onclick="${readOnly?"":"deselect()"}" style="width:${pw}px;height:${ph}px;background:#fff;border:2px solid rgba(255,255,255,0.13);overflow:hidden;position:relative;flex-shrink:0">
+      ${gridSvg}${snapSvg}${objsHtml}
+    </div>
+    ${wrapZone}
+  </div>`;
+}
+
+// ── Properties panel ──────────────────────────────────────────────────────────
+function buildProps(){
+  const o=S.selId?gobj(S.selId):null;
+  if(!o)return`<div style="color:#44445a;font-size:11px;text-align:center;margin-top:40px;line-height:1.8">Click an object on<br>the canvas to edit it</div>`;
+
+  function ni(lbl,key,step,val,extra){
+    return `<div style="margin-bottom:6px"><label class="lbl">${lbl}</label><input type="number" class="inp" step="${step}" value="${(+val||0).toFixed(3)}" onchange="uobj('${o.id}',{${key}:parseFloat(this.value)});R()" ${extra||""}></div>`;
   }
 
-  // Properties panel
-  function propsHtml(){
-    const o=selObj;
-    if(!o)return`<div style="color:#44445a;font-size:11px;text-align:center;margin-top:40px;line-height:1.7">Click an object<br>to edit it</div>`;
-    const inp=(lbl,key,step,val)=>`<div style="margin-bottom:6px"><label style="font-size:10px;color:#8888a8;display:block;margin-bottom:2px">${lbl}</label><input type="number" style="background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#e8e8f0;border-radius:4px;padding:4px 8px;font-size:11px;outline:none;width:100%" step="${step}" value="${(+val||0).toFixed(3)}" onchange="edProp('${o.id}','${key}',parseFloat(this.value))"></div>`;
-    if(o.t==="tx")return`
-      <div style="color:#8888a8;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Text</div>
-      <div style="margin-bottom:6px"><label style="font-size:10px;color:#8888a8;display:block;margin-bottom:2px">Font</label>
-        <select style="background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#e8e8f0;border-radius:4px;padding:4px 8px;font-size:11px;outline:none;width:100%" onchange="edProp('${o.id}','font',this.value)">
-          ${FONTS.map(f=>`<option value="${f}"${o.font===f?" selected":""}>${f}</option>`).join("")}
-        </select></div>
-      <div style="margin-bottom:6px"><label style="font-size:10px;color:#8888a8;display:block;margin-bottom:2px">Size (pt)</label>
-        <input type="number" style="background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#e8e8f0;border-radius:4px;padding:4px 8px;font-size:11px;outline:none;width:100%" value="${o.fs||16}" min="6" max="144" onchange="edProp('${o.id}','fs',parseInt(this.value))"></div>
-      <div style="margin-bottom:8px"><label style="font-size:10px;color:#8888a8;display:block;margin-bottom:4px">Style</label>
+  if(o.t==="tx"){
+    const alBtns=["left","center","right","justify"].map(a=>`<button class="fmt-btn${o.al===a?" on":""}" onclick="uobj('${o.id}',{al:'${a}'});R()" title="${a}">${a==="left"?"⬅":a==="center"?"☰":a==="right"?"➡":"⬌"}</button>`).join("");
+    const vaBtns=["top","middle","bottom"].map(a=>`<button class="fmt-btn${(o.valign||"middle")===a?" on":""}" onclick="uobj('${o.id}',{valign:'${a}'});R()" title="${a}">${a==="top"?"⬆":a==="middle"?"↕":"⬇"}</button>`).join("");
+    const fontOpts=FONTS.map(f=>`<option value="${f}"${o.font===f?" selected":""}>${f}</option>`).join("");
+    return `<div style="display:flex;flex-direction:column;gap:0">
+      <div class="sec">Text formatting</div>
+      <div style="margin-bottom:8px">
+        <label class="lbl">Font</label>
+        <select class="inp" onchange="uobj('${o.id}',{font:this.value});R()">${fontOpts}</select>
+      </div>
+      <div style="margin-bottom:8px">
+        <label class="lbl">Size (pt)</label>
+        <input type="number" class="inp" value="${o.fs||16}" min="6" max="144" onchange="uobj('${o.id}',{fs:parseInt(this.value)});R()">
+      </div>
+      <div style="margin-bottom:8px">
+        <label class="lbl">Style</label>
         <div style="display:flex;gap:3px">
-          ${["bold","italic","underline"].map(s=>`<button onclick="edProp('${o.id}','${s}',!${!!o[s]})" style="background:${o[s]?"#6C8EF5":"#2a2a42"};border:1px solid ${o[s]?"#6C8EF5":"rgba(255,255,255,0.13)"};color:${o[s]?"#fff":"#8888a8"};border-radius:3px;padding:3px 8px;cursor:pointer;font-size:12px;font-weight:700">${s==="bold"?"B":s==="italic"?"I":"U"}</button>`).join("")}
-        </div></div>
-      <div style="margin-bottom:8px"><label style="font-size:10px;color:#8888a8;display:block;margin-bottom:4px">Align</label>
-        <div style="display:flex;gap:3px">
-          ${["left","center","right","justify"].map(a=>`<button onclick="edProp('${o.id}','al','${a}')" style="background:${(o.al||"left")===a?"#6C8EF5":"#2a2a42"};border:1px solid ${(o.al||"left")===a?"#6C8EF5":"rgba(255,255,255,0.13)"};color:${(o.al||"left")===a?"#fff":"#8888a8"};border-radius:3px;padding:3px 7px;cursor:pointer;flex:1">${a==="left"?"◁":a==="center"?"◈":a==="right"?"▷":"⬌"}</button>`).join("")}
-        </div></div>
-      <hr style="border:none;border-top:1px solid rgba(255,255,255,0.07);margin:8px 0">
-      ${inp("X","x",.01,o.x)}${inp("Y","y",.005,o.y)}${inp("Width","w",.01,o.w)}${inp("Height","h",.01,o.h)}`;
-    if(o.t==="ln")return`<div style="color:#8888a8;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Line</div>
-      <div style="margin-bottom:6px"><label style="font-size:10px;color:#8888a8;display:block;margin-bottom:2px">Weight (px)</label>
-        <input type="number" style="background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#e8e8f0;border-radius:4px;padding:4px 8px;font-size:11px;outline:none;width:100%" value="${o.lw||1}" min="1" max="10" onchange="edProp('${o.id}','lw',parseInt(this.value))"></div>
-      ${inp("Y","y",.005,o.y)}${inp("Width","w",.01,o.w)}`;
-    if(o.t==="rc")return`<div style="color:#8888a8;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Rectangle</div>
-      <div style="margin-bottom:6px"><label style="font-size:10px;color:#8888a8;display:block;margin-bottom:2px">Border (px)</label>
-        <input type="number" style="background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#e8e8f0;border-radius:4px;padding:4px 8px;font-size:11px;outline:none;width:100%" value="${o.lw||1}" min="1" max="10" onchange="edProp('${o.id}','lw',parseInt(this.value))"></div>
-      ${inp("X","x",.01,o.x)}${inp("Y","y",.005,o.y)}${inp("Width","w",.01,o.w)}${inp("Height","h",.01,o.h)}`;
-    return"";
+          <button class="fmt-btn${o.bold?" on":""}" onclick="uobj('${o.id}',{bold:!${!!o.bold}});R()"><b>B</b></button>
+          <button class="fmt-btn${o.italic?" on":""}" onclick="uobj('${o.id}',{italic:!${!!o.italic}});R()"><i>I</i></button>
+          <button class="fmt-btn${o.underline?" on":""}" onclick="uobj('${o.id}',{underline:!${!!o.underline}});R()"><u>U</u></button>
+        </div>
+      </div>
+      <div style="margin-bottom:8px">
+        <label class="lbl">Horizontal align</label>
+        <div style="display:flex;gap:3px">${alBtns}</div>
+      </div>
+      <div style="margin-bottom:8px">
+        <label class="lbl">Vertical align</label>
+        <div style="display:flex;gap:3px">${vaBtns}</div>
+      </div>
+      <div style="margin-bottom:8px">
+        <label class="lbl" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" ${o.wrapText?"checked":""} onchange="uobj('${o.id}',{wrapText:this.checked});R()"> Wrap text
+        </label>
+      </div>
+      <div style="margin-bottom:8px">
+        <label class="lbl">Tracking (px)</label>
+        <input type="number" class="inp" step="0.5" value="${o.tracking||0}" onchange="uobj('${o.id}',{tracking:parseFloat(this.value)});R()">
+      </div>
+      <div style="margin-bottom:8px">
+        <label class="lbl">Width stretch (%)</label>
+        <input type="number" class="inp" step="1" min="10" max="300" value="${o.stretch||100}" onchange="uobj('${o.id}',{stretch:parseFloat(this.value)});R()">
+      </div>
+      <hr class="divider">
+      <div class="sec">Position & size</div>
+      ${ni("X","x",.01,o.x)}
+      ${ni("Y","y",.005,o.y)}
+      ${ni("Width","w",.01,o.w)}
+      ${ni("Height","h",.01,o.h)}
+    </div>`;
   }
+  if(o.t==="ln"){
+    return `<div style="display:flex;flex-direction:column;gap:0">
+      <div class="sec">Line</div>
+      <div style="margin-bottom:6px"><label class="lbl">Weight (px)</label><input type="number" class="inp" value="${o.lw||1}" min="1" max="10" onchange="uobj('${o.id}',{lw:parseInt(this.value)});R()"></div>
+      ${ni("Y position","y",.005,o.y)}
+      ${ni("Width","w",.01,o.w)}
+    </div>`;
+  }
+  if(o.t==="rc"){
+    return `<div style="display:flex;flex-direction:column;gap:0">
+      <div class="sec">Rectangle</div>
+      <div style="margin-bottom:6px"><label class="lbl">Border (px)</label><input type="number" class="inp" value="${o.lw||1}" min="1" max="10" onchange="uobj('${o.id}',{lw:parseInt(this.value)});R()"></div>
+      ${ni("X","x",.01,o.x)}
+      ${ni("Y","y",.005,o.y)}
+      ${ni("Width","w",.01,o.w)}
+      ${ni("Height","h",.01,o.h)}
+    </div>`;
+  }
+  return"";
+}
+
+// ── Record table ──────────────────────────────────────────────────────────────
+function buildRecordTable(){
+  const cols=FD.slice(0,9);
+  const rows=RX.map((r,i)=>`<tr class="recrow${S.recIdx===i?" selrow":""}" onclick="S.recIdx=${i};R()">
+    ${cols.map(f=>`<td style="color:${r[f.c]?"#e8e8f0":"#44445a"}">${(r[f.c]||"—").substring(0,22)}</td>`).join("")}
+  </tr>`).join("");
+  const heads=cols.map(f=>`<th style="padding:5px 8px;text-align:left;border-bottom:1px solid rgba(255,255,255,0.07);background:#1a1a28;white-space:nowrap;position:sticky;top:0">
+    <div style="color:#e8e8f0;font-size:11px;font-weight:600">${f.f}</div>
+    <div style="color:#44445a;font-size:10px">${f.c}</div>
+  </th>`).join("");
+  return `<div style="overflow-x:auto;border-top:1px solid rgba(255,255,255,0.07)">
+    <table style="width:100%;border-collapse:collapse;font-size:11px">
+      <thead><tr>${heads}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderDesigner(){
+  const rec=RX[S.recIdx];
+  const selObj=S.selId?gobj(S.selId):null;
 
   const fbar=selObj&&selObj.t==="tx"?`
     <div style="background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.07);padding:5px 12px;display:flex;align-items:center;gap:8px;flex-shrink:0">
       <span style="color:#44445a;font-style:italic;font-size:14px">ƒx</span>
-      <input id="ed-fx" style="flex:1;background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#e8e8f0;border-radius:4px;padding:4px 8px;font-size:12px;outline:none;font-family:monospace"
-        value="${(selObj.f||"").replace(/"/g,'&quot;').replace(/</g,"&lt;").replace(/>/g,"&gt;")}"
-        oninput="P._ed._ef=this.value" onblur="edCommitF()" onkeydown="if(event.key==='Enter')edCommitF()"
+      <input id="fxbar" class="inp" value="${(selObj.f||"").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}" style="flex:1;font-family:monospace;font-size:12px"
+        oninput="S._ef=this.value" onblur="commitF()" onkeydown="if(event.key==='Enter')commitF()"
         placeholder='=IF(Number&lt;&gt;"",Number&amp;" - "&amp;Cable,Cable)'>
-      <button onclick="P._ed.showFields=!P._ed.showFields;renderEditor()" style="background:${ed.showFields?"#6C8EF5":"#2a2a42"};border:1px solid ${ed.showFields?"#6C8EF5":"rgba(255,255,255,0.13)"};color:${ed.showFields?"#fff":"#8888a8"};border-radius:4px;padding:4px 9px;font-size:11px;cursor:pointer">Fields ▾</button>
+      <button class="btn${S.showFields?" on":""}" onclick="S.showFields=!S.showFields;R()">Fields ▾</button>
     </div>
-    ${ed.showFields?`<div style="background:#252538;border-bottom:1px solid rgba(255,255,255,0.07);padding:6px 12px;display:flex;flex-wrap:wrap;gap:4px;max-height:80px;overflow-y:auto;flex-shrink:0">
-      ${FD.map(f=>`<button onclick="const fx=document.getElementById('ed-fx');if(fx){fx.value+=&quot;${f.f}&quot;;P._ed._ef=fx.value}" style="background:#1a1a28;border:1px solid rgba(255,255,255,0.07);color:#8888a8;border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer">${f.f}</button>`).join("")}
+    ${S.showFields?`<div style="background:#252538;border-bottom:1px solid rgba(255,255,255,0.07);padding:6px 12px;display:flex;flex-wrap:wrap;gap:4px;max-height:80px;overflow-y:auto;flex-shrink:0">
+      ${FD.map(f=>`<button class="fbtn" onclick="insertField('${f.f}')">${f.f}</button>`).join("")}
     </div>`:""}
   `:"";
 
-  const nid_ed=()=>`oe${Date.now()}${Math.random().toString(36).slice(2,6)}`;
-
-  app.innerHTML=`
-    <!-- Editor top bar -->
+  document.getElementById("app").innerHTML=`
+    <!-- Top bar -->
     <div style="background:#1e1e2e;border-bottom:1px solid rgba(255,255,255,0.07);padding:0 14px;display:flex;align-items:center;gap:10px;height:44px;flex-shrink:0">
-      <button onclick="closeEditor(false)" style="background:none;border:none;color:#8888a8;cursor:pointer;font-size:13px;padding:4px 8px;border-radius:4px;display:flex;align-items:center;gap:5px" onmouseover="this.style.background='#2a2a42'" onmouseout="this.style.background='none'">← Discard</button>
-      <div style="width:1px;height:20px;background:rgba(255,255,255,0.08)"></div>
-      <span style="color:#6C8EF5;font-weight:700;font-size:14px">Editing:</span>
-      <span style="color:#e8e8f0;font-size:14px">${tpl.name}</span>
-      <span style="color:#44445a;font-size:11px;font-family:monospace">${specObj.n}</span>
+      <span style="color:#6C8EF5;font-weight:700;font-size:15px;letter-spacing:-.3px">VectorLabel</span>
+      <span style="color:#44445a;font-size:11px">Template Designer</span>
       <div style="flex:1"></div>
-      <!-- Add object buttons -->
-      <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px">Add</span>
-      ${[["T","tx","Text"],["╌","ln","Line"],["▭","rc","Rect"]].map(([ic,tp,lb])=>`
-        <button onclick="edAdd('${tp}')" style="display:flex;align-items:center;gap:4px;background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#8888a8;border-radius:4px;padding:4px 9px;cursor:pointer;font-size:11px">
-          <span style="font-size:13px;font-weight:700">${ic}</span>${lb}
-        </button>`).join("")}
-      ${ed.selId?`<button onclick="edDel()" style="background:rgba(245,108,108,0.15);border:1px solid rgba(245,108,108,0.3);color:#f56c6c;border-radius:4px;padding:4px 9px;cursor:pointer;font-size:11px">Delete</button>`:""}
-      <div style="width:1px;height:20px;background:rgba(255,255,255,0.08)"></div>
-      <!-- Zoom -->
-      <div style="display:flex;align-items:center;gap:3px;background:#2a2a42;border:1px solid rgba(255,255,255,0.13);border-radius:4px;padding:2px 6px">
-        <button onclick="P._ed.zoom=Math.max(.25,P._ed.zoom-.25);renderEditor()" style="background:none;border:none;color:#8888a8;cursor:pointer;font-size:16px;padding:0 2px;line-height:1">−</button>
-        <span style="color:#e8e8f0;font-size:11px;min-width:34px;text-align:center">${Math.round(ed.zoom*100)}%</span>
-        <button onclick="P._ed.zoom=Math.min(4,P._ed.zoom+.25);renderEditor()" style="background:none;border:none;color:#8888a8;cursor:pointer;font-size:16px;padding:0 2px;line-height:1">+</button>
+      <select class="inp" style="width:auto" onchange="S.spec=BL.find(l=>l.n===this.value);R()">
+        ${BL.map(l=>`<option value="${l.n}"${S.spec.n===l.n?" selected":""}>${l.lb}</option>`).join("")}
+      </select>
+      <button class="btn${S.wrap?" on":""}" onclick="S.wrap=!S.wrap;R()">${S.wrap?"Hide wrap":"Show wrap"}</button>
+      <div style="display:flex;align-items:center;gap:4px;background:#2a2a42;border:1px solid rgba(255,255,255,0.13);border-radius:4px;padding:2px 6px">
+        <button onclick="S.zoom=Math.max(0.25,S.zoom-0.25);R()" style="background:none;border:none;color:#8888a8;cursor:pointer;font-size:16px;padding:0 2px;line-height:1">−</button>
+        <span style="color:#e8e8f0;font-size:11px;min-width:36px;text-align:center">${Math.round(S.zoom*100)}%</span>
+        <button onclick="S.zoom=Math.min(4,S.zoom+0.25);R()" style="background:none;border:none;color:#8888a8;cursor:pointer;font-size:16px;padding:0 2px;line-height:1">+</button>
       </div>
-      <!-- Snap -->
-      <button onclick="P._ed.snapGrid=!P._ed.snapGrid;renderEditor()" style="background:${ed.snapGrid?"#6C8EF5":"#2a2a42"};border:1px solid ${ed.snapGrid?"#6C8EF5":"rgba(255,255,255,0.13)"};color:${ed.snapGrid?"#fff":"#8888a8"};border-radius:4px;padding:4px 8px;cursor:pointer;font-size:11px">⊞ Grid</button>
-      <div style="width:1px;height:20px;background:rgba(255,255,255,0.08)"></div>
-      <button onclick="closeEditor(true)" style="background:#4a6cd4;border:none;color:#fff;border-radius:4px;padding:5px 16px;cursor:pointer;font-size:13px;font-weight:600">Save & Return</button>
+      <button onclick="S.zoom=1;R()" class="btn" style="padding:4px 7px;font-size:10px">Reset</button>
+      <div style="display:flex;align-items:center;gap:6px;margin-left:4px">
+        <span style="color:#8888a8;font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${S.tplName}">${S.tplName}</span>
+      </div>
+      ${window._editorOnSave?`
+        <button class="btn" onclick="if(window._editorOnDiscard)window._editorOnDiscard()" style="padding:4px 12px">← Discard</button>
+        <button class="btn" onclick="showModal('save')" style="padding:4px 10px">Save as…</button>
+        <button class="btn" onclick="if(window._editorOnSave)window._editorOnSave({name:S.tplName,specN:S.spec.n,objs:JSON.parse(JSON.stringify(S.objs))})" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600;padding:5px 16px">Save & Return</button>
+      `:`
+        <button class="btn" onclick="showModal('new')" style="padding:4px 10px">New</button>
+        <button class="btn" onclick="openTemplate()" style="padding:4px 10px">Open…</button>
+        <button class="btn" onclick="showModal('save')" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600;padding:5px 14px">Save…</button>
+      `}
     </div>
 
-    <!-- Formula bar -->
-    ${fbar}
+    <!-- Second toolbar: snap/grid controls -->
+    <div style="background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.07);padding:0 14px;display:flex;align-items:center;gap:10px;height:34px;flex-shrink:0">
+      <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px">Snap</span>
+      <button class="btn${S.snapGrid?" on":""}" onclick="S.snapGrid=!S.snapGrid;R()">⊞ Grid</button>
+      <button class="btn${S.snapObjects?" on":""}" onclick="S.snapObjects=!S.snapObjects;R()">⊡ Objects</button>
+      <div style="display:flex;align-items:center;gap:5px">
+        <span style="color:#44445a;font-size:10px">Grid size</span>
+        <select class="inp" style="width:90px" onchange="S.gridSize=parseFloat(this.value);R()">
+          ${[0.01,0.025,0.05,0.1,0.125,0.25].map(v=>`<option value="${v}"${S.gridSize===v?" selected":""}>${Math.round(v*1000)/10}mm / ${v.toFixed(3)}"</option>`).join("")}
+        </select>
+      </div>
+    </div>
 
-    <!-- Editor body -->
+    <!-- Main body -->
     <div style="display:flex;flex:1;overflow:hidden">
-      <!-- Canvas -->
-      <div style="flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;background:#0d0d14;padding:28px">
-        <div style="transform:scale(${ed.zoom});transform-origin:center center;flex-shrink:0">
-          <div onclick="P._ed.selId=null;renderEditor()" style="width:${pw}px;height:${ph}px;background:#fff;border:2px solid rgba(255,255,255,0.13);position:relative;overflow:hidden">
-            ${gridSvg}
-            ${ed.objs.map(objHtml).join("")}
+
+      <!-- Left: add objects -->
+      <div style="width:70px;background:#1a1a28;border-right:1px solid rgba(255,255,255,0.07);padding:10px 6px;display:flex;flex-direction:column;gap:5px;align-items:center;flex-shrink:0">
+        <span style="color:#44445a;font-size:9px;margin-bottom:3px;text-transform:uppercase;letter-spacing:1px">Add</span>
+        <button class="tbtn" onclick="addObj('tx')"><span style="font-size:14px;font-weight:700">T</span>Text</button>
+        <button class="tbtn" onclick="addObj('ln')"><span style="font-size:14px;font-weight:700">╌</span>Line</button>
+        <button class="tbtn" onclick="addObj('rc')"><span style="font-size:14px;font-weight:700">▭</span>Rect</button>
+        <div style="flex:1"></div>
+        ${S.selId?`<button class="btn" onclick="delObj()" style="background:rgba(245,108,108,0.15);border-color:rgba(245,108,108,0.3);color:#f56c6c;width:56px;padding:5px 0;font-size:10px">Delete</button>`:""}
+      </div>
+
+      <!-- Center: canvas + formula bar + records -->
+      <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0">
+        ${fbar}
+        <!-- Canvas area -->
+        <div style="flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;background:#0d0d14;padding:28px">
+          <div style="transform:scale(${S.zoom});transform-origin:center center;flex-shrink:0">
+            ${buildCanvas(S.spec,S.objs,S.selId,rec,S.wrap,false)}
           </div>
         </div>
+        <!-- Resize handle -->
+        <div id="rec-resizer" style="height:5px;cursor:row-resize;background:rgba(108,142,245,0.0);border-top:1px solid rgba(255,255,255,0.1);flex-shrink:0" onmouseenter="this.style.background='rgba(108,142,245,0.25)'" onmouseleave="this.style.background='rgba(108,142,245,0)'" onmousedown="startRecResize(event)"></div>
+        <!-- Record selector -->
+        <div id="rec-panel" style="height:${S.recH||160}px;overflow:auto;background:#13131a;flex-shrink:0">
+          <div style="padding:6px 12px 4px;display:flex;align-items:center;gap:8px;border-top:1px solid rgba(255,255,255,0.07)">
+            <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px">Records</span>
+            <span style="color:#8888a8;font-size:10px">${RX.length} labels · click to preview</span>
+          </div>
+          ${buildRecordTable()}
+        </div>
       </div>
-      <!-- Properties -->
-      <div style="width:210px;background:#1a1a28;border-left:1px solid rgba(255,255,255,0.07);padding:12px;overflow-y:auto;flex-shrink:0">
-        ${propsHtml()}
-      </div>
-    </div>
 
-    <!-- Record preview strip -->
-    <div style="background:#1a1a28;border-top:1px solid rgba(255,255,255,0.07);padding:6px 12px;display:flex;align-items:center;gap:8px;flex-shrink:0">
-      <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px">Preview record</span>
-      ${P.records.map((r,i)=>`<button onclick="P._ed.recIdx=${i};renderEditor()" style="background:${ed.recIdx===i?"#6C8EF5":"#2a2a42"};border:1px solid ${ed.recIdx===i?"#6C8EF5":"rgba(255,255,255,0.13)"};color:${ed.recIdx===i?"#fff":"#8888a8"};border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer">${r._Side} ${r.Number||i+1}</button>`).join("")}
+      <!-- Right: properties -->
+      <div style="width:220px;background:#1a1a28;border-left:1px solid rgba(255,255,255,0.07);padding:12px;overflow-y:auto;flex-shrink:0">
+        ${buildProps()}
+      </div>
     </div>
   `;
 
-  // Restore formula bar value
-  const fx=document.getElementById("ed-fx");
-  if(fx&&ed._ef!==undefined)fx.value=ed._ef;
+  const fx=document.getElementById("fxbar");
+  if(fx&&S._ef!==undefined)fx.value=S._ef;
+
+  // Render modal if active
+  renderModal();
 }
 
-// Editor actions
-function edCommitF(){const ed=P._ed;if(ed.selId&&ed._ef!==undefined){const o=ed.objs.find(x=>x.id===ed.selId);if(o)o.f=ed._ef;ed._ef=undefined;renderEditor();}}
-function edProp(id,k,v){const o=P._ed.objs.find(x=>x.id===id);if(o){o[k]=v;}renderEditor();}
-function edAdd(type){const id="oe"+Date.now();P._ed.history.push(JSON.parse(JSON.stringify(P._ed.objs)));if(type==="tx")P._ed.objs.push({id,t:"tx",x:.05,y:.05,w:.5,h:.2,f:'=""',al:"left",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100});if(type==="ln")P._ed.objs.push({id,t:"ln",x:0,y:.25,w:1,h:0,lw:1});if(type==="rc")P._ed.objs.push({id,t:"rc",x:.05,y:.05,w:.4,h:.2,lw:1});P._ed.selId=id;renderEditor();}
-function edDel(){if(!P._ed.selId)return;P._ed.history.push(JSON.parse(JSON.stringify(P._ed.objs)));P._ed.objs=P._ed.objs.filter(o=>o.id!==P._ed.selId);P._ed.selId=null;renderEditor();}
-function edDrag(e,id){
-  e.stopPropagation();
-  const ed=P._ed;const o=ed.objs.find(x=>x.id===id);if(!o)return;
-  ed.selId=id;renderEditor();
-  const SC=185,sx=e.clientX,sy=e.clientY,ox=o.x,oy=o.y;
+function renderModal(){
+  let existing=document.getElementById("vl-modal");
+  if(existing)existing.remove();
+  if(!S.modal)return;
+
+  const overlay=document.createElement("div");
+  overlay.id="vl-modal";
+  overlay.className="modal-overlay";
+  overlay.onclick=e=>{if(e.target===overlay)closeModal();};
+
+  if(S.modal==="save"){
+    overlay.innerHTML=`
+      <div class="modal">
+        <div class="modal-title">Save Template</div>
+        <div class="modal-row">
+          <label class="lbl">Template name</label>
+          <input id="tpl-name-inp" class="inp" value="${S.tplName.replace(/"/g,'&quot;')}" style="font-size:14px;padding:6px 10px">
+        </div>
+        <div class="modal-row">
+          <label class="lbl">Label size</label>
+          <div style="background:#2a2a42;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:8px 12px;color:#e8e8f0;font-size:12px">${S.spec.lb}</div>
+        </div>
+        <div class="modal-row">
+          <label class="lbl">Objects</label>
+          <div style="color:#8888a8;font-size:12px">${S.objs.length} object${S.objs.length!==1?"s":""} on canvas</div>
+        </div>
+        <div style="background:#252538;border-radius:4px;padding:10px 12px;font-size:11px;color:#8888a8;line-height:1.6;margin-top:4px">
+          Saves to <span style="color:#6C8EF5;font-family:monospace">~/Documents/VectorLabel/Templates/</span><br>
+          The browser will ask you to choose a save location — navigate to that folder.
+        </div>
+        <div class="modal-footer">
+          <button class="btn" onclick="closeModal()">Cancel</button>
+          <button class="btn" onclick="saveTemplate()" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600">Save Template</button>
+        </div>
+      </div>`;
+  }
+
+  if(S.modal==="new"){
+    overlay.innerHTML=`
+      <div class="modal">
+        <div class="modal-title">New Template</div>
+        <p style="color:#8888a8;font-size:13px;line-height:1.6;margin-bottom:16px">
+          Start a new blank template. Any unsaved changes to the current template will be lost.
+        </p>
+        <div class="modal-row">
+          <label class="lbl">Template name</label>
+          <input id="new-tpl-name" class="inp" value="Untitled Template" style="font-size:14px;padding:6px 10px">
+        </div>
+        <div class="modal-row">
+          <label class="lbl">Label size</label>
+          <select id="new-tpl-spec" class="inp">
+            ${BL.map(l=>`<option value="${l.n}"${S.spec.n===l.n?" selected":""}>${l.lb}</option>`).join("")}
+          </select>
+        </div>
+        <div class="modal-footer">
+          <button class="btn" onclick="closeModal()">Cancel</button>
+          <button class="btn" onclick="newTemplate()" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600">Create</button>
+        </div>
+      </div>`;
+  }
+
+  if(S.modal==="open"){
+    const cards=S._loadedTemplates||[];
+    overlay.innerHTML=`
+      <div class="modal" style="min-width:500px">
+        <div class="modal-title">Open Template</div>
+        ${cards.length===0?`<div style="color:#44445a;text-align:center;padding:24px 0;font-size:13px">No templates loaded yet.<br>Use the file picker below to open a saved template.</div>`
+          :cards.map((t,i)=>`
+            <div class="tpl-card${S._openSel===i?" active":""}" onclick="S._openSel=${i};renderModal()">
+              <div class="tpl-preview"></div>
+              <div>
+                <div style="color:#e8e8f0;font-size:13px;font-weight:600">${t.name}</div>
+                <div style="color:#8888a8;font-size:11px;margin-top:2px">${t.specN} · ${t.objs.length} object${t.objs.length!==1?"s":""}</div>
+              </div>
+            </div>`).join("")}
+        <div class="modal-footer" style="justify-content:space-between">
+          <button class="btn" onclick="pickTemplateFile()">Browse file…</button>
+          <div style="display:flex;gap:8px">
+            <button class="btn" onclick="closeModal()">Cancel</button>
+            <button class="btn" onclick="loadSelectedTemplate()" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600" ${!(cards.length&&S._openSel!==undefined)?"disabled":""}>Open</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  document.body.appendChild(overlay);
+  // Auto-focus name input if present
+  const ni=document.getElementById("tpl-name-inp")||document.getElementById("new-tpl-name");
+  if(ni){ni.focus();ni.select();}
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+function deselect(){S.selId=null;S.showFields=false;S._ef=undefined;renderDesigner();}
+
+function commitF(){if(S.selId&&S._ef!==undefined){uobj(S.selId,{f:S._ef});S._ef=undefined;renderDesigner();}}
+function insertField(name){
+  const fx=document.getElementById("fxbar");
+  if(fx&&S.selId){const nv=(fx.value||"")+name;fx.value=nv;S._ef=nv;}
+}
+
+
+function startRecResize(e){
+  e.preventDefault();
+  const startY=e.clientY;
+  const startH=S.recH||160;
   function mv(e){
-    let nx=ox+(e.clientX-sx)/(SC*ed.zoom);
-    let ny=oy+(e.clientY-sy)/(SC*ed.zoom);
-    if(ed.snapGrid){nx=Math.round(nx/ed.gridSize)*ed.gridSize;ny=Math.round(ny/ed.gridSize)*ed.gridSize;}
-    o.x=Math.max(0,nx);o.y=Math.max(0,ny);renderEditor();
+    const delta=startY-e.clientY;
+    S.recH=Math.max(60,Math.min(400,startH+delta));
+    const panel=document.getElementById("rec-panel");
+    if(panel)panel.style.height=S.recH+"px";
+  }
+  function mu(){window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",mu);}
+  window.addEventListener("mousemove",mv);
+  window.addEventListener("mouseup",mu);
+}
+// ── Undo history ─────────────────────────────────────────────────────────────
+const HISTORY=[];
+const MAX_HISTORY=50;
+
+function snapshot(){
+  // Deep-clone just the parts that change: objs and selId
+  HISTORY.push(JSON.parse(JSON.stringify({objs:S.objs,selId:S.selId})));
+  if(HISTORY.length>MAX_HISTORY)HISTORY.shift();
+}
+
+function undo(){
+  if(!HISTORY.length)return;
+  const prev=HISTORY.pop();
+  S.objs=prev.objs;
+  S.selId=prev.selId;
+  S._ef=undefined;
+  R();
+}
+
+// Snapshot before any destructive/positional action
+const _origDelObj=delObj;
+const _origAddObj=addObj;
+const _origUobj=uobj;
+
+// Wrap uobj to snapshot before each property change
+function uobjWithHistory(id,p){
+  snapshot();
+  uobj(id,p);
+}
+
+// Wrap startDrag to snapshot on mousedown (before move)
+const _origStartDrag=startDrag;
+function startDrag(e,id){
+  e.stopPropagation();
+  const o=gobj(id);if(!o)return;
+  if(S.selId!==id){S.selId=id;S._ef=o.f;renderDesigner();}
+  snapshot();
+  const sx=e.clientX,sy=e.clientY,ox=o.x,oy=o.y;
+  function mv(e){
+    const rawX=ox+(e.clientX-sx)/(SC*S.zoom);
+    const rawY=oy+(e.clientY-sy)/(SC*S.zoom);
+    const o2=gobj(id);
+    const snapped=applySnap(rawX,rawY,o2?o2.w:0.1,o2?o2.h:0.1,id);
+    uobj(id,snapped);renderDesigner();
+  }
+  function mu(){S._snapLines=[];window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",mu);renderDesigner();}
+  window.addEventListener("mousemove",mv);window.addEventListener("mouseup",mu);
+}
+
+// Wrap startResize to snapshot on mousedown
+function startResize(e,id){
+  e.stopPropagation();
+  const o=gobj(id);if(!o)return;
+  snapshot();
+  const sx=e.clientX,sy=e.clientY,ow=o.w,oh=o.h;
+  function mv(e){
+    const dw=(e.clientX-sx)/(SC*S.zoom);
+    const dh=(e.clientY-sy)/(SC*S.zoom);
+    const nw=snapToGrid(Math.max(.05,ow+dw));
+    const nh=snapToGrid(Math.max(.02,oh+dh));
+    uobj(id,{w:nw,h:nh});renderDesigner();
   }
   function mu(){window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",mu);}
   window.addEventListener("mousemove",mv);window.addEventListener("mouseup",mu);
 }
-function edResz(e,id){
-  e.stopPropagation();
-  const ed=P._ed;const o=ed.objs.find(x=>x.id===id);if(!o)return;
-  const SC=185,sx=e.clientX,sy=e.clientY,ow=o.w,oh=o.h;
-  function mv(e){
-    let nw=ow+(e.clientX-sx)/(SC*ed.zoom);
-    let nh=oh+(e.clientY-sy)/(SC*ed.zoom);
-    if(ed.snapGrid){nw=Math.round(nw/ed.gridSize)*ed.gridSize;nh=Math.round(nh/ed.gridSize)*ed.gridSize;}
-    o.w=Math.max(.05,nw);o.h=Math.max(.02,nh);renderEditor();
-  }
-  function mu(){window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",mu);}
-  window.addEventListener("mousemove",mv);window.addEventListener("mouseup",mu);
+
+function delObj(){
+  if(!S.selId)return;
+  snapshot();
+  S.objs=S.objs.filter(o=>o.id!==S.selId);
+  S.selId=null;
+  R();
 }
 
-// Keyboard shortcuts in editor
+function addObj(type){
+  snapshot();
+  const id=mid();
+  const base={id,x:.05,y:.05};
+  if(type==="tx")S.objs.push({...base,t:"tx",w:.5,h:.2,f:'=""',al:"left",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100});
+  if(type==="ln")S.objs.push({...base,t:"ln",y:.25,w:1,h:0,lw:1});
+  if(type==="rc")S.objs.push({...base,t:"rc",w:.4,h:.2,lw:1});
+  S.selId=id;S._ef=undefined;renderDesigner();
+}
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
 document.addEventListener("keydown",function(e){
-  if(P.view!=="editor")return;
+  // Ignore if focus is inside an input, textarea, or select
   const tag=(document.activeElement||{}).tagName||"";
   const inInput=["INPUT","TEXTAREA","SELECT"].includes(tag);
-  if(!inInput){
-    if((e.metaKey||e.ctrlKey)&&e.key==="z"){e.preventDefault();const ed=P._ed;if(ed.history.length){ed.objs=ed.history.pop();ed.selId=null;renderEditor();}return;}
-    if((e.key==="Delete"||e.key==="Backspace")&&P._ed.selId){e.preventDefault();edDel();return;}
-    if(e.key==="Escape"){P._ed.selId=null;renderEditor();return;}
+
+  // Cmd/Ctrl+Z — undo (works even in inputs to avoid blocking browser undo,
+  // but we only intercept if NOT in an input)
+  if((e.metaKey||e.ctrlKey)&&e.key==="z"&&!inInput){
+    e.preventDefault();
+    undo();
+    return;
+  }
+
+  // Delete / Backspace — delete selected object, only when NOT in an input
+  if((e.key==="Delete"||e.key==="Backspace")&&!inInput&&S.selId){
+    e.preventDefault();
+    delObj();
+    return;
+  }
+
+  // Arrow keys — nudge selected object by 1px (0.5px with shift)
+  if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key)&&!inInput&&S.selId){
+    e.preventDefault();
+    const o=gobj(S.selId);if(!o)return;
+    const step=S.snapGrid?S.gridSize:(e.shiftKey?0.5:1)/SC;
+    if(e.key==="ArrowLeft")uobj(S.selId,{x:Math.max(0,o.x-step)});
+    if(e.key==="ArrowRight")uobj(S.selId,{x:o.x+step});
+    if(e.key==="ArrowUp")uobj(S.selId,{y:Math.max(0,o.y-step)});
+    if(e.key==="ArrowDown")uobj(S.selId,{y:o.y+step});
+    R();
+    return;
+  }
+
+  // Escape — deselect
+  if(e.key==="Escape"&&!inInput){
+    deselect();
   }
 });
+
+// ── Template management ───────────────────────────────────────────────────────
+
+function showModal(name){S.modal=name;renderModal();}
+function closeModal(){S.modal=null;renderModal();}
+
+function templateData(){
+  const name=S.tplName||"Untitled Template";
+  return{
+    version:1,
+    name,
+    specN:S.spec.n,
+    objs:JSON.parse(JSON.stringify(S.objs))
+  };
+}
+
+async function saveTemplate(){
+  const nameEl=document.getElementById("tpl-name-inp");
+  if(nameEl)S.tplName=nameEl.value.trim()||"Untitled Template";
+  const data=templateData();
+  const json=JSON.stringify(data,null,2);
+  const filename=(S.tplName.replace(/[^a-z0-9_\- ]/gi,"_")||"template")+".vlt.json";
+
+  // Use File System Access API if available (Chrome/Edge on Mac)
+  if(window.showSaveFilePicker){
+    try{
+      const fh=await window.showSaveFilePicker({
+        suggestedName:filename,
+        startIn:"documents",
+        types:[{description:"VectorLabel Template",accept:{"application/json":[".json",".vlt.json"]}}]
+      });
+      const writable=await fh.createWritable();
+      await writable.write(json);
+      await writable.close();
+      S.modal=null;
+      showToast("Saved: "+S.tplName);
+      R();
+      return;
+    }catch(e){
+      if(e.name==="AbortError"){S.modal=null;renderModal();return;}
+    }
+  }
+
+  // Fallback: trigger download
+  const blob=new Blob([json],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;a.download=filename;a.click();
+  URL.revokeObjectURL(url);
+  S.modal=null;
+  showToast("Downloaded: "+filename+" — move to ~/Documents/VectorLabel/Templates/");
+  R();
+}
+
+function newTemplate(){
+  const nameEl=document.getElementById("new-tpl-name");
+  const specEl=document.getElementById("new-tpl-spec");
+  const name=nameEl?nameEl.value.trim()||"Untitled Template":"Untitled Template";
+  const specN=specEl?specEl.value:BL[1].n;
+  snapshot();
+  S.tplName=name;
+  S.spec=BL.find(l=>l.n===specN)||BL[1];
+  S.objs=[];
+  S.selId=null;
+  S._ef=undefined;
+  S.modal=null;
+  R();
+  showToast("New template created");
+}
+
+async function openTemplate(){
+  S._loadedTemplates=S._loadedTemplates||[];
+  S._openSel=undefined;
+  S.modal="open";
+  renderModal();
+}
+
+async function pickTemplateFile(){
+  if(window.showOpenFilePicker){
+    try{
+      const [fh]=await window.showOpenFilePicker({
+        startIn:"documents",
+        types:[{description:"VectorLabel Template",accept:{"application/json":[".json",".vlt.json"]}}],
+        multiple:false
+      });
+      const file=await fh.getFile();
+      const text=await file.text();
+      const data=JSON.parse(text);
+      if(!data.objs)throw new Error("Not a VectorLabel template");
+      S._loadedTemplates=S._loadedTemplates||[];
+      // Avoid duplicates by name
+      const existing=S._loadedTemplates.findIndex(t=>t.name===data.name);
+      if(existing>=0)S._loadedTemplates[existing]=data;
+      else S._loadedTemplates.push(data);
+      S._openSel=S._loadedTemplates.length-1;
+      renderModal();
+    }catch(e){
+      if(e.name!=="AbortError")showToast("Error: "+e.message);
+    }
+  }else{
+    // Fallback file input
+    const inp=document.createElement("input");
+    inp.type="file";inp.accept=".json,.vlt.json";
+    inp.onchange=async()=>{
+      const file=inp.files[0];if(!file)return;
+      const text=await file.text();
+      try{
+        const data=JSON.parse(text);
+        if(!data.objs)throw new Error("Not a VectorLabel template");
+        S._loadedTemplates=S._loadedTemplates||[];
+        S._loadedTemplates.push(data);
+        S._openSel=S._loadedTemplates.length-1;
+        renderModal();
+      }catch(e){showToast("Error: "+e.message);}
+    };
+    inp.click();
+  }
+}
+
+function loadSelectedTemplate(){
+  const templates=S._loadedTemplates||[];
+  const t=templates[S._openSel];
+  if(!t)return;
+  snapshot();
+  S.tplName=t.name||"Untitled Template";
+  S.spec=BL.find(l=>l.n===t.specN)||BL[1];
+  S.objs=JSON.parse(JSON.stringify(t.objs));
+  S.selId=null;S._ef=undefined;
+  S.modal=null;
+  R();
+  showToast("Opened: "+S.tplName);
+}
+
+// ── Toast notifications ───────────────────────────────────────────────────────
+function showToast(msg){
+  let t=document.getElementById("vl-toast");
+  if(!t){t=document.createElement("div");t.id="vl-toast";
+    Object.assign(t.style,{position:"fixed",bottom:"24px",left:"50%",transform:"translateX(-50%)",
+      background:"#2a2a42",border:"1px solid rgba(108,142,245,0.4)",color:"#e8e8f0",
+      borderRadius:"6px",padding:"8px 18px",fontSize:"12px",zIndex:"2000",
+      boxShadow:"0 4px 20px rgba(0,0,0,0.5)",transition:"opacity 0.3s",pointerEvents:"none"});
+    document.body.appendChild(t);}
+  t.textContent=msg;t.style.opacity="1";
+  clearTimeout(t._timer);
+  t._timer=setTimeout(()=>{t.style.opacity="0";},2800);
+}
+
+// Close modal on Escape
+document.addEventListener("keydown",function(e2){
+  if(e2.key==="Escape"&&S.modal){closeModal();}
+},true);
 
 R();
 </script>
