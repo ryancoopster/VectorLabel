@@ -663,19 +663,8 @@ function initDesigner(opts){
 }
 
 const FONTS=["Helvetica Neue","Arial","Arial Narrow","Verdana","Tahoma","Courier New","Georgia","Impact"];
-const BL=[
-  {n:"BM-31-427",tw:1,th:1.5,pw:1,ph:.5,lb:'BM-31-427 — 1"×1.5"'},
-  {n:"BM-32-427",tw:1.5,th:1.5,pw:1.5,ph:.5,lb:'BM-32-427 — 1.5"×1.5"'},
-  {n:"BM-33-427",tw:4,th:1.5,pw:1.5,ph:1.5,lb:'BM-33-427 — 4"×1.5" (1.5" printable)'}
-];
-const FD=[
-  {f:"Number",c:"Number"},{f:"Cable Name",c:"Cable"},{f:"Signal",c:"Signal"},
-  {f:"Connector",c:"Connector"},{f:"Device Name",c:"Device_Name"},{f:"Device Tag",c:"Device_Tag"},
-  {f:"Socket Name",c:"Socket_Name"},{f:"Socket Tag",c:"Socket_Tag"},
-  {f:"Other Device",c:"Other_Device"},{f:"Other Socket",c:"Other_Socket"},
-  {f:"Other Connector",c:"Other_Connector"},{f:"Rack",c:"Rack"},{f:"Room",c:"Room"},
-  {f:"Rack U",c:"RackU"},{f:"Side",c:"_Side"},{f:"Cable Type",c:"Cable_Type"},{f:"Cable Length",c:"CableLength"}
-];
+// BL defined above
+// FD defined above
 const RX=[
   {_Side:"Source",Number:"N044",Cable:"RIO 1 PRI",Signal:"LAN",Connector:"EC-6A",Device_Name:"SWITCH 6.01",Device_Tag:"SWITCH 6.01",Socket_Name:"LAN 1",Socket_Tag:"LAN 1",Other_Device:"IO 1.01",Other_Socket:"DANTE PRI",Other_Connector:"EC-6A",Rack:"",Room:"",RackU:"",Cable_Type:"---",CableLength:"Auto"},
   {_Side:"Destination",Number:"N044",Cable:"RIO 1 PRI",Signal:"LAN",Connector:"EC-6A",Device_Name:"IO 1.01",Device_Tag:"IO 1.01",Socket_Name:"DANTE PRI",Socket_Tag:"DANTE PRI",Other_Device:"SWITCH 6.01",Other_Socket:"LAN 1",Other_Connector:"EC-6A",Rack:"RIO RACK",Room:"PORTABLE",RackU:"22",Cable_Type:"---",CableLength:"Auto"},
@@ -684,7 +673,7 @@ const RX=[
 ];
 
 // ── Formula engine ────────────────────────────────────────────────────────────
-function tokenize(expr){
+function _dup_tokenize(expr){
   const t=[];let i=0;
   while(i<expr.length){
     if(/\s/.test(expr[i])){i++;continue;}
@@ -701,7 +690,7 @@ function tokenize(expr){
   }
   return t;
 }
-function evalToks(toks,vars){
+function _dup_evalToks(toks,vars){
   let p=0;const pk=()=>toks[p],cs=()=>toks[p++];
   function rv(n){if(n in vars)return vars[n];const f=FD.find(x=>x.f.toLowerCase()===n.toLowerCase()||x.c.toLowerCase()===n.toLowerCase());return f?(vars[f.c]??""):n;}
   function pp(){
@@ -731,7 +720,7 @@ function evalToks(toks,vars){
   function pe(){let l=pp();while(pk()?.k==="a"){cs();l=String(l??"")+String(pp()??"");}return l;}
   return pe();
 }
-function evalF(formula,rec){
+function _dup_evalF(formula,rec){
   if(!formula||!formula.trim())return{v:"",e:null};
   if(!formula.startsWith("="))return{v:formula,e:null};
   const m={};FD.forEach(f=>{m[f.f]=rec[f.c]??"";m[f.c]=rec[f.c]??""});
@@ -757,7 +746,7 @@ function gobj(id){return S.objs.find(o=>o.id===id);}
 function uobj(id,p){S.objs=S.objs.map(o=>o.id===id?Object.assign({},o,p):o);}
 
 // ── Canvas ────────────────────────────────────────────────────────────────────
-const SC=185;
+// const SC=185;
 
 // ── Snap helpers ──────────────────────────────────────────────────────────────
 const SNAP_PX=4; // screen pixels threshold for smart snap
@@ -975,7 +964,7 @@ function buildProps(){
 }
 
 // ── Record table ──────────────────────────────────────────────────────────────
-function buildRecordTable(){
+function _dup_buildRecordTable(){
   const cols=FD.slice(0,9);
   const rows=RX.map((r,i)=>`<tr class="recrow${S.recIdx===i?" selrow":""}" onclick="S.recIdx=${i};R()">
     ${cols.map(f=>`<td style="color:${r[f.c]?"#e8e8f0":"#44445a"}">${(r[f.c]||"—").substring(0,22)}</td>`).join("")}
