@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>VectorLabel — Menu Bar</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#1c1c1e;display:flex;align-items:flex-start;justify-content:center;padding:40px;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;font-size:13px;color:#f0f0f5;min-height:100vh}
+
+/* macOS menu bar dropdown */
+.dropdown{
+  width:320px;
+  background:#2a2a2e;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,0.12);
+  box-shadow:0 20px 60px rgba(0,0,0,0.7), 0 0 0 0.5px rgba(255,255,255,0.08);
+  overflow:hidden;
+  user-select:none;
+}
+
+.section{padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.07)}
+.section:last-child{border-bottom:none}
+.section-header{
+  padding:4px 14px 6px;
+  font-size:10px;font-weight:600;
+  color:rgba(255,255,255,0.35);
+  text-transform:uppercase;letter-spacing:.8px;
+}
+.row{
+  display:flex;align-items:center;gap:9px;
+  padding:7px 14px;cursor:default;
+  transition:background .1s;
+}
+.row:hover{background:rgba(108,142,245,0.15)}
+.row.no-hover:hover{background:transparent;cursor:default}
+
+/* Status dots */
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.dot.green{background:#30d158}
+.dot.amber{background:#ff9f0a}
+.dot.red{background:#ff453a}
+.dot.blue{background:#0a84ff}
+.dot.grey{background:rgba(255,255,255,0.25)}
+
+/* Printer row */
+.printer-name{flex:1;font-size:12px;color:#e8e8f0;font-weight:500}
+.printer-model{font-size:10px;color:rgba(255,255,255,0.35);margin-top:1px}
+.printer-status-text{font-size:11px;white-space:nowrap}
+.status-ready{color:#30d158}
+.status-busy{color:#ff9f0a}
+.status-offline{color:rgba(255,255,255,0.3)}
+
+/* Print job row */
+.job-icon{width:26px;height:26px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+.job-icon.active{background:rgba(10,132,255,0.2)}
+.job-icon.done{background:rgba(48,209,88,0.15)}
+.job-icon.recent{background:rgba(255,255,255,0.07)}
+.job-meta{flex:1;min-width:0}
+.job-title{font-size:12px;font-weight:500;color:#e8e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.job-sub{font-size:10px;color:rgba(255,255,255,0.35);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Progress bar */
+.progress-wrap{padding:0 14px 8px;margin-top:-4px}
+.progress-track{height:3px;background:rgba(255,255,255,0.08);border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;border-radius:2px;transition:width .3s}
+.progress-fill.blue{background:linear-gradient(90deg,#0a84ff,#4a9eff)}
+.progress-fill.green{background:#30d158}
+
+/* Small buttons */
+.chip{
+  font-size:10px;font-weight:500;padding:3px 8px;border-radius:5px;
+  border:1px solid rgba(255,255,255,0.13);background:rgba(255,255,255,0.06);
+  color:rgba(255,255,255,0.6);cursor:pointer;white-space:nowrap;flex-shrink:0;
+}
+.chip:hover{background:rgba(255,255,255,0.12);color:#fff}
+.chip.cancel{border-color:rgba(255,69,58,0.3);background:rgba(255,69,58,0.08);color:#ff6961}
+.chip.cancel:hover{background:rgba(255,69,58,0.2)}
+.chip.reprint{border-color:rgba(108,142,245,0.35);background:rgba(108,142,245,0.1);color:#6C8EF5}
+.chip.reprint:hover{background:rgba(108,142,245,0.2)}
+.chip.primary{background:rgba(108,142,245,0.2);border-color:rgba(108,142,245,0.4);color:#a0b8ff}
+.chip.primary:hover{background:rgba(108,142,245,0.35)}
+
+/* Action rows */
+.action-row{
+  display:flex;align-items:center;gap:9px;
+  padding:8px 14px;cursor:pointer;
+  transition:background .1s;
+}
+.action-row:hover{background:rgba(255,255,255,0.07)}
+.action-icon{width:26px;height:26px;border-radius:6px;background:rgba(255,255,255,0.07);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.action-label{font-size:12px;color:#d0d0e0;font-weight:400}
+
+/* App header */
+.app-header{
+  display:flex;align-items:center;gap:10px;
+  padding:12px 14px 8px;
+}
+.logo-mark{width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#1e4fc4,#c8102e);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#fff;letter-spacing:-1px;flex-shrink:0}
+.app-name{font-size:13px;font-weight:600;color:#e8e8f0}
+.app-version{font-size:10px;color:rgba(255,255,255,0.25);margin-top:1px}
+.quit-btn{margin-left:auto;font-size:10px;color:rgba(255,255,255,0.25);cursor:pointer;padding:3px 6px;border-radius:4px}
+.quit-btn:hover{color:rgba(255,255,255,0.5);background:rgba(255,255,255,0.06)}
+
+/* Divider line */
+.divider{height:1px;background:rgba(255,255,255,0.07);margin:0}
+
+/* Simulated menu bar at top */
+.menubar-sim{
+  display:flex;align-items:center;justify-content:flex-end;
+  width:320px;padding:0 0 6px;gap:4px;
+}
+.menubar-icon{
+  width:22px;height:22px;background:#2a2a2e;border-radius:5px;
+  display:flex;align-items:center;justify-content:center;font-size:11px;
+  cursor:pointer;border:1px solid rgba(255,255,255,0.15);color:#e8e8f0;
+}
+.menubar-icon.active{background:#3a3a40;border-color:rgba(108,142,245,0.5)}
+</style>
+</head>
+<body>
+<div>
+
+  <!-- Simulated menu bar icon -->
+  <div class="menubar-sim">
+    <div style="flex:1;font-size:10px;color:rgba(255,255,255,0.2)">macOS menu bar</div>
+    <div class="menubar-icon">⊞</div>
+    <div class="menubar-icon active" title="VectorLabel">VL</div>
+  </div>
+
+  <!-- Dropdown -->
+  <div class="dropdown">
+
+    <!-- App header -->
+    <div class="app-header">
+      <div class="logo-mark">VL</div>
+      <div>
+        <div class="app-name">VectorLabel</div>
+        <div class="app-version">v1.0.0 · Watching ~/Documents/VectorLabel</div>
+      </div>
+      <div class="quit-btn" onclick="this.textContent='✓'">Quit</div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ── CONNECTED PRINTERS ── -->
+    <div class="section">
+      <div class="section-header">Printers</div>
+
+      <!-- Printer 1: Ready -->
+      <div class="row no-hover">
+        <div class="dot green"></div>
+        <div style="flex:1">
+          <div class="printer-name">Brady M610</div>
+          <div class="printer-model">M610-A3F2 · Ready</div>
+        </div>
+        <div class="printer-status-text status-ready">Ready</div>
+      </div>
+
+      <!-- Printer 2: Printing -->
+      <div>
+        <div class="row no-hover">
+          <div class="dot blue" style="animation:pulse 1.2s infinite"></div>
+          <div style="flex:1">
+            <div class="printer-name">Brady M611</div>
+            <div class="printer-model">M611-B891 · Printing job</div>
+          </div>
+          <div class="printer-status-text status-busy">Printing</div>
+        </div>
+        <!-- Progress for active print -->
+        <div class="progress-wrap">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:10px;color:rgba(255,255,255,0.35)">N044–N046 · 6 labels · 4 of 6</span>
+            <span style="font-size:10px;color:#0a84ff">67%</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill blue" style="width:67%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Printer 3: Offline -->
+      <div class="row no-hover">
+        <div class="dot grey"></div>
+        <div style="flex:1">
+          <div class="printer-name">Brady M610 (Lab)</div>
+          <div class="printer-model">M610-C104 · Not connected</div>
+        </div>
+        <div class="printer-status-text status-offline">Offline</div>
+      </div>
+
+    </div>
+
+    <!-- ── ACTIVE PRINT JOBS ── -->
+    <div class="section">
+      <div class="section-header">Active Jobs</div>
+
+      <!-- Job 1: Printing on M611 -->
+      <div>
+        <div class="row">
+          <div class="job-icon active">🖨</div>
+          <div class="job-meta">
+            <div class="job-title">Kodak Hall — N044–N046</div>
+            <div class="job-sub">Brady M611 · Standard Wire Label · 6 labels</div>
+          </div>
+          <div onclick="this.closest('.section').querySelector('.cancel-confirm').style.display='flex'" class="chip cancel">Cancel</div>
+        </div>
+        <!-- Progress repeat -->
+        <div class="progress-wrap">
+          <div class="progress-track">
+            <div class="progress-fill blue" style="width:67%"></div>
+          </div>
+        </div>
+        <!-- Cancel confirm -->
+        <div class="cancel-confirm" style="display:none;align-items:center;gap:6px;padding:4px 14px 8px">
+          <span style="font-size:11px;color:rgba(255,255,255,0.5);flex:1">Cancel this print?</span>
+          <div class="chip cancel" onclick="this.closest('.section').innerHTML='<div style=\'padding:10px 14px;font-size:11px;color:rgba(255,255,255,0.35)\'>Job cancelled.</div>'">Yes, cancel</div>
+          <div class="chip" onclick="this.closest('.cancel-confirm').style.display='none'">Keep</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── RECENT PRINTS ── -->
+    <div class="section">
+      <div class="section-header">Recent Prints</div>
+
+      <!-- Recent 1 -->
+      <div class="row">
+        <div class="job-icon done">✓</div>
+        <div class="job-meta">
+          <div class="job-title">Kodak Hall — All labels</div>
+          <div class="job-sub">8 labels · Standard Wire Label · M610 · 2 min ago</div>
+        </div>
+        <div class="chip reprint" onclick="showReprint(this,'Kodak Hall — All labels','8 labels · Standard Wire Label')">Reprint</div>
+      </div>
+
+      <!-- Recent 2 -->
+      <div class="row">
+        <div class="job-icon done">✓</div>
+        <div class="job-meta">
+          <div class="job-title">Geffen Hall — Selected (12)</div>
+          <div class="job-sub">12 labels · Power Label · M610 · 18 min ago</div>
+        </div>
+        <div class="chip reprint" onclick="showReprint(this,'Geffen Hall — Selected','12 labels · Power Label')">Reprint</div>
+      </div>
+
+      <!-- Recent 3 -->
+      <div class="row">
+        <div class="job-icon recent" style="color:rgba(255,255,255,0.3)">⊡</div>
+        <div class="job-meta">
+          <div class="job-title">Geffen Hall — N030–N032</div>
+          <div class="job-sub">6 labels · Standard Wire Label · M611 · 1 hr ago</div>
+        </div>
+        <div class="chip reprint" onclick="showReprint(this,'Geffen Hall — N030–N032','6 labels · Standard Wire Label')">Reprint</div>
+      </div>
+
+      <!-- Reprint confirmation (hidden by default) -->
+      <div id="reprint-confirm" style="display:none;padding:8px 14px 4px">
+        <div style="background:rgba(108,142,245,0.12);border:1px solid rgba(108,142,245,0.25);border-radius:8px;padding:10px 12px">
+          <div id="reprint-title" style="font-size:12px;font-weight:600;color:#e8e8f0;margin-bottom:2px"></div>
+          <div id="reprint-sub" style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:8px"></div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:10px;color:rgba(255,255,255,0.4);flex:1">Send to same printer with same settings?</span>
+            <div class="chip reprint" onclick="doReprint()">Open Print Screen</div>
+            <div class="chip" onclick="document.getElementById('reprint-confirm').style.display='none'">✕</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── ACTIONS ── -->
+    <div class="section">
+
+      <div class="action-row" onclick="this.style.background='rgba(108,142,245,0.2)'">
+        <div class="action-icon">⊞</div>
+        <div class="action-label">Open Template Designer</div>
+        <div style="margin-left:auto;font-size:10px;color:rgba(255,255,255,0.2)">⌘T</div>
+      </div>
+
+      <div class="action-row">
+        <div class="action-icon">📁</div>
+        <div class="action-label">Open Export Folder</div>
+        <div style="margin-left:auto;font-size:10px;color:rgba(255,255,255,0.2)">⌘E</div>
+      </div>
+
+      <div class="action-row">
+        <div class="action-icon">⚙</div>
+        <div class="action-label">Preferences…</div>
+        <div style="margin-left:auto;font-size:10px;color:rgba(255,255,255,0.2)">⌘,</div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- Annotation -->
+  <div style="margin-top:16px;font-size:11px;color:rgba(255,255,255,0.2);text-align:center;line-height:1.8">
+    Click Reprint or Cancel to see interactions
+  </div>
+
+</div>
+
+<style>
+@keyframes pulse {
+  0%,100%{opacity:1} 50%{opacity:.4}
+}
+</style>
+<script>
+function showReprint(btn, title, sub) {
+  document.getElementById('reprint-confirm').style.display = 'block';
+  document.getElementById('reprint-title').textContent = title;
+  document.getElementById('reprint-sub').textContent = sub;
+  // Scroll into view
+  document.getElementById('reprint-confirm').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function doReprint() {
+  document.getElementById('reprint-confirm').style.display = 'none';
+  // In real app: opens print window with saved state
+  const notice = document.createElement('div');
+  notice.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#2a2a42;border:1px solid rgba(108,142,245,0.4);color:#e8e8f0;border-radius:6px;padding:8px 18px;font-size:12px;z-index:999';
+  notice.textContent = '↗ Opening print screen with saved settings…';
+  document.body.appendChild(notice);
+  setTimeout(() => notice.remove(), 2500);
+}
+</script>
+</body>
+</html>
