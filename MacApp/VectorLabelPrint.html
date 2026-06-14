@@ -297,128 +297,58 @@ function buildPrintBar(){
   const total=P.records.length;
   const nSel=selCount();
   const t=tpl();
-  const canPrint=t&&nSel>0;
-  return`<div style="background:#1e1e2e;border-top:1px solid rgba(255,255,255,0.1);padding:10px 16px;display:flex;align-items:center;gap:12px;flex-shrink:0">
-    <!-- Selection summary -->
-    <div style="display:flex;align-items:center;gap:8px">
-      <span style="color:#8888a8;font-size:12px">${nSel} of ${total} selected</span>
+  const pr=printer();
+  const canPrint=t&&nSel>0&&pr.status==="ready";
+  const pCount=printCount();
+
+  return`<div style="background:#1e1e2e;border-top:1px solid rgba(255,255,255,0.1);padding:10px 16px;display:flex;align-items:center;gap:14px;flex-shrink:0;flex-wrap:wrap">
+
+    <!-- Selection controls -->
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-right:2px">Labels</span>
       <button class="btn" onclick="toggleAll()" style="padding:3px 8px;font-size:11px">${nSel===total?"Deselect all":"Select all"}</button>
-      <button class="btn" onclick="showPrintModal()" style="padding:3px 8px;font-size:11px">Select range…</button>
+      <span style="color:#8888a8;font-size:12px">${nSel} of ${total}</span>
     </div>
+
+    <!-- Divider -->
+    <div style="width:1px;height:20px;background:rgba(255,255,255,0.08)"></div>
+
+    <!-- Range selector inline -->
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px">Print</span>
+      ${["selected","all","range"].map(v=>`
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;padding:3px 8px;border-radius:4px;border:1px solid ${P.printRange===v?"#6C8EF5":"rgba(255,255,255,0.1)"};background:${P.printRange===v?"rgba(108,142,245,0.12)":"transparent"}">
+          <input type="radio" name="prange" value="${v}" ${P.printRange===v?"checked":""} onchange="P.printRange='${v}';R()" style="display:none">
+          <span style="color:${P.printRange===v?"#e8e8f0":"#8888a8"};font-size:11px">${v==="selected"?"Selected ("+nSel+")":v==="all"?"All ("+total+")":"Range"}</span>
+        </label>`).join("")}
+      ${P.printRange==="range"?`
+        <input type="number" class="inp" min="1" max="${total}" value="${P.rangeFrom}" style="width:54px;padding:3px 6px;font-size:11px" onchange="P.rangeFrom=Math.max(1,Math.min(parseInt(this.value)||1,${total}));R()">
+        <span style="color:#44445a">–</span>
+        <input type="number" class="inp" min="1" max="${total}" value="${P.rangeTo}" style="width:54px;padding:3px 6px;font-size:11px" onchange="P.rangeTo=Math.max(1,Math.min(parseInt(this.value)||${total},${total}));R()">
+        <span style="color:#44445a;font-size:11px">(${Math.max(0,P.rangeTo-P.rangeFrom+1)})</span>`:""}
+    </div>
+
     <div style="flex:1"></div>
+
     <!-- Printer selector -->
     <div style="display:flex;align-items:center;gap:8px">
       <div style="position:relative">
         <select class="inp" style="width:220px;padding:5px 28px 5px 32px;appearance:none;-webkit-appearance:none;cursor:pointer"
           onchange="P.activePrinter=this.value;R()">
-          ${PRINTERS.map(pr=>`<option value="${pr.id}" ${P.activePrinter===pr.id?"selected":""}>${pr.name} — ${pr.serial}</option>`).join("")}
+          ${PRINTERS.map(p=>`<option value="${p.id}" ${P.activePrinter===p.id?"selected":""}>${p.name} — ${p.serial}</option>`).join("")}
         </select>
-        <!-- Status dot overlaid on left of select -->
-        <div style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:${printer().status==="ready"?"#5cc896":printer().status==="busy"?"#f5c96c":"#f56c6c"};pointer-events:none"></div>
-        <!-- Dropdown arrow -->
+        <div style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:${pr.status==="ready"?"#5cc896":pr.status==="busy"?"#f5c96c":"#f56c6c"};pointer-events:none"></div>
         <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:#8888a8;font-size:9px;pointer-events:none">▼</div>
       </div>
-      <div style="font-size:11px;${printer().status==="ready"?"color:#5cc896":printer().status==="busy"?"color:#f5c96c":"color:#f56c6c"}">
-        ${printer().status==="ready"?"Ready":printer().status==="busy"?"Busy":"Offline"}
+      <div style="font-size:11px;${pr.status==="ready"?"color:#5cc896":pr.status==="busy"?"color:#f5c96c":"color:#f56c6c"}">
+        ${pr.status==="ready"?"Ready":pr.status==="busy"?"Busy":"Offline"}
       </div>
     </div>
-    <!-- Print button -->
-    <button class="btn primary" onclick="showPrintModal()" style="padding:7px 20px;font-size:13px" ${canPrint&&printer().status==="ready"?"":"disabled"}>
-      Print ${nSel} label${nSel!==1?"s":""}…
+
+    <!-- Print button — goes straight to printing, no confirmation -->
+    <button class="btn primary" onclick="doPrint()" style="padding:7px 22px;font-size:13px" ${canPrint?"":"disabled"}>
+      Print ${pCount} label${pCount!==1?"s":""}
     </button>
-  </div>`;
-}
-
-// ── Print confirmation modal ───────────────────────────────────────────────────
-function buildPrintModal(){
-  const t=tpl();
-  const total=P.records.length;
-  const nSel=selCount();
-  const spec=BL.find(l=>l.n===t?.specN)||BL[1];
-  return`<div class="modal-overlay" onclick="if(event.target===this)P.modal=null,R()">
-    <div class="modal" style="width:480px">
-      <div class="modal-title">Print Labels</div>
-
-      <!-- Template + supply + printer info -->
-      <div class="print-info" style="margin-bottom:16px">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
-          ${renderLabel(t,P.records[P.previewIdx]||{},0.35)}
-          <div>
-            <div style="color:#8888a8;font-size:10px;text-transform:uppercase;letter-spacing:1px">Template</div>
-            <div style="color:#e8e8f0;font-size:13px;font-weight:600;margin-bottom:6px">${t?.name||"—"}</div>
-            <div style="color:#8888a8;font-size:10px;text-transform:uppercase;letter-spacing:1px">Load this supply</div>
-            <div style="color:#6C8EF5;font-size:13px;font-weight:600;font-family:monospace">${spec.n}</div>
-            <div style="color:#44445a;font-size:11px">${spec.lb.split("—")[1]?.trim()||""}</div>
-          </div>
-        </div>
-        <div style="border-top:1px solid rgba(255,255,255,0.07);padding-top:10px">
-          <label class="lbl">Printer</label>
-          <div style="display:flex;align-items:center;gap:8px">
-            <div style="position:relative;flex:1">
-              <select class="inp" style="padding:5px 28px 5px 32px;appearance:none;-webkit-appearance:none;cursor:pointer"
-                onchange="P.activePrinter=this.value;R()">
-                ${PRINTERS.map(pr=>`<option value="${pr.id}" ${P.activePrinter===pr.id?"selected":""}>${pr.name} — ${pr.serial}</option>`).join("")}
-              </select>
-              <div style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:${printer().status==="ready"?"#5cc896":printer().status==="busy"?"#f5c96c":"#f56c6c"};pointer-events:none"></div>
-              <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:#8888a8;font-size:9px;pointer-events:none">▼</div>
-            </div>
-            <div style="font-size:11px;white-space:nowrap;${printer().status==="ready"?"color:#5cc896":printer().status==="busy"?"color:#f5c96c":"color:#f56c6c"}">
-              ${printer().status==="ready"?"Ready":printer().status==="busy"?"Busy — wait or choose another":"Offline"}
-            </div>
-          </div>
-          ${printer().status!=="ready"?`<div style="color:#f5c96c;font-size:11px;margin-top:6px">⚠ Select a ready printer before printing</div>`:""}
-        </div>
-      </div>
-
-      <!-- Print range selection -->
-      <div style="margin-bottom:14px">
-        <label class="lbl">Print range</label>
-        <div style="display:flex;flex-direction:column;gap:8px">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;border-radius:5px;border:1px solid ${P.printRange==="selected"?"#6C8EF5":"rgba(255,255,255,0.08)"};background:${P.printRange==="selected"?"rgba(108,142,245,0.1)":"transparent"}">
-            <input type="radio" name="prange" value="selected" ${P.printRange==="selected"?"checked":""} onchange="P.printRange='selected';R()">
-            <div>
-              <div style="color:#e8e8f0;font-size:12px">Selected labels <span style="color:#6C8EF5;font-weight:600">(${nSel})</span></div>
-              <div style="color:#44445a;font-size:11px">Print only the checked rows</div>
-            </div>
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;border-radius:5px;border:1px solid ${P.printRange==="all"?"#6C8EF5":"rgba(255,255,255,0.08)"};background:${P.printRange==="all"?"rgba(108,142,245,0.1)":"transparent"}">
-            <input type="radio" name="prange" value="all" ${P.printRange==="all"?"checked":""} onchange="P.printRange='all';R()">
-            <div>
-              <div style="color:#e8e8f0;font-size:12px">All labels <span style="color:#6C8EF5;font-weight:600">(${total})</span></div>
-              <div style="color:#44445a;font-size:11px">Print every record in this export</div>
-            </div>
-          </label>
-          <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;padding:8px 10px;border-radius:5px;border:1px solid ${P.printRange==="range"?"#6C8EF5":"rgba(255,255,255,0.08)"};background:${P.printRange==="range"?"rgba(108,142,245,0.1)":"transparent"}">
-            <input type="radio" name="prange" value="range" ${P.printRange==="range"?"checked":""} onchange="P.printRange='range';R()" style="margin-top:2px">
-            <div style="flex:1">
-              <div style="color:#e8e8f0;font-size:12px;margin-bottom:6px">Custom range</div>
-              <div style="display:flex;align-items:center;gap:8px">
-                <div>
-                  <label class="lbl">From label #</label>
-                  <input type="number" class="inp" min="1" max="${total}" value="${P.rangeFrom}" style="width:80px" onchange="P.rangeFrom=Math.max(1,Math.min(parseInt(this.value)||1,${total}));P.printRange='range';R()">
-                </div>
-                <span style="color:#44445a;margin-top:14px">—</span>
-                <div>
-                  <label class="lbl">To label #</label>
-                  <input type="number" class="inp" min="1" max="${total}" value="${P.rangeTo}" style="width:80px" onchange="P.rangeTo=Math.max(1,Math.min(parseInt(this.value)||${total},${total}));P.printRange='range';R()">
-                </div>
-                <div style="margin-top:14px;color:#44445a;font-size:11px">${P.printRange==="range"?`= ${Math.max(0,P.rangeTo-P.rangeFrom+1)} labels`:""}</div>
-              </div>
-            </div>
-          </label>
-        </div>
-      </div>
-
-      <!-- Print count summary -->
-      <div style="background:#252538;border-radius:4px;padding:8px 12px;font-size:12px;color:#8888a8">
-        Ready to send <span style="color:#e8e8f0;font-weight:600">${printCount()}</span> label${printCount()!==1?"s":""} to <span style="color:${printer().status==="ready"?"#5cc896":"#f5c96c"}">${printer().name}</span>
-      </div>
-
-      <div class="modal-footer">
-        <button class="btn" onclick="P.modal=null;R()">Cancel</button>
-        <button class="btn primary" style="padding:7px 24px;font-size:13px" onclick="doPrint()" ${printer().status==="ready"?"":"disabled"}>Print ${printCount()} label${printCount()!==1?"s":""}</button>
-      </div>
-    </div>
   </div>`;
 }
 
@@ -428,8 +358,6 @@ function printCount(){
   if(P.printRange==="range")return Math.max(0,P.rangeTo-P.rangeFrom+1);
   return 0;
 }
-
-function showPrintModal(){if(tpl())P.modal="print",R();}
 
 function doPrint(){
   const n=printCount();
@@ -628,7 +556,7 @@ function R(){
     ${buildPrintBar()}
 
     <!-- Modal -->
-    ${P.modal==="print"?buildPrintModal():""}
+
     ${P.modal==="printing"||P.modal==="done"?buildPrintingModal():""}
   `;
 }
