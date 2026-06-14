@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>VectorLabel — Print</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:#13131a;color:#e8e8f0;font-family:system-ui,sans-serif;font-size:13px}
+input,select,button{font-family:system-ui,sans-serif;font-size:12px}
+.inp{background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#e8e8f0;border-radius:4px;padding:4px 8px;outline:none;width:100%}
+.inp:focus{border-color:#6C8EF5}
+.btn{background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#8888a8;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:12px;white-space:nowrap}
+.btn:hover{background:#333350}
+.btn.primary{background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600}
+.btn.primary:hover{background:#5a7ce4}
+.btn.danger{background:rgba(245,108,108,0.15);border-color:rgba(245,108,108,0.3);color:#f56c6c}
+.btn.on{background:#6C8EF5;border-color:#6C8EF5;color:#fff}
+.tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600}
+.tag.src{background:rgba(108,142,245,0.2);color:#6C8EF5}
+.tag.dst{background:rgba(108,200,150,0.2);color:#5cc896}
+label.lbl{font-size:10px;color:#8888a8;display:block;margin-bottom:3px}
+.divider{border:none;border-top:1px solid rgba(255,255,255,0.07);margin:12px 0}
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:100}
+.modal{background:#1a1a28;border:1px solid rgba(255,255,255,0.13);border-radius:8px;padding:24px;box-shadow:0 8px 40px rgba(0,0,0,0.6)}
+.modal-title{font-size:15px;font-weight:600;margin-bottom:16px}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.07)}
+.rec-row{display:grid;grid-template-columns:28px 28px 1fr 1fr 1fr 1fr 1fr;align-items:center;gap:0;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;min-height:36px}
+.rec-row:hover{background:rgba(108,142,245,0.06)}
+.rec-row.selected{background:rgba(108,142,245,0.12)}
+.rec-row.active-preview{background:rgba(108,142,245,0.2)}
+.rec-cell{padding:6px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rec-hdr{font-size:10px;color:#44445a;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.tpl-card{background:#252538;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:12px 14px;cursor:pointer;display:flex;align-items:center;gap:12px;margin-bottom:8px;transition:border-color .15s}
+.tpl-card:hover{border-color:#6C8EF5;background:#2d2d48}
+.tpl-card.active{border-color:#6C8EF5;background:#2a2a42}
+.cb{width:14px;height:14px;border:1.5px solid rgba(255,255,255,0.2);border-radius:3px;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;background:#13131a}
+.cb.chk{background:#6C8EF5;border-color:#6C8EF5}
+.cb.partial{background:#2a2a42;border-color:#6C8EF5}
+.check-tick{color:#fff;font-size:9px;line-height:1}
+.print-info{background:#252538;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:12px 14px}
+</style>
+</head>
+<body>
+<div id="app" style="display:flex;flex-direction:column;height:100vh"></div>
+<script>
+// ── Field definitions ─────────────────────────────────────────────────────────
+const FD=[
+  {f:"Number",c:"Number"},{f:"Cable Name",c:"Cable"},{f:"Signal",c:"Signal"},
+  {f:"Connector",c:"Connector"},{f:"Device Name",c:"Device_Name"},
+  {f:"Socket Name",c:"Socket_Name"},{f:"Other Device",c:"Other_Device"},
+  {f:"Other Socket",c:"Other_Socket"},{f:"Rack",c:"Rack"},{f:"Room",c:"Room"}
+];
+
+// ── Formula engine (same as designer) ────────────────────────────────────────
+function tokenize(expr){
+  const t=[];let i=0;
+  while(i<expr.length){
+    if(/\s/.test(expr[i])){i++;continue;}
+    if(expr[i]==='"'){let j=i+1,s="";while(j<expr.length&&expr[j]!=='"')s+=expr[j++];t.push({k:"s",v:s});i=j+1;continue;}
+    if(/\d/.test(expr[i])){let j=i;while(j<expr.length&&/[\d.]/.test(expr[j]))j++;t.push({k:"n",v:parseFloat(expr.slice(i,j))});i=j;continue;}
+    if(expr[i]==='&'){t.push({k:"a"});i++;continue;}
+    if(expr[i]==='<'&&expr[i+1]==='>'){t.push({k:"ne"});i+=2;continue;}
+    if(expr[i]==='='){t.push({k:"eq"});i++;continue;}
+    if(expr[i]===','){t.push({k:"cm"});i++;continue;}
+    if(expr[i]==='('){t.push({k:"lp"});i++;continue;}
+    if(expr[i]===')'){t.push({k:"rp"});i++;continue;}
+    if(/[A-Za-z_]/.test(expr[i])){let j=i;while(j<expr.length&&/[A-Za-z0-9_ ]/.test(expr[j]))j++;t.push({k:"id",v:expr.slice(i,j).trimEnd()});i=j;continue;}
+    i++;
+  }
+  return t;
+}
+function evalToks(toks,vars){
+  let p=0;const pk=()=>toks[p],cs=()=>toks[p++];
+  function rv(n){if(n in vars)return vars[n];const f=FD.find(x=>x.f.toLowerCase()===n.toLowerCase()||x.c.toLowerCase()===n.toLowerCase());return f?(vars[f.c]??""):n;}
+  function pp(){
+    const t=pk();if(!t)return"";
+    if(t.k==="s"){cs();return t.v;}if(t.k==="n"){cs();return t.v;}
+    if(t.k==="id"){
+      const name=t.v;cs();
+      if(pk()?.k==="lp"){cs();const args=[];while(pk()&&pk().k!=="rp"){args.push(pe());if(pk()?.k==="cm")cs();}cs();
+        const fn=name.toUpperCase();
+        if(fn==="IF")return args[0]?(args[1]??""):(args[2]??"");
+        if(fn==="LEFT")return String(args[0]??"").slice(0,args[1]??1);
+        if(fn==="RIGHT"){const s=String(args[0]??"");return s.slice(s.length-(args[1]??1));}
+        if(fn==="LEN")return String(args[0]??"").length;
+        if(fn==="UPPER")return String(args[0]??"").toUpperCase();
+        if(fn==="LOWER")return String(args[0]??"").toLowerCase();
+        if(fn==="TRIM")return String(args[0]??"").trim();
+        if(fn==="MID")return String(args[0]??"").slice((args[1]??1)-1,((args[1]??1)-1)+(args[2]??1));
+        return"";}
+      if(pk()?.k==="ne"||pk()?.k==="eq"){const op=cs().k;const r=pp();const l=rv(name);return op==="ne"?l!==String(r):l===String(r);}
+      return rv(name);}
+    if(t.k==="lp"){cs();const v=pe();if(pk()?.k==="rp")cs();return v;}
+    cs();return"";
+  }
+  function pe(){let l=pp();while(pk()?.k==="a"){cs();l=String(l??"")+String(pp()??"");}return l;}
+  return pe();
+}
+function evalF(formula,rec){
+  if(!formula?.trim())return{v:"",e:null};
+  if(!formula.startsWith("="))return{v:formula,e:null};
+  const m={};FD.forEach(f=>{m[f.f]=rec[f.c]??"";m[f.c]=rec[f.c]??""});
+  try{return{v:String(evalToks(tokenize(formula.slice(1)),m)??""),e:null};}
+  catch(err){return{v:"",e:err.message};}
+}
+
+// ── Label preview renderer ────────────────────────────────────────────────────
+const BL=[
+  {n:"BM-31-427",tw:1,th:1.5,pw:1,ph:.5,lb:'BM-31-427 — 1"×1.5"'},
+  {n:"BM-32-427",tw:1.5,th:1.5,pw:1.5,ph:.5,lb:'BM-32-427 — 1.5"×1.5"'},
+  {n:"BM-33-427",tw:4,th:1.5,pw:1.5,ph:1.5,lb:'BM-33-427 — 4"×1.5" (1.5" printable)'}
+];
+const SC=185;
+
+function renderLabel(tpl,rec,scale=1){
+  const spec=BL.find(l=>l.n===tpl.specN)||BL[1];
+  const pw=spec.pw*SC*scale,ph=spec.ph*SC*scale;
+  const sc=SC*scale;
+  const objs=(tpl.objs||[]).map(o=>{
+    const x=o.x*sc,y=o.y*sc,w=(o.w||1)*sc,h=(o.h||0)*sc;
+    if(o.t==="tx"){
+      const {v,e}=rec?evalF(o.f,rec):{v:"",e:null};
+      const fz=Math.max(5,(o.fs||14)*(sc/100));
+      const jc=o.al==="center"?"center":o.al==="right"?"flex-end":"flex-start";
+      const va=o.valign==="top"?"flex-start":o.valign==="bottom"?"flex-end":"center";
+      const fw=o.bold?700:400;
+      const fs=o.italic?"italic":"normal";
+      const td=o.underline?"underline":"none";
+      const ws=o.wrapText?"normal":"nowrap";
+      const sx=(o.stretch||100)/100;
+      const col=e?"#f56c6c":"#000";
+      const txt=(e?`⚠`:v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+      return `<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${Math.max(h,8)}px;overflow:hidden;display:flex;align-items:${va};padding:0 1px;box-sizing:border-box">
+        <div style="width:100%;font-family:'${o.font||"Helvetica Neue"}',Arial,sans-serif;font-size:${fz}px;font-weight:${fw};font-style:${fs};text-decoration:${td};color:${col};white-space:${ws};overflow:hidden;text-overflow:ellipsis;line-height:1.15;text-align:${o.al||"left"};transform:scaleX(${sx});transform-origin:left center">${txt}</div>
+      </div>`;
+    }
+    if(o.t==="ln")return`<div style="position:absolute;left:${x}px;top:${y}px;width:${(o.w||1)*sc}px;height:${Math.max(1,o.lw||1)}px;background:#000"></div>`;
+    if(o.t==="rc")return`<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border:${o.lw||1}px solid #000;background:transparent"></div>`;
+    return"";
+  }).join("");
+  return`<div style="width:${pw}px;height:${ph}px;background:#fff;border:1.5px solid rgba(255,255,255,0.15);border-radius:2px;position:relative;overflow:hidden;flex-shrink:0">${objs}</div>`;
+}
+
+// ── Sample data ───────────────────────────────────────────────────────────────
+const SAMPLE_CSV=[
+  {_Side:"Source",Number:"N044",Cable:"RIO 1 PRI",Signal:"LAN",Connector:"EC-6A",Device_Name:"SWITCH 6.01",Socket_Name:"LAN 1",Other_Device:"IO 1.01",Other_Socket:"DANTE PRI",Other_Connector:"EC-6A",Rack:"",Room:""},
+  {_Side:"Destination",Number:"N044",Cable:"RIO 1 PRI",Signal:"LAN",Connector:"EC-6A",Device_Name:"IO 1.01",Socket_Name:"DANTE PRI",Other_Device:"SWITCH 6.01",Other_Socket:"LAN 1",Other_Connector:"EC-6A",Rack:"RIO RACK",Room:"PORTABLE"},
+  {_Side:"Source",Number:"N045",Cable:"RIO 2 PRI",Signal:"LAN",Connector:"EC-6A",Device_Name:"SWITCH 6.01",Socket_Name:"LAN 2",Other_Device:"IO 1.02",Other_Socket:"DANTE PRI",Other_Connector:"EC-6A",Rack:"",Room:""},
+  {_Side:"Destination",Number:"N045",Cable:"RIO 2 PRI",Signal:"LAN",Connector:"EC-6A",Device_Name:"IO 1.02",Socket_Name:"DANTE PRI",Other_Device:"SWITCH 6.01",Other_Socket:"LAN 2",Other_Connector:"EC-6A",Rack:"RIO RACK",Room:"PORTABLE"},
+  {_Side:"Source",Number:"N046",Cable:"RIO 3 PRI",Signal:"LAN",Connector:"EC-6A",Device_Name:"SWITCH 6.01",Socket_Name:"LAN 3",Other_Device:"IO 1.03",Other_Socket:"DANTE PRI",Other_Connector:"EC-6A",Rack:"",Room:""},
+  {_Side:"Destination",Number:"N046",Cable:"RIO 3 PRI",Signal:"LAN",Connector:"EC-6A",Device_Name:"IO 1.03",Socket_Name:"DANTE PRI",Other_Device:"SWITCH 6.01",Other_Socket:"LAN 3",Other_Connector:"EC-6A",Rack:"RIO RACK",Room:"PORTABLE"},
+  {_Side:"Source",Number:"N030",Cable:"",Signal:"LAN",Connector:"EC-6A",Device_Name:"AMP ROOM B",Socket_Name:"C6-8",Other_Device:"SL",Other_Socket:"6A-8",Other_Connector:"EC-6A",Rack:"",Room:""},
+  {_Side:"Destination",Number:"N030",Cable:"",Signal:"LAN",Connector:"EC-6A",Device_Name:"SL",Socket_Name:"6A-8",Other_Device:"AMP ROOM B",Other_Socket:"C6-8",Other_Connector:"EC-6A",Rack:"",Room:"AMP ROOM"},
+];
+
+// Sample template (matches designer format)
+const SAMPLE_TPL={
+  name:"Standard Wire Label",
+  specN:"BM-32-427",
+  objs:[
+    {t:"tx",x:.02,y:.03,w:.44,h:.28,f:'=IF(Connector<>"",Connector,"")',al:"left",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100},
+    {t:"tx",x:.62,y:.03,w:.36,h:.28,f:'=IF(Rack<>"",Rack,"")',al:"right",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100},
+    {t:"tx",x:.02,y:.08,w:.96,h:.34,f:'=IF(Number<>"",Number&IF(Cable<>""," - "&Cable,""),IF(Cable<>"",Cable,""))',al:"center",valign:"middle",fs:19,bold:true,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100},
+    {t:"ln",x:0,y:.44,w:1,h:0,lw:1},
+    {t:"tx",x:.02,y:.47,w:.96,h:.24,f:'=IF(Other_Device<>"","@ "&Other_Device&IF(Other_Socket<>""," : "&Other_Socket,""),"")',al:"center",valign:"middle",fs:12,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100}
+  ]
+};
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let P={
+  records: SAMPLE_CSV,
+  templates: [SAMPLE_TPL],
+  activeTpl: 0,
+  selected: new Set(SAMPLE_CSV.map((_,i)=>i)), // all selected by default
+  previewIdx: 0,
+  modal: null,
+  printRange: "all",   // "all" | "selected" | "range"
+  rangeFrom: 1,
+  rangeTo: SAMPLE_CSV.length,
+  sourceFile: "ESM_Kodak_Hall_Master_export_20260614_172508.csv",
+};
+
+function tpl(){return P.templates[P.activeTpl]||null;}
+function selCount(){return P.selected.size;}
+function toggleSel(i){
+  if(P.selected.has(i))P.selected.delete(i);
+  else P.selected.add(i);
+  R();
+}
+function toggleAll(){
+  if(P.selected.size===P.records.length)P.selected.clear();
+  else P.records.forEach((_,i)=>P.selected.add(i));
+  R();
+}
+function selectRange(from,to){
+  P.selected.clear();
+  for(let i=from-1;i<to&&i<P.records.length;i++)P.selected.add(i);
+  R();
+}
+
+// ── Label preview panel ───────────────────────────────────────────────────────
+function buildPreviewPanel(){
+  const t=tpl();
+  const rec=P.records[P.previewIdx];
+  if(!t||!rec)return`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#44445a;font-size:12px">No template selected</div>`;
+  const spec=BL.find(l=>l.n===t.specN)||BL[1];
+  const scale=0.9;
+  return`<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:24px">
+    <div style="color:#8888a8;font-size:11px;font-weight:600">Label Preview</div>
+    ${renderLabel(t,rec,scale)}
+    <div style="text-align:center">
+      <div style="color:#e8e8f0;font-size:12px;font-weight:600">${rec.Number||"—"} ${rec.Cable||""}</div>
+      <div style="color:#8888a8;font-size:11px;margin-top:3px">${rec._Side} label</div>
+    </div>
+    <div class="print-info" style="width:100%;max-width:260px">
+      <label class="lbl">Required supply</label>
+      <div style="color:#e8e8f0;font-size:12px;font-weight:600;font-family:monospace">${spec.n}</div>
+      <div style="color:#8888a8;font-size:11px;margin-top:2px">${spec.lb.split("—")[1]?.trim()||""}</div>
+    </div>
+  </div>`;
+}
+
+// ── Record table ──────────────────────────────────────────────────────────────
+function buildRecordTable(){
+  const cols=[
+    {f:"Side",c:"_Side"},{f:"Number",c:"Number"},{f:"Cable",c:"Cable"},
+    {f:"Signal",c:"Signal"},{f:"Device",c:"Device_Name"},{f:"Socket",c:"Socket_Name"}
+  ];
+  const allChk=P.selected.size===P.records.length?"chk":P.selected.size>0?"partial":"";
+  const hdr=`<div class="rec-row" style="background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.1);position:sticky;top:0;z-index:2">
+    <div class="rec-cell" style="display:flex;align-items:center;justify-content:center">
+      <div class="cb ${allChk}" onclick="toggleAll()" title="Select all">
+        <span class="check-tick">${allChk==="chk"?"✓":allChk==="partial"?"−":""}</span>
+      </div>
+    </div>
+    <div class="rec-cell rec-hdr">#</div>
+    ${cols.map(c=>`<div class="rec-cell rec-hdr">${c.f}</div>`).join("")}
+  </div>`;
+
+  const rows=P.records.map((r,i)=>{
+    const isSel=P.selected.has(i);
+    const isPrev=P.previewIdx===i;
+    const side=r._Side==="Source"?"src":"dst";
+    return`<div class="rec-row${isSel?" selected":""}${isPrev?" active-preview":""}" onclick="P.previewIdx=${i};R()">
+      <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();toggleSel(${i})">
+        <div class="cb ${isSel?"chk":""}"><span class="check-tick">${isSel?"✓":""}</span></div>
+      </div>
+      <div class="rec-cell" style="color:#44445a;font-size:10px">${i+1}</div>
+      <div class="rec-cell"><span class="tag ${side}">${r._Side}</span></div>
+      <div class="rec-cell" style="color:${r.Number?"#e8e8f0":"#44445a"};font-weight:${r.Number?600:400}">${r.Number||"—"}</div>
+      <div class="rec-cell" style="color:#8888a8">${r.Cable||"—"}</div>
+      <div class="rec-cell" style="color:#8888a8">${r.Signal||"—"}</div>
+      <div class="rec-cell" style="color:#8888a8">${(r.Device_Name||"—").substring(0,18)}</div>
+      <div class="rec-cell" style="color:#8888a8">${(r.Socket_Name||"—").substring(0,14)}</div>
+    </div>`;
+  }).join("");
+
+  return`<div style="overflow-y:auto;flex:1">
+    <div style="min-width:500px">${hdr}${rows}</div>
+  </div>`;
+}
+
+// ── Template selector ─────────────────────────────────────────────────────────
+function buildTemplateBar(){
+  const t=tpl();
+  return`<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.07);flex-shrink:0">
+    <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px;white-space:nowrap">Template</span>
+    <div style="display:flex;gap:6px;flex:1;overflow-x:auto;padding-bottom:2px">
+      ${P.templates.map((tl,i)=>`
+        <div onclick="P.activeTpl=${i};R()" style="display:flex;align-items:center;gap:8px;background:${P.activeTpl===i?"#2a2a42":"#252538"};border:1px solid ${P.activeTpl===i?"#6C8EF5":"rgba(255,255,255,0.1)"};border-radius:5px;padding:5px 10px;cursor:pointer;white-space:nowrap;flex-shrink:0">
+          ${renderLabel(tl,P.records[0]||{},0.25)}
+          <div>
+            <div style="color:#e8e8f0;font-size:12px;font-weight:${P.activeTpl===i?600:400}">${tl.name}</div>
+            <div style="color:#44445a;font-size:10px;margin-top:1px">${tl.specN}</div>
+          </div>
+        </div>`).join("")}
+      <button class="btn" onclick="loadTemplateFile()" style="flex-shrink:0;padding:5px 10px;font-size:11px">+ Load template…</button>
+    </div>
+    ${t?`<div style="flex-shrink:0;text-align:right">
+      <div style="color:#44445a;font-size:10px">Required supply</div>
+      <div style="color:#6C8EF5;font-size:11px;font-weight:600;font-family:monospace">${t.specN}</div>
+    </div>`:""}
+  </div>`;
+}
+
+// ── Print bar ─────────────────────────────────────────────────────────────────
+function buildPrintBar(){
+  const total=P.records.length;
+  const nSel=selCount();
+  const t=tpl();
+  const canPrint=t&&nSel>0;
+  return`<div style="background:#1e1e2e;border-top:1px solid rgba(255,255,255,0.1);padding:10px 16px;display:flex;align-items:center;gap:12px;flex-shrink:0">
+    <!-- Selection summary -->
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="color:#8888a8;font-size:12px">${nSel} of ${total} selected</span>
+      <button class="btn" onclick="toggleAll()" style="padding:3px 8px;font-size:11px">${nSel===total?"Deselect all":"Select all"}</button>
+      <button class="btn" onclick="showPrintModal()" style="padding:3px 8px;font-size:11px">Select range…</button>
+    </div>
+    <div style="flex:1"></div>
+    <!-- Printer status mock -->
+    <div style="display:flex;align-items:center;gap:6px;color:#5cc896;font-size:11px">
+      <div style="width:7px;height:7px;background:#5cc896;border-radius:50%"></div>
+      Brady M610 ready
+    </div>
+    <!-- Print button -->
+    <button class="btn primary" onclick="showPrintModal()" style="padding:7px 20px;font-size:13px" ${canPrint?"":"disabled"}>
+      Print ${nSel} label${nSel!==1?"s":""}…
+    </button>
+  </div>`;
+}
+
+// ── Print confirmation modal ───────────────────────────────────────────────────
+function buildPrintModal(){
+  const t=tpl();
+  const total=P.records.length;
+  const nSel=selCount();
+  const spec=BL.find(l=>l.n===t?.specN)||BL[1];
+  return`<div class="modal-overlay" onclick="if(event.target===this)P.modal=null,R()">
+    <div class="modal" style="width:480px">
+      <div class="modal-title">Print Labels</div>
+
+      <!-- Template + supply info -->
+      <div class="print-info" style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:12px">
+          ${renderLabel(t,P.records[P.previewIdx]||{},0.35)}
+          <div>
+            <div style="color:#8888a8;font-size:10px;text-transform:uppercase;letter-spacing:1px">Template</div>
+            <div style="color:#e8e8f0;font-size:13px;font-weight:600;margin-bottom:6px">${t?.name||"—"}</div>
+            <div style="color:#8888a8;font-size:10px;text-transform:uppercase;letter-spacing:1px">Load this supply</div>
+            <div style="color:#6C8EF5;font-size:13px;font-weight:600;font-family:monospace">${spec.n}</div>
+            <div style="color:#44445a;font-size:11px">${spec.lb.split("—")[1]?.trim()||""}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Print range selection -->
+      <div style="margin-bottom:14px">
+        <label class="lbl">Print range</label>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;border-radius:5px;border:1px solid ${P.printRange==="selected"?"#6C8EF5":"rgba(255,255,255,0.08)"};background:${P.printRange==="selected"?"rgba(108,142,245,0.1)":"transparent"}">
+            <input type="radio" name="prange" value="selected" ${P.printRange==="selected"?"checked":""} onchange="P.printRange='selected';R()">
+            <div>
+              <div style="color:#e8e8f0;font-size:12px">Selected labels <span style="color:#6C8EF5;font-weight:600">(${nSel})</span></div>
+              <div style="color:#44445a;font-size:11px">Print only the checked rows</div>
+            </div>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;border-radius:5px;border:1px solid ${P.printRange==="all"?"#6C8EF5":"rgba(255,255,255,0.08)"};background:${P.printRange==="all"?"rgba(108,142,245,0.1)":"transparent"}">
+            <input type="radio" name="prange" value="all" ${P.printRange==="all"?"checked":""} onchange="P.printRange='all';R()">
+            <div>
+              <div style="color:#e8e8f0;font-size:12px">All labels <span style="color:#6C8EF5;font-weight:600">(${total})</span></div>
+              <div style="color:#44445a;font-size:11px">Print every record in this export</div>
+            </div>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;padding:8px 10px;border-radius:5px;border:1px solid ${P.printRange==="range"?"#6C8EF5":"rgba(255,255,255,0.08)"};background:${P.printRange==="range"?"rgba(108,142,245,0.1)":"transparent"}">
+            <input type="radio" name="prange" value="range" ${P.printRange==="range"?"checked":""} onchange="P.printRange='range';R()" style="margin-top:2px">
+            <div style="flex:1">
+              <div style="color:#e8e8f0;font-size:12px;margin-bottom:6px">Custom range</div>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div>
+                  <label class="lbl">From label #</label>
+                  <input type="number" class="inp" min="1" max="${total}" value="${P.rangeFrom}" style="width:80px" onchange="P.rangeFrom=Math.max(1,Math.min(parseInt(this.value)||1,${total}));P.printRange='range';R()">
+                </div>
+                <span style="color:#44445a;margin-top:14px">—</span>
+                <div>
+                  <label class="lbl">To label #</label>
+                  <input type="number" class="inp" min="1" max="${total}" value="${P.rangeTo}" style="width:80px" onchange="P.rangeTo=Math.max(1,Math.min(parseInt(this.value)||${total},${total}));P.printRange='range';R()">
+                </div>
+                <div style="margin-top:14px;color:#44445a;font-size:11px">${P.printRange==="range"?`= ${Math.max(0,P.rangeTo-P.rangeFrom+1)} labels`:""}</div>
+              </div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Print count summary -->
+      <div style="background:#252538;border-radius:4px;padding:8px 12px;font-size:12px;color:#8888a8">
+        Ready to send <span style="color:#e8e8f0;font-weight:600">${printCount()}</span> label${printCount()!==1?"s":""} to <span style="color:#5cc896">Brady M610</span>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn" onclick="P.modal=null;R()">Cancel</button>
+        <button class="btn primary" style="padding:7px 24px;font-size:13px" onclick="doPrint()">Print ${printCount()} label${printCount()!==1?"s":""}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function printCount(){
+  if(P.printRange==="all")return P.records.length;
+  if(P.printRange==="selected")return selCount();
+  if(P.printRange==="range")return Math.max(0,P.rangeTo-P.rangeFrom+1);
+  return 0;
+}
+
+function showPrintModal(){if(tpl())P.modal="print",R();}
+
+function doPrint(){
+  const n=printCount();
+  P.modal="printing";R();
+  // Simulate print progress
+  let done=0;
+  const iv=setInterval(()=>{
+    done+=Math.ceil(Math.random()*3);
+    if(done>=n){done=n;clearInterval(iv);P.modal="done";R();}
+    else{P._printProgress={done,total:n};renderProgress();}
+  },120);
+}
+
+function renderProgress(){
+  const el=document.getElementById("print-progress");
+  if(!el)return;
+  const {done,total}=P._printProgress||{done:0,total:1};
+  const pct=Math.round(done/total*100);
+  el.querySelector(".prog-bar").style.width=pct+"%";
+  el.querySelector(".prog-txt").textContent=`Printing label ${done} of ${total}…`;
+}
+
+function buildPrintingModal(){
+  const n=printCount();
+  if(P.modal==="done"){
+    return`<div class="modal-overlay">
+      <div class="modal" style="width:380px;text-align:center">
+        <div style="font-size:40px;margin-bottom:12px">✓</div>
+        <div class="modal-title" style="justify-content:center">Print complete</div>
+        <div style="color:#8888a8;font-size:13px;margin-bottom:20px">${printCount()} label${printCount()!==1?"s":""} sent to Brady M610</div>
+        <button class="btn primary" onclick="P.modal=null;P._printProgress=null;R()" style="width:100%;padding:9px">Done</button>
+      </div>
+    </div>`;
+  }
+  const prog=P._printProgress||{done:0,total:n};
+  const pct=Math.round(prog.done/prog.total*100);
+  return`<div class="modal-overlay" id="print-progress">
+    <div class="modal" style="width:380px">
+      <div class="modal-title">Printing…</div>
+      <div style="color:#8888a8;font-size:13px;margin-bottom:16px" class="prog-txt">Preparing ${n} labels…</div>
+      <div style="background:#252538;border-radius:4px;overflow:hidden;height:6px;margin-bottom:8px">
+        <div class="prog-bar" style="height:100%;background:#6C8EF5;border-radius:4px;transition:width .1s;width:${pct}%"></div>
+      </div>
+      <div style="color:#44445a;font-size:11px;text-align:right">${pct}%</div>
+    </div>
+  </div>`;
+}
+
+// ── Load template file ────────────────────────────────────────────────────────
+async function loadTemplateFile(){
+  if(window.showOpenFilePicker){
+    try{
+      const [fh]=await window.showOpenFilePicker({
+        startIn:"documents",
+        types:[{description:"VectorLabel Template",accept:{"application/json":[".json",".vlt.json"]}}],
+        multiple:false
+      });
+      const file=await fh.getFile();
+      const text=await file.text();
+      const data=JSON.parse(text);
+      if(!data.objs)throw new Error("Not a VectorLabel template");
+      const dup=P.templates.findIndex(t=>t.name===data.name);
+      if(dup>=0)P.templates[dup]=data;
+      else P.templates.push(data);
+      P.activeTpl=P.templates.length-1;
+      R();
+    }catch(e){if(e.name!=="AbortError")alert("Error: "+e.message);}
+  }else{
+    const inp=document.createElement("input");inp.type="file";inp.accept=".json,.vlt.json";
+    inp.onchange=async()=>{
+      const file=inp.files[0];if(!file)return;
+      try{
+        const data=JSON.parse(await file.text());
+        if(!data.objs)throw new Error("Not a VectorLabel template");
+        P.templates.push(data);P.activeTpl=P.templates.length-1;R();
+      }catch(e){alert("Error: "+e.message);}
+    };
+    inp.click();
+  }
+}
+
+// ── Load CSV file ─────────────────────────────────────────────────────────────
+async function loadCSV(){
+  if(window.showOpenFilePicker){
+    try{
+      const [fh]=await window.showOpenFilePicker({
+        startIn:"documents",
+        types:[{description:"VectorLabel CSV Export",accept:{"text/csv":[".csv"]}}]
+      });
+      const file=await fh.getFile();
+      const text=await file.text();
+      P.records=parseCSV(text);
+      P.selected=new Set(P.records.map((_,i)=>i));
+      P.previewIdx=0;
+      P.sourceFile=file.name;
+      R();
+    }catch(e){if(e.name!=="AbortError")alert("Error: "+e.message);}
+  }else{
+    const inp=document.createElement("input");inp.type="file";inp.accept=".csv";
+    inp.onchange=async()=>{
+      const file=inp.files[0];if(!file)return;
+      P.records=parseCSV(await file.text());
+      P.selected=new Set(P.records.map((_,i)=>i));
+      P.previewIdx=0;P.sourceFile=file.name;R();
+    };
+    inp.click();
+  }
+}
+
+function parseCSV(text){
+  const lines=text.split(/\r?\n/).filter(l=>l.trim());
+  if(!lines.length)return[];
+  const headers=lines[0].split(",").map(h=>h.replace(/^"|"$/g,"").trim());
+  return lines.slice(1).map(line=>{
+    const vals=[];let cur="",inQ=false;
+    for(const c of line){
+      if(c==='"'){inQ=!inQ;}else if(c===','&&!inQ){vals.push(cur);cur="";}else cur+=c;
+    }
+    vals.push(cur);
+    const row={};
+    headers.forEach((h,i)=>row[h]=(vals[i]||"").replace(/^"|"$/g,""));
+    return row;
+  }).filter(r=>Object.values(r).some(v=>v));
+}
+
+// ── Main render ───────────────────────────────────────────────────────────────
+function R(){
+  const t=tpl();
+  document.getElementById("app").innerHTML=`
+    <!-- Top bar -->
+    <div style="background:#1e1e2e;border-bottom:1px solid rgba(255,255,255,0.07);padding:0 16px;display:flex;align-items:center;gap:12px;height:44px;flex-shrink:0">
+      <span style="color:#6C8EF5;font-weight:700;font-size:15px;letter-spacing:-.3px">VectorLabel</span>
+      <span style="color:#44445a;font-size:11px">Print</span>
+      <div style="width:1px;height:20px;background:rgba(255,255,255,0.08)"></div>
+      <span style="color:#8888a8;font-size:11px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${P.sourceFile}">${P.sourceFile}</span>
+      <div style="flex:1"></div>
+      <button class="btn" onclick="loadCSV()" style="font-size:11px">Load CSV…</button>
+    </div>
+
+    <!-- Template bar -->
+    ${buildTemplateBar()}
+
+    <!-- Main: record table + preview -->
+    <div style="display:flex;flex:1;overflow:hidden">
+
+      <!-- Record table -->
+      <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0">
+        <!-- Table header info -->
+        <div style="padding:7px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0;border-bottom:1px solid rgba(255,255,255,0.05)">
+          <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px">Labels</span>
+          <span style="color:#8888a8;font-size:11px">${P.records.length} total · click row to preview · checkbox to select</span>
+        </div>
+        <!-- Grid headers -->
+        <div class="rec-row" style="background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.1);flex-shrink:0">
+          <div class="rec-cell" style="display:flex;align-items:center;justify-content:center">
+            <div class="cb ${P.selected.size===P.records.length?"chk":P.selected.size>0?"partial":""}" onclick="toggleAll()">
+              <span class="check-tick">${P.selected.size===P.records.length?"✓":P.selected.size>0?"−":""}</span>
+            </div>
+          </div>
+          <div class="rec-cell rec-hdr">#</div>
+          <div class="rec-cell rec-hdr">Side</div>
+          <div class="rec-cell rec-hdr">Number</div>
+          <div class="rec-cell rec-hdr">Cable</div>
+          <div class="rec-cell rec-hdr">Signal</div>
+          <div class="rec-cell rec-hdr">Device</div>
+          <div class="rec-cell rec-hdr">Socket</div>
+        </div>
+        <div style="overflow-y:auto;flex:1">
+          ${P.records.map((r,i)=>{
+            const isSel=P.selected.has(i);
+            const isPrev=P.previewIdx===i;
+            const side=r._Side==="Source"?"src":"dst";
+            return`<div class="rec-row${isSel?" selected":""}${isPrev?" active-preview":""}" onclick="P.previewIdx=${i};R()">
+              <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();toggleSel(${i})">
+                <div class="cb ${isSel?"chk":""}"><span class="check-tick">${isSel?"✓":""}</span></div>
+              </div>
+              <div class="rec-cell" style="color:#44445a;font-size:10px">${i+1}</div>
+              <div class="rec-cell"><span class="tag ${side}">${r._Side}</span></div>
+              <div class="rec-cell" style="color:${r.Number?"#e8e8f0":"#44445a"};font-weight:${r.Number?600:400}">${r.Number||"—"}</div>
+              <div class="rec-cell" style="color:#8888a8">${r.Cable||"—"}</div>
+              <div class="rec-cell" style="color:#8888a8">${r.Signal||"—"}</div>
+              <div class="rec-cell" style="color:#8888a8">${(r.Device_Name||"—").substring(0,20)}</div>
+              <div class="rec-cell" style="color:#8888a8">${(r.Socket_Name||"—").substring(0,16)}</div>
+            </div>`;
+          }).join("")}
+        </div>
+      </div>
+
+      <!-- Right: preview panel -->
+      <div style="width:280px;background:#1a1a28;border-left:1px solid rgba(255,255,255,0.07);overflow-y:auto;flex-shrink:0">
+        ${buildPreviewPanel()}
+      </div>
+    </div>
+
+    <!-- Print bar -->
+    ${buildPrintBar()}
+
+    <!-- Modal -->
+    ${P.modal==="print"?buildPrintModal():""}
+    ${P.modal==="printing"||P.modal==="done"?buildPrintingModal():""}
+  `;
+}
+
+R();
+</script>
+</body>
+</html>
