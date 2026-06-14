@@ -1,70 +1,291 @@
 import Foundation
 
-/// Watches the export folder (written to by the Vectorworks plugin) for new
-/// CSV exports and parses them into WireRecord pairs (source + destination).
-final class ExportWatcher {
-    private var source: DispatchSourceFileSystemObject?
-    private var fileDescriptor: CInt = -1
-    let folderURL: URL
-    var onNewExport: (([WireRecord]) -> Void)?
+// ── Folder structure ──────────────────────────────────────────────────────────
+//
+//  ~/Documents/VectorLabel/
+//    Templates/
+//    Exports/
+//      <VectorworksFileName>/          ← one folder per VW project file
+//        <VWFileName>_export_YYYYMMDD_HHMMSS.csv
+//        <VWFileName>_export_YYYYMMDD_HHMMSS.csv
+//        ...  (max 15, oldest pruned by datecode in filename)
+//
+// ExportWatcher watches the Exports/ root with FSEvents in recursive mode,
+// so any new CSV dropped into any project subfolder is picked up immediately.
+// Pruning uses the _export_YYYYMMDD_HHMMSS datecode in the filename —
+// NOT file-system metadata — so it is cloud-sync and copy safe.
 
-    init(folderURL: URL) {
-        self.folderURL = folderURL
+// ── ExportWatcher ─────────────────────────────────────────────────────────────
+
+final class ExportWatcher {
+
+    /// Root of the exports tree:  ~/Documents/VectorLabel/Exports/
+    let exportsRootURL: URL
+
+    /// Called on the main queue whenever a new CSV is found and parsed.
+    var onNewExport: ((URL, [WireRecord]) -> Void)?
+
+    private var eventStream: FSEventStreamRef?
+
+    /// Track which files we have already processed so we don't fire twice.
+    private var processedPaths = Set<String>()
+
+    init(exportsRootURL: URL) {
+        self.exportsRootURL = exportsRootURL
     }
 
+    // MARK: - Start / Stop
+
     func start() {
-        try? FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+        // Create the Exports root if it doesn't exist yet
+        try? FileManager.default.createDirectory(
+            at: exportsRootURL,
+            withIntermediateDirectories: true
+        )
 
-        fileDescriptor = open(folderURL.path, O_EVTONLY)
-        guard fileDescriptor >= 0 else { return }
+        let paths = [exportsRootURL.path] as CFArray
+        var ctx = FSEventStreamContext(
+            version: 0,
+            info: Unmanaged.passUnretained(self).toOpaque(),
+            retain: nil, release: nil, copyDescription: nil
+        )
 
-        let queue = DispatchQueue(label: "com.sai.cabletron.exportwatcher")
-        let src = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fileDescriptor, eventMask: .write, queue: queue)
-        src.setEventHandler { [weak self] in
-            self?.scanForNewFiles()
-        }
-        src.setCancelHandler { [weak self] in
-            if let fd = self?.fileDescriptor, fd >= 0 { close(fd) }
-        }
-        src.resume()
-        source = src
+        // kFSEventStreamCreateFlagFileEvents  — fire on individual file changes
+        // kFSEventStreamCreateFlagUseCFTypes  — use CFString paths
+        // kFSEventStreamCreateFlagNoDefer     — deliver events promptly
+        let flags = UInt32(
+            kFSEventStreamCreateFlagFileEvents |
+            kFSEventStreamCreateFlagUseCFTypes |
+            kFSEventStreamCreateFlagNoDefer
+        )
 
-        // Catch anything already sitting in the folder on launch
-        scanForNewFiles()
+        let stream = FSEventStreamCreate(
+            kCFAllocatorDefault,
+            { _, info, numEvents, eventPaths, eventFlags, _ in
+                guard let info = info else { return }
+                let watcher = Unmanaged<ExportWatcher>.fromOpaque(info).takeUnretainedValue()
+                let paths = unsafeBitCast(eventPaths, to: NSArray.self)
+                let flags = UnsafeBufferPointer(start: eventFlags, count: numEvents)
+
+                for i in 0 ..< numEvents {
+                    guard let path = paths[i] as? String else { continue }
+
+                    // Only care about .csv files being created / modified
+                    guard path.lowercased().hasSuffix(".csv") else { continue }
+
+                    let flag = flags[i]
+                    let created  = flag & UInt32(kFSEventStreamEventFlagItemCreated)  != 0
+                    let modified = flag & UInt32(kFSEventStreamEventFlagItemModified) != 0
+                    let renamed  = flag & UInt32(kFSEventStreamEventFlagItemRenamed)  != 0
+                    guard created || modified || renamed else { continue }
+
+                    watcher.handleNewFile(at: URL(fileURLWithPath: path))
+                }
+            },
+            &ctx,
+            paths,
+            FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
+            0.5,    // latency in seconds — coalesce rapid bursts
+            flags
+        )
+
+        guard let stream = stream else { return }
+        FSEventStreamScheduleWithRunLoop(stream, CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue)
+        FSEventStreamStart(stream)
+        eventStream = stream
+
+        // Also process anything sitting in the tree right now (e.g. missed while app was closed)
+        scanExistingFiles()
     }
 
     func stop() {
-        source?.cancel()
-        source = nil
+        guard let stream = eventStream else { return }
+        FSEventStreamStop(stream)
+        FSEventStreamInvalidate(stream)
+        FSEventStreamRelease(stream)
+        eventStream = nil
     }
 
-    private func scanForNewFiles() {
-        guard let files = try? FileManager.default.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: nil) else { return }
-        let csvFiles = files.filter { $0.pathExtension.lowercased() == "csv" }
+    // MARK: - File handling
 
-        for file in csvFiles {
-            if let records = WireExportParser.parse(fileURL: file) {
-                onNewExport?(records)
+    /// Called when FSEvents reports a new/modified CSV anywhere under Exports/
+    private func handleNewFile(at fileURL: URL) {
+        let path = fileURL.path
+
+        // Skip if we already processed this file in this session
+        guard !processedPaths.contains(path) else { return }
+
+        // Verify the file is directly inside a project subfolder, not floating
+        // at the Exports root level.
+        let parent = fileURL.deletingLastPathComponent()
+        guard parent.path != exportsRootURL.path else {
+            // File is at Exports/ root — not expected, ignore it
+            return
+        }
+
+        // Verify the filename matches our export pattern
+        guard ExportFilenameParser.isVectorLabelExport(fileURL.lastPathComponent) else { return }
+
+        // Small delay to make sure the file is fully written before reading
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            self?.processFile(at: fileURL)
+        }
+    }
+
+    private func processFile(at fileURL: URL) {
+        guard let records = WireExportParser.parse(fileURL: fileURL) else { return }
+        guard !records.isEmpty else { return }
+
+        processedPaths.insert(fileURL.path)
+
+        // Prune the project folder this file lives in
+        let projectFolder = fileURL.deletingLastPathComponent()
+        ExportPruner.prune(projectFolder: projectFolder, keep: ExportSettings.maxExportsPerProject)
+
+        DispatchQueue.main.async { [weak self] in
+            self?.onNewExport?(fileURL, records)
+        }
+    }
+
+    /// Scan the entire Exports/ tree on launch for any unprocessed files.
+    private func scanExistingFiles() {
+        guard let enumerator = FileManager.default.enumerator(
+            at: exportsRootURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else { return }
+
+        var csvURLs: [URL] = []
+        for case let fileURL as URL in enumerator {
+            guard fileURL.pathExtension.lowercased() == "csv" else { continue }
+            guard ExportFilenameParser.isVectorLabelExport(fileURL.lastPathComponent) else { continue }
+            let parent = fileURL.deletingLastPathComponent()
+            guard parent.path != exportsRootURL.path else { continue }
+            csvURLs.append(fileURL)
+        }
+
+        // Sort by embedded datecode so we process oldest → newest
+        let sorted = csvURLs.sorted {
+            let a = ExportFilenameParser.datecode(from: $0.lastPathComponent) ?? ""
+            let b = ExportFilenameParser.datecode(from: $1.lastPathComponent) ?? ""
+            return a < b
+        }
+
+        // Only pick up the most recent one per project on launch
+        // (avoids flooding the print window with every historical export)
+        var seenProjects = Set<String>()
+        for fileURL in sorted.reversed() {
+            let projectName = fileURL.deletingLastPathComponent().lastPathComponent
+            guard !seenProjects.contains(projectName) else { continue }
+            seenProjects.insert(projectName)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.processFile(at: fileURL)
             }
-            // Move processed file aside so it isn't picked up again
-            let processedURL = file.deletingPathExtension().appendingPathExtension("processed.csv")
-            try? FileManager.default.removeItem(at: processedURL)
-            try? FileManager.default.moveItem(at: file, to: processedURL)
         }
     }
 }
 
-/// Parses a Vectorworks ConnectCAD wire export into per-side WireRecords.
+// ── Export filename parser ────────────────────────────────────────────────────
+
+/// Helpers for working with VectorLabel export filenames.
 ///
-/// Expected CSV format: one row per wire, with a "WireID" column plus
-/// arbitrary ConnectCAD field columns prefixed "Src_" and "Dst_" for fields
-/// that differ per side, and unprefixed columns for fields shared by both
-/// (e.g. CableName, CableType, Length, CombinedField).
+/// Expected format:  <VWFileName>_export_YYYYMMDD_HHMMSS.csv
+/// Example:          ESM_Kodak_Hall_Master_export_20260614_172508.csv
+///
+/// The datecode is extracted from the filename itself — never from file-system
+/// metadata — so pruning is correct across copies, cloud sync, and Time Machine.
+
+enum ExportFilenameParser {
+
+    private static let pattern = try! NSRegularExpression(
+        pattern: #"_export_(\d{8}_\d{6})\.csv$"#,
+        options: .caseInsensitive
+    )
+
+    /// Returns true if the filename matches the VectorLabel export pattern.
+    static func isVectorLabelExport(_ filename: String) -> Bool {
+        let range = NSRange(filename.startIndex..., in: filename)
+        return pattern.firstMatch(in: filename, range: range) != nil
+    }
+
+    /// Extracts the YYYYMMDD_HHMMSS datecode from the filename.
+    /// Returns nil if the filename doesn't match the expected pattern.
+    static func datecode(from filename: String) -> String? {
+        let range = NSRange(filename.startIndex..., in: filename)
+        guard let match = pattern.firstMatch(in: filename, range: range),
+              let dcRange = Range(match.range(at: 1), in: filename) else { return nil }
+        return String(filename[dcRange])
+    }
+}
+
+// ── Export pruner ─────────────────────────────────────────────────────────────
+
+/// Deletes oldest exports from a project folder when the count exceeds `keep`.
+///
+/// Sorting is by the _export_YYYYMMDD_HHMMSS datecode in the filename.
+/// Lexicographic order == chronological order because the format is zero-padded
+/// and fixed-width. Files that don't match the pattern are never touched.
+
+enum ExportPruner {
+
+    static func prune(projectFolder: URL, keep: Int) {
+        guard keep > 0 else { return }
+
+        let fm = FileManager.default
+        guard let contents = try? fm.contentsOfDirectory(
+            at: projectFolder,
+            includingPropertiesForKeys: nil,
+            options: .skipsHiddenFiles
+        ) else { return }
+
+        // Only consider files that match our naming pattern
+        let exportFiles: [(datecode: String, url: URL)] = contents.compactMap { url in
+            guard url.pathExtension.lowercased() == "csv",
+                  let dc = ExportFilenameParser.datecode(from: url.lastPathComponent)
+            else { return nil }
+            return (dc, url)
+        }
+
+        // Sort oldest → newest by datecode string (lexicographic == chronological)
+        let sorted = exportFiles.sorted { $0.datecode < $1.datecode }
+
+        // Delete everything before the last `keep` entries
+        let toDelete = sorted.dropLast(keep)
+        for entry in toDelete {
+            try? fm.removeItem(at: entry.url)
+        }
+    }
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+
+enum ExportSettings {
+    /// Maximum number of export CSVs to retain per project folder.
+    /// Oldest files (by embedded datecode) are deleted when this is exceeded.
+    /// Configurable in Preferences → Export → Exports to keep per project.
+    static var maxExportsPerProject: Int = 15
+}
+
+// ── Wire record ───────────────────────────────────────────────────────────────
+
+struct WireRecord {
+    let side: String          // "Source" or "Destination"
+    let wireID: String
+    let fields: [String: String]
+
+    subscript(key: String) -> String { fields[key] ?? "" }
+}
+
+// ── CSV parser ────────────────────────────────────────────────────────────────
+
 enum WireExportParser {
+
+    /// Parse a VectorLabel CSV export into WireRecord pairs.
+    /// Returns nil if the file can't be read or is empty.
     static func parse(fileURL: URL) -> [WireRecord]? {
         guard let content = try? String(contentsOf: fileURL, encoding: .utf8) else { return nil }
         var lines = content.components(separatedBy: .newlines).filter { !$0.isEmpty }
-        guard !lines.isEmpty else { return nil }
+        guard lines.count >= 2 else { return nil }
 
         let headers = parseCSVLine(lines.removeFirst())
         var records: [WireRecord] = []
@@ -75,41 +296,27 @@ enum WireExportParser {
             var row: [String: String] = [:]
             for (i, header) in headers.enumerated() { row[header] = values[i] }
 
-            let wireID = row["WireID"] ?? UUID().uuidString
-
-            for side in ["Source", "Destination"] {
-                let prefix = side == "Source" ? "Src_" : "Dst_"
-                var fields: [String: String] = [:]
-                for (key, value) in row {
-                    if key.hasPrefix(prefix) {
-                        fields[String(key.dropFirst(prefix.count))] = value
-                    } else if !key.hasPrefix("Src_") && !key.hasPrefix("Dst_") {
-                        fields[key] = value // shared field
-                    }
-                }
-                fields["Side"] = side
-                fields["WireID"] = wireID
-                records.append(WireRecord(side: side, wireID: wireID, fields: fields))
-            }
+            let wireID   = row["Number"] ?? UUID().uuidString
+            let side     = row["_Side"]  ?? "Source"
+            records.append(WireRecord(side: side, wireID: wireID, fields: row))
         }
 
-        return records
+        return records.isEmpty ? nil : records
     }
 
-    /// Minimal CSV line parser handling quoted fields with commas/quotes.
+    /// RFC-4180 compliant CSV line parser.
     private static func parseCSVLine(_ line: String) -> [String] {
         var fields: [String] = []
         var current = ""
         var inQuotes = false
-        var chars = Array(line)
+        let chars = Array(line)
         var i = 0
         while i < chars.count {
             let c = chars[i]
             if inQuotes {
                 if c == "\"" {
                     if i + 1 < chars.count && chars[i+1] == "\"" {
-                        current.append("\"")
-                        i += 1
+                        current.append("\""); i += 1   // escaped quote
                     } else {
                         inQuotes = false
                     }
@@ -117,9 +324,11 @@ enum WireExportParser {
                     current.append(c)
                 }
             } else {
-                if c == "\"" { inQuotes = true }
-                else if c == "," { fields.append(current); current = "" }
-                else { current.append(c) }
+                switch c {
+                case "\"": inQuotes = true
+                case ",":  fields.append(current); current = ""
+                default:   current.append(c)
+                }
             }
             i += 1
         }
