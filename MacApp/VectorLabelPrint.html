@@ -186,6 +186,7 @@ let P={
   rangeTo: SAMPLE_CSV.length,
   sourceFile: "ESM_Kodak_Hall_Master_export_20260614_172508.csv",
   activePrinter: "m610-001",
+  view: "print", // "print" | "editor"
 };
 function printer(){return PRINTERS.find(p=>p.id===P.activePrinter)||PRINTERS[0];}
 
@@ -276,12 +277,15 @@ function buildTemplateBar(){
     <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px;white-space:nowrap">Template</span>
     <div style="display:flex;gap:6px;flex:1;overflow-x:auto;padding-bottom:2px">
       ${P.templates.map((tl,i)=>`
-        <div onclick="P.activeTpl=${i};R()" style="display:flex;align-items:center;gap:8px;background:${P.activeTpl===i?"#2a2a42":"#252538"};border:1px solid ${P.activeTpl===i?"#6C8EF5":"rgba(255,255,255,0.1)"};border-radius:5px;padding:5px 10px;cursor:pointer;white-space:nowrap;flex-shrink:0">
-          ${renderLabel(tl,P.records[0]||{},0.25)}
-          <div>
-            <div style="color:#e8e8f0;font-size:12px;font-weight:${P.activeTpl===i?600:400}">${tl.name}</div>
-            <div style="color:#44445a;font-size:10px;margin-top:1px">${tl.specN}</div>
+        <div style="display:flex;align-items:center;gap:0;background:${P.activeTpl===i?"#2a2a42":"#252538"};border:1px solid ${P.activeTpl===i?"#6C8EF5":"rgba(255,255,255,0.1)"};border-radius:5px;overflow:hidden;flex-shrink:0;white-space:nowrap">
+          <div onclick="P.activeTpl=${i};R()" style="display:flex;align-items:center;gap:8px;padding:5px 10px;cursor:pointer">
+            ${renderLabel(tl,P.records[0]||{},0.25)}
+            <div>
+              <div style="color:#e8e8f0;font-size:12px;font-weight:${P.activeTpl===i?600:400}">${tl.name}</div>
+              <div style="color:#44445a;font-size:10px;margin-top:1px">${tl.specN}</div>
+            </div>
           </div>
+          ${P.activeTpl===i?`<button onclick="openEditor()" style="background:rgba(108,142,245,0.15);border:none;border-left:1px solid rgba(108,142,245,0.3);color:#6C8EF5;padding:0 10px;height:100%;cursor:pointer;font-size:11px;font-weight:600">Edit</button>`:""}
         </div>`).join("")}
       <button class="btn" onclick="loadTemplateFile()" style="flex-shrink:0;padding:5px 10px;font-size:11px">+ Load template…</button>
     </div>
@@ -485,6 +489,7 @@ function parseCSV(text){
 
 // ── Main render ───────────────────────────────────────────────────────────────
 function R(){
+  if(P.view==="editor"){renderEditor();return;}
   const t=tpl();
   document.getElementById("app").innerHTML=`
     <!-- Top bar -->
@@ -560,6 +565,246 @@ function R(){
     ${P.modal==="printing"||P.modal==="done"?buildPrintingModal():""}
   `;
 }
+
+// ── Editor integration ────────────────────────────────────────────────────────
+function openEditor(){
+  // Copy the active template into editor state so changes are isolated until saved
+  P._editingTpl=JSON.parse(JSON.stringify(P.templates[P.activeTpl]));
+  P.view="editor";
+  R();
+}
+
+function closeEditor(save){
+  if(save&&P._editingTpl){
+    // Persist changes back to the template list
+    P.templates[P.activeTpl]=JSON.parse(JSON.stringify(P._editingTpl));
+  }
+  P._editingTpl=null;
+  P.view="print";
+  R();
+}
+
+function renderEditor(){
+  const app=document.getElementById("app");
+
+  // ── Inline mini-designer ──────────────────────────────────────────────────
+  const tpl=P._editingTpl;
+  const specObj=BL.find(l=>l.n===tpl.specN)||BL[1];
+  const rec=P.records[P.previewIdx]||{};
+
+  // Editor state lives on P._ed
+  if(!P._ed||P._ed.tplId!==P.activeTpl){
+    P._ed={
+      tplId:P.activeTpl,
+      objs:JSON.parse(JSON.stringify(tpl.objs)),
+      selId:null,
+      zoom:1,
+      wrap:false,
+      showFields:false,
+      snapGrid:true,
+      snapObjects:true,
+      gridSize:0.05,
+      _snapLines:[],
+      _ef:undefined,
+      recIdx:P.previewIdx,
+      history:[]
+    };
+  }
+
+  const ed=P._ed;
+  const selObj=ed.selId?ed.objs.find(o=>o.id===ed.selId):null;
+  const FONTS=["Helvetica Neue","Arial","Arial Narrow","Verdana","Tahoma","Courier New","Georgia","Impact"];
+
+  // Commit formula bar value back to object
+  function commitF(){if(ed.selId&&ed._ef!==undefined){const o=ed.objs.find(x=>x.id===ed.selId);if(o)o.f=ed._ef;ed._ef=undefined;}}
+
+  // Snap helpers (simplified, no cross-object snap indicators for brevity)
+  function sg(v){if(!ed.snapGrid)return v;return Math.round(v/ed.gridSize)*ed.gridSize;}
+
+  const SC=185;
+  const sc=SC;
+  const pw=specObj.pw*sc,ph=specObj.ph*sc;
+
+  // Grid SVG
+  const gridLines=[];
+  if(ed.snapGrid){const gs=ed.gridSize*sc;for(let x=0;x<pw;x+=gs)gridLines.push(`<line x1="${x.toFixed(1)}" y1="0" x2="${x.toFixed(1)}" y2="${ph}" stroke="rgba(108,142,245,0.18)" stroke-width="0.5"/>`);for(let y=0;y<ph;y+=gs)gridLines.push(`<line x1="0" y1="${y.toFixed(1)}" x2="${pw}" y2="${y.toFixed(1)}" stroke="rgba(108,142,245,0.18)" stroke-width="0.5"/>`);}
+  const gridSvg=gridLines.length?`<svg style="position:absolute;top:0;left:0;width:${pw}px;height:${ph}px;pointer-events:none;z-index:0" width="${pw}" height="${ph}">${gridLines.join("")}</svg>`:"";
+
+  // Objects HTML
+  function objHtml(o){
+    const x=o.x*sc,y=o.y*sc,w=(o.w||1)*sc,h=(o.h||0)*sc;
+    const sel=o.id===ed.selId;
+    const ss=sel?`outline:1.5px solid #6C8EF5;outline-offset:1px;`:"";
+    if(o.t==="tx"){
+      const {v,e}=evalF(o.f,rec);
+      const va=o.valign==="top"?"flex-start":o.valign==="bottom"?"flex-end":"center";
+      const fz=Math.max(7,(o.fs||14)*(sc/100));
+      const col=e?"#f56c6c":"#000";
+      const txt=(e?`⚠ ${e}`:v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+      const rb=sel?`<div onmousedown="edResz(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:#6C8EF5;border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";
+      return `<div onmousedown="edDrag(event,'${o.id}')" style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${Math.max(h,12)}px;${ss}border-radius:2px;cursor:move;overflow:hidden;display:flex;align-items:${va};padding:0 2px;box-sizing:border-box">
+        <div style="width:100%;font-family:'${o.font||"Helvetica Neue"}',Arial,sans-serif;font-size:${fz}px;font-weight:${o.bold?700:400};font-style:${o.italic?"italic":"normal"};text-decoration:${o.underline?"underline":"none"};color:${col};white-space:${o.wrapText?"normal":"nowrap"};overflow:hidden;text-overflow:ellipsis;line-height:1.15;text-align:${o.al||"left"};transform:scaleX(${(o.stretch||100)/100});transform-origin:left center">${txt}</div>${rb}</div>`;
+    }
+    if(o.t==="ln")return`<div onmousedown="edDrag(event,'${o.id}')" style="position:absolute;left:${x}px;top:${y}px;width:${(o.w||1)*sc}px;height:${Math.max(1,o.lw||1)}px;background:#000;cursor:move;${ss}"></div>`;
+    if(o.t==="rc"){const rb=sel?`<div onmousedown="edResz(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:#6C8EF5;border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";return`<div onmousedown="edDrag(event,'${o.id}')" style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border:${o.lw||1}px solid #000;background:transparent;cursor:move;${ss}">${rb}</div>`;}
+    return"";
+  }
+
+  // Properties panel
+  function propsHtml(){
+    const o=selObj;
+    if(!o)return`<div style="color:#44445a;font-size:11px;text-align:center;margin-top:40px;line-height:1.7">Click an object<br>to edit it</div>`;
+    const inp=(lbl,key,step,val)=>`<div style="margin-bottom:6px"><label style="font-size:10px;color:#8888a8;display:block;margin-bottom:2px">${lbl}</label><input type="number" style="background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#e8e8f0;border-radius:4px;padding:4px 8px;font-size:11px;outline:none;width:100%" step="${step}" value="${(+val||0).toFixed(3)}" onchange="edProp('${o.id}','${key}',parseFloat(this.value))"></div>`;
+    if(o.t==="tx")return`
+      <div style="color:#8888a8;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Text</div>
+      <div style="margin-bottom:6px"><label style="font-size:10px;color:#8888a8;display:block;margin-bottom:2px">Font</label>
+        <select style="background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#e8e8f0;border-radius:4px;padding:4px 8px;font-size:11px;outline:none;width:100%" onchange="edProp('${o.id}','font',this.value)">
+          ${FONTS.map(f=>`<option value="${f}"${o.font===f?" selected":""}>${f}</option>`).join("")}
+        </select></div>
+      <div style="margin-bottom:6px"><label style="font-size:10px;color:#8888a8;display:block;margin-bottom:2px">Size (pt)</label>
+        <input type="number" style="background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#e8e8f0;border-radius:4px;padding:4px 8px;font-size:11px;outline:none;width:100%" value="${o.fs||16}" min="6" max="144" onchange="edProp('${o.id}','fs',parseInt(this.value))"></div>
+      <div style="margin-bottom:8px"><label style="font-size:10px;color:#8888a8;display:block;margin-bottom:4px">Style</label>
+        <div style="display:flex;gap:3px">
+          ${["bold","italic","underline"].map(s=>`<button onclick="edProp('${o.id}','${s}',!${!!o[s]})" style="background:${o[s]?"#6C8EF5":"#2a2a42"};border:1px solid ${o[s]?"#6C8EF5":"rgba(255,255,255,0.13)"};color:${o[s]?"#fff":"#8888a8"};border-radius:3px;padding:3px 8px;cursor:pointer;font-size:12px;font-weight:700">${s==="bold"?"B":s==="italic"?"I":"U"}</button>`).join("")}
+        </div></div>
+      <div style="margin-bottom:8px"><label style="font-size:10px;color:#8888a8;display:block;margin-bottom:4px">Align</label>
+        <div style="display:flex;gap:3px">
+          ${["left","center","right","justify"].map(a=>`<button onclick="edProp('${o.id}','al','${a}')" style="background:${(o.al||"left")===a?"#6C8EF5":"#2a2a42"};border:1px solid ${(o.al||"left")===a?"#6C8EF5":"rgba(255,255,255,0.13)"};color:${(o.al||"left")===a?"#fff":"#8888a8"};border-radius:3px;padding:3px 7px;cursor:pointer;flex:1">${a==="left"?"◁":a==="center"?"◈":a==="right"?"▷":"⬌"}</button>`).join("")}
+        </div></div>
+      <hr style="border:none;border-top:1px solid rgba(255,255,255,0.07);margin:8px 0">
+      ${inp("X","x",.01,o.x)}${inp("Y","y",.005,o.y)}${inp("Width","w",.01,o.w)}${inp("Height","h",.01,o.h)}`;
+    if(o.t==="ln")return`<div style="color:#8888a8;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Line</div>
+      <div style="margin-bottom:6px"><label style="font-size:10px;color:#8888a8;display:block;margin-bottom:2px">Weight (px)</label>
+        <input type="number" style="background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#e8e8f0;border-radius:4px;padding:4px 8px;font-size:11px;outline:none;width:100%" value="${o.lw||1}" min="1" max="10" onchange="edProp('${o.id}','lw',parseInt(this.value))"></div>
+      ${inp("Y","y",.005,o.y)}${inp("Width","w",.01,o.w)}`;
+    if(o.t==="rc")return`<div style="color:#8888a8;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Rectangle</div>
+      <div style="margin-bottom:6px"><label style="font-size:10px;color:#8888a8;display:block;margin-bottom:2px">Border (px)</label>
+        <input type="number" style="background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#e8e8f0;border-radius:4px;padding:4px 8px;font-size:11px;outline:none;width:100%" value="${o.lw||1}" min="1" max="10" onchange="edProp('${o.id}','lw',parseInt(this.value))"></div>
+      ${inp("X","x",.01,o.x)}${inp("Y","y",.005,o.y)}${inp("Width","w",.01,o.w)}${inp("Height","h",.01,o.h)}`;
+    return"";
+  }
+
+  const fbar=selObj&&selObj.t==="tx"?`
+    <div style="background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.07);padding:5px 12px;display:flex;align-items:center;gap:8px;flex-shrink:0">
+      <span style="color:#44445a;font-style:italic;font-size:14px">ƒx</span>
+      <input id="ed-fx" style="flex:1;background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#e8e8f0;border-radius:4px;padding:4px 8px;font-size:12px;outline:none;font-family:monospace"
+        value="${(selObj.f||"").replace(/"/g,'&quot;').replace(/</g,"&lt;").replace(/>/g,"&gt;")}"
+        oninput="P._ed._ef=this.value" onblur="edCommitF()" onkeydown="if(event.key==='Enter')edCommitF()"
+        placeholder='=IF(Number&lt;&gt;"",Number&amp;" - "&amp;Cable,Cable)'>
+      <button onclick="P._ed.showFields=!P._ed.showFields;renderEditor()" style="background:${ed.showFields?"#6C8EF5":"#2a2a42"};border:1px solid ${ed.showFields?"#6C8EF5":"rgba(255,255,255,0.13)"};color:${ed.showFields?"#fff":"#8888a8"};border-radius:4px;padding:4px 9px;font-size:11px;cursor:pointer">Fields ▾</button>
+    </div>
+    ${ed.showFields?`<div style="background:#252538;border-bottom:1px solid rgba(255,255,255,0.07);padding:6px 12px;display:flex;flex-wrap:wrap;gap:4px;max-height:80px;overflow-y:auto;flex-shrink:0">
+      ${FD.map(f=>`<button onclick="const fx=document.getElementById('ed-fx');if(fx){fx.value+=&quot;${f.f}&quot;;P._ed._ef=fx.value}" style="background:#1a1a28;border:1px solid rgba(255,255,255,0.07);color:#8888a8;border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer">${f.f}</button>`).join("")}
+    </div>`:""}
+  `:"";
+
+  const nid_ed=()=>`oe${Date.now()}${Math.random().toString(36).slice(2,6)}`;
+
+  app.innerHTML=`
+    <!-- Editor top bar -->
+    <div style="background:#1e1e2e;border-bottom:1px solid rgba(255,255,255,0.07);padding:0 14px;display:flex;align-items:center;gap:10px;height:44px;flex-shrink:0">
+      <button onclick="closeEditor(false)" style="background:none;border:none;color:#8888a8;cursor:pointer;font-size:13px;padding:4px 8px;border-radius:4px;display:flex;align-items:center;gap:5px" onmouseover="this.style.background='#2a2a42'" onmouseout="this.style.background='none'">← Discard</button>
+      <div style="width:1px;height:20px;background:rgba(255,255,255,0.08)"></div>
+      <span style="color:#6C8EF5;font-weight:700;font-size:14px">Editing:</span>
+      <span style="color:#e8e8f0;font-size:14px">${tpl.name}</span>
+      <span style="color:#44445a;font-size:11px;font-family:monospace">${specObj.n}</span>
+      <div style="flex:1"></div>
+      <!-- Add object buttons -->
+      <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px">Add</span>
+      ${[["T","tx","Text"],["╌","ln","Line"],["▭","rc","Rect"]].map(([ic,tp,lb])=>`
+        <button onclick="edAdd('${tp}')" style="display:flex;align-items:center;gap:4px;background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#8888a8;border-radius:4px;padding:4px 9px;cursor:pointer;font-size:11px">
+          <span style="font-size:13px;font-weight:700">${ic}</span>${lb}
+        </button>`).join("")}
+      ${ed.selId?`<button onclick="edDel()" style="background:rgba(245,108,108,0.15);border:1px solid rgba(245,108,108,0.3);color:#f56c6c;border-radius:4px;padding:4px 9px;cursor:pointer;font-size:11px">Delete</button>`:""}
+      <div style="width:1px;height:20px;background:rgba(255,255,255,0.08)"></div>
+      <!-- Zoom -->
+      <div style="display:flex;align-items:center;gap:3px;background:#2a2a42;border:1px solid rgba(255,255,255,0.13);border-radius:4px;padding:2px 6px">
+        <button onclick="P._ed.zoom=Math.max(.25,P._ed.zoom-.25);renderEditor()" style="background:none;border:none;color:#8888a8;cursor:pointer;font-size:16px;padding:0 2px;line-height:1">−</button>
+        <span style="color:#e8e8f0;font-size:11px;min-width:34px;text-align:center">${Math.round(ed.zoom*100)}%</span>
+        <button onclick="P._ed.zoom=Math.min(4,P._ed.zoom+.25);renderEditor()" style="background:none;border:none;color:#8888a8;cursor:pointer;font-size:16px;padding:0 2px;line-height:1">+</button>
+      </div>
+      <!-- Snap -->
+      <button onclick="P._ed.snapGrid=!P._ed.snapGrid;renderEditor()" style="background:${ed.snapGrid?"#6C8EF5":"#2a2a42"};border:1px solid ${ed.snapGrid?"#6C8EF5":"rgba(255,255,255,0.13)"};color:${ed.snapGrid?"#fff":"#8888a8"};border-radius:4px;padding:4px 8px;cursor:pointer;font-size:11px">⊞ Grid</button>
+      <div style="width:1px;height:20px;background:rgba(255,255,255,0.08)"></div>
+      <button onclick="closeEditor(true)" style="background:#4a6cd4;border:none;color:#fff;border-radius:4px;padding:5px 16px;cursor:pointer;font-size:13px;font-weight:600">Save & Return</button>
+    </div>
+
+    <!-- Formula bar -->
+    ${fbar}
+
+    <!-- Editor body -->
+    <div style="display:flex;flex:1;overflow:hidden">
+      <!-- Canvas -->
+      <div style="flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;background:#0d0d14;padding:28px">
+        <div style="transform:scale(${ed.zoom});transform-origin:center center;flex-shrink:0">
+          <div onclick="P._ed.selId=null;renderEditor()" style="width:${pw}px;height:${ph}px;background:#fff;border:2px solid rgba(255,255,255,0.13);position:relative;overflow:hidden">
+            ${gridSvg}
+            ${ed.objs.map(objHtml).join("")}
+          </div>
+        </div>
+      </div>
+      <!-- Properties -->
+      <div style="width:210px;background:#1a1a28;border-left:1px solid rgba(255,255,255,0.07);padding:12px;overflow-y:auto;flex-shrink:0">
+        ${propsHtml()}
+      </div>
+    </div>
+
+    <!-- Record preview strip -->
+    <div style="background:#1a1a28;border-top:1px solid rgba(255,255,255,0.07);padding:6px 12px;display:flex;align-items:center;gap:8px;flex-shrink:0">
+      <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px">Preview record</span>
+      ${P.records.map((r,i)=>`<button onclick="P._ed.recIdx=${i};renderEditor()" style="background:${ed.recIdx===i?"#6C8EF5":"#2a2a42"};border:1px solid ${ed.recIdx===i?"#6C8EF5":"rgba(255,255,255,0.13)"};color:${ed.recIdx===i?"#fff":"#8888a8"};border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer">${r._Side} ${r.Number||i+1}</button>`).join("")}
+    </div>
+  `;
+
+  // Restore formula bar value
+  const fx=document.getElementById("ed-fx");
+  if(fx&&ed._ef!==undefined)fx.value=ed._ef;
+}
+
+// Editor actions
+function edCommitF(){const ed=P._ed;if(ed.selId&&ed._ef!==undefined){const o=ed.objs.find(x=>x.id===ed.selId);if(o)o.f=ed._ef;ed._ef=undefined;renderEditor();}}
+function edProp(id,k,v){const o=P._ed.objs.find(x=>x.id===id);if(o){o[k]=v;}renderEditor();}
+function edAdd(type){const id="oe"+Date.now();P._ed.history.push(JSON.parse(JSON.stringify(P._ed.objs)));if(type==="tx")P._ed.objs.push({id,t:"tx",x:.05,y:.05,w:.5,h:.2,f:'=""',al:"left",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100});if(type==="ln")P._ed.objs.push({id,t:"ln",x:0,y:.25,w:1,h:0,lw:1});if(type==="rc")P._ed.objs.push({id,t:"rc",x:.05,y:.05,w:.4,h:.2,lw:1});P._ed.selId=id;renderEditor();}
+function edDel(){if(!P._ed.selId)return;P._ed.history.push(JSON.parse(JSON.stringify(P._ed.objs)));P._ed.objs=P._ed.objs.filter(o=>o.id!==P._ed.selId);P._ed.selId=null;renderEditor();}
+function edDrag(e,id){
+  e.stopPropagation();
+  const ed=P._ed;const o=ed.objs.find(x=>x.id===id);if(!o)return;
+  ed.selId=id;renderEditor();
+  const SC=185,sx=e.clientX,sy=e.clientY,ox=o.x,oy=o.y;
+  function mv(e){
+    let nx=ox+(e.clientX-sx)/(SC*ed.zoom);
+    let ny=oy+(e.clientY-sy)/(SC*ed.zoom);
+    if(ed.snapGrid){nx=Math.round(nx/ed.gridSize)*ed.gridSize;ny=Math.round(ny/ed.gridSize)*ed.gridSize;}
+    o.x=Math.max(0,nx);o.y=Math.max(0,ny);renderEditor();
+  }
+  function mu(){window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",mu);}
+  window.addEventListener("mousemove",mv);window.addEventListener("mouseup",mu);
+}
+function edResz(e,id){
+  e.stopPropagation();
+  const ed=P._ed;const o=ed.objs.find(x=>x.id===id);if(!o)return;
+  const SC=185,sx=e.clientX,sy=e.clientY,ow=o.w,oh=o.h;
+  function mv(e){
+    let nw=ow+(e.clientX-sx)/(SC*ed.zoom);
+    let nh=oh+(e.clientY-sy)/(SC*ed.zoom);
+    if(ed.snapGrid){nw=Math.round(nw/ed.gridSize)*ed.gridSize;nh=Math.round(nh/ed.gridSize)*ed.gridSize;}
+    o.w=Math.max(.05,nw);o.h=Math.max(.02,nh);renderEditor();
+  }
+  function mu(){window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",mu);}
+  window.addEventListener("mousemove",mv);window.addEventListener("mouseup",mu);
+}
+
+// Keyboard shortcuts in editor
+document.addEventListener("keydown",function(e){
+  if(P.view!=="editor")return;
+  const tag=(document.activeElement||{}).tagName||"";
+  const inInput=["INPUT","TEXTAREA","SELECT"].includes(tag);
+  if(!inInput){
+    if((e.metaKey||e.ctrlKey)&&e.key==="z"){e.preventDefault();const ed=P._ed;if(ed.history.length){ed.objs=ed.history.pop();ed.selId=null;renderEditor();}return;}
+    if((e.key==="Delete"||e.key==="Backspace")&&P._ed.selId){e.preventDefault();edDel();return;}
+    if(e.key==="Escape"){P._ed.selId=null;renderEditor();return;}
+  }
+});
 
 R();
 </script>
