@@ -1,0 +1,13 @@
+_Side,Number,Cable,Signal,Circuits,CableLength,CableCalculatedLength,Number Display,Cable Type,Cable Outside Diameter,CircuitType,Device_Name,Device_Tag,Socket_Name,Socket_Tag,Socket_Signal,Connector,Socket_Circs,Room,Rack,RackU,Other_Device,Other_Socket,Other_Connector
+Source,N044,RIO 1 PRI,LAN,1,Auto,---,Both,---,"0""",rounded,SWITCH 6.01,SWITCH 6.01,LAN 1,LAN 1,LAN,EC-6A,1,,,,IO 1.01,DANTE PRI,EC-6A
+Destination,N044,RIO 1 PRI,LAN,1,Auto,---,Both,---,"0""",rounded,IO 1.01,IO 1.01,DANTE PRI,DANTE PRI,DANTE,EC-6A,1,PORTABLE,RIO RACK,22,SWITCH 6.01,LAN 1,EC-6A
+Source,N045,RIO 2 PRI,LAN,1,Auto,---,Both,---,"0""",rounded,SWITCH 6.01,SWITCH 6.01,LAN 2,LAN 2,LAN,EC-6A,1,,,,IO 1.02,DANTE PRI,EC-6A
+Destination,N045,RIO 2 PRI,LAN,1,Auto,---,Both,---,"0""",rounded,IO 1.02,IO 1.02,DANTE PRI,DANTE PRI,DANTE,EC-6A,1,PORTABLE,RIO RACK,16,SWITCH 6.01,LAN 2,EC-6A
+Source,N046,RIO 3 PRI,LAN,1,Auto,---,Both,---,"0""",rounded,SWITCH 6.01,SWITCH 6.01,LAN 3,LAN 3,LAN,EC-6A,1,,,,IO 1.03,DANTE PRI,EC-6A
+Destination,N046,RIO 3 PRI,LAN,1,Auto,---,Both,---,"0""",rounded,IO 1.03,IO 1.03,DANTE PRI,DANTE PRI,DANTE,EC-6A,1,PORTABLE,RIO RACK,10,SWITCH 6.01,LAN 3,EC-6A
+Source,N030,,LAN,1,Auto,---,Both,---,"0""",rounded,AMP ROOM B,AMP ROOM B,C6-8,C6-8,LAN,EC-6A,1,,,,SL,6A-8,EC-6A
+Destination,N030,,LAN,1,Auto,---,Both,---,"0""",rounded,SL,SL,6A-8,6A-8,LAN,EC-6A,1,AMP ROOM,,,AMP ROOM B,C6-8,EC-6A
+Source,N031,,LAN,1,Auto,---,Both,---,"0""",rounded,AMP ROOM B,AMP ROOM B,C6-9,C6-9,LAN,EC-6A,1,,,,SL,6A-9,EC-6A
+Destination,N031,,LAN,1,Auto,---,Both,---,"0""",rounded,SL,SL,6A-9,6A-9,LAN,EC-6A,1,AMP ROOM,,,AMP ROOM B,C6-9,EC-6A
+Source,N032,,LAN,1,Auto,---,Both,---,"0""",rounded,AMP ROOM B,AMP ROOM B,C6-10,C6-10,LAN,EC-6A,1,,,,SL,6A-10,EC-6A
+Destination,N032,,LAN,1,Auto,---,Both,---,"0""",rounded,SL,SL,6A-10,6A-10,LAN,EC-6A,1,AMP ROOM,,,AMP ROOM B,C6-10,EC-6A
