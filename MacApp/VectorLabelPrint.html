@@ -167,18 +167,27 @@ const SAMPLE_TPL={
 };
 
 // ── State ─────────────────────────────────────────────────────────────────────
+// ── Simulated printer list (in Swift app this comes from USB device scan) ────
+const PRINTERS=[
+  {id:"m610-001",name:"Brady M610",model:"M610",status:"ready",serial:"M610-A3F2"},
+  {id:"m611-001",name:"Brady M611",model:"M611",status:"ready",serial:"M611-B891"},
+  {id:"m610-002",name:"Brady M610 (Lab)",model:"M610",status:"busy",serial:"M610-C104"},
+];
+
 let P={
   records: SAMPLE_CSV,
   templates: [SAMPLE_TPL],
   activeTpl: 0,
-  selected: new Set(SAMPLE_CSV.map((_,i)=>i)), // all selected by default
+  selected: new Set(SAMPLE_CSV.map((_,i)=>i)),
   previewIdx: 0,
   modal: null,
-  printRange: "all",   // "all" | "selected" | "range"
+  printRange: "all",
   rangeFrom: 1,
   rangeTo: SAMPLE_CSV.length,
   sourceFile: "ESM_Kodak_Hall_Master_export_20260614_172508.csv",
+  activePrinter: "m610-001",
 };
+function printer(){return PRINTERS.find(p=>p.id===P.activePrinter)||PRINTERS[0];}
 
 function tpl(){return P.templates[P.activeTpl]||null;}
 function selCount(){return P.selected.size;}
@@ -297,13 +306,24 @@ function buildPrintBar(){
       <button class="btn" onclick="showPrintModal()" style="padding:3px 8px;font-size:11px">Select range…</button>
     </div>
     <div style="flex:1"></div>
-    <!-- Printer status mock -->
-    <div style="display:flex;align-items:center;gap:6px;color:#5cc896;font-size:11px">
-      <div style="width:7px;height:7px;background:#5cc896;border-radius:50%"></div>
-      Brady M610 ready
+    <!-- Printer selector -->
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="position:relative">
+        <select class="inp" style="width:220px;padding:5px 28px 5px 32px;appearance:none;-webkit-appearance:none;cursor:pointer"
+          onchange="P.activePrinter=this.value;R()">
+          ${PRINTERS.map(pr=>`<option value="${pr.id}" ${P.activePrinter===pr.id?"selected":""}>${pr.name} — ${pr.serial}</option>`).join("")}
+        </select>
+        <!-- Status dot overlaid on left of select -->
+        <div style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:${printer().status==="ready"?"#5cc896":printer().status==="busy"?"#f5c96c":"#f56c6c"};pointer-events:none"></div>
+        <!-- Dropdown arrow -->
+        <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:#8888a8;font-size:9px;pointer-events:none">▼</div>
+      </div>
+      <div style="font-size:11px;${printer().status==="ready"?"color:#5cc896":printer().status==="busy"?"color:#f5c96c":"color:#f56c6c"}">
+        ${printer().status==="ready"?"Ready":printer().status==="busy"?"Busy":"Offline"}
+      </div>
     </div>
     <!-- Print button -->
-    <button class="btn primary" onclick="showPrintModal()" style="padding:7px 20px;font-size:13px" ${canPrint?"":"disabled"}>
+    <button class="btn primary" onclick="showPrintModal()" style="padding:7px 20px;font-size:13px" ${canPrint&&printer().status==="ready"?"":"disabled"}>
       Print ${nSel} label${nSel!==1?"s":""}…
     </button>
   </div>`;
@@ -319,9 +339,9 @@ function buildPrintModal(){
     <div class="modal" style="width:480px">
       <div class="modal-title">Print Labels</div>
 
-      <!-- Template + supply info -->
+      <!-- Template + supply + printer info -->
       <div class="print-info" style="margin-bottom:16px">
-        <div style="display:flex;align-items:center;gap:12px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
           ${renderLabel(t,P.records[P.previewIdx]||{},0.35)}
           <div>
             <div style="color:#8888a8;font-size:10px;text-transform:uppercase;letter-spacing:1px">Template</div>
@@ -330,6 +350,23 @@ function buildPrintModal(){
             <div style="color:#6C8EF5;font-size:13px;font-weight:600;font-family:monospace">${spec.n}</div>
             <div style="color:#44445a;font-size:11px">${spec.lb.split("—")[1]?.trim()||""}</div>
           </div>
+        </div>
+        <div style="border-top:1px solid rgba(255,255,255,0.07);padding-top:10px">
+          <label class="lbl">Printer</label>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="position:relative;flex:1">
+              <select class="inp" style="padding:5px 28px 5px 32px;appearance:none;-webkit-appearance:none;cursor:pointer"
+                onchange="P.activePrinter=this.value;R()">
+                ${PRINTERS.map(pr=>`<option value="${pr.id}" ${P.activePrinter===pr.id?"selected":""}>${pr.name} — ${pr.serial}</option>`).join("")}
+              </select>
+              <div style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:${printer().status==="ready"?"#5cc896":printer().status==="busy"?"#f5c96c":"#f56c6c"};pointer-events:none"></div>
+              <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:#8888a8;font-size:9px;pointer-events:none">▼</div>
+            </div>
+            <div style="font-size:11px;white-space:nowrap;${printer().status==="ready"?"color:#5cc896":printer().status==="busy"?"color:#f5c96c":"color:#f56c6c"}">
+              ${printer().status==="ready"?"Ready":printer().status==="busy"?"Busy — wait or choose another":"Offline"}
+            </div>
+          </div>
+          ${printer().status!=="ready"?`<div style="color:#f5c96c;font-size:11px;margin-top:6px">⚠ Select a ready printer before printing</div>`:""}
         </div>
       </div>
 
@@ -374,12 +411,12 @@ function buildPrintModal(){
 
       <!-- Print count summary -->
       <div style="background:#252538;border-radius:4px;padding:8px 12px;font-size:12px;color:#8888a8">
-        Ready to send <span style="color:#e8e8f0;font-weight:600">${printCount()}</span> label${printCount()!==1?"s":""} to <span style="color:#5cc896">Brady M610</span>
+        Ready to send <span style="color:#e8e8f0;font-weight:600">${printCount()}</span> label${printCount()!==1?"s":""} to <span style="color:${printer().status==="ready"?"#5cc896":"#f5c96c"}">${printer().name}</span>
       </div>
 
       <div class="modal-footer">
         <button class="btn" onclick="P.modal=null;R()">Cancel</button>
-        <button class="btn primary" style="padding:7px 24px;font-size:13px" onclick="doPrint()">Print ${printCount()} label${printCount()!==1?"s":""}</button>
+        <button class="btn primary" style="padding:7px 24px;font-size:13px" onclick="doPrint()" ${printer().status==="ready"?"":"disabled"}>Print ${printCount()} label${printCount()!==1?"s":""}</button>
       </div>
     </div>
   </div>`;
@@ -422,7 +459,7 @@ function buildPrintingModal(){
       <div class="modal" style="width:380px;text-align:center">
         <div style="font-size:40px;margin-bottom:12px">✓</div>
         <div class="modal-title" style="justify-content:center">Print complete</div>
-        <div style="color:#8888a8;font-size:13px;margin-bottom:20px">${printCount()} label${printCount()!==1?"s":""} sent to Brady M610</div>
+        <div style="color:#8888a8;font-size:13px;margin-bottom:20px">${printCount()} label${printCount()!==1?"s":""} sent to ${printer().name}</div>
         <button class="btn primary" onclick="P.modal=null;P._printProgress=null;R()" style="width:100%;padding:9px">Done</button>
       </div>
     </div>`;
