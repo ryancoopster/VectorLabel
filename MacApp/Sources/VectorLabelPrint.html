@@ -24,7 +24,7 @@ label.lbl{font-size:10px;color:#8888a8;display:block;margin-bottom:3px}
 .modal{background:#1a1a28;border:1px solid rgba(255,255,255,0.13);border-radius:8px;padding:24px;box-shadow:0 8px 40px rgba(0,0,0,0.6)}
 .modal-title{font-size:15px;font-weight:600;margin-bottom:16px}
 .modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.07)}
-.rec-row{display:grid;grid-template-columns:28px 24px 28px 1fr 1fr 1fr 1fr 1fr;align-items:center;gap:0;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;min-height:36px}
+.rec-row{display:grid;grid-template-columns:var(--col-cb) var(--col-pair) var(--col-num) var(--col-side) var(--col-number) var(--col-cable) var(--col-signal) var(--col-device) var(--col-socket);align-items:center;gap:0;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;min-height:36px}
 .rec-row:hover{background:rgba(108,142,245,0.06)}
 .rec-row.selected{background:rgba(108,142,245,0.12)}
 .rec-row.active-preview{background:rgba(108,142,245,0.2)}
@@ -38,6 +38,9 @@ label.lbl{font-size:10px;color:#8888a8;display:block;margin-bottom:3px}
 .cb.partial{background:#2a2a42;border-color:#6C8EF5}
 .check-tick{color:#fff;font-size:9px;line-height:1}
 .print-info{background:#252538;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:12px 14px}
+.col-resizer{position:absolute;right:-3px;top:0;bottom:0;width:6px;cursor:col-resize;z-index:5;display:flex;align-items:center;justify-content:center}
+.col-resizer:hover::after,.col-resizer.dragging::after{content:'';position:absolute;width:2px;top:4px;bottom:4px;background:#6C8EF5;border-radius:1px}
+.rec-hdr-cell{position:relative;padding:6px 8px;font-size:10px;color:#44445a;font-weight:600;text-transform:uppercase;letter-spacing:.5px;overflow:hidden;white-space:nowrap;user-select:none}
 
 
 *{box-sizing:border-box;margin:0;padding:0}
@@ -197,6 +200,46 @@ const SAMPLE_TPL={
     {t:"tx",x:.02,y:.47,w:.96,h:.24,f:'=IF(Other_Device<>"","@ "&Other_Device&IF(Other_Socket<>""," : "&Other_Socket,""),"")',al:"center",valign:"middle",fs:12,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100}
   ]
 };
+
+// ── Column widths ────────────────────────────────────────────────────────────
+// Fixed columns (px): cb=28, pair=28, num=36
+// Resizable columns (px), saved in localStorage
+const COL_DEFAULTS={side:90,number:72,cable:140,signal:72,device:160,socket:140};
+let COLS=(()=>{
+  try{const s=localStorage.getItem('vl-col-widths');if(s)return Object.assign({},COL_DEFAULTS,JSON.parse(s));}catch(e){}
+  return Object.assign({},COL_DEFAULTS);
+})();
+function saveCols(){try{localStorage.setItem('vl-col-widths',JSON.stringify(COLS));}catch(e){}}
+function applyColVars(){
+  const r=document.documentElement;
+  r.style.setProperty('--col-cb','28px');
+  r.style.setProperty('--col-pair','28px');
+  r.style.setProperty('--col-num','36px');
+  r.style.setProperty('--col-side',COLS.side+'px');
+  r.style.setProperty('--col-number',COLS.number+'px');
+  r.style.setProperty('--col-cable',COLS.cable+'px');
+  r.style.setProperty('--col-signal',COLS.signal+'px');
+  r.style.setProperty('--col-device',COLS.device+'px');
+  r.style.setProperty('--col-socket',COLS.socket+'px');
+}
+
+function startColResize(e,col){
+  e.preventDefault();e.stopPropagation();
+  const el=e.currentTarget;el.classList.add('dragging');
+  const startX=e.clientX,startW=COLS[col];
+  function mv(e){
+    COLS[col]=Math.max(40,startW+(e.clientX-startX));
+    applyColVars();
+  }
+  function mu(){
+    el.classList.remove('dragging');
+    saveCols();
+    window.removeEventListener('mousemove',mv);
+    window.removeEventListener('mouseup',mu);
+  }
+  window.addEventListener('mousemove',mv);
+  window.addEventListener('mouseup',mu);
+}
 
 // ── State ─────────────────────────────────────────────────────────────────────
 // ── Simulated printer list (in Swift app this comes from USB device scan) ────
@@ -665,31 +708,36 @@ function R(){
               <span class="check-tick">${P.selected.size===P.records.length?"✓":P.selected.size>0?"−":""}</span>
             </div>
           </div>
-          <div class="rec-cell rec-hdr" title="Toggle source + destination pair" style="text-align:center;font-size:9px">⇅</div>
-          <div class="rec-cell rec-hdr">#</div>
-          <div class="rec-cell rec-hdr">Side</div>
-          <div class="rec-cell rec-hdr">Number</div>
-          <div class="rec-cell rec-hdr">Cable</div>
-          <div class="rec-cell rec-hdr">Signal</div>
-          <div class="rec-cell rec-hdr">Device</div>
-          <div class="rec-cell rec-hdr">Socket</div>
+          <div class="rec-hdr-cell" title="Toggle pair (Source + Destination)" style="text-align:center;font-size:9px">⇅</div>
+          <div class="rec-hdr-cell">#</div>
+          ${['side','number','cable','signal','device','socket'].map(col=>`
+            <div class="rec-hdr-cell">
+              ${{side:'Side',number:'Number',cable:'Cable',signal:'Signal',device:'Device',socket:'Socket'}[col]}
+              <div class="col-resizer" onmousedown="startColResize(event,'${col}')"></div>
+            </div>`).join('')}
         </div>
         <div style="overflow-y:auto;flex:1">
           ${P.records.map((r,i)=>{
             const isSel=P.selected.has(i);
             const isPrev=P.previewIdx===i;
             const side=r._Side==="Source"?"src":"dst";
+            const ps2=pairChkState(i);
             return`<div class="rec-row${isSel?" selected":""}${isPrev?" active-preview":""}" onclick="P.previewIdx=${i};R()">
               <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();toggleSel(${i})">
                 <div class="cb ${isSel?"chk":""}"><span class="check-tick">${isSel?"✓":""}</span></div>
+              </div>
+              <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();togglePair(${i})" title="Toggle Source + Destination pair">
+                <div style="width:18px;height:14px;border:1.5px solid ${ps2?'rgba(108,142,245,0.6)':'rgba(255,255,255,0.1)'};border-radius:3px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:${ps2==='chk'?'rgba(108,142,245,0.2)':ps2==='partial'?'rgba(108,142,245,0.08)':'transparent'}">
+                  <span style="color:${ps2?'#6C8EF5':'rgba(255,255,255,0.15)'};font-size:8px;line-height:1">⇅</span>
+                </div>
               </div>
               <div class="rec-cell" style="color:#44445a;font-size:10px">${i+1}</div>
               <div class="rec-cell"><span class="tag ${side}">${r._Side}</span></div>
               <div class="rec-cell" style="color:${r.Number?"#e8e8f0":"#44445a"};font-weight:${r.Number?600:400}">${r.Number||"—"}</div>
               <div class="rec-cell" style="color:#8888a8">${r.Cable||"—"}</div>
               <div class="rec-cell" style="color:#8888a8">${r.Signal||"—"}</div>
-              <div class="rec-cell" style="color:#8888a8">${(r.Device_Name||"—").substring(0,20)}</div>
-              <div class="rec-cell" style="color:#8888a8">${(r.Socket_Name||"—").substring(0,16)}</div>
+              <div class="rec-cell" style="color:#8888a8">${r.Device_Name||"—"}</div>
+              <div class="rec-cell" style="color:#8888a8">${r.Socket_Name||"—"}</div>
             </div>`;
           }).join("")}
         </div>
@@ -708,6 +756,7 @@ function R(){
 
     ${P.modal==="printing"||P.modal==="done"?buildPrintingModal():""}
   `;
+  applyColVars();
 }
 
 
