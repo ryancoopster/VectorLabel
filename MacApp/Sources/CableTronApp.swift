@@ -36,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var designerWindow: NSWindow?
     private var designerWebView: WKWebView?
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    @MainActor func applicationDidFinishLaunching(_ notification: Notification) {
         printWindowController = PrintWindowController()
         NSApp.setActivationPolicy(AppSettings.shared.showInDock ? .regular : .accessory)
         TemplateStore.shared.reload()
@@ -53,7 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         self.watcher = watcher
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
+    @MainActor func applicationWillTerminate(_ notification: Notification) {
         watcher?.stop()
         PrinterManager.shared.stopScan()
     }

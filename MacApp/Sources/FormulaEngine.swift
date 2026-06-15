@@ -43,7 +43,7 @@ enum FormulaEngine {
 
     private static func tokenize(_ expr: String) -> [Token] {
         var tokens: [Token] = []
-        var chars = Array(expr)
+        let chars = Array(expr)
         var i = 0
 
         while i < chars.count {
@@ -179,31 +179,34 @@ enum FormulaEngine {
             let s = str(v); return !s.isEmpty && s != "false" && s != "0"
         }
 
+        // Helper to safely pull an element from [Any?] without Any?? double-optional
+        func arg(_ i: Int) -> Any? { i < args.count ? args[i] : nil }
+
         switch name {
         case "IF":
-            return bool(args.first) ? (args.count > 1 ? args[1] : "") : (args.count > 2 ? args[2] : "")
+            return bool(arg(0)) ? arg(1) ?? "" : arg(2) ?? ""
         case "LEFT":
-            let s = str(args.first); let n = args.count > 1 ? num(args[1]) : 1
-            return String(s.prefix(max(0, n)))
+            let s = str(arg(0)); let n = num(arg(1))
+            return String(s.prefix(max(0, n > 0 ? n : 1)))
         case "RIGHT":
-            let s = str(args.first); let n = args.count > 1 ? num(args[1]) : 1
-            return String(s.suffix(max(0, n)))
+            let s = str(arg(0)); let n = num(arg(1))
+            return String(s.suffix(max(0, n > 0 ? n : 1)))
         case "MID":
-            let s = str(args.first)
-            let start = max(0, (args.count > 1 ? num(args[1]) : 1) - 1)
-            let length = args.count > 2 ? num(args[2]) : 1
+            let s = str(arg(0))
+            let start = max(0, num(arg(1)) - 1)
+            let length = max(0, num(arg(2)))
             guard start < s.count else { return "" }
             let from = s.index(s.startIndex, offsetBy: start)
             let to   = s.index(from, offsetBy: min(length, s.count - start))
             return String(s[from..<to])
         case "LEN":
-            return str(args.first).count
+            return str(arg(0)).count
         case "UPPER":
-            return str(args.first).uppercased()
+            return str(arg(0)).uppercased()
         case "LOWER":
-            return str(args.first).lowercased()
+            return str(arg(0)).lowercased()
         case "TRIM":
-            return str(args.first).trimmingCharacters(in: .whitespaces)
+            return str(arg(0)).trimmingCharacters(in: .whitespaces)
         default:
             return ""
         }

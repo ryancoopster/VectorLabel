@@ -104,7 +104,11 @@ final class PrintWindowController: NSObject {
         else { return }
 
         let printerJSON: String
-        if let data = try? encoder.encode(PrinterManager.shared.printers),
+        let printerDicts = PrinterManager.shared.printers.map { p -> [String: String] in
+            ["id": p.id, "name": p.name, "model": p.model, "serial": p.serial,
+             "status": p.status.rawValue]
+        }
+        if let data = try? JSONSerialization.data(withJSONObject: printerDicts),
            let s = String(data: data, encoding: .utf8) { printerJSON = s }
         else { printerJSON = "[]" }
 
@@ -191,7 +195,7 @@ extension PrintWindowController: WKScriptMessageHandler {
         else { return }
 
         // Find the template
-        guard let template = TemplateStore.shared.templates.first(where: { $0.id.uuidString == templateID })
+        guard let template = TemplateStore.shared.templates.first(where: { $0.id == templateID })
               ?? TemplateStore.shared.templates.first
         else { return }
 

@@ -123,7 +123,7 @@ final class PrinterManager: ObservableObject {
                 defer { BradyUSB.close(handle) }
 
                 for (i, vglJob) in jobs.enumerated() {
-                    if await job.isCancelled { break }
+                    if job.isCancelled { break }
                     try BradyUSB.sendJob(vglJob, handle: handle)
                     await MainActor.run { job.completedLabels = i + 1 }
                     if i < jobs.count - 1 {
