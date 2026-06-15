@@ -142,10 +142,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             return
         }
         let popover = NSPopover()
-        popover.contentViewController = NSHostingController(
+        let hosting = NSHostingController(
             rootView: MenuBarView().environmentObject(self)
         )
-        popover.contentSize = NSSize(width: 320, height: 500)
+        // Let the popover size its height to the SwiftUI content (width is fixed
+        // at 320 in MenuBarView), so recent-print rows with wrapped, multi-line
+        // filenames are never clipped.
+        hosting.sizingOptions = [.preferredContentSize]
+        popover.contentViewController = hosting
         popover.behavior = .transient
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         menuPopover = popover

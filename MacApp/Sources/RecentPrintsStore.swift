@@ -44,6 +44,14 @@ struct RecentPrint: Codable, Identifiable, Hashable {
         case labelCount, printRange, selectedIndices, status, rangeFrom, rangeTo
     }
 
+    /// Absolute print date and time, e.g. "Jun 15, 2026 at 3:42 PM".
+    var dateTimeString: String {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        return f.string(from: date)
+    }
+
     /// Human-readable time since print, e.g. "2 min ago", "1 hr ago".
     var timeAgo: String {
         let secs = Int(-date.timeIntervalSinceNow)

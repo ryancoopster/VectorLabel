@@ -12,24 +12,30 @@ struct MenuBarView: View {
     @EnvironmentObject var appDelegate: AppDelegate
 
     var body: some View {
-        // Printers
-        printersSection
+        VStack(alignment: .leading, spacing: 0) {
+            // Printers
+            printersSection
 
-        Divider()
-
-        // Active jobs
-        if !printerManager.activeJobs.filter({ !$0.isComplete }).isEmpty {
-            activeJobsSection
             Divider()
+
+            // Active jobs
+            if !printerManager.activeJobs.filter({ !$0.isComplete }).isEmpty {
+                activeJobsSection
+                Divider()
+            }
+
+            // Recent prints
+            recentPrintsSection
+
+            Divider()
+
+            // Actions
+            actionsSection
         }
-
-        // Recent prints
-        recentPrintsSection
-
-        Divider()
-
-        // Actions
-        actionsSection
+        .frame(width: 320)
+        // Fixed width + the popover's preferredContentSize sizing lets the
+        // height grow to fit wrapped content so rows are never clipped.
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     // MARK: – Printers
@@ -279,28 +285,37 @@ struct RecentPrintRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(alignment: .top, spacing: 8) {
             Image(systemName: statusIcon)
                 .foregroundColor(statusColor)
                 .frame(width: 20, height: 20)
 
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 2) {
+                // Full title — wraps over as many lines as needed, never clipped.
                 Text(recent.title)
                     .font(.system(size: 12, weight: .medium))
-                    .lineLimit(1)
-                Text("\(recent.status.displayName) · \(recent.labelCount) labels · \(recent.timeAgo)")
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("\(recent.status.displayName) · \(recent.labelCount) label\(recent.labelCount == 1 ? "" : "s")")
                     .font(.system(size: 10))
                     .foregroundColor(.secondary)
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("\(recent.dateTimeString) · \(recent.timeAgo)")
+                    .font(.system(size: 10))
+                    .foregroundColor(Color.secondary.opacity(0.75))
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            Spacer()
+            Spacer(minLength: 4)
 
             Button("Reprint") { onReprint() }
                 .font(.system(size: 10, weight: .medium))
                 .foregroundColor(.accentColor)
+                .fixedSize()
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 5)
+        .padding(.vertical, 6)
     }
 }

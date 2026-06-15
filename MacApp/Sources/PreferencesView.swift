@@ -240,15 +240,15 @@ struct PreferencesView: View {
     private var recentTab: some View {
         VStack(alignment: .leading, spacing: 0) {
             PrefSection(title: "History") {
-                PrefRow(label: "Recent print jobs to show in menu bar") {
-                    Picker("", selection: $settings.recentPrintsCount) {
-                        Text("3").tag(3)
-                        Text("5").tag(5)
-                        Text("10").tag(10)
+                PrefRow(label: "Recent print jobs to show in menu bar",
+                        caption: "Number of recent prints listed in the menu bar dropdown.") {
+                    Stepper(value: $settings.recentPrintsCount, in: 1...25) {
+                        Text("\(settings.recentPrintsCount)")
+                            .font(.system(size: 13, weight: .medium))
+                            .frame(minWidth: 24, alignment: .trailing)
+                            .monospacedDigit()
                     }
-                    .pickerStyle(.segmented)
-                    .frame(width: 150)
-                    .labelsHidden()
+                    .fixedSize()
                 }
             }
 

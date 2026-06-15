@@ -55,7 +55,7 @@ final class AppSettings: ObservableObject {
 
     // MARK: – Recent prints
 
-    /// How many recent print jobs to show in the menu bar (3, 5, or 10).
+    /// How many recent print jobs to show in the menu bar (user-defined, default 5).
     @Published var recentPrintsCount: Int {
         didSet { UserDefaults.standard.set(recentPrintsCount, forKey: "recentPrintsCount") }
     }
@@ -95,7 +95,7 @@ final class AppSettings: ObservableObject {
         m611ProductIDOverride = defaults.string(forKey: "m611ProductIDOverride") ?? ""
         interLabelDelayMs = defaults.object(forKey: "interLabelDelayMs") as? Int ?? 50
         defaultPrintRange = defaults.string(forKey: "defaultPrintRange") ?? "all"
-        recentPrintsCount = defaults.object(forKey: "recentPrintsCount") as? Int ?? 3
+        recentPrintsCount = defaults.object(forKey: "recentPrintsCount") as? Int ?? 5
         showInDock        = defaults.object(forKey: "showInDock") as? Bool ?? false
 
         // Sync ExportSettings singleton
@@ -112,7 +112,7 @@ final class AppSettings: ObservableObject {
         m611ProductIDOverride = ""
         interLabelDelayMs    = 50
         defaultPrintRange    = "all"
-        recentPrintsCount    = 3
+        recentPrintsCount    = 5
         showInDock           = false
     }
 }
