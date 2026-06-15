@@ -1036,7 +1036,7 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
 
 
   return `<div style="display:flex;flex-direction:column;align-items:flex-start;flex-shrink:0">
-    <div onclick="${readOnly?"":"deselect()"}" style="width:${pw}px;height:${ph}px;background:#fff;border:2px solid rgba(255,255,255,0.13);overflow:hidden;position:relative;flex-shrink:0">
+    <div onmousedown="${readOnly?'':`if(event.target===this||'svg,line,circle'.split(',').includes(event.target.tagName.toLowerCase()))deselect()`}" style="width:${pw}px;height:${ph}px;background:#fff;border:2px solid rgba(255,255,255,0.13);overflow:hidden;position:relative;flex-shrink:0">
       ${gridSvg}${snapSvg}${objsHtml}
     </div>
     ${wrapZone}
