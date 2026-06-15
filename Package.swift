@@ -8,15 +8,6 @@ let package = Package(
         .executable(name: "VectorLabel", targets: ["VectorLabel"]),
     ],
     targets: [
-        // Wraps libusb-1.0 so Swift can import it.
-        //
-        // Prerequisites (run in Terminal before opening in Xcode):
-        //   brew install libusb pkg-config
-        //
-        // module.modulemap header path by architecture:
-        //   Apple Silicon: /opt/homebrew/include/libusb-1.0/libusb.h  ← default
-        //   Intel Mac:     /usr/local/include/libusb-1.0/libusb.h
-        // Edit MacApp/Sources/CLibUSB/module.modulemap if on Intel.
         .systemLibrary(
             name: "CLibUSB",
             path: "MacApp/Sources/CLibUSB",
@@ -27,21 +18,29 @@ let package = Package(
             name: "VectorLabel",
             dependencies: ["CLibUSB"],
             path: "MacApp/Sources",
-            exclude: [
-                "CLibUSB",  // system library in its own subfolder
-            ],
+            exclude: ["CLibUSB"],
             resources: [
                 .copy("VectorLabelPrint.html"),
                 .copy("VectorLabelDesigner.html"),
             ],
-            // Info.plist is at the repo root.
-            // In Xcode: Target → Build Settings → INFOPLIST_FILE = Info.plist
-            // For swift build: set MACOSX_BUNDLE_INFO_PLIST environment variable.
+            swiftSettings: [
+                // Embed bundle identifier and Info.plist via compiler flags
+                .unsafeFlags([
+                    "-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"
+                ])
+            ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("WebKit"),
                 .linkedFramework("CoreGraphics"),
                 .linkedFramework("CoreText"),
+                // Inject bundle identifier so WKWebView sandbox works
+                .unsafeFlags([
+                    "-Xlinker", "-sectcreate",
+                    "-Xlinker", "__TEXT",
+                    "-Xlinker", "__info_plist",
+                    "-Xlinker", "../../Info.plist"
+                ])
             ]
         ),
     ]
