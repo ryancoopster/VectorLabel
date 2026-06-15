@@ -1401,18 +1401,40 @@ const _origStartDrag=startDrag;
 function startDrag(e,id){
   e.stopPropagation();
   const o=gobj(id);if(!o)return;
-  if(S.selId!==id){S.selId=id;S._ef=o.f;renderDesigner();}
+
+  // Update state immediately but DON'T re-render yet.
+  // Re-rendering destroys the DOM mid-event and breaks the drag chain.
+  // Instead we update selection visuals in-place and re-render on mouseup.
+  const wasSelected=(S.selId===id);
+  S.selId=id;
+  if(o.f!==undefined)S._ef=o.f;
+
+  // Update the formula bar text live without full re-render
+  const fxEl=document.getElementById("fxbar");
+  if(fxEl&&o.f!==undefined)fxEl.value=(o.f||"").replace(/"/g,'"');
+
   snapshot();
   const sx=e.clientX,sy=e.clientY,ox=o.x,oy=o.y;
+  let didMove=false;
+
   function mv(e){
+    didMove=true;
     const rawX=ox+(e.clientX-sx)/(SC*S.zoom);
     const rawY=oy+(e.clientY-sy)/(SC*S.zoom);
     const o2=gobj(id);
     const snapped=applySnap(rawX,rawY,o2?o2.w:0.1,o2?o2.h:0.1,id);
-    uobj(id,snapped);renderDesigner();
+    uobj(id,snapped);
+    renderDesigner();
   }
-  function mu(){S._snapLines=[];window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",mu);renderDesigner();}
-  window.addEventListener("mousemove",mv);window.addEventListener("mouseup",mu);
+  function mu(){
+    S._snapLines=[];
+    window.removeEventListener("mousemove",mv);
+    window.removeEventListener("mouseup",mu);
+    // Always re-render on mouseup to show selection state + updated props panel
+    renderDesigner();
+  }
+  window.addEventListener("mousemove",mv);
+  window.addEventListener("mouseup",mu);
 }
 
 // Wrap startResize to snapshot on mousedown
