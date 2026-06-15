@@ -31,11 +31,13 @@ struct VectorLabelApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
-    private let printWindowController = PrintWindowController()
+    // PrintWindowController is @MainActor; initialised in applicationDidFinishLaunching
+    private var printWindowController: PrintWindowController!
     private var designerWindow: NSWindow?
     private var designerWebView: WKWebView?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        printWindowController = PrintWindowController()
         NSApp.setActivationPolicy(AppSettings.shared.showInDock ? .regular : .accessory)
         TemplateStore.shared.reload()
         PrinterManager.shared.startScan()

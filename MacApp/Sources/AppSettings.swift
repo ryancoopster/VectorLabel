@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import AppKit
 
 /// All user-configurable preferences for VectorLabel.
 /// Values are persisted via UserDefaults through @AppStorage-compatible wrappers.
@@ -65,7 +66,10 @@ final class AppSettings: ObservableObject {
     @Published var showInDock: Bool {
         didSet {
             UserDefaults.standard.set(showInDock, forKey: "showInDock")
-            NSApp.setActivationPolicy(showInDock ? .regular : .accessory)
+            // NSApp.setActivationPolicy must be called on the main actor.
+            DispatchQueue.main.async {
+                NSApp.setActivationPolicy(self.showInDock ? .regular : .accessory)
+            }
         }
     }
 
