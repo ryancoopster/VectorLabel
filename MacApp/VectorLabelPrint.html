@@ -524,8 +524,8 @@ function buildPrintBar(){
   const nSel=selCount();
   const t=tpl();
   const pr=printer();
-  const canPrint=t&&pCount>0&&pr.status==="ready";
   const pCount=printCount();
+  const canPrint=t&&pCount>0&&pr.status==="ready";
 
   return`<div style="background:#1e1e2e;border-top:1px solid rgba(255,255,255,0.1);padding:10px 16px;display:flex;align-items:center;gap:14px;flex-shrink:0;flex-wrap:wrap">
 
