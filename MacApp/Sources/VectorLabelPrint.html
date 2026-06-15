@@ -316,6 +316,7 @@ let P={
   activeTpl: 0,
   selected: new Set(SAMPLE_CSV.map((_,i)=>i)),
   previewIdx: 0,
+  lastClickIdx: null, // for shift-click range selection
   modal: null,
   printRange: "all",
   rangeFrom: 1,
@@ -387,6 +388,22 @@ function toggleAll(){
   else P.records.forEach((_,i)=>P.selected.add(i));
   R();
 }
+
+// Row click: preview this record. Shift-click: select range between last clicked and this.
+function handleRowClick(e,i){
+  if(e.shiftKey&&P.lastClickIdx!==null){
+    const lo=Math.min(P.lastClickIdx,i);
+    const hi=Math.max(P.lastClickIdx,i);
+    for(let j=lo;j<=hi;j++) P.selected.add(j);
+    P.printRange="selected";
+    P.previewIdx=i;
+    R();
+  }else{
+    P.previewIdx=i;
+    P.lastClickIdx=i;
+    R();
+  }
+}
 function selectSide(side){
   // If all of this side are already selected, deselect them; otherwise select all of this side
   const sideIndices=P.records.map((r,i)=>r._Side===side?i:-1).filter(i=>i>=0);
@@ -405,15 +422,20 @@ function selectRange(from,to){
 function buildPreviewPanel(){
   const t=tpl();
   const rec=P.records[P.previewIdx];
+  const total=P.records.length;
   if(!t||!rec)return`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#44445a;font-size:12px">No template selected</div>`;
   const spec=BL.find(l=>l.n===t.specN)||BL[1];
   const scale=0.9;
-  return`<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:24px">
-    <div style="color:#8888a8;font-size:11px;font-weight:600">Label Preview</div>
+  return`<div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:20px">
+    <div style="display:flex;align-items:center;gap:6px;width:100%;justify-content:center">
+      <button onclick="P.previewIdx=Math.max(0,P.previewIdx-1);R()" class="btn" style="padding:3px 10px;font-size:15px;line-height:1" ${P.previewIdx===0?"disabled":""}>‹</button>
+      <span style="color:#8888a8;font-size:11px;min-width:60px;text-align:center">${P.previewIdx+1} / ${total}</span>
+      <button onclick="P.previewIdx=Math.min(${total}-1,P.previewIdx+1);R()" class="btn" style="padding:3px 10px;font-size:15px;line-height:1" ${P.previewIdx===total-1?"disabled":""}>›</button>
+    </div>
     ${renderLabel(t,rec,scale)}
     <div style="text-align:center">
       <div style="color:#e8e8f0;font-size:12px;font-weight:600">${rec.Number||"—"} ${rec.Cable||""}</div>
-      <div style="color:#8888a8;font-size:11px;margin-top:3px">${rec._Side} label</div>
+      <div style="color:#8888a8;font-size:11px;margin-top:2px">${rec._Side} label</div>
     </div>
     <div class="print-info" style="width:100%;max-width:260px">
       <label class="lbl">Required supply</label>
@@ -445,7 +467,7 @@ function buildRecordTable(){
     const isSel=P.selected.has(i);
     const isPrev=P.previewIdx===i;
     const side=r._Side==="Source"?"src":"dst";
-    return`<div class="rec-row${isSel?" selected":""}${isPrev?" active-preview":""}" onclick="P.previewIdx=${i};R()">
+    return`<div class="rec-row${isSel?" selected":""}${isPrev?" active-preview":""}" onclick="handleRowClick(event,${i})">
       <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();toggleSel(${i})">
         <div class="cb ${isSel?"chk":""}"><span class="check-tick">${isSel?"✓":""}</span></div>
       </div>
@@ -796,7 +818,7 @@ function R(){
             const isPrev=P.previewIdx===i;
             const side=r._Side==="Source"?"src":"dst";
             const ps2=pairChkState(i);
-            return`<div class="rec-row${isSel?" selected":""}${isPrev?" active-preview":""}" onclick="P.previewIdx=${i};R()">
+            return`<div class="rec-row${isSel?" selected":""}${isPrev?" active-preview":""}" onclick="handleRowClick(event,${i})">
               <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();toggleSel(${i})">
                 <div class="cb ${isSel?"chk":""}"><span class="check-tick">${isSel?"✓":""}</span></div>
               </div>
@@ -1299,9 +1321,12 @@ function renderDesigner(){
         <div id="rec-resizer" style="height:5px;cursor:row-resize;background:rgba(108,142,245,0.0);border-top:1px solid rgba(255,255,255,0.1);flex-shrink:0" onmouseenter="this.style.background='rgba(108,142,245,0.25)'" onmouseleave="this.style.background='rgba(108,142,245,0)'" onmousedown="startRecResize(event)"></div>
         <!-- Record selector -->
         <div id="rec-panel" style="height:${S.recH||160}px;overflow:auto;background:#13131a;flex-shrink:0">
-          <div style="padding:5px 12px 4px;display:flex;align-items:center;gap:8px;border-top:1px solid rgba(255,255,255,0.07)">
+          <div style="padding:5px 10px 4px;display:flex;align-items:center;gap:6px;border-top:1px solid rgba(255,255,255,0.07);flex-shrink:0">
             <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px">Records</span>
-            <span style="color:#8888a8;font-size:10px">${(window._editorRecords||RX).length} · click to preview</span>
+            <div style="flex:1"></div>
+            <span style="color:#44445a;font-size:10px">${S.recIdx+1} / ${(window._editorRecords||RX).length}</span>
+            <button onclick="S.recIdx=Math.max(0,S.recIdx-1);R()" class="btn" style="padding:2px 7px;font-size:13px;line-height:1" ${S.recIdx===0?"disabled":""}>‹</button>
+            <button onclick="S.recIdx=Math.min((window._editorRecords||RX).length-1,S.recIdx+1);R()" class="btn" style="padding:2px 7px;font-size:13px;line-height:1" ${S.recIdx===(window._editorRecords||RX).length-1?"disabled":""}>›</button>
           </div>
           ${buildEditorRecordTable()}
         </div>

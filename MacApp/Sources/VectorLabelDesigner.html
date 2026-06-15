@@ -450,9 +450,13 @@ function R(){
         <div id="rec-resizer" style="height:5px;cursor:row-resize;background:rgba(108,142,245,0.0);border-top:1px solid rgba(255,255,255,0.1);flex-shrink:0" onmouseenter="this.style.background='rgba(108,142,245,0.25)'" onmouseleave="this.style.background='rgba(108,142,245,0)'" onmousedown="startRecResize(event)"></div>
         <!-- Record selector -->
         <div id="rec-panel" style="height:${S.recH||160}px;overflow:auto;background:#13131a;flex-shrink:0">
-          <div style="padding:6px 12px 4px;display:flex;align-items:center;gap:8px;border-top:1px solid rgba(255,255,255,0.07)">
+          <div style="padding:5px 10px 4px;display:flex;align-items:center;gap:6px;border-top:1px solid rgba(255,255,255,0.07);flex-shrink:0">
             <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px">Records</span>
-            <span style="color:#8888a8;font-size:10px">${RX.length} labels · click to preview</span>
+            <span style="color:#8888a8;font-size:10px">${RX.length} labels</span>
+            <div style="flex:1"></div>
+            <span style="color:#44445a;font-size:10px">${S.recIdx+1} / ${RX.length}</span>
+            <button onclick="S.recIdx=Math.max(0,S.recIdx-1);R()" class="btn" style="padding:2px 7px;font-size:13px;line-height:1" ${S.recIdx===0?"disabled":""}>‹</button>
+            <button onclick="S.recIdx=Math.min(RX.length-1,S.recIdx+1);R()" class="btn" style="padding:2px 7px;font-size:13px;line-height:1" ${S.recIdx===RX.length-1?"disabled":""}>›</button>
           </div>
           ${buildRecordTable()}
         </div>
