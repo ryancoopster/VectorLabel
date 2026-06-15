@@ -235,8 +235,4 @@ struct PreferencesView: View {
     }
 }
 
-// MARK: – PrinterManager extension for manual scan
-
-extension PrinterManager {
-    func scanNow() { Task { @MainActor in self.scanNow() } }
-}
+// PrinterManager.scanNow() is defined in PrinterManager.swift

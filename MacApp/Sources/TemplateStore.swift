@@ -33,7 +33,7 @@ struct TemplateObject: Codable, Identifiable, Hashable {
 
 /// A saved VectorLabel template, matching .vlt.json exactly.
 struct VLTemplate: Codable, Identifiable, Hashable {
-    var id: UUID = UUID()
+    var id: String = UUID().uuidString  // String so HTML-saved IDs like "st1" decode correctly
     var version: Int = 1
     var name: String
     var specN: String       // Brady part number e.g. "BM-32-427"

@@ -115,13 +115,13 @@ enum LabelRenderer {
         // The HTML designer uses font-size in points at SC=185 (px per label unit).
         // We need to scale to the actual render DPI: (fs / 185) * dpi.
         // obj.fs is already in pt relative to the 185-px canvas.
-        let sc = 185.0
-        let rawPt = obj.fs ?? 14.0
-        // Scale: rawPt is the size at 185px/unit; at 300dpi the label is wider,
-        // so we scale proportionally.
-        let scaledPt = rawPt * (Double(pw) / (sc * Double(pw) / Double(pw)))
-        // Simpler: map directly — rawPt at 72 DPI on a 185-unit canvas → at 300 DPI
-        let fontSize = rawPt * Double(pw) / (sc * (BradyCatalog.size(forPartNumber: "BM-32-427")?.printableWidthInches ?? 1.5))
+        // In the HTML designer, font size is specified at SC=185 (185px per label unit).
+        // The HTML renders: fz = (obj.fs / 100) * 185 px
+        // For print at 300 DPI, scale by 300/185.
+        let designerDPI = 185.0
+        let printDPI    = 300.0
+        let rawPt       = obj.fs ?? 14.0
+        let fontSize    = rawPt * (printDPI / designerDPI)
 
         var traits: NSFontTraitMask = []
         if obj.bold   == true { traits.insert(.boldFontMask) }
@@ -221,9 +221,4 @@ enum LabelRenderer {
     }
 }
 
-// MARK: – Legacy shim (used by old PrintPreviewView)
-
-/// Thin wrapper so BradyCatalog dimensions include the DPI property.
-extension BradyLabelSize {
-    var dpi: Int { 300 }
-}
+// BradyLabelSize.dpi is defined as a stored property in BradyCatalog.swift

@@ -60,15 +60,18 @@ final class PrinterManager: ObservableObject {
     // MARK: – USB scan
 
     func startScan() {
-        scanNow()
+        performScan()
         scanTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.scanNow() }
+            Task { @MainActor in self?.performScan() }
         }
     }
 
     func stopScan() { scanTimer?.invalidate(); scanTimer = nil }
 
-    private func scanNow() {
+    /// Public entry point for manual refresh (called from Preferences).
+    func scanNow() { performScan() }
+
+    private func performScan() {
         // Perform USB enumeration on a background thread so we don't block the main queue.
         Task.detached {
             let found = BradyUSB.enumeratePrinters()
@@ -134,7 +137,7 @@ final class PrinterManager: ObservableObject {
                 job.isComplete = true
                 self.setPrinterBusy(printerID, busy: false)
                 // Clean up completed jobs older than 60s on next scan
-                self.activeJobs.removeAll { $0.isComplete && $0.isCancelled }
+                self.activeJobs.removeAll { $0.isComplete }
             }
         }
     }

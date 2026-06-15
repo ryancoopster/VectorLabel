@@ -144,9 +144,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private func injectDesignerRecords(_ records: [WireRecord], filename: String) {
         guard let wv = designerWebView else { return }
         guard let data = try? JSONEncoder().encode(records),
-              let json = String(data: data, encoding: .utf8) else { return }
-        let escaped = JSONSerialization.escapeString(filename)
-        let js = "if(typeof initDesignerRecords==='function')initDesignerRecords(\(json),\(escaped));"
+              let json = String(data: data, encoding: .utf8),
+              let fnData = try? JSONSerialization.data(withJSONObject: filename),
+              let fnJSON = String(data: fnData, encoding: .utf8)
+        else { return }
+        let js = "if(typeof initDesignerRecords==='function')initDesignerRecords(\(json),\(fnJSON));"
         wv.evaluateJavaScript(js, completionHandler: nil)
     }
 
@@ -182,12 +184,4 @@ extension AppDelegate: WKNavigationDelegate {
     }
 }
 
-// MARK: – JSON helper
-
-private extension JSONSerialization {
-    static func escapeString(_ s: String) -> String {
-        guard let data = try? JSONSerialization.data(withJSONObject: s),
-              let str = String(data: data, encoding: .utf8) else { return "\"\"" }
-        return str
-    }
-}
+// JSONSerialization.escapeString is defined in PrintWindowController.swift

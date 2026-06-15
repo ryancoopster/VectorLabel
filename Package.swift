@@ -9,11 +9,17 @@ let package = Package(
     ],
     targets: [
         // Wraps libusb-1.0 so Swift can import it.
-        // Requires: brew install libusb
-        // The module.modulemap must point at the correct libusb header path.
+        //
+        // Prerequisites (run in Terminal before opening in Xcode):
+        //   brew install libusb pkg-config
+        //
+        // The module.modulemap path depends on your Mac architecture:
+        //   Apple Silicon: /opt/homebrew/include/libusb-1.0/libusb.h  ← default
+        //   Intel Mac:     /usr/local/include/libusb-1.0/libusb.h
+        // Edit MacApp/Sources/CLibUSB/module.modulemap if you're on Intel.
         .systemLibrary(
             name: "CLibUSB",
-            path: "MacApp/Sources",
+            path: "MacApp/Sources/CLibUSB",
             pkgConfig: "libusb-1.0",
             providers: [.brew(["libusb"])]
         ),
@@ -21,17 +27,13 @@ let package = Package(
             name: "VectorLabel",
             dependencies: ["CLibUSB"],
             path: "MacApp/Sources",
-            exclude: ["module.modulemap"],   // handled by CLibUSB target
+            exclude: [
+                "CLibUSB",   // system library lives in its own subfolder
+            ],
             resources: [
-                // HTML UIs loaded in WKWebView at runtime
                 .copy("VectorLabelPrint.html"),
                 .copy("VectorLabelDesigner.html"),
-                // Info.plist and entitlements are picked up by Xcode automatically;
-                // for SPM builds we include them as resources so they're in the bundle.
-                .copy("Info.plist"),
-                .copy("VectorLabel.entitlements"),
             ],
-            swiftSettings: [],
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("WebKit"),

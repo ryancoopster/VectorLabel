@@ -14,25 +14,40 @@ A macOS menu bar app for printing Brady M610/M611 wrap-around wire labels from V
 
 ## Prerequisites
 
+Run these in Terminal **before** opening the project in Xcode:
+
 ```bash
-brew install libusb
+brew install libusb pkg-config
 ```
 
-## Build (Xcode)
+## Open in Xcode
 
-1. Clone the repo
-2. `brew install libusb`
+1. Clone the repository
+2. Run `brew install libusb pkg-config`
 3. Open `Package.swift` in Xcode (File → Open → select Package.swift)
-4. Select the **VectorLabel** scheme, target **My Mac**
-5. **Product → Build** (⌘B)
+4. Xcode will resolve the package graph — it should succeed now
+5. Select the **VectorLabel** scheme, destination **My Mac**
+6. **Product → Build** (⌘B)
 
-The first build will ask for permission to access Documents — allow it.
+### Info.plist & Entitlements
 
-## Build (command line)
+`MacApp/Info.plist` and `MacApp/VectorLabel.entitlements` are not bundled via SPM
+(SPM doesn't allow Info.plist as a resource). Set them in Xcode:
 
-```bash
-swift build -c release
-.build/release/VectorLabel
+- Target → Build Settings → `INFOPLIST_FILE` = `MacApp/Info.plist`
+- Target → Signing & Capabilities → Add entitlements file → `MacApp/VectorLabel.entitlements`
+
+Or run via `swift run` for development (entitlements are not enforced in debug).
+
+### Apple Silicon vs Intel
+
+`MacApp/Sources/CLibUSB/module.modulemap` defaults to the Apple Silicon Homebrew path:
+```
+/opt/homebrew/include/libusb-1.0/libusb.h
+```
+If you're on Intel, change it to:
+```
+/usr/local/include/libusb-1.0/libusb.h
 ```
 
 ## Vectorworks plugin
@@ -68,6 +83,6 @@ Select circuits in ConnectCAD, run the command. The CSV lands in
 | `RecentPrintsStore.swift` | Persists last N print jobs for reprint |
 | `MenuBarView.swift` | Full SwiftUI menu bar dropdown |
 | `PreferencesView.swift` | Preferences window (6 tabs) |
-| `VectorLabelPrint.html` | Print UI (record table, template picker, printer selector) |
-| `VectorLabelDesigner.html` | Template designer (canvas, formula bar, snap grid) |
+| `VectorLabelPrint.html` | Print UI (record table, template picker, printer selector, live editor) |
+| `VectorLabelDesigner.html` | Standalone template designer |
 | `VectorworksPlugin/export_circuits.py` | Vectorworks ConnectCAD → CSV exporter |
