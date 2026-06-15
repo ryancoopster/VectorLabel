@@ -94,14 +94,22 @@ enum BradyVGL {
     }
 
     /// RLE-encode a single raster line.
-    /// Bit 7 = color (0x80 = white/no ink, 0x00 = black/ink).
-    /// Bits 0-6 = run length minus 1 (max 128 per byte).
+    ///
+    /// Output byte: **bit 7 = color (`0x80` = black/ink run, `0x00` = white run)**,
+    /// bits 0-6 = run length − 1 (max 128 pixels per byte; longer runs split).
+    ///
+    /// IMPORTANT: `0x80` is the *black* run flag. Brady's SDK comments document this
+    /// backwards (`0x80` = white); the hardware-validated truth is `0x80` = black.
+    /// Earlier versions of this method used the inverted polarity, which printed
+    /// RLE-compressed lines (solid fills, borders) as negatives. See the M610
+    /// handoff spec §5/§10 for test vectors.
+    ///
+    /// The trailing white run is omitted entirely — the printer treats the unsent
+    /// remainder of a line as white.
     static func compressRLELine(_ line: [UInt8]) -> [UInt8] {
         guard !line.isEmpty else { return [] }
 
-        var out: [UInt8] = []
-
-        // Walk bit by bit, MSB first within each byte.
+        // Expand to pixels, MSB first within each byte (row 0 → bit 7 of byte 0).
         var bits: [UInt8] = []
         bits.reserveCapacity(line.count * 8)
         for byte in line {
@@ -110,18 +118,54 @@ enum BradyVGL {
             }
         }
 
+        // Collect (color, length) runs over the pixels.
+        var runs: [(black: Bool, length: Int)] = []
         var i = 0
         while i < bits.count {
-            let color = bits[i] // 1 = black/ink, 0 = white
-            var runLength = 1
-            while i + runLength < bits.count && bits[i + runLength] == color && runLength < 128 {
-                runLength += 1
+            let black = bits[i] == 1
+            var length = 1
+            while i + length < bits.count && (bits[i + length] == 1) == black {
+                length += 1
             }
-            let colorBit: UInt8 = color == 1 ? 0x00 : 0x80
-            out.append(colorBit | UInt8(runLength - 1))
-            i += runLength
+            runs.append((black, length))
+            i += length
         }
 
+        // Drop the trailing white run — printer renders the remainder as white.
+        if let last = runs.last, !last.black { runs.removeLast() }
+
+        // Encode, splitting runs longer than 128 px across multiple bytes.
+        var out: [UInt8] = []
+        for run in runs {
+            var remaining = run.length
+            let colorBit: UInt8 = run.black ? 0x80 : 0x00
+            while remaining > 0 {
+                let chunk = min(remaining, 128)
+                out.append(colorBit | UInt8(chunk - 1))
+                remaining -= chunk
+            }
+        }
         return out
+    }
+
+    /// Build a batch of complete VGL jobs (one job per label) using the cut-mode
+    /// strategy from the M610 spec §7: every job is "never cut" (mode 2) except the
+    /// last, which is "cut after job" (mode 0) — so a die-cut batch feeds as one
+    /// strip and is cut once at the end. Pass `cutEachLabel: true` to separate every
+    /// label instead (mode 1 on all jobs).
+    static func buildBatch(
+        _ labels: [(pixels: [UInt8], width: Int, height: Int)],
+        cutEachLabel: Bool = false
+    ) -> [[UInt8]] {
+        labels.enumerated().map { index, label in
+            let mode: CutMode
+            if cutEachLabel {
+                mode = .eachLabel
+            } else {
+                mode = (index == labels.count - 1) ? .afterJob : .never
+            }
+            return buildPrintJob(pixels: label.pixels, width: label.width,
+                                 height: label.height, cutMode: mode)
+        }
     }
 }

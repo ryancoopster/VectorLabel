@@ -132,6 +132,9 @@ final class PrinterManager: ObservableObject {
         setPrinterBusy(printerID, busy: true)
 
         Task.detached {
+            // Serialize all USB access (printing vs. SmartCell polling) — the
+            // device allows only one owner at a time.
+            BradyUSB.deviceLock.wait()
             do {
                 let handle = try BradyUSB.openPrinterByID(printerID)
                 defer { BradyUSB.close(handle) }
@@ -147,6 +150,7 @@ final class PrinterManager: ObservableObject {
             } catch {
                 print("[PrinterManager] Print failed: \(error)")
             }
+            BradyUSB.deviceLock.signal()
             await MainActor.run {
                 job.isComplete = true
                 self.setPrinterBusy(printerID, busy: false)
@@ -163,6 +167,45 @@ final class PrinterManager: ObservableObject {
             var copy = p
             if copy.id == id { copy.status = busy ? .busy : .ready }
             return copy
+        }
+    }
+
+    // MARK: – SmartCell cassette detection
+
+    /// Most recent SmartCell read per printer ID, for auto-detecting the loaded
+    /// supply instead of asking the user.
+    @Published var cassettes: [String: BradyUSB.SmartCellInfo] = [:]
+    private var cassetteFetchedAt: [String: Date] = [:]
+    private let cassetteTTL: TimeInterval = 60
+
+    /// Read the loaded cassette's SmartCell chip for a printer and cache it
+    /// (60 s TTL). The query is slow (several seconds when cold — the channel
+    /// needs priming) and needs exclusive device access, so it runs on a
+    /// background task behind the shared device lock and publishes to `cassettes`.
+    /// Skipped while a print is in progress so it never delays a job.
+    func refreshCassette(for printerID: String, force: Bool = false) {
+        if activeJobs.contains(where: { !$0.isComplete }) { return }  // don't delay a print
+        if !force, let at = cassetteFetchedAt[printerID],
+           Date().timeIntervalSince(at) < cassetteTTL { return }
+
+        Task.detached {
+            BradyUSB.deviceLock.wait()
+            var info: BradyUSB.SmartCellInfo?
+            do {
+                let handle = try BradyUSB.openPrinterByID(printerID)
+                defer { BradyUSB.close(handle) }
+                info = BradyUSB.querySmartCell(handle: handle)
+            } catch {
+                // LIBUSB_ERROR_ACCESS or not found — keep any cached value.
+            }
+            BradyUSB.deviceLock.signal()
+
+            if let info {
+                await MainActor.run {
+                    self.cassettes[printerID] = info
+                    self.cassetteFetchedAt[printerID] = Date()
+                }
+            }
         }
     }
 }
