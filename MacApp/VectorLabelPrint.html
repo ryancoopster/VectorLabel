@@ -24,7 +24,7 @@ label.lbl{font-size:10px;color:#8888a8;display:block;margin-bottom:3px}
 .modal{background:#1a1a28;border:1px solid rgba(255,255,255,0.13);border-radius:8px;padding:24px;box-shadow:0 8px 40px rgba(0,0,0,0.6)}
 .modal-title{font-size:15px;font-weight:600;margin-bottom:16px}
 .modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.07)}
-.rec-row{display:grid;grid-template-columns:28px 28px 1fr 1fr 1fr 1fr 1fr;align-items:center;gap:0;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;min-height:36px}
+.rec-row{display:grid;grid-template-columns:28px 24px 28px 1fr 1fr 1fr 1fr 1fr;align-items:center;gap:0;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;min-height:36px}
 .rec-row:hover{background:rgba(108,142,245,0.06)}
 .rec-row.selected{background:rgba(108,142,245,0.12)}
 .rec-row.active-preview{background:rgba(108,142,245,0.2)}
@@ -224,11 +224,48 @@ function printer(){return PRINTERS.find(p=>p.id===P.activePrinter)||PRINTERS[0];
 
 function tpl(){return P.templates[P.activeTpl]||null;}
 function selCount(){return P.selected.size;}
+
+// Records come in Source/Destination pairs. pairIdx(i) returns the partner index.
+function pairIdx(i){
+  const r=P.records[i];
+  if(!r)return null;
+  if(r._Side==="Source"   && i+1<P.records.length && P.records[i+1]._Side==="Destination") return i+1;
+  if(r._Side==="Destination" && i>0 && P.records[i-1]._Side==="Source") return i-1;
+  return null;
+}
+
+// Toggle a single row
 function toggleSel(i){
   if(P.selected.has(i))P.selected.delete(i);
   else P.selected.add(i);
   R();
 }
+
+// Toggle a pair — if either is selected, deselect both; if both deselected, select both
+function togglePair(i){
+  const j=pairIdx(i);
+  const hasI=P.selected.has(i);
+  const hasJ=j!==null&&P.selected.has(j);
+  if(hasI||hasJ){
+    P.selected.delete(i);
+    if(j!==null)P.selected.delete(j);
+  }else{
+    P.selected.add(i);
+    if(j!==null)P.selected.add(j);
+  }
+  R();
+}
+
+// Pair checkbox state: 'chk' both selected, 'partial' one selected, '' neither
+function pairChkState(i){
+  const j=pairIdx(i);
+  const hasI=P.selected.has(i);
+  const hasJ=j!==null?P.selected.has(j):hasI;
+  if(hasI&&hasJ)return'chk';
+  if(hasI||hasJ)return'partial';
+  return'';
+}
+
 function toggleAll(){
   if(P.selected.size===P.records.length)P.selected.clear();
   else P.records.forEach((_,i)=>P.selected.add(i));
@@ -275,6 +312,7 @@ function buildRecordTable(){
         <span class="check-tick">${allChk==="chk"?"✓":allChk==="partial"?"−":""}</span>
       </div>
     </div>
+    <div class="rec-cell rec-hdr" title="Toggle pair" style="text-align:center;color:#44445a;font-size:9px">⇅</div>
     <div class="rec-cell rec-hdr">#</div>
     ${cols.map(c=>`<div class="rec-cell rec-hdr">${c.f}</div>`).join("")}
   </div>`;
@@ -554,6 +592,7 @@ function R(){
               <span class="check-tick">${P.selected.size===P.records.length?"✓":P.selected.size>0?"−":""}</span>
             </div>
           </div>
+          <div class="rec-cell rec-hdr" title="Toggle source + destination pair" style="text-align:center;font-size:9px">⇅</div>
           <div class="rec-cell rec-hdr">#</div>
           <div class="rec-cell rec-hdr">Side</div>
           <div class="rec-cell rec-hdr">Number</div>
