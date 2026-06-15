@@ -3,8 +3,9 @@ import AppKit
 
 // MARK: – Root menu bar content
 
-/// The full dropdown that appears when the user clicks the VectorLabel status item.
-/// Matches VectorLabel-MenuBar.html exactly.
+/// The dropdown shown when the user clicks the VectorLabel status item.
+/// Styled with the shared VectorLabel design tokens (Theme.swift) so it
+/// matches the Preferences window and the HTML print/designer UIs.
 struct MenuBarView: View {
     @ObservedObject var printerManager  = PrinterManager.shared
     @ObservedObject var recentPrints    = RecentPrintsStore.shared
@@ -16,18 +17,18 @@ struct MenuBarView: View {
             // Printers
             printersSection
 
-            Divider()
+            vlDivider
 
             // Active jobs
             if !printerManager.activeJobs.filter({ !$0.isComplete }).isEmpty {
                 activeJobsSection
-                Divider()
+                vlDivider
             }
 
             // Recent prints
             recentPrintsSection
 
-            Divider()
+            vlDivider
 
             // Actions
             actionsSection
@@ -36,24 +37,45 @@ struct MenuBarView: View {
         // Fixed width + the popover's preferredContentSize sizing lets the
         // height grow to fit wrapped content so rows are never clipped.
         .fixedSize(horizontal: false, vertical: true)
+        .background(Color.vlBackground)
+    }
+
+    // MARK: – Shared building blocks
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundColor(.vlDim)
+            .padding(.horizontal, 14)
+            .padding(.top, 12)
+            .padding(.bottom, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var vlDivider: some View {
+        Rectangle()
+            .fill(Color.vlBorder)
+            .frame(height: 1)
+            .padding(.vertical, 4)
+    }
+
+    private func emptyState(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11))
+            .foregroundColor(.vlSecondary)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: – Printers
 
     private var printersSection: some View {
         Group {
-            Text("Printers")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 14)
-                .padding(.top, 6)
+            sectionHeader("Printers")
 
             if printerManager.printers.isEmpty {
-                Text("No printers connected")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 4)
+                emptyState("No printers connected")
             } else {
                 ForEach(printerManager.printers) { printer in
                     PrinterRow(printer: printer)
@@ -66,11 +88,7 @@ struct MenuBarView: View {
 
     private var activeJobsSection: some View {
         Group {
-            Text("Active Jobs")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 14)
-                .padding(.top, 6)
+            sectionHeader("Active Jobs")
 
             ForEach(printerManager.activeJobs.filter { !$0.isComplete }) { job in
                 ActiveJobRow(job: job)
@@ -82,18 +100,10 @@ struct MenuBarView: View {
 
     private var recentPrintsSection: some View {
         Group {
-            Text("Recent Prints")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundColor(.secondary)
-                .padding(.horizontal, 14)
-                .padding(.top, 6)
+            sectionHeader("Recent Prints")
 
             if recentPrints.prints.isEmpty {
-                Text("No recent prints")
-                    .font(.system(size: 11))
-                    .foregroundColor(.secondary)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 4)
+                emptyState("No recent prints")
             } else {
                 ForEach(recentPrints.prints.prefix(settings.recentPrintsCount)) { recent in
                     RecentPrintRow(recent: recent) {
@@ -108,72 +118,32 @@ struct MenuBarView: View {
 
     private var actionsSection: some View {
         Group {
-            Button {
+            MenuActionRow(icon: "square.and.pencil", title: "Open Template Designer", shortcut: "⌘T") {
                 appDelegate.openTemplateDesigner()
-            } label: {
-                HStack {
-                    Image(systemName: "square.and.pencil")
-                        .frame(width: 18)
-                    Text("Open Template Designer")
-                    Spacer()
-                    Text("⌘T")
-                        .foregroundColor(.secondary)
-                        .font(.system(size: 10))
-                }
             }
             .keyboardShortcut("t", modifiers: .command)
 
-            Button {
+            MenuActionRow(icon: "folder", title: "Open Export Folder", shortcut: "⌘E") {
                 appDelegate.openExportFolder()
-            } label: {
-                HStack {
-                    Image(systemName: "folder")
-                        .frame(width: 18)
-                    Text("Open Export Folder")
-                    Spacer()
-                    Text("⌘E")
-                        .foregroundColor(.secondary)
-                        .font(.system(size: 10))
-                }
             }
             .keyboardShortcut("e", modifiers: .command)
 
-            Button {
+            MenuActionRow(icon: "gearshape", title: "Preferences…", shortcut: "⌘,") {
                 appDelegate.openPreferences()
-            } label: {
-                HStack {
-                    Image(systemName: "gearshape")
-                        .frame(width: 18)
-                    Text("Preferences…")
-                    Spacer()
-                    Text("⌘,")
-                        .foregroundColor(.secondary)
-                        .font(.system(size: 10))
-                }
             }
             .keyboardShortcut(",", modifiers: .command)
 
-            Divider()
+            vlDivider
 
-            Button {
+            MenuActionRow(icon: "power", title: "Quit VectorLabel", shortcut: "⌘Q") {
                 NSApplication.shared.terminate(nil)
-            } label: {
-                HStack {
-                    Image(systemName: "power")
-                        .frame(width: 18)
-                    Text("Quit VectorLabel")
-                    Spacer()
-                    Text("⌘Q")
-                        .foregroundColor(.secondary)
-                        .font(.system(size: 10))
-                }
             }
             .keyboardShortcut("q", modifiers: .command)
 
             // Build version footer
             Text(appVersionString)
                 .font(.system(size: 9))
-                .foregroundColor(.secondary)
+                .foregroundColor(.vlDim)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.top, 6)
                 .padding(.bottom, 8)
@@ -190,6 +160,40 @@ struct MenuBarView: View {
     }
 }
 
+// MARK: – Menu action row (icon + title + shortcut, with hover highlight)
+
+struct MenuActionRow: View {
+    let icon: String
+    let title: String
+    let shortcut: String
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 0) {
+                Image(systemName: icon)
+                    .font(.system(size: 12))
+                    .foregroundColor(.vlAccent)
+                    .frame(width: 24, alignment: .leading)
+                Text(title)
+                    .font(.system(size: 12))
+                    .foregroundColor(.vlLabel)
+                Spacer()
+                Text(shortcut)
+                    .font(.system(size: 10))
+                    .foregroundColor(.vlDim)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .contentShape(Rectangle())
+            .background(hovering ? Color.white.opacity(0.06) : Color.clear)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+    }
+}
+
 // MARK: – Sub-views
 
 struct PrinterRow: View {
@@ -197,9 +201,9 @@ struct PrinterRow: View {
 
     var statusColor: Color {
         switch printer.status {
-        case .ready:   return .green
-        case .busy:    return .orange
-        case .offline: return Color(white: 0.5)
+        case .ready:   return .vlGreen
+        case .busy:    return .vlOrange
+        case .offline: return .vlDim
         }
     }
 
@@ -208,14 +212,14 @@ struct PrinterRow: View {
             Circle()
                 .fill(statusColor)
                 .frame(width: 7, height: 7)
-                .opacity(printer.status == .busy ? 1.0 : 1.0)  // pulse handled separately
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(printer.name)
                     .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.vlLabel)
                 Text("\(printer.serial) · \(printer.status.displayName)")
                     .font(.system(size: 10))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.vlSecondary)
             }
 
             Spacer()
@@ -237,16 +241,17 @@ struct ActiveJobRow: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
                 Image(systemName: "printer.fill")
-                    .foregroundColor(.blue)
+                    .foregroundColor(.vlAccent)
                     .frame(width: 20, height: 20)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(job.title)
                         .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.vlLabel)
                         .lineLimit(1)
                     Text("\(job.templateName) · \(job.labelCount) labels")
                         .font(.system(size: 10))
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.vlSecondary)
                 }
 
                 Spacer()
@@ -256,14 +261,18 @@ struct ActiveJobRow: View {
                         job.requestCancel()
                         showCancelConfirm = false
                     }
-                    .foregroundColor(.red)
-                    .font(.system(size: 10))
+                    .buttonStyle(.plain)
+                    .foregroundColor(.vlRed)
+                    .font(.system(size: 10, weight: .medium))
 
                     Button("Keep") { showCancelConfirm = false }
+                        .buttonStyle(.plain)
+                        .foregroundColor(.vlSecondary)
                         .font(.system(size: 10))
                 } else {
                     Button("Cancel") { showCancelConfirm = true }
-                        .foregroundColor(.red)
+                        .buttonStyle(.plain)
+                        .foregroundColor(.vlRed)
                         .font(.system(size: 10))
                 }
             }
@@ -272,10 +281,10 @@ struct ActiveJobRow: View {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.white.opacity(0.1))
+                        .fill(Color.vlSurface2)
                         .frame(height: 3)
                     RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.blue)
+                        .fill(Color.vlAccent)
                         .frame(width: geo.size.width * CGFloat(job.progress), height: 3)
                 }
             }
@@ -283,7 +292,7 @@ struct ActiveJobRow: View {
 
             Text("\(job.completedLabels) of \(job.labelCount)")
                 .font(.system(size: 10))
-                .foregroundColor(.secondary)
+                .foregroundColor(.vlSecondary)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 6)
@@ -293,6 +302,7 @@ struct ActiveJobRow: View {
 struct RecentPrintRow: View {
     let recent: RecentPrint
     let onReprint: () -> Void
+    @State private var hovering = false
 
     private var statusIcon: String {
         switch recent.status {
@@ -305,10 +315,10 @@ struct RecentPrintRow: View {
 
     private var statusColor: Color {
         switch recent.status {
-        case .complete:                return .green
-        case .printing:                return .blue
+        case .complete:                return .vlGreen
+        case .printing:                return .vlAccent
         case .cancelledBeforePrinting,
-             .cancelledMidPrint:        return .orange
+             .cancelledMidPrint:        return .vlOrange
         }
     }
 
@@ -322,28 +332,38 @@ struct RecentPrintRow: View {
                 // Full title — wraps over as many lines as needed, never clipped.
                 Text(recent.title)
                     .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.vlLabel)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text("\(recent.status.displayName) · \(recent.labelCount) label\(recent.labelCount == 1 ? "" : "s")")
                     .font(.system(size: 10))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.vlSecondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text("\(recent.dateTimeString) · \(recent.timeAgo)")
                     .font(.system(size: 10))
-                    .foregroundColor(Color.secondary.opacity(0.75))
+                    .foregroundColor(.vlDim)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer(minLength: 4)
 
-            Button("Reprint") { onReprint() }
-                .font(.system(size: 10, weight: .medium))
-                .foregroundColor(.accentColor)
-                .fixedSize()
+            Button(action: onReprint) {
+                Text("Reprint")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.vlAccent)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.vlAccent.opacity(0.12))
+                    .cornerRadius(5)
+            }
+            .buttonStyle(.plain)
+            .fixedSize()
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 6)
+        .background(hovering ? Color.white.opacity(0.04) : Color.clear)
+        .onHover { hovering = $0 }
     }
 }

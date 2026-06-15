@@ -150,6 +150,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // filenames are never clipped.
         hosting.sizingOptions = [.preferredContentSize]
         popover.contentViewController = hosting
+        // Dark popover chrome so the arrow/background matches the themed content.
+        popover.appearance = NSAppearance(named: .darkAqua)
         popover.behavior = .transient
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         menuPopover = popover
