@@ -18,11 +18,13 @@ let package = Package(
             name: "VectorLabel",
             dependencies: ["CLibUSB"],
             path: "MacApp/Sources",
-            exclude: ["CLibUSB"],
+            exclude: [
+                "CLibUSB",
+                "Info.plist",
+            ],
             resources: [
                 .copy("VectorLabelPrint.html"),
                 .copy("VectorLabelDesigner.html"),
-                .process("Info.plist"),
             ],
             linkerSettings: [
                 .linkedFramework("AppKit"),

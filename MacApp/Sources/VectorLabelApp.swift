@@ -33,7 +33,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     @MainActor func applicationDidFinishLaunching(_ notification: Notification) {
         // WKWebView requires a bundle identifier for its sandboxed WebContent process.
         // When running from SPM/Xcode without INFOPLIST_FILE set, inject it directly.
-        // Bundle identifier is set via Info.plist in MacApp/Sources/
+        // SPM cannot inject Info.plist. Set INFOPLIST_FILE in Xcode Build Settings
+        // pointing to Info.plist at the repo root to get a proper bundle identifier.
+        // As a dev fallback, register the ID in UserDefaults which WKWebView checks.
+        if Bundle.main.bundleIdentifier == nil || Bundle.main.bundleIdentifier!.isEmpty {
+            UserDefaults.standard.set("com.sai.vectorlabel", forKey: "CFBundleIdentifier")
+        }
         printWindowController = PrintWindowController()
 
         // Set up the NSStatusItem — reliable for LSUIElement apps, no activation issues
