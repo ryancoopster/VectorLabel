@@ -6,7 +6,13 @@ struct BradyLabelSize: Identifiable, Codable, Hashable {
     let partNumber: String      // e.g. "BM-32-427"
     let widthInches: Double
     let heightInches: Double
-    let dpi: Int = 300
+    // dpi is constant — excluded from Codable to avoid "immutable property will not
+    // be decoded" warning (Swift can't decode a let with a default into Codable).
+    var dpi: Int { 300 }
+
+    private enum CodingKeys: String, CodingKey {
+        case partNumber, widthInches, heightInches
+    }
 
     var pixelWidth: Int { Int((widthInches * Double(dpi)).rounded()) }
     var pixelHeight: Int { Int((heightInches * Double(dpi)).rounded()) }

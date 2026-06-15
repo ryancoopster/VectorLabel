@@ -5,6 +5,7 @@ import WebKit
 // MARK: – App entry point
 
 @main
+@MainActor
 struct VectorLabelApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
@@ -97,7 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         ) { [weak self] _ in
             self?.designerWindow = nil
             self?.designerWebView = nil
-            TemplateStore.shared.reload()
+            Task { @MainActor in TemplateStore.shared.reload() }
         }
     }
 
