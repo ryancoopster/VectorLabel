@@ -9,19 +9,11 @@ import WebKit
 struct VectorLabelApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
+    // NSStatusItem is managed entirely by AppDelegate.
+    // We use an empty scene here — the menu bar icon is set up in
+    // applicationDidFinishLaunching via NSStatusBar.
     var body: some Scene {
-        MenuBarExtra {
-            MenuBarView()
-                .environmentObject(appDelegate)
-        } label: {
-            if PrinterManager.shared.activeJobs.contains(where: { !$0.isComplete }) {
-                Image(systemName: "printer.fill")
-            } else {
-                Text("VL").font(.system(size: 11, weight: .bold))
-            }
-        }
-        .menuBarExtraStyle(.window)
-
+        Settings { EmptyView() }
     }
 }
 
@@ -36,13 +28,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var preferencesWindow: NSWindow?
     private var designerCloseObserver: NSObjectProtocol?
 
+    private var statusItem: NSStatusItem?
+
     @MainActor func applicationDidFinishLaunching(_ notification: Notification) {
-        // Ensure bundle identifier is set — required for WKWebView sandbox
         if Bundle.main.bundleIdentifier == nil || Bundle.main.bundleIdentifier!.isEmpty {
-            // Running without a proper bundle (dev/SPM). Set a temporary identifier.
             UserDefaults.standard.set("com.sai.vectorlabel", forKey: "NSBundleIdentifier")
         }
         printWindowController = PrintWindowController()
+
+        // Set up the NSStatusItem — reliable for LSUIElement apps, no activation issues
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        if let button = item.button {
+            button.title = "VL"
+            button.font = NSFont.systemFont(ofSize: 11, weight: .bold)
+            button.action = #selector(toggleMenuBarPopover)
+            button.target = self
+        }
+        statusItem = item
         NSApp.setActivationPolicy(AppSettings.shared.showInDock ? .regular : .accessory)
         TemplateStore.shared.reload()
         PrinterManager.shared.startScan()
@@ -111,6 +113,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
             }
         }
+    }
+
+    private var menuPopover: NSPopover?
+
+    @objc func toggleMenuBarPopover() {
+        guard let button = statusItem?.button else { return }
+        if let popover = menuPopover, popover.isShown {
+            popover.performClose(nil)
+            menuPopover = nil
+            return
+        }
+        let popover = NSPopover()
+        popover.contentViewController = NSHostingController(
+            rootView: MenuBarView().environmentObject(self)
+        )
+        popover.contentSize = NSSize(width: 320, height: 500)
+        popover.behavior = .transient
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        menuPopover = popover
     }
 
     func openPreferences() {
