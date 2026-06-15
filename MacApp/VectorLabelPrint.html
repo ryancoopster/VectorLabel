@@ -844,15 +844,16 @@ function openEditor(){
     template: tplCopy,
     records: P.records,
     onSaveReturn: function(updatedTpl){
+      cleanupEditorDOM();
       P.templates[P.activeTpl]=updatedTpl;
       window._editorOnSave=null;
       window._editorOnDiscard=null;
       P.view="print";
-      // Restore the print screen's R() before calling it
       if(window._printR){window.R=window._printR;window._printR=null;}
       R();
     },
     onDiscard: function(){
+      cleanupEditorDOM();
       window._editorOnSave=null;
       window._editorOnDiscard=null;
       P.view="print";
@@ -862,7 +863,16 @@ function openEditor(){
   });
 }
 
+function cleanupEditorDOM(){
+  // Remove the modal overlay — it lives on document.body, survives #app re-render
+  const modal=document.getElementById("vl-modal");
+  if(modal)modal.remove();
+  // Clear designer modal state
+  S.modal=null;
+}
+
 function closeEditor(){
+  cleanupEditorDOM();
   window._editorOnSave=null;
   window._editorOnDiscard=null;
   P.view="print";
