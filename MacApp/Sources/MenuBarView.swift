@@ -132,7 +132,9 @@ struct MenuBarView: View {
             }
             .keyboardShortcut("e", modifiers: .command)
 
-            SettingsLink {
+            Button {
+                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            } label: {
                 HStack {
                     Image(systemName: "gearshape")
                         .frame(width: 18)
@@ -143,6 +145,7 @@ struct MenuBarView: View {
                         .font(.system(size: 10))
                 }
             }
+            .keyboardShortcut(",", modifiers: .command)
 
             Divider()
 

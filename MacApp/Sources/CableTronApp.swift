@@ -108,7 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 
     func openReprint(_ recent: RecentPrint) {
-        printWindowController.showForReprint(recent)
+        Task { @MainActor in self.printWindowController.showForReprint(recent) }
     }
 
     // MARK: – Auto-load most recent CSV for the designer
