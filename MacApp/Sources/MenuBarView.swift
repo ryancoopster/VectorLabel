@@ -260,17 +260,35 @@ struct RecentPrintRow: View {
     let recent: RecentPrint
     let onReprint: () -> Void
 
+    private var statusIcon: String {
+        switch recent.status {
+        case .complete:                return "checkmark.circle.fill"
+        case .printing:                return "printer.fill"
+        case .cancelledBeforePrinting,
+             .cancelledMidPrint:        return "xmark.circle.fill"
+        }
+    }
+
+    private var statusColor: Color {
+        switch recent.status {
+        case .complete:                return .green
+        case .printing:                return .blue
+        case .cancelledBeforePrinting,
+             .cancelledMidPrint:        return .orange
+        }
+    }
+
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(.green)
+            Image(systemName: statusIcon)
+                .foregroundColor(statusColor)
                 .frame(width: 20, height: 20)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(recent.title)
                     .font(.system(size: 12, weight: .medium))
                     .lineLimit(1)
-                Text("\(recent.labelCount) labels · \(recent.templateName) · \(recent.timeAgo)")
+                Text("\(recent.status.displayName) · \(recent.labelCount) labels · \(recent.timeAgo)")
                     .font(.system(size: 10))
                     .foregroundColor(.secondary)
                     .lineLimit(1)

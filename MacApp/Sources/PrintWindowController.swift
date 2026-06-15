@@ -27,18 +27,25 @@ final class PrintWindowController: NSObject {
     // Observes the active PrintJob so we can drive the web view's progress UI.
     private var jobObservers: Set<AnyCancellable> = []
 
+    // Recent-print record for the job submitted this session, so its status can
+    // be updated (printing → complete / cancelled-mid-print). nil until Print is
+    // clicked; while nil, a ✕ Cancel records a "cancelled before printing" entry.
+    private var currentRecentPrintID: UUID?
+
     // MARK: – Show / hide
 
     func showForNewExport(fileURL: URL, records: [WireRecord]) {
         self.records = records
         self.sourceFileURL = fileURL
         self.reprinting = nil
+        self.currentRecentPrintID = nil
         openWindowIfNeeded()
         sendInitialState()
     }
 
     func showForReprint(_ recent: RecentPrint) {
         self.reprinting = recent
+        self.currentRecentPrintID = nil
         // Clear any stale export URL so the recorded source filename comes from
         // the reprint record, not a previously-opened export.
         self.sourceFileURL = nil
@@ -199,11 +206,15 @@ extension PrintWindowController: WKScriptMessageHandler {
         case "close":
             // The ✕ Cancel button sends the configured job flagged cancelled so
             // it's still saved to Recent Prints (for reprint), even though it was
-            // never printed. Skip when there's nothing printable.
-            if let payload = body["payload"] as? [String: Any],
+            // never printed. Skip when there's nothing printable, or when a print
+            // was already submitted this session (that record tracks its own
+            // status via observePrintJob, so don't add a duplicate).
+            if currentRecentPrintID == nil,
+               let payload = body["payload"] as? [String: Any],
                payload["cancelled"] as? Bool == true,
                let indices = payload["recordIndices"] as? [Int], !indices.isEmpty,
-               let recent = makeRecentPrint(from: payload, labelCount: indices.count) {
+               let recent = makeRecentPrint(from: payload, labelCount: indices.count,
+                                            status: .cancelledBeforePrinting) {
                 RecentPrintsStore.shared.add(recent)
             }
             close()
@@ -252,15 +263,18 @@ extension PrintWindowController: WKScriptMessageHandler {
         )
         observePrintJob(job)
 
-        // Record in recent prints
-        if let recent = makeRecentPrint(from: payload, labelCount: jobs.count) {
+        // Record in recent prints as in-progress; status is updated on completion
+        // or mid-print cancellation by observePrintJob.
+        if let recent = makeRecentPrint(from: payload, labelCount: jobs.count, status: .printing) {
+            currentRecentPrintID = recent.id
             RecentPrintsStore.shared.add(recent)
         }
     }
 
     /// Builds a RecentPrint from a print/cancel payload, or nil if required
     /// fields are missing. Shared by the print and the cancel-records paths.
-    private func makeRecentPrint(from payload: [String: Any], labelCount: Int) -> RecentPrint? {
+    private func makeRecentPrint(from payload: [String: Any], labelCount: Int,
+                                 status: RecentPrint.Status) -> RecentPrint? {
         guard let printerID     = payload["printerID"]     as? String,
               let title         = payload["title"]         as? String,
               let templateName  = payload["templateName"]  as? String,
@@ -283,6 +297,7 @@ extension PrintWindowController: WKScriptMessageHandler {
             labelCount: labelCount,
             printRange: printRange,
             selectedIndices: recordIndices,
+            status: status,
             rangeFrom: payload["rangeFrom"] as? Int,
             rangeTo: payload["rangeTo"] as? Int
         )
@@ -304,11 +319,17 @@ extension PrintWindowController: WKScriptMessageHandler {
             .store(in: &jobObservers)
 
         job.$isComplete
-            .sink { [weak self] complete in
+            .sink { [weak self, weak job] complete in
                 guard complete else { return }
                 Task { @MainActor in
                     guard let self = self else { return }
                     self.evalJS("if(typeof completePrint==='function')completePrint();")
+                    if let id = self.currentRecentPrintID {
+                        RecentPrintsStore.shared.updateStatus(
+                            id: id,
+                            to: (job?.isCancelled ?? false) ? .cancelledMidPrint : .complete
+                        )
+                    }
                     self.jobObservers.removeAll()
                 }
             }

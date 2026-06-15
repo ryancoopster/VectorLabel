@@ -13,9 +13,27 @@ struct RecentPrint: Codable, Identifiable, Hashable {
     var labelCount: Int
     var printRange: PrintRange
     var selectedIndices: [Int]      // which record indices were checked
+    var status: Status = .complete  // lifecycle outcome of the job
 
     enum PrintRange: String, Codable {
         case all, selected, range
+    }
+
+    /// Lifecycle outcome shown in the Recent Prints menu.
+    enum Status: String, Codable {
+        case printing                // submitted, still printing
+        case complete                // all labels sent
+        case cancelledBeforePrinting // ✕ Cancel before a print started
+        case cancelledMidPrint       // job cancelled while printing
+
+        var displayName: String {
+            switch self {
+            case .printing:                return "Printing…"
+            case .complete:                return "Complete"
+            case .cancelledBeforePrinting: return "Cancelled before printing"
+            case .cancelledMidPrint:       return "Cancelled mid-print"
+            }
+        }
     }
 
     var rangeFrom: Int?
@@ -23,7 +41,7 @@ struct RecentPrint: Codable, Identifiable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case id, date, title, sourceFileName, templateName, printerName
-        case labelCount, printRange, selectedIndices, rangeFrom, rangeTo
+        case labelCount, printRange, selectedIndices, status, rangeFrom, rangeTo
     }
 
     /// Human-readable time since print, e.g. "2 min ago", "1 hr ago".
@@ -52,6 +70,8 @@ extension RecentPrint {
         labelCount      = (try? c.decode(Int.self,    forKey: .labelCount)) ?? 0
         printRange      = (try? c.decode(PrintRange.self, forKey: .printRange)) ?? .selected
         selectedIndices = (try? c.decode([Int].self,  forKey: .selectedIndices)) ?? []
+        // Older records predate the status field; treat them as completed.
+        status          = (try? c.decode(Status.self, forKey: .status)) ?? .complete
         rangeFrom       = try? c.decode(Int.self, forKey: .rangeFrom)
         rangeTo         = try? c.decode(Int.self, forKey: .rangeTo)
     }
@@ -83,6 +103,13 @@ final class RecentPrintsStore: ObservableObject {
         prints.insert(print, at: 0)
         let maxCount = AppSettings.shared.recentPrintsCount
         if prints.count > maxCount { prints = Array(prints.prefix(maxCount)) }
+        save()
+    }
+
+    /// Updates the status of a previously-added record (e.g. printing → complete).
+    func updateStatus(id: UUID, to status: RecentPrint.Status) {
+        guard let idx = prints.firstIndex(where: { $0.id == id }) else { return }
+        prints[idx].status = status
         save()
     }
 
