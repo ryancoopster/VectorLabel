@@ -396,20 +396,10 @@ function toggleAll(){
 }
 
 // Row click: preview this record. Shift-click: select range between last clicked and this.
+// handleRowClick kept for compatibility but range-select is now in checkbox/pair cells
 function handleRowClick(e,i){
-  if(e.shiftKey&&P.lastClickIdx!==null){
-    const lo=Math.min(P.lastClickIdx,i);
-    const hi=Math.max(P.lastClickIdx,i);
-    for(let j=lo;j<=hi;j++) P.selected.add(j);
-    P.printRange="selected";
-    P.previewIdx=i;
-    // Don't update lastClickIdx on shift-click so anchor stays fixed
-    R();
-  }else{
-    P.previewIdx=i;
-    P.lastClickIdx=i;  // set anchor for next shift-click
-    R();
-  }
+  P.previewIdx=i;
+  R();
 }
 function selectSide(side){
   // If all of this side are already selected, deselect them; otherwise select all of this side
@@ -474,7 +464,7 @@ function buildRecordTable(){
     const isSel=P.selected.has(i);
     const isPrev=P.previewIdx===i;
     const side=r._Side==="Source"?"src":"dst";
-    return`<div class="rec-row${isSel?" selected":""}${isPrev?" active-preview":""}" onclick="handleRowClick(event,${i})">
+    return`<div class="rec-row${isSel?" selected":""}${isPrev?" active-preview":""}" onclick="P.previewIdx=${i};P.lastClickIdx=null;R()">
       <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();toggleSel(${i})">
         <div class="cb ${isSel?"chk":""}"><span class="check-tick">${isSel?"✓":""}</span></div>
       </div>
@@ -825,11 +815,11 @@ function R(){
             const isPrev=P.previewIdx===i;
             const side=r._Side==="Source"?"src":"dst";
             const ps2=pairChkState(i);
-            return`<div class="rec-row${isSel?" selected":""}${isPrev?" active-preview":""}" onclick="handleRowClick(event,${i})">
-              <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();if(event.shiftKey){handleRowClick(event,${i})}else{toggleSel(${i})}">
+            return`<div class="rec-row${isSel?" selected":""}${isPrev?" active-preview":""}" onclick="P.previewIdx=${i};P.lastClickIdx=null;R()">
+              <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();if(event.shiftKey&&P.lastClickIdx!==null){const lo=Math.min(P.lastClickIdx,${i}),hi=Math.max(P.lastClickIdx,${i});for(let j=lo;j<=hi;j++)P.selected.add(j);P.printRange='selected';R();}else{P.lastClickIdx=${i};toggleSel(${i});}">
                 <div class="cb ${isSel?"chk":""}"><span class="check-tick">${isSel?"✓":""}</span></div>
               </div>
-              <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();if(event.shiftKey){handleRowClick(event,${i})}else{togglePair(${i})}" title="Toggle Source + Destination pair — Shift+click to range select">
+              <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();if(event.shiftKey&&P.lastClickIdx!==null){const lo=Math.min(P.lastClickIdx,${i}),hi=Math.max(P.lastClickIdx,${i});for(let j=lo;j<=hi;j++)P.selected.add(j);P.printRange='selected';R();}else{P.lastClickIdx=${i};togglePair(${i});}" title="Toggle Source + Destination pair — Shift+click to range select">
                 <div style="width:18px;height:14px;border:1.5px solid ${ps2?'rgba(108,142,245,0.6)':'rgba(255,255,255,0.1)'};border-radius:3px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:${ps2==='chk'?'rgba(108,142,245,0.2)':ps2==='partial'?'rgba(108,142,245,0.08)':'transparent'}">
                   <span style="color:${ps2?'#6C8EF5':'rgba(255,255,255,0.15)'};font-size:8px;line-height:1">⇅</span>
                 </div>
