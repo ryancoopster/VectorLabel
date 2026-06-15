@@ -1,143 +1,229 @@
 import Foundation
 import CoreGraphics
 import CoreText
+import AppKit
 
-/// A field placed on a label template, bound to a key from the wire record.
-struct TemplateField: Codable, Identifiable, Hashable {
-    var id: UUID = UUID()
-    var fieldKey: String        // matches a key in WireRecord.fields, e.g. "CableName"
-    var x: Double               // normalized 0-1 within label
-    var y: Double
-    var width: Double           // normalized 0-1
-    var height: Double
-    var fontWeight: FontWeight = .regular
-    var alignment: TextAlignment = .left
-    var autoFit: Bool = true
-    var maxFontSize: Double = 24
-    var minFontSize: Double = 8
+// WireRecord is defined in ExportWatcher.swift.
+// VLTemplate and TemplateObject are defined in TemplateStore.swift.
+// This file contains only the renderer.
 
-    enum FontWeight: String, Codable { case regular, bold, black }
-    enum TextAlignment: String, Codable { case left, center, right }
-}
+// MARK: – Brady label geometry
 
-/// A saved label template, locked to a specific Brady label size.
-struct LabelTemplate: Codable, Identifiable {
-    var id: UUID = UUID()
-    var name: String
-    var partNumber: String      // BradyCatalog part number, e.g. "BM-32-427"
-    var fields: [TemplateField]
-
-    var labelSize: BradyLabelSize? {
-        BradyCatalog.size(forPartNumber: partNumber)
+extension BradyLabelSize {
+    /// Printable area in inches. For BM-33-427 the printable zone is 1.5×1.5,
+    /// even though the total label is 4×1.5.
+    var printableWidthInches: Double {
+        switch partNumber {
+        case "BM-31-427": return 1.0
+        case "BM-32-427": return 1.5
+        case "BM-33-427": return 1.5
+        default: return widthInches
+        }
     }
+
+    var printableHeightInches: Double {
+        switch partNumber {
+        case "BM-31-427": return 0.5
+        case "BM-32-427": return 0.5
+        case "BM-33-427": return 1.5
+        default: return heightInches
+        }
+    }
+
+    var printablePixelWidth:  Int { Int((printableWidthInches  * Double(dpi)).rounded()) }
+    var printablePixelHeight: Int { Int((printableHeightInches * Double(dpi)).rounded()) }
 }
 
-/// A single label's data, keyed by the same field names used in templates.
-/// One WireRecord exists per side (source/destination) of each wire.
-struct WireRecord: Identifiable, Hashable {
-    var id: UUID = UUID()
-    var side: String            // "Source" or "Destination"
-    var wireID: String
-    var fields: [String: String] // all ConnectCAD fields, raw + combined
-}
+// MARK: – Renderer
 
-/// Renders a LabelTemplate + WireRecord to a 1bpp mono pixel buffer
-/// suitable for BradyVGL.buildPrintJob.
+/// Renders a VLTemplate + WireRecord to a 1-byte-per-pixel mono buffer
+/// (0xFF = ink/black, 0x00 = white) suitable for BradyVGL.buildPrintJob.
 enum LabelRenderer {
 
-    /// Returns row-major 1-byte-per-pixel buffer, 0xFF = black, 0x00 = white.
-    static func render(template: LabelTemplate, record: WireRecord) -> (pixels: [UInt8], width: Int, height: Int)? {
+    /// SC is the coordinate scale used by the HTML designer: 185 px per inch-unit.
+    /// Template object coordinates are in 0…1 relative to the printable area.
+    /// We map those onto the actual print DPI here.
+    static func render(template: VLTemplate, record: WireRecord) -> (pixels: [UInt8], width: Int, height: Int)? {
         guard let size = template.labelSize else { return nil }
-        let width = size.pixelWidth
-        let height = size.pixelHeight
+        let pw = size.printablePixelWidth
+        let ph = size.printablePixelHeight
 
         let colorSpace = CGColorSpaceCreateDeviceGray()
-        guard let ctx = CGContext(data: nil, width: width, height: height,
-                                   bitsPerComponent: 8, bytesPerRow: width,
-                                   space: colorSpace, bitmapInfo: CGImageAlphaInfo.none.rawValue) else {
-            return nil
-        }
+        guard let ctx = CGContext(
+            data: nil, width: pw, height: ph,
+            bitsPerComponent: 8, bytesPerRow: pw,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.none.rawValue
+        ) else { return nil }
 
         // White background
         ctx.setFillColor(gray: 1.0, alpha: 1.0)
-        ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
-        ctx.setFillColor(gray: 0.0, alpha: 1.0)
+        ctx.fill(CGRect(x: 0, y: 0, width: pw, height: ph))
 
-        // Flip coordinate system so (0,0) is top-left like the canvas version
-        ctx.translateBy(x: 0, y: CGFloat(height))
+        // Flip so (0,0) is top-left (matches HTML canvas convention)
+        ctx.translateBy(x: 0, y: CGFloat(ph))
         ctx.scaleBy(x: 1, y: -1)
 
-        for field in template.fields {
-            let text = record.fields[field.fieldKey] ?? ""
-            drawField(text, field: field, in: ctx, labelWidth: width, labelHeight: height)
-        }
-
-        guard let data = ctx.data else { return nil }
-        let buffer = data.bindMemory(to: UInt8.self, capacity: width * height)
-
-        // Threshold to 1bpp: anything darker than mid-gray = ink (0xFF)
-        var pixels = [UInt8](repeating: 0, count: width * height)
-        for i in 0..<(width * height) {
-            pixels[i] = buffer[i] < 0x80 ? 0xFF : 0x00
-        }
-
-        return (pixels, width, height)
-    }
-
-    private static func drawField(_ text: String, field: TemplateField, in ctx: CGContext, labelWidth: Int, labelHeight: Int) {
-        guard !text.isEmpty else { return }
-
-        let rect = CGRect(
-            x: field.x * Double(labelWidth),
-            y: field.y * Double(labelHeight),
-            width: field.width * Double(labelWidth),
-            height: field.height * Double(labelHeight)
-        )
-
-        let weight: CGFloat
-        switch field.fontWeight {
-        case .regular: weight = 0.0
-        case .bold: weight = 0.4
-        case .black: weight = 0.62
-        }
-
-        var fontSize = CGFloat(field.maxFontSize)
-        var attrString: NSAttributedString = makeAttributedString(text, size: fontSize, weight: weight, alignment: field.alignment)
-
-        if field.autoFit {
-            while fontSize > CGFloat(field.minFontSize) {
-                let bounds = attrString.boundingRect(with: rect.size, options: [.usesLineFragmentOrigin], context: nil)
-                if bounds.width <= rect.width && bounds.height <= rect.height {
-                    break
-                }
-                fontSize -= 1
-                attrString = makeAttributedString(text, size: fontSize, weight: weight, alignment: field.alignment)
+        for obj in template.objs {
+            switch obj.t {
+            case "tx": drawText(obj, record: record, in: ctx, pw: pw, ph: ph)
+            case "ln": drawLine(obj, in: ctx, pw: pw, ph: ph)
+            case "rc": drawRect(obj, in: ctx, pw: pw, ph: ph)
+            default: break
             }
         }
 
-        let framesetter = CTFramesetterCreateWithAttributedString(attrString)
-        let path = CGPath(rect: rect, transform: nil)
-        let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: 0), path, nil)
-        CTFrameDraw(frame, ctx)
+        guard let data = ctx.data else { return nil }
+        let raw = data.bindMemory(to: UInt8.self, capacity: pw * ph)
+        var pixels = [UInt8](repeating: 0, count: pw * ph)
+        for i in 0 ..< (pw * ph) {
+            pixels[i] = raw[i] < 0x80 ? 0xFF : 0x00
+        }
+        return (pixels, pw, ph)
     }
 
-    private static func makeAttributedString(_ text: String, size: CGFloat, weight: CGFloat, alignment: TemplateField.TextAlignment) -> NSAttributedString {
-        let descriptor = NSFontDescriptor(fontAttributes: [
-            .family: "Helvetica Neue",
-            .traits: [NSFontDescriptor.TraitKey.weight: weight]
-        ])
-        let font = CTFontCreateWithFontDescriptor(descriptor, size, nil)
+    // MARK: – Drawing helpers
 
-        let paragraph = NSMutableParagraphStyle()
-        switch alignment {
-        case .left: paragraph.alignment = .left
-        case .center: paragraph.alignment = .center
-        case .right: paragraph.alignment = .right
+    private static func rect(for obj: TemplateObject, pw: Int, ph: Int) -> CGRect {
+        CGRect(
+            x: obj.x * Double(pw),
+            y: obj.y * Double(ph),
+            width:  (obj.w) * Double(pw),
+            height: (obj.h) * Double(ph)
+        )
+    }
+
+    private static func drawText(_ obj: TemplateObject, record: WireRecord, in ctx: CGContext, pw: Int, ph: Int) {
+        let formula = obj.f ?? ""
+        let text = FormulaEngine.evaluate(formula, fields: record.fields)
+        guard !text.isEmpty else { return }
+
+        let r = rect(for: obj, pw: pw, ph: ph)
+
+        // Font
+        let fontName: String
+        switch obj.font ?? "Helvetica Neue" {
+        case "Arial Narrow": fontName = "ArialNarrow"
+        case "Courier New":  fontName = "CourierNewPSMT"
+        case "Georgia":      fontName = "Georgia"
+        case "Impact":       fontName = "Impact"
+        case "Tahoma":       fontName = "Tahoma"
+        case "Verdana":      fontName = "Verdana"
+        default:             fontName = "HelveticaNeue"
         }
 
-        return NSAttributedString(string: text, attributes: [
-            .font: font,
-            .paragraphStyle: paragraph
-        ])
+        // The HTML designer uses font-size in points at SC=185 (px per label unit).
+        // We need to scale to the actual render DPI: (fs / 185) * dpi.
+        // obj.fs is already in pt relative to the 185-px canvas.
+        let sc = 185.0
+        let rawPt = obj.fs ?? 14.0
+        // Scale: rawPt is the size at 185px/unit; at 300dpi the label is wider,
+        // so we scale proportionally.
+        let scaledPt = rawPt * (Double(pw) / (sc * Double(pw) / Double(pw)))
+        // Simpler: map directly — rawPt at 72 DPI on a 185-unit canvas → at 300 DPI
+        let fontSize = rawPt * Double(pw) / (sc * (BradyCatalog.size(forPartNumber: "BM-32-427")?.printableWidthInches ?? 1.5))
+
+        var traits: NSFontTraitMask = []
+        if obj.bold   == true { traits.insert(.boldFontMask) }
+        if obj.italic == true { traits.insert(.italicFontMask) }
+
+        let fontManager = NSFontManager.shared
+        var nsFont: NSFont
+        if let base = NSFont(name: fontName, size: CGFloat(fontSize)) {
+            nsFont = traits.isEmpty ? base : fontManager.convert(base, toHaveTrait: traits)
+        } else {
+            nsFont = NSFont.systemFont(ofSize: CGFloat(fontSize), weight: obj.bold == true ? .bold : .regular)
+        }
+
+        let ctFont = CTFontCreateWithName(nsFont.fontName as CFString, CGFloat(fontSize), nil)
+
+        let paraStyle = NSMutableParagraphStyle()
+        switch obj.al ?? "left" {
+        case "center":  paraStyle.alignment = .center
+        case "right":   paraStyle.alignment = .right
+        case "justify": paraStyle.alignment = .justified
+        default:        paraStyle.alignment = .left
+        }
+        if obj.wrapText != true { paraStyle.lineBreakMode = .byClipping }
+
+        var attrs: [NSAttributedString.Key: Any] = [
+            .font: ctFont,
+            .paragraphStyle: paraStyle,
+            .foregroundColor: CGColor(gray: 0.0, alpha: 1.0)
+        ]
+        if obj.underline == true {
+            attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue
+        }
+        if let tracking = obj.tracking, tracking != 0 {
+            attrs[.kern] = CGFloat(tracking) * CGFloat(pw) / CGFloat(sc)
+        }
+
+        let attrStr = NSAttributedString(string: text, attributes: attrs)
+
+        // Vertical alignment
+        let framesetter = CTFramesetterCreateWithAttributedString(attrStr)
+        let suggestedSize = CTFramesetterSuggestFrameSizeWithConstraints(
+            framesetter,
+            CFRange(location: 0, length: 0),
+            nil,
+            CGSize(width: r.width, height: CGFloat.greatestFiniteMagnitude),
+            nil
+        )
+
+        var drawRect = r
+        switch obj.valign ?? "middle" {
+        case "top":
+            drawRect.origin.y = r.minY
+        case "bottom":
+            drawRect.origin.y = r.maxY - suggestedSize.height
+        default: // middle
+            drawRect.origin.y = r.midY - suggestedSize.height / 2
+        }
+        drawRect.size.height = max(r.height, suggestedSize.height)
+
+        // Horizontal stretch (scaleX)
+        let stretch = (obj.stretch ?? 100.0) / 100.0
+        if abs(stretch - 1.0) > 0.01 {
+            ctx.saveGState()
+            ctx.translateBy(x: drawRect.origin.x, y: drawRect.origin.y)
+            ctx.scaleBy(x: CGFloat(stretch), y: 1.0)
+            let scaledRect = CGRect(origin: .zero, size: drawRect.size)
+            let path = CGPath(rect: scaledRect, transform: nil)
+            let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: 0), path, nil)
+            CTFrameDraw(frame, ctx)
+            ctx.restoreGState()
+        } else {
+            let path = CGPath(rect: drawRect, transform: nil)
+            let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: 0), path, nil)
+            CTFrameDraw(frame, ctx)
+        }
     }
+
+    private static func drawLine(_ obj: TemplateObject, in ctx: CGContext, pw: Int, ph: Int) {
+        let x1 = obj.x * Double(pw)
+        let y  = obj.y * Double(ph)
+        let x2 = (obj.x + obj.w) * Double(pw)
+        let lw = max(1.0, obj.lw ?? 1.0) * Double(pw) / Double(pw)
+
+        ctx.setStrokeColor(gray: 0.0, alpha: 1.0)
+        ctx.setLineWidth(CGFloat(lw))
+        ctx.move(to: CGPoint(x: x1, y: y))
+        ctx.addLine(to: CGPoint(x: x2, y: y))
+        ctx.strokePath()
+    }
+
+    private static func drawRect(_ obj: TemplateObject, in ctx: CGContext, pw: Int, ph: Int) {
+        let r = rect(for: obj, pw: pw, ph: ph)
+        let lw = max(1.0, obj.lw ?? 1.0)
+        ctx.setStrokeColor(gray: 0.0, alpha: 1.0)
+        ctx.setLineWidth(CGFloat(lw))
+        ctx.stroke(r)
+    }
+}
+
+// MARK: – Legacy shim (used by old PrintPreviewView)
+
+/// Thin wrapper so BradyCatalog dimensions include the DPI property.
+extension BradyLabelSize {
+    var dpi: Int { 300 }
 }

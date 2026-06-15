@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Required for USB access via libusb -->
+    <key>com.apple.security.device.usb</key>
+    <true/>
+
+    <!-- Required to read/write ~/Documents/VectorLabel/ -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+
+    <!-- Required to watch the Exports folder via FSEvents -->
+    <key>com.apple.security.files.downloads.read-write</key>
+    <false/>
+    <key>com.apple.security.files.bookmarks.app-scope</key>
+    <true/>
+
+    <!-- Allow outgoing network for any future cloud features, off by default -->
+    <key>com.apple.security.network.client</key>
+    <false/>
+
+    <!-- JIT disabled (not needed) -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <false/>
+
+    <!-- Allow loading local HTML files in WKWebView -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <false/>
+</dict>
+</plist>

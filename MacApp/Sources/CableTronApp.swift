@@ -1,170 +1,143 @@
 import SwiftUI
 import AppKit
 
+// MARK: – App entry point
+
 @main
-struct CableTronApp: App {
+struct VectorLabelApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
-        // Print preview is opened as a separate NSWindow by AppDelegate;
-        // SwiftUI's MenuBarExtra provides the persistent status item.
+        // Menu bar dropdown
         MenuBarExtra {
-            MenuBarContentView()
-                .environmentObject(appDelegate.state)
+            MenuBarView()
+                .environmentObject(appDelegate)
         } label: {
-            Image(systemName: appDelegate.state.statusIcon)
+            // Show a filled/animated icon when a print is active
+            if PrinterManager.shared.activeJobs.contains(where: { !$0.isComplete }) {
+                Image(systemName: "printer.fill")
+            } else {
+                // Use a simple text label while we don't have a bundled icon asset
+                Text("VL")
+                    .font(.system(size: 11, weight: .bold))
+            }
         }
-        .menuBarExtraStyle(.menu)
+        .menuBarExtraStyle(.window)  // use .window for custom SwiftUI content
 
+        // Preferences (⌘,)
         Settings {
-            SettingsView()
-                .environmentObject(appDelegate.state)
+            PreferencesView()
         }
     }
 }
 
-/// Shared app state, observed by the menu bar dropdown and settings.
-final class AppState: ObservableObject {
-    enum Status {
-        case idle, printing, done, error(String)
-    }
+// MARK: – AppDelegate
 
-    @Published var status: Status = .idle
-    @Published var jobLog: [String] = []
-    @Published var exportFolderPath: String = (NSHomeDirectory() as NSString).appendingPathComponent("CableTronExports")
-    @Published var templates: [LabelTemplate] = []
-    @Published var pendingRecords: [WireRecord] = []
+/// Wires together the watcher, printer manager, template store and print window.
+final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
-    var statusIcon: String {
-        switch status {
-        case .idle: return "tag"
-        case .printing: return "printer"
-        case .done: return "checkmark.circle"
-        case .error: return "exclamationmark.triangle"
-        }
-    }
+    // One print window controller for the lifetime of the app
+    private let printWindowController = PrintWindowController()
 
-    func log(_ message: String) {
-        let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        jobLog.insert("[\(timestamp)] \(message)", at: 0)
-        if jobLog.count > 50 { jobLog.removeLast() }
-    }
-}
-
-struct MenuBarContentView: View {
-    @EnvironmentObject var state: AppState
-
-    var body: some View {
-        switch state.status {
-        case .idle:
-            Text("Idle — watching for exports")
-        case .printing:
-            Text("Printing…")
-        case .done:
-            Text("Print job complete")
-        case .error(let message):
-            Text("Error: \(message)")
-        }
-
-        Divider()
-
-        ForEach(state.jobLog.prefix(10), id: \.self) { entry in
-            Text(entry).font(.caption)
-        }
-
-        Divider()
-
-        SettingsLink {
-            Text("Settings…")
-        }
-
-        Button("Quit") {
-            NSApplication.shared.terminate(nil)
-        }
-    }
-}
-
-final class AppDelegate: NSObject, NSApplicationDelegate {
-    let state = AppState()
-    private var watcher: ExportWatcher?
-    private var printWindowController: NSWindowController?
+    // One template designer window
+    private var designerWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        loadTemplates()
+        // Don't show in Dock by default
+        let showInDock = AppSettings.shared.showInDock
+        NSApp.setActivationPolicy(showInDock ? .regular : .accessory)
 
-        let url = URL(fileURLWithPath: state.exportFolderPath)
-        let watcher = ExportWatcher(folderURL: url)
-        watcher.onNewExport = { [weak self] records in
-            DispatchQueue.main.async {
-                self?.handleNewExport(records)
+        // Load templates
+        TemplateStore.shared.reload()
+
+        // Start USB printer scan
+        PrinterManager.shared.startScan()
+
+        // Start watching the exports folder
+        let watcher = ExportWatcher(exportsRootURL: AppSettings.shared.exportsFolderURL)
+        watcher.onNewExport = { [weak self] fileURL, records in
+            Task { @MainActor in
+                guard AppSettings.shared.autoOpenPrintWindow else { return }
+                self?.printWindowController.showForNewExport(fileURL: fileURL, records: records)
             }
         }
         watcher.start()
         self.watcher = watcher
     }
 
-    private func handleNewExport(_ records: [WireRecord]) {
-        state.pendingRecords = records
-        state.log("Received \(records.count) label record(s) for review")
-        showPrintPreview()
+    func applicationWillTerminate(_ notification: Notification) {
+        watcher?.stop()
+        PrinterManager.shared.stopScan()
     }
 
-    private func showPrintPreview() {
-        // Bring app to foreground for the print review window
-        NSApp.activate(ignoringOtherApps: true)
+    // MARK: – Actions called by MenuBarView
 
-        let view = PrintPreviewView(
-            records: state.pendingRecords,
-            templates: state.templates,
-            onClose: { [weak self] in
-                self?.printWindowController?.close()
-                self?.printWindowController = nil
-                NSApp.hide(nil)
-            },
-            onPrint: { [weak self] jobs, partNumber in
-                self?.runPrintJobs(jobs, partNumber: partNumber)
-                self?.printWindowController?.close()
-                self?.printWindowController = nil
-                NSApp.hide(nil)
-            }
-        )
+    func openTemplateDesigner() {
+        if let win = designerWindow {
+            win.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
 
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
-            styleMask: [.titled, .closable, .resizable],
+        guard let htmlURL = Bundle.main.url(forResource: "VectorLabelDesigner", withExtension: "html")
+                            ?? devHTMLURL("VectorLabelDesigner")
+        else { return }
+
+        let wv = makeWebView()
+        wv.loadFileURL(htmlURL, allowingReadAccessTo: htmlURL.deletingLastPathComponent())
+
+        let win = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1200, height: 820),
+            styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered, defer: false
         )
-        window.title = "Print Wire Labels"
-        window.contentView = NSHostingView(rootView: view)
-        window.center()
+        win.title = "VectorLabel — Template Designer"
+        win.contentView = wv
+        win.center()
+        win.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        designerWindow = win
 
-        let controller = NSWindowController(window: window)
-        controller.showWindow(nil)
-        printWindowController = controller
-    }
-
-    private func runPrintJobs(_ jobs: [[UInt8]], partNumber: String) {
-        state.status = .printing
-        state.log("Sending \(jobs.count) label(s) to printer — load \(partNumber)")
-
-        DispatchQueue.global(qos: .userInitiated).async {
-            do {
-                try BradyUSB.sendJobs(jobs)
-                DispatchQueue.main.async {
-                    self.state.status = .done
-                    self.state.log("Print complete (\(jobs.count) labels)")
-                }
-            } catch {
-                DispatchQueue.main.async {
-                    self.state.status = .error("\(error)")
-                    self.state.log("Print failed: \(error)")
-                }
-            }
+        // Clear reference when window closes
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: win, queue: .main
+        ) { [weak self] _ in
+            self?.designerWindow = nil
+            TemplateStore.shared.reload()   // pick up any newly saved templates
         }
     }
 
-    private func loadTemplates() {
-        // TODO: load saved templates from Application Support
-        state.templates = []
+    func openExportFolder() {
+        let url = AppSettings.shared.exportsFolderURL
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(url)
+    }
+
+    func openReprint(_ recent: RecentPrint) {
+        printWindowController.showForReprint(recent)
+    }
+
+    // MARK: – Private
+
+    private var watcher: ExportWatcher?
+
+    private func makeWebView() -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.preferences.setValue(true, forKey: "developerExtrasEnabled")
+        return WKWebView(frame: .zero, configuration: config)
+    }
+
+    /// Development fallback: find the HTML file relative to this source file.
+    private func devHTMLURL(_ name: String) -> URL? {
+        let src = URL(fileURLWithPath: #file)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let candidate = src.appendingPathComponent("\(name).html")
+        return FileManager.default.fileExists(atPath: candidate.path) ? candidate : nil
     }
 }
+
+// MARK: – Import WebKit (needed for WKWebView in AppDelegate)
+
+import WebKit

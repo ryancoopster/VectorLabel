@@ -1,53 +1,73 @@
 # VectorLabel
 
-A two-part system for printing Brady M610/M611 wrap-around wire labels directly from Vectorworks ConnectCAD circuits.
+A macOS menu bar app for printing Brady M610/M611 wrap-around wire labels from Vectorworks ConnectCAD exports.
 
-## Components
+## Folder structure
 
-### `VectorworksPlugin/export_circuits.py`
-Vectorworks Python plug-in script. Select one or more ConnectCAD circuit objects, run the command, and it exports a CSV to `~/Documents/VectorLabel/`. Each circuit produces two rows — one for the Source label and one for the Destination label.
+```
+~/Documents/VectorLabel/
+  Templates/          ← .vlt.json label templates from the designer
+  Exports/
+    <VWFileName>/     ← one folder per Vectorworks project file
+      <VWFileName>_export_YYYYMMDD_HHMMSS.csv   (max 15 per project)
+```
 
-**Install:** Tools > Plug-ins > Plug-in Manager > New > Command > Python. Paste the script contents. Add to workspace via Tools > Workspaces > Edit Current Workspace.
+## Prerequisites
 
-### `MacApp/`
-Swift/SwiftUI macOS menu bar companion app. Watches `~/Documents/VectorLabel/` for new CSV exports, shows a print preview window with template selection, and sends VGL-encoded print jobs directly to a Brady M610 or M611 via USB (libusb).
-
-**Status:** Source files scaffolded. Xcode project and template editor UI in progress.
-
-## Supported Brady Label Sizes
-| Part Number | Size | Notes |
-|---|---|---|
-| BM-31-427 | 1" × 1.5" | Roll |
-| BM-32-427 | 1.5" × 1.5" | Roll |
-| BM-33-427 | 1.5" × 4" | Roll |
-
-## Setup (Mac App)
 ```bash
 brew install libusb
 ```
-Then open `MacApp/` in Xcode and build. Requires macOS 13+.
 
-## Export CSV Columns
-| Column | Description |
+## Build (Xcode)
+
+1. Clone the repo
+2. `brew install libusb`
+3. Open `Package.swift` in Xcode (File → Open → select Package.swift)
+4. Select the **VectorLabel** scheme, target **My Mac**
+5. **Product → Build** (⌘B)
+
+The first build will ask for permission to access Documents — allow it.
+
+## Build (command line)
+
+```bash
+swift build -c release
+.build/release/VectorLabel
+```
+
+## Vectorworks plugin
+
+Install `VectorworksPlugin/export_circuits.py` as a Vectorworks command plug-in:
+
+1. Vectorworks → Tools → Plug-ins → Plug-in Manager → New Command
+2. Language: Python, paste the contents of `export_circuits.py`
+3. Add to your workspace toolbar
+
+Select circuits in ConnectCAD, run the command. The CSV lands in  
+`~/Documents/VectorLabel/Exports/<VWFileName>/` and VectorLabel opens the print window automatically.
+
+## Brady USB PID
+
+- M610: VID `0x0E2E`, PID `0x010B` ✓ confirmed  
+- M611: PID `0x010C` assumed — if your M611 isn't detected, check Preferences → Printers
+
+## Architecture
+
+| File | Role |
 |---|---|
-| `_Side` | Source or Destination |
-| `Number` | Cable number |
-| `Cable` | Cable name |
-| `Signal` | Signal type (LAN, PWR, DANTE, etc.) |
-| `Device_Name` | Near-end device name |
-| `Device_Tag` | Near-end device tag |
-| `Socket_Name` | Near-end socket name |
-| `Connector` | Near-end connector type |
-| `Other_Device` | Far-end device name |
-| `Other_Socket` | Far-end socket name |
-| `Other_Connector` | Far-end connector type |
-| `Room` / `Rack` / `RackU` | Physical location (destination side) |
-| `Cable Type` | Cable type |
-| `CableLength` | Cable length setting |
-
-## Open Items
-- Xcode project file
-- Template editor UI
-- Template persistence (Application Support)
-- M611 USB product ID verification
-- Settings window
+| `CableTronApp.swift` | `@main`, `AppDelegate`, wires everything together |
+| `AppSettings.swift` | `UserDefaults`-backed preferences singleton |
+| `ExportWatcher.swift` | FSEvents recursive folder watcher + CSV parser + pruner |
+| `TemplateStore.swift` | Loads/saves `.vlt.json` templates |
+| `FormulaEngine.swift` | Swift port of the JS formula evaluator |
+| `LabelTemplate.swift` | Core Graphics renderer: `VLTemplate + WireRecord → pixels` |
+| `BradyVGL.swift` | Builds VGL print jobs from pixel buffers |
+| `BradyUSB.swift` | libusb transport: enumerate, open, send |
+| `PrinterManager.swift` | USB scan loop, active job queue, cancel support |
+| `PrintWindowController.swift` | WKWebView print window, JS↔Swift bridge |
+| `RecentPrintsStore.swift` | Persists last N print jobs for reprint |
+| `MenuBarView.swift` | Full SwiftUI menu bar dropdown |
+| `PreferencesView.swift` | Preferences window (6 tabs) |
+| `VectorLabelPrint.html` | Print UI (record table, template picker, printer selector) |
+| `VectorLabelDesigner.html` | Template designer (canvas, formula bar, snap grid) |
+| `VectorworksPlugin/export_circuits.py` | Vectorworks ConnectCAD → CSV exporter |
