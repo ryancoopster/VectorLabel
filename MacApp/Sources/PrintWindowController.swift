@@ -27,6 +27,10 @@ final class PrintWindowController: NSObject {
     // Observes the active PrintJob so we can drive the web view's progress UI.
     private var jobObservers: Set<AnyCancellable> = []
 
+    // Keeps the print window's printer dropdown in sync with the live USB scan.
+    // Without this, a window opened before the scan finishes shows no printers.
+    private var printerObserver: AnyCancellable?
+
     // Recent-print record for the job submitted this session, so its status can
     // be updated (printing → complete / cancelled-mid-print). nil until Print is
     // clicked; while nil, a ✕ Cancel records a "cancelled before printing" entry.
@@ -59,6 +63,7 @@ final class PrintWindowController: NSObject {
 
     func close() {
         jobObservers.removeAll()
+        printerObserver = nil
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "vectorlabel")
         window?.close()
         window = nil
@@ -83,6 +88,13 @@ final class PrintWindowController: NSObject {
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.navigationDelegate = self
         self.webView = wv
+
+        // Push live printer-list changes into the web view. $printers emits its
+        // current value immediately and again on every scan change, so a window
+        // opened before the USB scan finishes still gets printers when they appear.
+        printerObserver = PrinterManager.shared.$printers
+            .receive(on: RunLoop.main)
+            .sink { [weak self] printers in self?.pushPrinters(printers) }
 
         // Prefer live repo file during development so git pull is reflected immediately
         let htmlURL = Self.findHTMLFile("VectorLabelPrint")
@@ -115,6 +127,19 @@ final class PrintWindowController: NSObject {
     }
 
     // MARK: – JS bridge: push data into the web view
+
+    /// Pushes the current printer list to the web view without resetting the
+    /// user's record selection. No-ops when the page isn't loaded yet.
+    private func pushPrinters(_ printers: [PrinterDevice]) {
+        let dicts = printers.map { p -> [String: String] in
+            ["id": p.id, "name": p.name, "model": p.model, "serial": p.serial,
+             "status": p.status.rawValue]
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: dicts),
+              let json = String(data: data, encoding: .utf8)
+        else { return }
+        evalJS("if(typeof updatePrinters==='function')updatePrinters(\(json));")
+    }
 
     private func sendInitialState() {
         guard let wv = webView else { return }
@@ -346,6 +371,7 @@ extension PrintWindowController: WKScriptMessageHandler {
 extension PrintWindowController: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         jobObservers.removeAll()
+        printerObserver = nil
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "vectorlabel")
         webView = nil
         window = nil

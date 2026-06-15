@@ -167,6 +167,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         win.styleMask = [.titled, .closable, .nonactivatingPanel]
         win.hidesOnDeactivate = false
         win.isReleasedWhenClosed = false
+        // The print window floats; keep Preferences just above it so it always
+        // opens in front of any other VectorLabel window.
+        win.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
         win.setContentSize(NSSize(width: 600, height: 480))
         win.center()
         NSApp.activate(ignoringOtherApps: true)

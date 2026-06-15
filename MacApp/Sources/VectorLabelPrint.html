@@ -1881,6 +1881,26 @@ function initPrintWindow(opts){
 
 // printer() already uses window._swiftPrinters — see definition above
 
+// Called by Swift whenever the USB printer list changes, so the dropdown stays
+// in sync with the live scan without resetting the user's record selection.
+function updatePrinters(printers){
+  window._swiftPrinters=(printers||[]).map(p=>({
+    id: p.id,
+    name: p.name,
+    model: p.model||"M6xx",
+    status: p.status||"ready",
+    serial: p.serial||""
+  }));
+  // Keep the current selection if that printer is still present; otherwise pick
+  // a ready printer (or the first available one).
+  if(!window._swiftPrinters.find(p=>p.id===P.activePrinter)){
+    P.activePrinter=window._swiftPrinters.find(p=>p.status==="ready")?.id
+                   ||window._swiftPrinters[0]?.id
+                   ||P.activePrinter;
+  }
+  R();
+}
+
 // Tell Swift the page is ready to receive data
 function notifyReady(){
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){

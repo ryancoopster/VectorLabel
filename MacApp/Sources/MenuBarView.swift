@@ -155,10 +155,38 @@ struct MenuBarView: View {
 
             Divider()
 
-            Button("Quit VectorLabel") {
+            Button {
                 NSApplication.shared.terminate(nil)
+            } label: {
+                HStack {
+                    Image(systemName: "power")
+                        .frame(width: 18)
+                    Text("Quit VectorLabel")
+                    Spacer()
+                    Text("⌘Q")
+                        .foregroundColor(.secondary)
+                        .font(.system(size: 10))
+                }
             }
+            .keyboardShortcut("q", modifiers: .command)
+
+            // Build version footer
+            Text(appVersionString)
+                .font(.system(size: 9))
+                .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.top, 6)
+                .padding(.bottom, 8)
         }
+    }
+
+    /// App version for the menu footer. Reads the bundle in a real .app build;
+    /// falls back to the Info.plist values for the SPM dev binary.
+    private var appVersionString: String {
+        let info = Bundle.main.infoDictionary
+        let short = (info?["CFBundleShortVersionString"] as? String) ?? "1.0.0"
+        let build = (info?["CFBundleVersion"] as? String) ?? "dev"
+        return "VectorLabel \(short) (build \(build))"
     }
 }
 
