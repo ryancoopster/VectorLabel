@@ -316,24 +316,7 @@ struct PreferencesView: View {
 
     private var advancedTab: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PrefSection(title: "Developer") {
-                PrefRow(
-                    label: "Repo path",
-                    caption: "Path to your VectorLabel git clone. When set, HTML files are loaded live from the repo so changes take effect without rebuilding. Leave empty to use the bundled HTML."
-                ) {
-                    HStack(spacing: 8) {
-                        TextField("e.g. /Users/you/Dropbox/VectorLabel", text: $settings.devRepoPath)
-                            .font(.system(size: 11, design: .monospaced))
-                            .textFieldStyle(.roundedBorder)
-                            .colorScheme(.dark)
-                            .frame(maxWidth: 220)
-                        Button("Browse…") { browseRepoPath() }
-                            .buttonStyle(VLButtonStyle())
-                    }
-                }
-            }
-
-            PrefSection(title: "App Behaviour") {
+PrefSection(title: "App Behaviour") {
                 PrefRow(
                     label: "Show VectorLabel in Dock",
                     caption: "By default VectorLabel runs as a menu-bar-only app. Enable this to also show an icon in the Dock."
@@ -372,20 +355,7 @@ struct PreferencesView: View {
         return path
     }
 
-    private func browseRepoPath() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true; panel.canChooseFiles = false
-        panel.prompt = "Select Repo Folder"
-        panel.message = "Select the root of your VectorLabel git clone"
-        if !settings.devRepoPath.isEmpty {
-            panel.directoryURL = URL(fileURLWithPath: settings.devRepoPath)
-        }
-        if panel.runModal() == .OK, let url = panel.url {
-            settings.devRepoPath = url.path
-        }
-    }
-
-    private func browseWatchFolder() {
+private func browseWatchFolder() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true; panel.canChooseFiles = false
         panel.canCreateDirectories = true; panel.prompt = "Select Watch Folder"
