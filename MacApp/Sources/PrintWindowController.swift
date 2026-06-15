@@ -68,7 +68,10 @@ final class PrintWindowController: NSObject {
         let htmlURL = Self.findHTMLFile("VectorLabelPrint")
             ?? Bundle.main.url(forResource: "VectorLabelPrint", withExtension: "html")
         guard let htmlURL = htmlURL else { return }
-        wv.loadFileURL(htmlURL, allowingReadAccessTo: htmlURL.deletingLastPathComponent())
+        // Grant access to the parent directory so WKWebView can read the file.
+        // For repo files, grant access up to MacApp/ so any relative resources work.
+        let accessURL = htmlURL.deletingLastPathComponent()
+        wv.loadFileURL(htmlURL, allowingReadAccessTo: accessURL)
 
         let win = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1100, height: 720),
@@ -155,6 +158,8 @@ final class PrintWindowController: NSObject {
             "Downloads/VectorLabel/MacApp/Sources",
             "Documents/VectorLabel/MacApp/Sources",
             "Developer/VectorLabel/MacApp/Sources",
+            "Desktop/VectorLabel/MacApp/Sources",
+            "Projects/VectorLabel/MacApp/Sources",
         ]
         for rel in searchPaths {
             let url = URL(fileURLWithPath: home)

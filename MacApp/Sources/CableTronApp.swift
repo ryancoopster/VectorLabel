@@ -198,6 +198,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             "Downloads/VectorLabel/MacApp/Sources",
             "Documents/VectorLabel/MacApp/Sources",
             "Developer/VectorLabel/MacApp/Sources",
+            "Desktop/VectorLabel/MacApp/Sources",
+            "Projects/VectorLabel/MacApp/Sources",
         ]
         for rel in searchPaths {
             let candidate = URL(fileURLWithPath: home)
