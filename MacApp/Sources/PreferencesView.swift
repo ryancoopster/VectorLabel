@@ -104,6 +104,7 @@ struct PreferencesView: View {
                         .padding(.vertical, 10)
                         .foregroundColor(selectedTab == i ? .vlAccent : .vlSecondary)
                         .background(selectedTab == i ? Color.vlAccent.opacity(0.12) : Color.clear)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
