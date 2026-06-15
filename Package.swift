@@ -23,24 +23,11 @@ let package = Package(
                 .copy("VectorLabelPrint.html"),
                 .copy("VectorLabelDesigner.html"),
             ],
-            swiftSettings: [
-                // Embed bundle identifier and Info.plist via compiler flags
-                .unsafeFlags([
-                    "-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"
-                ])
-            ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("WebKit"),
                 .linkedFramework("CoreGraphics"),
                 .linkedFramework("CoreText"),
-                // Inject bundle identifier so WKWebView sandbox works
-                .unsafeFlags([
-                    "-Xlinker", "-sectcreate",
-                    "-Xlinker", "__TEXT",
-                    "-Xlinker", "__info_plist",
-                    "-Xlinker", "../../Info.plist"
-                ])
             ]
         ),
     ]
