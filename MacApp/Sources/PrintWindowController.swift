@@ -61,7 +61,11 @@ final class PrintWindowController: NSObject {
     // MARK: – Window setup
 
     private func openWindowIfNeeded() {
-        if window != nil { window?.makeKeyAndOrderFront(nil); return }
+        if let win = window {
+            NSApp.activate(ignoringOtherApps: true)
+            win.makeKeyAndOrderFront(nil)
+            return
+        }
 
         let config = WKWebViewConfiguration()
         let contentController = WKUserContentController()
@@ -90,9 +94,16 @@ final class PrintWindowController: NSObject {
         )
         win.title = "VectorLabel — Print"
         win.contentView = wv
+        // Auto-launches when an export is detected while the user is in another
+        // app (e.g. Vectorworks). Float above normal windows and don't hide on
+        // deactivate so it stays in the front layer instead of appearing behind.
+        win.level = .floating
+        win.hidesOnDeactivate = false
+        win.isReleasedWhenClosed = false
         win.center()
         win.delegate = self
-        win.orderFrontRegardless()
+        NSApp.activate(ignoringOtherApps: true)
+        win.makeKeyAndOrderFront(nil)
         self.window = win
     }
 
