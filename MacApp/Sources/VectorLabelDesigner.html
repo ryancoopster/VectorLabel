@@ -490,7 +490,7 @@ function R(){
       <button class="btn${S.snapObjects?" on":""}" onclick="S.snapObjects=!S.snapObjects;R()">⊡ Objects</button>
       <div style="display:flex;align-items:center;gap:5px">
         <span style="color:#44445a;font-size:10px">Grid size</span>
-        <select class="inp" style="width:90px" onchange="S.gridSize=parseFloat(this.value);R()">
+        <select class="inp" style="width:148px" onchange="S.gridSize=parseFloat(this.value);R()">
           ${[0.01,0.025,0.05,0.1,0.125,0.25].map(v=>`<option value="${v}"${S.gridSize===v?" selected":""}>${Math.round(v*1000)/10}mm / ${v.toFixed(3)}"</option>`).join("")}
         </select>
       </div>
