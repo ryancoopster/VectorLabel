@@ -99,8 +99,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             forName: NSWindow.willCloseNotification,
             object: win, queue: .main
         ) { [weak self] _ in
-            self?.designerWindow = nil
+            // Nil the navigation delegate before releasing the webview
+            // to prevent EXC_BAD_ACCESS on dealloc
+            self?.designerWebView?.navigationDelegate = nil
             self?.designerWebView = nil
+            self?.designerWindow = nil
             Task { @MainActor in TemplateStore.shared.reload() }
         }
     }
