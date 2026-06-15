@@ -271,6 +271,14 @@ function toggleAll(){
   else P.records.forEach((_,i)=>P.selected.add(i));
   R();
 }
+function selectSide(side){
+  // If all of this side are already selected, deselect them; otherwise select all of this side
+  const sideIndices=P.records.map((r,i)=>r._Side===side?i:-1).filter(i=>i>=0);
+  const allSelected=sideIndices.every(i=>P.selected.has(i));
+  sideIndices.forEach(i=>allSelected?P.selected.delete(i):P.selected.add(i));
+  P.printRange="selected";
+  R();
+}
 function selectRange(from,to){
   P.selected.clear();
   for(let i=from-1;i<to&&i<P.records.length;i++)P.selected.add(i);
@@ -378,9 +386,12 @@ function buildPrintBar(){
   return`<div style="background:#1e1e2e;border-top:1px solid rgba(255,255,255,0.1);padding:10px 16px;display:flex;align-items:center;gap:14px;flex-shrink:0;flex-wrap:wrap">
 
     <!-- Selection controls -->
-    <div style="display:flex;align-items:center;gap:6px">
+    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
       <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-right:2px">Labels</span>
       <button class="btn" onclick="toggleAll()" style="padding:3px 8px;font-size:11px">${nSel===total?"Deselect all":"Select all"}</button>
+      <div style="width:1px;height:14px;background:rgba(255,255,255,0.08)"></div>
+      <button class="btn" onclick="selectSide('Source')" style="padding:3px 8px;font-size:11px;color:#6C8EF5;border-color:rgba(108,142,245,0.3)">Sources</button>
+      <button class="btn" onclick="selectSide('Destination')" style="padding:3px 8px;font-size:11px;color:#5cc896;border-color:rgba(92,200,150,0.3)">Destinations</button>
       <span style="color:#8888a8;font-size:12px">${nSel} of ${total}</span>
     </div>
 
