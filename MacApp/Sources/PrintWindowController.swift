@@ -64,17 +64,10 @@ final class PrintWindowController: NSObject {
         wv.navigationDelegate = self
         self.webView = wv
 
-        guard let htmlURL = Bundle.main.url(forResource: "VectorLabelPrint", withExtension: "html") else {
-            // Fallback: load from the MacApp folder next to the binary during development
-            let devURL = URL(fileURLWithPath: #file)
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .appendingPathComponent("VectorLabelPrint.html")
-            if FileManager.default.fileExists(atPath: devURL.path) {
-                wv.loadFileURL(devURL, allowingReadAccessTo: devURL.deletingLastPathComponent())
-            }
-            return
-        }
+        // Prefer live repo file during development so git pull is reflected immediately
+        let htmlURL = Self.findHTMLFile("VectorLabelPrint")
+            ?? Bundle.main.url(forResource: "VectorLabelPrint", withExtension: "html")
+        guard let htmlURL = htmlURL else { return }
         wv.loadFileURL(htmlURL, allowingReadAccessTo: htmlURL.deletingLastPathComponent())
 
         let win = NSWindow(
@@ -148,6 +141,26 @@ final class PrintWindowController: NSObject {
             if url.lastPathComponent == recent.sourceFileName {
                 return WireExportParser.parse(fileURL: url)
             }
+        }
+        return nil
+    }
+
+    // MARK: – Dev HTML loader
+
+    /// Finds an HTML file in the live repo checkout first, then falls back to the bundle.
+    /// This ensures git pull changes are reflected without a full Xcode rebuild.
+    static func findHTMLFile(_ name: String) -> URL? {
+        let home = NSHomeDirectory()
+        let searchPaths = [
+            "Downloads/VectorLabel/MacApp/Sources",
+            "Documents/VectorLabel/MacApp/Sources",
+            "Developer/VectorLabel/MacApp/Sources",
+        ]
+        for rel in searchPaths {
+            let url = URL(fileURLWithPath: home)
+                .appendingPathComponent(rel)
+                .appendingPathComponent("\(name).html")
+            if FileManager.default.fileExists(atPath: url.path) { return url }
         }
         return nil
     }

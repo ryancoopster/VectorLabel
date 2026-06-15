@@ -166,6 +166,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 
     private func devHTMLURL(_ name: String) -> URL? {
+        // During development, load HTML directly from the repo so changes
+        // are picked up without a full rebuild. Xcode's .copy resource bundling
+        // caches files and may not re-copy after a git pull.
+        //
+        // Search order:
+        // 1. ~/Downloads/VectorLabel/MacApp/Sources/<name>.html  (default clone location)
+        // 2. ~/Documents/VectorLabel/MacApp/Sources/<name>.html
+        // 3. #file-relative path (source-build fallback)
+        let home = NSHomeDirectory()
+        let searchPaths = [
+            "Downloads/VectorLabel/MacApp/Sources",
+            "Documents/VectorLabel/MacApp/Sources",
+            "Developer/VectorLabel/MacApp/Sources",
+        ]
+        for rel in searchPaths {
+            let candidate = URL(fileURLWithPath: home)
+                .appendingPathComponent(rel)
+                .appendingPathComponent("\(name).html")
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+        }
+        // Fallback: look relative to compiled source path
         let src = URL(fileURLWithPath: #file)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
