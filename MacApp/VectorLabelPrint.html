@@ -235,8 +235,8 @@ function startColResize(e,col){
 }
 
 // ── Column widths — Live editor record table ───────────────────────────────────
-// Separate key so editor and print screen columns are independent
-const ED_COL_DEFAULTS={field:130,colkey:110,value:200};
+// Matches print screen columns but saved separately so widths are independent.
+const ED_COL_DEFAULTS={side:90,number:72,cable:150,signal:72,device:160,socket:150};
 let ED_COLS=(()=>{
   try{const s=localStorage.getItem('vl-ed-col-widths');if(s)return Object.assign({},ED_COL_DEFAULTS,JSON.parse(s));}catch(e){}
   return Object.assign({},ED_COL_DEFAULTS);
@@ -244,17 +244,62 @@ let ED_COLS=(()=>{
 function saveEdCols(){try{localStorage.setItem('vl-ed-col-widths',JSON.stringify(ED_COLS));}catch(e){}}
 function applyEdColVars(){
   const r=document.documentElement;
-  r.style.setProperty('--ed-col-field', ED_COLS.field+'px');
-  r.style.setProperty('--ed-col-key',   ED_COLS.colkey+'px');
-  r.style.setProperty('--ed-col-value', ED_COLS.value+'px');
+  r.style.setProperty('--edr-side',   ED_COLS.side+'px');
+  r.style.setProperty('--edr-number', ED_COLS.number+'px');
+  r.style.setProperty('--edr-cable',  ED_COLS.cable+'px');
+  r.style.setProperty('--edr-signal', ED_COLS.signal+'px');
+  r.style.setProperty('--edr-device', ED_COLS.device+'px');
+  r.style.setProperty('--edr-socket', ED_COLS.socket+'px');
 }
 function startEdColResize(e,col){
   e.preventDefault();e.stopPropagation();
   const el=e.currentTarget;el.classList.add('dragging');
   const startX=e.clientX,startW=ED_COLS[col];
-  function mv(e){ED_COLS[col]=Math.max(60,startW+(e.clientX-startX));applyEdColVars();}
+  function mv(e){ED_COLS[col]=Math.max(40,startW+(e.clientX-startX));applyEdColVars();}
   function mu(){el.classList.remove('dragging');saveEdCols();window.removeEventListener('mousemove',mv);window.removeEventListener('mouseup',mu);}
   window.addEventListener('mousemove',mv);window.addEventListener('mouseup',mu);
+}
+
+// Builds the record table shown in the live editor (uses S.recIdx + RX/_editorRecords)
+function buildEditorRecordTable(){
+  const records=window._editorRecords||RX;
+  const hdrCols=[
+    {label:'Side',   col:'side'},
+    {label:'Number', col:'number'},
+    {label:'Cable',  col:'cable'},
+    {label:'Signal', col:'signal'},
+    {label:'Device', col:'device'},
+    {label:'Socket', col:'socket'},
+  ];
+  const hdr=`<div style="display:grid;grid-template-columns:var(--edr-side) var(--edr-number) var(--edr-cable) var(--edr-signal) var(--edr-device) var(--edr-socket);background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.1);position:sticky;top:0;z-index:2">
+    ${hdrCols.map(h=>`
+      <div style="position:relative;padding:5px 8px;font-size:10px;color:#44445a;font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;user-select:none">
+        ${h.label}
+        <div class="col-resizer" onmousedown="startEdColResize(event,'${h.col}')"></div>
+      </div>`).join('')}
+  </div>`;
+
+  const rows=records.map((r,i)=>{
+    const isActive=S.recIdx===i;
+    const side=r._Side==="Source"?"src":"dst";
+    return`<div onclick="S.recIdx=${i};R()"
+      style="display:grid;grid-template-columns:var(--edr-side) var(--edr-number) var(--edr-cable) var(--edr-signal) var(--edr-device) var(--edr-socket);
+             border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;min-height:34px;align-items:center;
+             background:${isActive?'rgba(108,142,245,0.18)':'transparent'}"
+      onmouseover="if(!${isActive})this.style.background='rgba(108,142,245,0.06)'"
+      onmouseout="if(!${isActive})this.style.background='transparent'">
+      <div style="padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+        <span class="tag ${side}">${r._Side||"—"}</span>
+      </div>
+      <div style="padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${r.Number?"#e8e8f0":"#44445a"};font-weight:${r.Number?600:400}">${r.Number||"—"}</div>
+      <div style="padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8888a8">${r.Cable||"—"}</div>
+      <div style="padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8888a8">${r.Signal||"—"}</div>
+      <div style="padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8888a8">${r.Device_Name||"—"}</div>
+      <div style="padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8888a8">${r.Socket_Name||"—"}</div>
+    </div>`;
+  }).join('');
+
+  return`<div style="overflow-x:auto">${hdr}${rows}</div>`;
 }
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -1145,42 +1190,7 @@ function buildProps(){
 }
 
 // ── Record table ──────────────────────────────────────────────────────────────
-function _dup_buildRecordTable(){
-  // Use the current record as the active record source (RX or window._editorRecords)
-  const records=window._editorRecords||RX;
-  const hdr=`<div class="ed-rec-row" style="background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.1);position:sticky;top:0;z-index:2">
-    <div class="ed-rec-hdr">Field name
-      <div class="col-resizer" onmousedown="startEdColResize(event,'field')"></div>
-    </div>
-    <div class="ed-rec-hdr">Column key
-      <div class="col-resizer" onmousedown="startEdColResize(event,'colkey')"></div>
-    </div>
-    <div class="ed-rec-hdr">Value (record ${S.recIdx+1})
-      <div class="col-resizer" onmousedown="startEdColResize(event,'value')"></div>
-    </div>
-  </div>`;
-  // Show field values for the currently selected record
-  const rec=records[S.recIdx]||{};
-  const rows=FD.map((f,i)=>{
-    const val=rec[f.c]||"";
-    return`<div class="ed-rec-row" onclick="S.recIdx=${i%records.length};R()">
-      <div class="ed-rec-cell" style="color:#8888a8">${f.f}</div>
-      <div class="ed-rec-cell" style="color:#44445a;font-family:monospace;font-size:10px">${f.c}</div>
-      <div class="ed-rec-cell" style="color:${val?"#e8e8f0":"#333344"}">${val||"—"}</div>
-    </div>`;
-  }).join("");
-  // Also show a record switcher above
-  const switcher=`<div style="display:flex;gap:4px;padding:6px 8px;overflow-x:auto;flex-shrink:0;border-bottom:1px solid rgba(255,255,255,0.07)">
-    ${records.map((r,i)=>`<button onclick="S.recIdx=${i};R()" style="padding:2px 8px;border-radius:4px;border:1px solid ${S.recIdx===i?'#6C8EF5':'rgba(255,255,255,0.1)'};background:${S.recIdx===i?'rgba(108,142,245,0.2)':'transparent'};color:${S.recIdx===i?'#e8e8f0':'#8888a8'};font-size:10px;cursor:pointer;white-space:nowrap">${r._Side||'Record'} ${r.Number||i+1}</button>`).join('')}
-  </div>`;
-  return `<div style="overflow-y:auto;overflow-x:hidden">
-    ${switcher}
-    ${hdr}
-    ${rows}
-  </div>`;
-}
 
-// ── Render ────────────────────────────────────────────────────────────────────
 function renderDesigner(){
   const rec=RX[S.recIdx];
   const selObj=S.selId?gobj(S.selId):null;
@@ -1267,11 +1277,11 @@ function renderDesigner(){
         <div id="rec-resizer" style="height:5px;cursor:row-resize;background:rgba(108,142,245,0.0);border-top:1px solid rgba(255,255,255,0.1);flex-shrink:0" onmouseenter="this.style.background='rgba(108,142,245,0.25)'" onmouseleave="this.style.background='rgba(108,142,245,0)'" onmousedown="startRecResize(event)"></div>
         <!-- Record selector -->
         <div id="rec-panel" style="height:${S.recH||160}px;overflow:auto;background:#13131a;flex-shrink:0">
-          <div style="padding:6px 12px 4px;display:flex;align-items:center;gap:8px;border-top:1px solid rgba(255,255,255,0.07)">
+          <div style="padding:5px 12px 4px;display:flex;align-items:center;gap:8px;border-top:1px solid rgba(255,255,255,0.07)">
             <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px">Records</span>
-            <span style="color:#8888a8;font-size:10px">${RX.length} labels · click to preview</span>
+            <span style="color:#8888a8;font-size:10px">${(window._editorRecords||RX).length} · click to preview</span>
           </div>
-          ${buildRecordTable()}
+          ${buildEditorRecordTable()}
         </div>
       </div>
 
