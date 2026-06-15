@@ -103,7 +103,7 @@ struct MenuBarView: View {
     private var actionsSection: some View {
         Group {
             Button {
-                DispatchQueue.main.async { appDelegate.openTemplateDesigner() }
+                appDelegate.openTemplateDesigner()
             } label: {
                 HStack {
                     Image(systemName: "square.and.pencil")
@@ -118,7 +118,7 @@ struct MenuBarView: View {
             .keyboardShortcut("t", modifiers: .command)
 
             Button {
-                DispatchQueue.main.async { appDelegate.openExportFolder() }
+                appDelegate.openExportFolder()
             } label: {
                 HStack {
                     Image(systemName: "folder")
@@ -133,8 +133,7 @@ struct MenuBarView: View {
             .keyboardShortcut("e", modifiers: .command)
 
             Button {
-                // Close the popover first so it doesn't fight with the new window
-                DispatchQueue.main.async { appDelegate.openPreferences() }
+                appDelegate.openPreferences()
             } label: {
                 HStack {
                     Image(systemName: "gearshape")

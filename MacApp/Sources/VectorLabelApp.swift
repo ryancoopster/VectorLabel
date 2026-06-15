@@ -19,6 +19,7 @@ struct VectorLabelApp: App {
 
 // MARK: – AppDelegate
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     // PrintWindowController is @MainActor; initialised in applicationDidFinishLaunching
@@ -30,7 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     private var statusItem: NSStatusItem?
 
-    @MainActor func applicationDidFinishLaunching(_ notification: Notification) {
+    func applicationDidFinishLaunching(_ notification: Notification) {
         // WKWebView requires a bundle identifier for its sandboxed WebContent process.
         // When running from SPM/Xcode without INFOPLIST_FILE set, inject it directly.
         // SPM cannot inject Info.plist. Set INFOPLIST_FILE in Xcode Build Settings
@@ -65,7 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         self.watcher = watcher
     }
 
-    @MainActor func applicationWillTerminate(_ notification: Notification) {
+    func applicationWillTerminate(_ notification: Notification) {
         watcher?.stop()
         PrinterManager.shared.stopScan()
     }
