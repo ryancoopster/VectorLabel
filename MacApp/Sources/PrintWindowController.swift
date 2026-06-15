@@ -53,7 +53,7 @@ final class PrintWindowController: NSObject {
     // MARK: – Window setup
 
     private func openWindowIfNeeded() {
-        if window != nil { window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); return }
+        if window != nil { window?.makeKeyAndOrderFront(nil); return }
 
         let config = WKWebViewConfiguration()
         let contentController = WKUserContentController()
@@ -84,7 +84,6 @@ final class PrintWindowController: NSObject {
         win.center()
         win.delegate = self
         win.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
         self.window = win
     }
 

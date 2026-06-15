@@ -68,7 +68,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     func openTemplateDesigner() {
         if let win = designerWindow {
             win.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
             return
         }
 
@@ -93,7 +92,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         win.contentView = wv
         win.center()
         win.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
         designerWindow = win
 
         designerCloseObserver = NotificationCenter.default.addObserver(
@@ -110,9 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             }
             Task { @MainActor in
                 TemplateStore.shared.reload()
-                // Resign active status so the menu bar extra remains clickable.
-                // LSUIElement apps must not stay "active" with no open windows.
-                NSApp.deactivate()
+
             }
         }
     }
@@ -120,7 +116,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     func openPreferences() {
         if let win = preferencesWindow {
             win.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
             return
         }
         let controller = NSHostingController(rootView: PreferencesView())
@@ -130,7 +125,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         win.setContentSize(NSSize(width: 600, height: 480))
         win.center()
         win.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
         preferencesWindow = win
         NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
