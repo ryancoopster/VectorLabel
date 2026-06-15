@@ -35,6 +35,9 @@ final class PrintWindowController: NSObject {
 
     func showForReprint(_ recent: RecentPrint) {
         self.reprinting = recent
+        // Clear any stale export URL so the recorded source filename comes from
+        // the reprint record, not a previously-opened export.
+        self.sourceFileURL = nil
         openWindowIfNeeded()
         // Recent prints store the CSV path; try to reload it
         if let csv = loadCSVForReprint(recent) {

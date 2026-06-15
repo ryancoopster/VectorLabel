@@ -86,9 +86,13 @@ final class PrinterManager: ObservableObject {
                     }
                     updated.append(dev)
                 }
-                // Printers we had before that are no longer found → offline
+                // Printers we had before that are no longer found → mark offline
+                // for one scan cycle so the user sees a disconnect, then drop them.
+                // (Already-offline entries are not carried forward, so a removed
+                // printer disappears on the next scan instead of lingering forever.)
                 for existing in self.printers {
-                    if !updated.contains(where: { $0.id == existing.id }) {
+                    if !updated.contains(where: { $0.id == existing.id }),
+                       existing.status != .offline {
                         var gone = existing; gone.status = .offline
                         updated.append(gone)
                     }

@@ -102,8 +102,26 @@ enum FormulaEngine {
         return fields.first { $0.key.lowercased() == lower }?.value ?? ""
     }
 
-    /// Parses: primary (&  primary)*
+    /// Parses a comparison: concat ((= | <>) concat)?
+    /// Comparison binds looser than concatenation, matching Excel, so
+    /// `A&B = C&D` means `(A&B) = (C&D)`. Works on any operand — field,
+    /// string literal, number, function result, or parenthesised expression.
     private static func parseExpr(tokens: [Token], pos: inout Int, fields: [String: String]) throws -> Any? {
+        let left = try parseConcat(tokens: tokens, pos: &pos, fields: fields)
+
+        guard pos < tokens.count else { return left }
+        let isNE: Bool = { if case .ne = tokens[pos] { return true }; return false }()
+        let isEQ: Bool = { if case .eq = tokens[pos] { return true }; return false }()
+        guard isNE || isEQ else { return left }
+
+        pos += 1
+        let right = try parseConcat(tokens: tokens, pos: &pos, fields: fields)
+        let equal = looseEqual(left, right)
+        return isNE ? !equal : equal
+    }
+
+    /// Parses: primary (&  primary)*
+    private static func parseConcat(tokens: [Token], pos: inout Int, fields: [String: String]) throws -> Any? {
         var left = try parsePrimary(tokens: tokens, pos: &pos, fields: fields)
 
         while pos < tokens.count {
@@ -113,6 +131,22 @@ enum FormulaEngine {
             left = "\(left ?? "")\(right ?? "")"
         }
         return left
+    }
+
+    /// Loose equality: compare numerically when both sides look like numbers
+    /// (so `LEN(x)=3` works despite `3` tokenising as a Double), else as strings.
+    private static func looseEqual(_ a: Any?, _ b: Any?) -> Bool {
+        if let da = anyToDouble(a), let db = anyToDouble(b) { return da == db }
+        return "\(a ?? "")" == "\(b ?? "")"
+    }
+
+    private static func anyToDouble(_ v: Any?) -> Double? {
+        switch v {
+        case let d as Double: return d
+        case let i as Int:    return Double(i)
+        case let s as String: return s.isEmpty ? nil : Double(s)
+        default:              return nil
+        }
     }
 
     private static func parsePrimary(tokens: [Token], pos: inout Int, fields: [String: String]) throws -> Any? {
@@ -147,21 +181,7 @@ enum FormulaEngine {
                 return evalFunction(name.uppercased(), args: args, fields: fields)
             }
 
-            // Comparison?
-            if pos < tokens.count {
-                let isNE = { if case .ne = tokens[pos] { return true }; return false }()
-                let isEQ = { if case .eq = tokens[pos] { return true }; return false }()
-                if isNE || isEQ {
-                    pos += 1
-                    let rhs = try parsePrimary(tokens: tokens, pos: &pos, fields: fields)
-                    let lhsStr = resolveField(name, fields: fields)
-                    let rhsStr = "\(rhs ?? "")"
-                    let equal = lhsStr == rhsStr
-                    return isNE ? !equal : equal
-                }
-            }
-
-            // Plain field reference
+            // Plain field reference (comparisons are handled in parseExpr)
             return resolveField(name, fields: fields)
 
         case .ne, .eq, .amp, .comma, .rparen:
@@ -173,7 +193,13 @@ enum FormulaEngine {
 
     private static func evalFunction(_ name: String, args: [Any?], fields: [String: String]) -> Any? {
         func str(_ v: Any?) -> String { "\(v ?? "")" }
-        func num(_ v: Any?) -> Int { Int(str(v)) ?? 0 }
+        func num(_ v: Any?) -> Int {
+            // Numeric literals tokenise as Double, so "3.0" would fail Int(_:).
+            if let d = v as? Double { return Int(d) }
+            if let i = v as? Int    { return i }
+            let s = str(v)
+            return Int(s) ?? Int(Double(s) ?? 0)
+        }
         func bool(_ v: Any?) -> Bool {
             if let b = v as? Bool { return b }
             let s = str(v); return !s.isEmpty && s != "false" && s != "0"
@@ -186,11 +212,12 @@ enum FormulaEngine {
         case "IF":
             return bool(arg(0)) ? arg(1) ?? "" : arg(2) ?? ""
         case "LEFT":
-            let s = str(arg(0)); let n = num(arg(1))
-            return String(s.prefix(max(0, n > 0 ? n : 1)))
+            // Omitted count defaults to 1 (Excel); an explicit 0 yields "".
+            let s = str(arg(0)); let n = arg(1) == nil ? 1 : num(arg(1))
+            return String(s.prefix(max(0, n)))
         case "RIGHT":
-            let s = str(arg(0)); let n = num(arg(1))
-            return String(s.suffix(max(0, n > 0 ? n : 1)))
+            let s = str(arg(0)); let n = arg(1) == nil ? 1 : num(arg(1))
+            return String(s.suffix(max(0, n)))
         case "MID":
             let s = str(arg(0))
             let start = max(0, num(arg(1)) - 1)

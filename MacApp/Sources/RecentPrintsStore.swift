@@ -21,6 +21,11 @@ struct RecentPrint: Codable, Identifiable, Hashable {
     var rangeFrom: Int?
     var rangeTo: Int?
 
+    enum CodingKeys: String, CodingKey {
+        case id, date, title, sourceFileName, templateName, printerName
+        case labelCount, printRange, selectedIndices, rangeFrom, rangeTo
+    }
+
     /// Human-readable time since print, e.g. "2 min ago", "1 hr ago".
     var timeAgo: String {
         let secs = Int(-date.timeIntervalSinceNow)
@@ -28,6 +33,27 @@ struct RecentPrint: Codable, Identifiable, Hashable {
         if secs < 3600  { return "\(secs / 60) min ago" }
         if secs < 86400 { return "\(secs / 3600) hr ago" }
         return "\(secs / 86400) day(s) ago"
+    }
+}
+
+// MARK: – Tolerant decoding
+
+// Decode defensively so adding fields to RecentPrint doesn't make every older
+// recent_prints.json fail to decode (which would silently wipe all history).
+extension RecentPrint {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id              = (try? c.decode(UUID.self,   forKey: .id)) ?? UUID()
+        date            = (try? c.decode(Date.self,   forKey: .date)) ?? Date()
+        title           = (try? c.decode(String.self, forKey: .title)) ?? ""
+        sourceFileName  = (try? c.decode(String.self, forKey: .sourceFileName)) ?? ""
+        templateName    = (try? c.decode(String.self, forKey: .templateName)) ?? ""
+        printerName     = (try? c.decode(String.self, forKey: .printerName)) ?? ""
+        labelCount      = (try? c.decode(Int.self,    forKey: .labelCount)) ?? 0
+        printRange      = (try? c.decode(PrintRange.self, forKey: .printRange)) ?? .selected
+        selectedIndices = (try? c.decode([Int].self,  forKey: .selectedIndices)) ?? []
+        rangeFrom       = try? c.decode(Int.self, forKey: .rangeFrom)
+        rangeTo         = try? c.decode(Int.self, forKey: .rangeTo)
     }
 }
 

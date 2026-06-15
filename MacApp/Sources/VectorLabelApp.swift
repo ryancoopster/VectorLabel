@@ -108,17 +108,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             forName: NSWindow.willCloseNotification,
             object: win, queue: .main
         ) { [weak self] _ in
-            guard let self = self else { return }
-            self.designerWebView?.navigationDelegate = nil
-            self.designerWebView = nil
-            self.designerWindow = nil
-            if let token = self.designerCloseObserver {
-                NotificationCenter.default.removeObserver(token)
-                self.designerCloseObserver = nil
-            }
-            Task { @MainActor in
+            MainActor.assumeIsolated {
+                guard let self = self else { return }
+                self.designerWebView?.navigationDelegate = nil
+                self.designerWebView = nil
+                self.designerWindow = nil
+                if let token = self.designerCloseObserver {
+                    NotificationCenter.default.removeObserver(token)
+                    self.designerCloseObserver = nil
+                }
                 TemplateStore.shared.reload()
-
             }
         }
     }
@@ -158,7 +157,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
             object: win, queue: .main
-        ) { [weak self] _ in self?.preferencesWindow = nil }
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.preferencesWindow = nil } }
     }
 
     func openExportFolder() {
