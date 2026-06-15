@@ -125,6 +125,12 @@ final class ExportWatcher {
         // File must be exactly one level below root (project subfolder), not at root itself
         guard parent != root else { return }
 
+        // Mark as processed immediately. FSEvents commonly fires created + modified
+        // for the same file within the coalescing window; without claiming the path
+        // here (rather than 0.5s later in processFile) both events would schedule a
+        // processFile and the export would be handled — and the window opened — twice.
+        processedPaths.insert(path)
+
         print("[ExportWatcher] New export detected: \(fileURL.lastPathComponent)")
 
         // Delay to ensure file is fully written
@@ -134,8 +140,12 @@ final class ExportWatcher {
     }
 
     private func processFile(at fileURL: URL) {
-        guard let records = WireExportParser.parse(fileURL: fileURL) else { return }
-        guard !records.isEmpty else { return }
+        // If the file isn't readable/parseable yet (e.g. still being written or
+        // cloud-syncing), release the claim so a later FSEvents change can retry.
+        guard let records = WireExportParser.parse(fileURL: fileURL), !records.isEmpty else {
+            processedPaths.remove(fileURL.path)
+            return
+        }
 
         processedPaths.insert(fileURL.path)
 

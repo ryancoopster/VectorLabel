@@ -29,19 +29,27 @@ final class PrintJob: ObservableObject, Identifiable {
     let printerID: String
 
     @Published var completedLabels: Int = 0
-    @Published var isCancelled: Bool = false
     @Published var isComplete: Bool = false
 
-    var progress: Double { labelCount > 0 ? Double(completedLabels) / Double(labelCount) : 0 }
+    // Read from the background print task and written from the main thread, so it
+    // needs its own synchronization rather than relying on @Published/main-actor.
+    private let cancelLock = NSLock()
+    private var _isCancelled = false
+    var isCancelled: Bool {
+        cancelLock.lock(); defer { cancelLock.unlock() }
+        return _isCancelled
+    }
 
-    private var cancelContinuation: CheckedContinuation<Void, Never>?
+    var progress: Double { labelCount > 0 ? Double(completedLabels) / Double(labelCount) : 0 }
 
     init(title: String, labelCount: Int, templateName: String, printerID: String) {
         self.title = title; self.labelCount = labelCount
         self.templateName = templateName; self.printerID = printerID
     }
 
-    func requestCancel() { isCancelled = true }
+    func requestCancel() {
+        cancelLock.lock(); _isCancelled = true; cancelLock.unlock()
+    }
 }
 
 // MARK: – PrinterManager
@@ -105,13 +113,15 @@ final class PrinterManager: ObservableObject {
     // MARK: – Print dispatch
 
     /// Submit a set of VGL jobs to the given printer.
+    /// Returns the created `PrintJob` so callers can observe its progress.
+    @discardableResult
     func submit(
         jobs: [[UInt8]],
         title: String,
         templateName: String,
         printerID: String,
         delayMs: Int = AppSettings.shared.interLabelDelayMs
-    ) {
+    ) -> PrintJob {
         let job = PrintJob(
             title: title,
             labelCount: jobs.count,
@@ -144,6 +154,8 @@ final class PrinterManager: ObservableObject {
                 self.activeJobs.removeAll { $0.isComplete }
             }
         }
+
+        return job
     }
 
     private func setPrinterBusy(_ id: String, busy: Bool) {

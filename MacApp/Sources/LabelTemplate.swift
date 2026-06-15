@@ -45,8 +45,9 @@ enum LabelRenderer {
     /// We map those onto the actual print DPI here.
     static func render(template: VLTemplate, record: WireRecord) -> (pixels: [UInt8], width: Int, height: Int)? {
         guard let size = template.labelSize else { return nil }
-        let pw = size.printablePixelWidth
-        let ph = size.printablePixelHeight
+        let pw  = size.printablePixelWidth
+        let ph  = size.printablePixelHeight
+        let dpi = size.dpi
 
         let colorSpace = CGColorSpaceCreateDeviceGray()
         guard let ctx = CGContext(
@@ -66,9 +67,9 @@ enum LabelRenderer {
 
         for obj in template.objs {
             switch obj.t {
-            case "tx": drawText(obj, record: record, in: ctx, pw: pw, ph: ph)
-            case "ln": drawLine(obj, in: ctx, pw: pw, ph: ph)
-            case "rc": drawRect(obj, in: ctx, pw: pw, ph: ph)
+            case "tx": drawText(obj, record: record, in: ctx, dpi: dpi)
+            case "ln": drawLine(obj, in: ctx, dpi: dpi)
+            case "rc": drawRect(obj, in: ctx, dpi: dpi)
             default: break
             }
         }
@@ -84,21 +85,30 @@ enum LabelRenderer {
 
     // MARK: – Drawing helpers
 
-    private static func rect(for obj: TemplateObject, pw: Int, ph: Int) -> CGRect {
-        CGRect(
-            x: obj.x * Double(pw),
-            y: obj.y * Double(ph),
-            width:  (obj.w) * Double(pw),
-            height: (obj.h) * Double(ph)
+    /// The HTML designer treats object coordinates as inches (it renders at
+    /// SC = 185 px per inch via `o.x * SC`), NOT as a 0…1 fraction of the
+    /// printable area. So map inches → print pixels with the print DPI, which
+    /// reproduces the authored layout at any printable size.
+    private static func rect(for obj: TemplateObject, dpi: Int) -> CGRect {
+        let s = Double(dpi)
+        return CGRect(
+            x: obj.x * s,
+            y: obj.y * s,
+            width:  obj.w * s,
+            height: obj.h * s
         )
     }
 
-    private static func drawText(_ obj: TemplateObject, record: WireRecord, in ctx: CGContext, pw: Int, ph: Int) {
+    /// Designer renders at 185 px/inch; print is `dpi` px/inch. To keep the same
+    /// physical size, every pixel measurement scales by `dpi / 185`.
+    private static let designerDPI = 185.0
+
+    private static func drawText(_ obj: TemplateObject, record: WireRecord, in ctx: CGContext, dpi: Int) {
         let formula = obj.f ?? ""
         let text = FormulaEngine.evaluate(formula, fields: record.fields)
         guard !text.isEmpty else { return }
 
-        let r = rect(for: obj, pw: pw, ph: ph)
+        let r = rect(for: obj, dpi: dpi)
 
         // Font
         let fontName: String
@@ -112,16 +122,11 @@ enum LabelRenderer {
         default:             fontName = "HelveticaNeue"
         }
 
-        // The HTML designer uses font-size in points at SC=185 (px per label unit).
-        // We need to scale to the actual render DPI: (fs / 185) * dpi.
-        // obj.fs is already in pt relative to the 185-px canvas.
-        // In the HTML designer, font size is specified at SC=185 (185px per label unit).
-        // The HTML renders: fz = (obj.fs / 100) * 185 px
-        // For print at 300 DPI, scale by 300/185.
-        let designerDPI = 185.0
-        let printDPI    = 300.0
-        let rawPt       = obj.fs ?? 14.0
-        let fontSize    = rawPt * (printDPI / designerDPI)
+        // The HTML designer renders text at:  fz = max(7, obj.fs * 185/100) px
+        // (185 px per inch). Reproduce that exact physical size at print DPI by
+        // computing the designer pixel size, then scaling by dpi/185.
+        let designerPx = max(7.0, (obj.fs ?? 14.0) * designerDPI / 100.0)
+        let fontSize   = designerPx * (Double(dpi) / designerDPI)
 
         var traits: NSFontTraitMask = []
         if obj.bold   == true { traits.insert(.boldFontMask) }
@@ -155,7 +160,8 @@ enum LabelRenderer {
             attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue
         }
         if let tracking = obj.tracking, tracking != 0 {
-            attrs[.kern] = CGFloat(tracking) * (300.0 / 185.0)  // scale from designer px to print px
+            // Designer letter-spacing is in screen px; scale to print px.
+            attrs[.kern] = CGFloat(tracking) * CGFloat(Double(dpi) / designerDPI)
         }
 
         let attrStr = NSAttributedString(string: text, attributes: attrs)
@@ -199,11 +205,13 @@ enum LabelRenderer {
         }
     }
 
-    private static func drawLine(_ obj: TemplateObject, in ctx: CGContext, pw: Int, ph: Int) {
-        let x1 = obj.x * Double(pw)
-        let y  = obj.y * Double(ph)
-        let x2 = (obj.x + obj.w) * Double(pw)
-        let lw = max(1.0, obj.lw ?? 1.0) * Double(pw) / Double(pw)
+    private static func drawLine(_ obj: TemplateObject, in ctx: CGContext, dpi: Int) {
+        let s  = Double(dpi)
+        let x1 = obj.x * s
+        let y  = obj.y * s
+        let x2 = (obj.x + obj.w) * s
+        // Line weight is in designer screen px; scale to print px (floor at 1px).
+        let lw = max(1.0, (obj.lw ?? 1.0) * s / designerDPI)
 
         ctx.setStrokeColor(gray: 0.0, alpha: 1.0)
         ctx.setLineWidth(CGFloat(lw))
@@ -212,9 +220,9 @@ enum LabelRenderer {
         ctx.strokePath()
     }
 
-    private static func drawRect(_ obj: TemplateObject, in ctx: CGContext, pw: Int, ph: Int) {
-        let r = rect(for: obj, pw: pw, ph: ph)
-        let lw = max(1.0, obj.lw ?? 1.0)
+    private static func drawRect(_ obj: TemplateObject, in ctx: CGContext, dpi: Int) {
+        let r  = rect(for: obj, dpi: dpi)
+        let lw = max(1.0, (obj.lw ?? 1.0) * Double(dpi) / designerDPI)
         ctx.setStrokeColor(gray: 0.0, alpha: 1.0)
         ctx.setLineWidth(CGFloat(lw))
         ctx.stroke(r)

@@ -1,6 +1,7 @@
 import AppKit
 import WebKit
 import SwiftUI
+import Combine
 
 /// Opens the print window (VectorLabelPrint.html in a WKWebView) when a new
 /// export is detected, and also when the user taps "Reprint" in the menu bar.
@@ -22,6 +23,9 @@ final class PrintWindowController: NSObject {
     private var records: [WireRecord] = []
     private var sourceFileURL: URL?
     private var reprinting: RecentPrint?
+
+    // Observes the active PrintJob so we can drive the web view's progress UI.
+    private var jobObservers: Set<AnyCancellable> = []
 
     // MARK: – Show / hide
 
@@ -47,6 +51,7 @@ final class PrintWindowController: NSObject {
     }
 
     func close() {
+        jobObservers.removeAll()
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "vectorlabel")
         window?.close()
         window = nil
@@ -225,13 +230,14 @@ extension PrintWindowController: WKScriptMessageHandler {
             printRange = .selected
         }
 
-        // Submit to printer
-        PrinterManager.shared.submit(
+        // Submit to printer and mirror its progress into the web view's modal.
+        let job = PrinterManager.shared.submit(
             jobs: jobs,
             title: title,
             templateName: templateName,
             printerID: printerID
         )
+        observePrintJob(job)
 
         // Record in recent prints
         let recent = RecentPrint(
@@ -248,12 +254,44 @@ extension PrintWindowController: WKScriptMessageHandler {
         )
         RecentPrintsStore.shared.add(recent)
     }
+
+    /// Bridge a job's progress into the print window's modal. The HTML defines
+    /// `updatePrintProgress(done,total)` and `completePrint()`; without these
+    /// calls the modal would sit at 0% forever even though printing succeeds.
+    private func observePrintJob(_ job: PrintJob) {
+        jobObservers.removeAll()
+        let total = job.labelCount
+
+        job.$completedLabels
+            .sink { [weak self] done in
+                Task { @MainActor in
+                    self?.evalJS("if(typeof updatePrintProgress==='function')updatePrintProgress(\(done),\(total));")
+                }
+            }
+            .store(in: &jobObservers)
+
+        job.$isComplete
+            .sink { [weak self] complete in
+                guard complete else { return }
+                Task { @MainActor in
+                    guard let self = self else { return }
+                    self.evalJS("if(typeof completePrint==='function')completePrint();")
+                    self.jobObservers.removeAll()
+                }
+            }
+            .store(in: &jobObservers)
+    }
+
+    private func evalJS(_ js: String) {
+        webView?.evaluateJavaScript(js, completionHandler: nil)
+    }
 }
 
 // MARK: – NSWindowDelegate
 
 extension PrintWindowController: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
+        jobObservers.removeAll()
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "vectorlabel")
         webView = nil
         window = nil

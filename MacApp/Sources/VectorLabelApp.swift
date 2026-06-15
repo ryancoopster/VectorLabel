@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var designerWebView: WKWebView?
     private var preferencesWindow: NSWindow?
     private var designerCloseObserver: NSObjectProtocol?
+    private var preferencesCloseObserver: NSObjectProtocol?
 
     private var statusItem: NSStatusItem?
 
@@ -154,10 +155,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         win.center()
         win.orderFrontRegardless()
         preferencesWindow = win
-        NotificationCenter.default.addObserver(
+        preferencesCloseObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
             object: win, queue: .main
-        ) { [weak self] _ in MainActor.assumeIsolated { self?.preferencesWindow = nil } }
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self = self else { return }
+                self.preferencesWindow = nil
+                if let token = self.preferencesCloseObserver {
+                    NotificationCenter.default.removeObserver(token)
+                    self.preferencesCloseObserver = nil
+                }
+            }
+        }
     }
 
     func openExportFolder() {
