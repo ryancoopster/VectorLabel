@@ -44,6 +44,7 @@ final class PrintWindowController: NSObject {
     }
 
     func close() {
+        webView?.configuration.userContentController.removeScriptMessageHandler(forName: "vectorlabel")
         window?.close()
         window = nil
         webView = nil
@@ -288,19 +289,28 @@ private extension String {
 }
 
 // MARK: – WireRecord: Codable (for JS bridge)
+// Records are flattened so JS can access r.Cable, r._Side, r.Number directly.
 
 extension WireRecord: Codable {
-    enum CodingKeys: String, CodingKey { case side, wireID, fields }
     init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        side   = try c.decode(String.self, forKey: .side)
-        wireID = try c.decode(String.self, forKey: .wireID)
-        fields = try c.decode([String: String].self, forKey: .fields)
+        let c = try decoder.container(keyedBy: DynamicKey.self)
+        side   = (try? c.decode(String.self, forKey: DynamicKey("_Side"))) ?? "Source"
+        wireID = (try? c.decode(String.self, forKey: DynamicKey("Number"))) ?? ""
+        var f: [String: String] = [:]
+        for key in c.allKeys { f[key.stringValue] = try? c.decode(String.self, forKey: key) }
+        fields = f
     }
     func encode(to encoder: Encoder) throws {
-        var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(side,   forKey: .side)
-        try c.encode(wireID, forKey: .wireID)
-        try c.encode(fields, forKey: .fields)
+        // Flatten all fields to top level so JS sees r.Cable, r._Side etc.
+        var c = encoder.container(keyedBy: DynamicKey.self)
+        for (k, v) in fields { try c.encode(v, forKey: DynamicKey(k)) }
     }
+}
+
+private struct DynamicKey: CodingKey {
+    var stringValue: String
+    var intValue: Int? { nil }
+    init(_ string: String) { stringValue = string }
+    init?(stringValue: String) { self.stringValue = stringValue }
+    init?(intValue: Int) { return nil }
 }

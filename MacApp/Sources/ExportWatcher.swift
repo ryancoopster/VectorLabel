@@ -94,8 +94,8 @@ final class ExportWatcher {
         FSEventStreamStart(stream)
         eventStream = stream
 
-        // Also process anything sitting in the tree right now (e.g. missed while app was closed)
-        scanExistingFiles()
+        // Note: we intentionally do NOT scan existing files on launch.
+        // The print window only opens when Vectorworks exports a new CSV while the app is running.
     }
 
     func stop() {
