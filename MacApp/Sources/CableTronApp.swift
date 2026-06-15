@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import WebKit
 
 // MARK: – App entry point
 
@@ -8,23 +9,18 @@ struct VectorLabelApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
-        // Menu bar dropdown
         MenuBarExtra {
             MenuBarView()
                 .environmentObject(appDelegate)
         } label: {
-            // Show a filled/animated icon when a print is active
             if PrinterManager.shared.activeJobs.contains(where: { !$0.isComplete }) {
                 Image(systemName: "printer.fill")
             } else {
-                // Use a simple text label while we don't have a bundled icon asset
-                Text("VL")
-                    .font(.system(size: 11, weight: .bold))
+                Text("VL").font(.system(size: 11, weight: .bold))
             }
         }
-        .menuBarExtraStyle(.window)  // use .window for custom SwiftUI content
+        .menuBarExtraStyle(.window)
 
-        // Preferences (⌘,)
         Settings {
             PreferencesView()
         }
@@ -33,27 +29,17 @@ struct VectorLabelApp: App {
 
 // MARK: – AppDelegate
 
-/// Wires together the watcher, printer manager, template store and print window.
 final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
-    // One print window controller for the lifetime of the app
     private let printWindowController = PrintWindowController()
-
-    // One template designer window
     private var designerWindow: NSWindow?
+    private var designerWebView: WKWebView?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Don't show in Dock by default
-        let showInDock = AppSettings.shared.showInDock
-        NSApp.setActivationPolicy(showInDock ? .regular : .accessory)
-
-        // Load templates
+        NSApp.setActivationPolicy(AppSettings.shared.showInDock ? .regular : .accessory)
         TemplateStore.shared.reload()
-
-        // Start USB printer scan
         PrinterManager.shared.startScan()
 
-        // Start watching the exports folder
         let watcher = ExportWatcher(exportsRootURL: AppSettings.shared.exportsFolderURL)
         watcher.onNewExport = { [weak self] fileURL, records in
             Task { @MainActor in
@@ -83,8 +69,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                             ?? devHTMLURL("VectorLabelDesigner")
         else { return }
 
-        let wv = makeWebView()
+        // WKWebView with navigation delegate so we can inject records after load
+        let config = WKWebViewConfiguration()
+        config.preferences.setValue(true, forKey: "developerExtrasEnabled")
+        let wv = WKWebView(frame: .zero, configuration: config)
+        wv.navigationDelegate = self
         wv.loadFileURL(htmlURL, allowingReadAccessTo: htmlURL.deletingLastPathComponent())
+        designerWebView = wv
 
         let win = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1200, height: 820),
@@ -98,13 +89,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         NSApp.activate(ignoringOtherApps: true)
         designerWindow = win
 
-        // Clear reference when window closes
         NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
             object: win, queue: .main
         ) { [weak self] _ in
             self?.designerWindow = nil
-            TemplateStore.shared.reload()   // pick up any newly saved templates
+            self?.designerWebView = nil
+            TemplateStore.shared.reload()
         }
     }
 
@@ -118,6 +109,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         printWindowController.showForReprint(recent)
     }
 
+    // MARK: – Auto-load most recent CSV for the designer
+
+    /// Finds the most recent CSV export with ≥10 records across all project
+    /// subfolders under Exports/, sorted by embedded datecode in the filename.
+    private func findMostRecentCSV(minRecords: Int = 10) -> (url: URL, records: [WireRecord])? {
+        let exportsRoot = AppSettings.shared.exportsFolderURL
+        guard let enumerator = FileManager.default.enumerator(
+            at: exportsRoot,
+            includingPropertiesForKeys: nil,
+            options: .skipsHiddenFiles
+        ) else { return nil }
+
+        var candidates: [(datecode: String, url: URL)] = []
+        for case let fileURL as URL in enumerator {
+            guard fileURL.pathExtension.lowercased() == "csv",
+                  let dc = ExportFilenameParser.datecode(from: fileURL.lastPathComponent)
+            else { continue }
+            candidates.append((dc, fileURL))
+        }
+
+        // Sort newest first (lexicographic on YYYYMMDD_HHMMSS = chronological)
+        candidates.sort { $0.datecode > $1.datecode }
+
+        for candidate in candidates {
+            if let records = WireExportParser.parse(fileURL: candidate.url),
+               records.count >= minRecords {
+                return (candidate.url, records)
+            }
+        }
+        return nil
+    }
+
+    private func injectDesignerRecords(_ records: [WireRecord], filename: String) {
+        guard let wv = designerWebView else { return }
+        guard let data = try? JSONEncoder().encode(records),
+              let json = String(data: data, encoding: .utf8) else { return }
+        let escaped = JSONSerialization.escapeString(filename)
+        let js = "if(typeof initDesignerRecords==='function')initDesignerRecords(\(json),\(escaped));"
+        wv.evaluateJavaScript(js, completionHandler: nil)
+    }
+
     // MARK: – Private
 
     private var watcher: ExportWatcher?
@@ -128,7 +160,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         return WKWebView(frame: .zero, configuration: config)
     }
 
-    /// Development fallback: find the HTML file relative to this source file.
     private func devHTMLURL(_ name: String) -> URL? {
         let src = URL(fileURLWithPath: #file)
             .deletingLastPathComponent()
@@ -138,6 +169,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 }
 
-// MARK: – Import WebKit (needed for WKWebView in AppDelegate)
+// MARK: – WKNavigationDelegate (for designer auto-load)
 
-import WebKit
+extension AppDelegate: WKNavigationDelegate {
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        // Only handle the designer webview
+        guard webView === designerWebView else { return }
+        // Inject the most recent CSV with ≥10 records
+        if let result = findMostRecentCSV(minRecords: 10) {
+            injectDesignerRecords(result.records, filename: result.url.lastPathComponent)
+        }
+    }
+}
+
+// MARK: – JSON helper
+
+private extension JSONSerialization {
+    static func escapeString(_ s: String) -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: s),
+              let str = String(data: data, encoding: .utf8) else { return "\"\"" }
+        return str
+    }
+}

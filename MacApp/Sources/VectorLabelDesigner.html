@@ -34,6 +34,9 @@ label.lbl{font-size:10px;color:#8888a8;display:block;margin-bottom:3px}
 .tpl-card:hover{background:#2d2d48;border-color:#6C8EF5}
 .tpl-card.active{border-color:#6C8EF5;background:#2a2a42}
 .tpl-preview{width:60px;height:20px;background:#fff;border:1px solid #ccc;border-radius:2px;flex-shrink:0;position:relative;overflow:hidden}
+.tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600}
+.tag.src{background:rgba(108,142,245,0.2);color:#6C8EF5}
+.tag.dst{background:rgba(108,200,150,0.2);color:#5cc896}
 </style>
 </head>
 <body>
@@ -53,7 +56,7 @@ const FD=[
   {f:"Other Connector",c:"Other_Connector"},{f:"Rack",c:"Rack"},{f:"Room",c:"Room"},
   {f:"Rack U",c:"RackU"},{f:"Side",c:"_Side"},{f:"Cable Type",c:"Cable_Type"},{f:"Cable Length",c:"CableLength"}
 ];
-const RX=[
+let RX=[
   {_Side:"Source",Number:"N044",Cable:"RIO 1 PRI",Signal:"LAN",Connector:"EC-6A",Device_Name:"SWITCH 6.01",Device_Tag:"SWITCH 6.01",Socket_Name:"LAN 1",Socket_Tag:"LAN 1",Other_Device:"IO 1.01",Other_Socket:"DANTE PRI",Other_Connector:"EC-6A",Rack:"",Room:"",RackU:"",Cable_Type:"---",CableLength:"Auto"},
   {_Side:"Destination",Number:"N044",Cable:"RIO 1 PRI",Signal:"LAN",Connector:"EC-6A",Device_Name:"IO 1.01",Device_Tag:"IO 1.01",Socket_Name:"DANTE PRI",Socket_Tag:"DANTE PRI",Other_Device:"SWITCH 6.01",Other_Socket:"LAN 1",Other_Connector:"EC-6A",Rack:"RIO RACK",Room:"PORTABLE",RackU:"22",Cable_Type:"---",CableLength:"Auto"},
   {_Side:"Source",Number:"N045",Cable:"RIO 2 PRI",Signal:"LAN",Connector:"EC-6A",Device_Name:"SWITCH 6.01",Device_Tag:"SWITCH 6.01",Socket_Name:"LAN 2",Socket_Tag:"LAN 2",Other_Device:"IO 1.02",Other_Socket:"DANTE PRI",Other_Connector:"EC-6A",Rack:"",Room:"",RackU:"",Cable_Type:"---",CableLength:"Auto"},
@@ -473,6 +476,10 @@ function R(){
       <div style="display:flex;align-items:center;gap:6px;margin-left:4px">
         <span style="color:#8888a8;font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${S.tplName}">${S.tplName}</span>
       </div>
+      <div style="width:1px;height:20px;background:rgba(255,255,255,0.08)"></div>
+      <button class="btn" onclick="loadDesignerCSV()" style="padding:4px 9px;font-size:11px" title="${S._csvName||'No CSV loaded'}">
+        ${S._csvName?'📄 '+S._csvName.replace(/_export_\d{8}_\d{6}\.csv$/i,'').replace(/_/g,' ').slice(-24):'Load CSV…'}
+      </button>
       <span id="ed-toolbar-btns"></span>
     </div>
 
@@ -943,6 +950,64 @@ function showToast(msg){
 document.addEventListener("keydown",function(e2){
   if(e2.key==="Escape"&&S.modal){closeModal();}
 },true);
+
+// ── CSV loading for standalone designer ───────────────────────────────────────
+
+function parseCSV(text){
+  const lines=text.split(/\r?\n/).filter(l=>l.trim());
+  if(!lines.length)return[];
+  const headers=lines[0].split(",").map(h=>h.replace(/^"|"$/g,"").trim());
+  return lines.slice(1).map(line=>{
+    const vals=[];let cur="",inQ=false;
+    for(const c of line){
+      if(c==='"'){inQ=!inQ;}else if(c===','&&!inQ){vals.push(cur);cur="";}else cur+=c;
+    }
+    vals.push(cur);
+    const row={};
+    headers.forEach((h,i)=>row[h]=(vals[i]||"").replace(/^"|"$/g,""));
+    return row;
+  }).filter(r=>Object.values(r).some(v=>v));
+}
+
+async function loadDesignerCSV(){
+  if(window.showOpenFilePicker){
+    try{
+      const [fh]=await window.showOpenFilePicker({
+        startIn:"documents",
+        types:[{description:"VectorLabel CSV Export",accept:{"text/csv":[".csv"]}}]
+      });
+      const file=await fh.getFile();
+      const rows=parseCSV(await file.text());
+      if(rows.length>0){
+        RX=rows;
+        S.recIdx=0;
+        S._csvName=file.name;
+        R();
+        showToast("Loaded: "+file.name+" ("+rows.length+" records)");
+      }
+    }catch(e){if(e.name!=="AbortError")showToast("Error: "+e.message);}
+  }else{
+    const inp=document.createElement("input");inp.type="file";inp.accept=".csv";
+    inp.onchange=async()=>{
+      const file=inp.files[0];if(!file)return;
+      const rows=parseCSV(await file.text());
+      if(rows.length>0){RX=rows;S.recIdx=0;S._csvName=file.name;R();showToast("Loaded: "+file.name);}
+    };
+    inp.click();
+  }
+}
+
+// Auto-load most recent CSV from ~/Documents/VectorLabel/Exports/ with 10+ records.
+// In the browser this isn't possible without a file picker; in the Swift WKWebView
+// the app calls initDesignerRecords(records, filename) before the page renders.
+// We expose this function so Swift can call it.
+function initDesignerRecords(records, filename){
+  if(!records||!records.length)return;
+  RX=records;
+  S.recIdx=0;
+  S._csvName=filename||"";
+  R();
+}
 
 R();
 </script>
