@@ -125,7 +125,7 @@ final class PrintWindowController: NSObject {
               records: \(recordsJSON),
               templates: \(templatesJSON),
               printers: \(printerJSON),
-              sourceFile: \(JSONSerialization.escapeString(sourceFile)),
+              sourceFile: \(sourceFile.jsonQuoted),
               reprint: \(reprintJSON)
             });
           }
@@ -275,11 +275,15 @@ extension PrintWindowController: NSWindowDelegate {
 
 // MARK: – JSON helper
 
-private extension JSONSerialization {
-    static func escapeString(_ s: String) -> String {
-        guard let data = try? JSONSerialization.data(withJSONObject: s),
-              let str = String(data: data, encoding: .utf8) else { return "\"\"" }
-        return str
+private extension String {
+    /// Returns the string wrapped in JSON double-quotes with proper escaping.
+    var jsonQuoted: String {
+        let escaped = self
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n")
+            .replacingOccurrences(of: "\r", with: "\\r")
+        return "\"\(escaped)\""
     }
 }
 

@@ -36,6 +36,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var preferencesWindow: NSWindow?
 
     @MainActor func applicationDidFinishLaunching(_ notification: Notification) {
+        // Ensure bundle identifier is set — required for WKWebView sandbox
+        if Bundle.main.bundleIdentifier == nil || Bundle.main.bundleIdentifier!.isEmpty {
+            // Running without a proper bundle (dev/SPM). Set a temporary identifier.
+            UserDefaults.standard.set("com.sai.vectorlabel", forKey: "NSBundleIdentifier")
+        }
         printWindowController = PrintWindowController()
         NSApp.setActivationPolicy(AppSettings.shared.showInDock ? .regular : .accessory)
         TemplateStore.shared.reload()
