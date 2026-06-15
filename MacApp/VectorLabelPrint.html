@@ -355,6 +355,7 @@ function pairIdx(i){
 function toggleSel(i){
   if(P.selected.has(i))P.selected.delete(i);
   else P.selected.add(i);
+  P.printRange="selected"; // count should always reflect what's checked
   R();
 }
 
@@ -370,6 +371,7 @@ function togglePair(i){
     P.selected.add(i);
     if(j!==null)P.selected.add(j);
   }
+  P.printRange="selected";
   R();
 }
 
@@ -384,8 +386,12 @@ function pairChkState(i){
 }
 
 function toggleAll(){
-  if(P.selected.size===P.records.length)P.selected.clear();
-  else P.records.forEach((_,i)=>P.selected.add(i));
+  if(P.selected.size===P.records.length){
+    P.selected.clear();
+  }else{
+    P.records.forEach((_,i)=>P.selected.add(i));
+    P.printRange="all"; // selecting all switches back to "all" mode
+  }
   R();
 }
 
@@ -518,7 +524,7 @@ function buildPrintBar(){
   const nSel=selCount();
   const t=tpl();
   const pr=printer();
-  const canPrint=t&&nSel>0&&pr.status==="ready";
+  const canPrint=t&&pCount>0&&pr.status==="ready";
   const pCount=printCount();
 
   return`<div style="background:#1e1e2e;border-top:1px solid rgba(255,255,255,0.1);padding:10px 16px;display:flex;align-items:center;gap:14px;flex-shrink:0;flex-wrap:wrap">
