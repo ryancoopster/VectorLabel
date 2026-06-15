@@ -4,5 +4,6 @@ xcuserdata/
 DerivedData/
 *.resolved
 .build/
+.swiftpm/
 __pycache__/
 *.pyc
