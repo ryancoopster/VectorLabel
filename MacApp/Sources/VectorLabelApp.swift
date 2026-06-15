@@ -76,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     func openTemplateDesigner() {
         if let win = designerWindow {
+            NSApp.activate(ignoringOtherApps: true)
             win.makeKeyAndOrderFront(nil)
             return
         }
@@ -101,8 +102,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         )
         win.title = "VectorLabel — Template Designer"
         win.contentView = wv
+        win.hidesOnDeactivate = false
+        win.isReleasedWhenClosed = false
         win.center()
-        win.orderFrontRegardless()
+        NSApp.activate(ignoringOtherApps: true)
+        win.makeKeyAndOrderFront(nil)
         designerWindow = win
 
         designerCloseObserver = NotificationCenter.default.addObserver(
@@ -144,6 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     func openPreferences() {
         if let win = preferencesWindow {
+            NSApp.activate(ignoringOtherApps: true)
             win.makeKeyAndOrderFront(nil)
             return
         }
@@ -151,9 +156,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         let win = NSPanel(contentViewController: controller)
         win.title = "VectorLabel Preferences"
         win.styleMask = [.titled, .closable, .nonactivatingPanel]
+        win.hidesOnDeactivate = false
+        win.isReleasedWhenClosed = false
         win.setContentSize(NSSize(width: 600, height: 480))
         win.center()
-        win.orderFrontRegardless()
+        NSApp.activate(ignoringOtherApps: true)
+        win.makeKeyAndOrderFront(nil)
         preferencesWindow = win
         preferencesCloseObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
