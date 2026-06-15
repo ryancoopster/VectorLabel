@@ -166,10 +166,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private func injectDesignerRecords(_ records: [WireRecord], filename: String) {
         guard let wv = designerWebView else { return }
         guard let data = try? JSONEncoder().encode(records),
-              let json = String(data: data, encoding: .utf8),
-              let fnData = try? JSONSerialization.data(withJSONObject: filename),
-              let fnJSON = String(data: fnData, encoding: .utf8)
+              let json = String(data: data, encoding: .utf8)
         else { return }
+        // JSON-encode the filename string safely
+        let fnJSON = "\"" + filename.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
         let js = "if(typeof initDesignerRecords==='function')initDesignerRecords(\(json),\(fnJSON));"
         wv.evaluateJavaScript(js, completionHandler: nil)
     }
