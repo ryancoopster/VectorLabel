@@ -435,14 +435,76 @@ function printCount(){
 
 function doPrint(){
   const n=printCount();
-  P.modal="printing";R();
-  // Simulate print progress
-  let done=0;
-  const iv=setInterval(()=>{
-    done+=Math.ceil(Math.random()*3);
-    if(done>=n){done=n;clearInterval(iv);P.modal="done";R();}
-    else{P._printProgress={done,total:n};renderProgress();}
-  },120);
+  if(n===0)return;
+
+  // Build list of record indices to print
+  let indices=[];
+  if(P.printRange==="all"){
+    indices=P.records.map((_,i)=>i);
+  } else if(P.printRange==="selected"){
+    indices=[...P.selected].sort((a,b)=>a-b);
+  } else if(P.printRange==="range"){
+    for(let i=P.rangeFrom-1;i<P.rangeTo&&i<P.records.length;i++) indices.push(i);
+  }
+
+  const t=tpl();
+  const pr=printer();
+  const payload={
+    action:"print",
+    payload:{
+      printerID: pr.id,
+      title: buildJobTitle(indices),
+      templateName: t?t.name:"",
+      templateID: t?t.id:"",
+      recordIndices: indices,
+      printRange: P.printRange,
+      rangeFrom: P.rangeFrom,
+      rangeTo: P.rangeTo,
+    }
+  };
+
+  // If running inside the Swift app, post to native bridge
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
+    window.webkit.messageHandlers.vectorlabel.postMessage(payload);
+    P.modal="printing";
+    P._printProgress={done:0,total:n};
+    R();
+    // Swift will call updatePrintProgress() / completePrint() as labels send
+  } else {
+    // Browser demo: simulate progress
+    P.modal="printing";R();
+    let done=0;
+    const iv=setInterval(()=>{
+      done+=Math.ceil(Math.random()*3);
+      if(done>=n){done=n;clearInterval(iv);P.modal="done";R();}
+      else{P._printProgress={done,total:n};renderProgress();}
+    },120);
+  }
+}
+
+function buildJobTitle(indices){
+  if(!indices.length)return"Print job";
+  const nums=[...new Set(indices.map(i=>P.records[i]&&P.records[i].Number).filter(Boolean))];
+  const file=P.sourceFile.replace(/_export_\d{8}_\d{6}\.csv$/i,"").replace(/_/g," ");
+  if(nums.length===0)return file+" — "+indices.length+" labels";
+  if(nums.length===1)return file+" — "+nums[0];
+  return file+" — "+nums[0]+"–"+nums[nums.length-1];
+}
+
+// Called by Swift to update print progress
+function updatePrintProgress(done,total){
+  P._printProgress={done,total};
+  renderProgress();
+}
+
+// Called by Swift when all labels are done
+function completePrint(){
+  P.modal="done";R();
+}
+
+// Called by Swift to cancel the job
+function cancelPrint(){
+  P.modal=null;P._printProgress=null;R();
 }
 
 function renderProgress(){
@@ -1519,7 +1581,88 @@ document.addEventListener("keydown",function(e2){
   if(e2.key==="Escape"&&S.modal){closeModal();}
 },true);
 
+// ── Swift bridge ──────────────────────────────────────────────────────────────
+
+/// Called by Swift (via WKWebView evaluateJavaScript) after the page loads,
+/// to inject real records, templates, printers, and optional reprint settings.
+function initPrintWindow(opts){
+  if(!opts)return;
+
+  // Records from the CSV
+  if(opts.records&&opts.records.length>0){
+    P.records=opts.records;
+    P.selected=new Set(opts.records.map((_,i)=>i));
+    P.rangeFrom=1;
+    P.rangeTo=opts.records.length;
+  }
+
+  // Templates from ~/Documents/VectorLabel/Templates/
+  if(opts.templates&&opts.templates.length>0){
+    // Convert VLTemplate format (specN, objs) to the format P.templates expects
+    P.templates=opts.templates.map(t=>({
+      id: t.id||t.name,
+      name: t.name||"Unnamed",
+      specN: t.specN||"BM-32-427",
+      objs: t.objs||[]
+    }));
+    P.activeTpl=0;
+  }
+
+  // Printers from USB scan
+  if(opts.printers&&opts.printers.length>0){
+    // Replace the simulated PRINTERS array
+    window._swiftPrinters=opts.printers.map(p=>({
+      id: p.id,
+      name: p.name,
+      model: p.model||"M6xx",
+      status: p.status||"ready",
+      serial: p.serial||""
+    }));
+    P.activePrinter=window._swiftPrinters.find(p=>p.status==="ready")?.id
+                   ||window._swiftPrinters[0]?.id
+                   ||P.activePrinter;
+  }
+
+  // Source file name for display
+  if(opts.sourceFile) P.sourceFile=opts.sourceFile;
+
+  // Reprint: restore previous selection settings
+  if(opts.reprint){
+    const rp=opts.reprint;
+    if(rp.printRange) P.printRange=rp.printRange;
+    if(rp.rangeFrom)  P.rangeFrom=rp.rangeFrom;
+    if(rp.rangeTo)    P.rangeTo=rp.rangeTo;
+    if(rp.selectedIndices&&rp.selectedIndices.length>0){
+      P.selected=new Set(rp.selectedIndices);
+      if(P.printRange==="all") P.printRange="selected";
+    }
+    // Try to match template by name
+    if(rp.templateName){
+      const idx=P.templates.findIndex(t=>t.name===rp.templateName);
+      if(idx>=0) P.activeTpl=idx;
+    }
+  }
+
+  R();
+}
+
+// Override printer() to use Swift-injected printers if available
+const _origPrinterFn=printer;
+function printer(){
+  const pool=window._swiftPrinters||PRINTERS;
+  return pool.find(p=>p.id===P.activePrinter)||pool[0]||PRINTERS[0];
+}
+
+// Tell Swift the page is ready to receive data
+function notifyReady(){
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"ready",payload:null});
+  }
+}
+
 R();
+// Notify Swift that the page has rendered and is ready for initPrintWindow()
+window.addEventListener("load",notifyReady);
 </script>
 </body>
 </html>
