@@ -848,12 +848,15 @@ function openEditor(){
       window._editorOnSave=null;
       window._editorOnDiscard=null;
       P.view="print";
+      // Restore the print screen's R() before calling it
+      if(window._printR){window.R=window._printR;window._printR=null;}
       R();
     },
     onDiscard: function(){
       window._editorOnSave=null;
       window._editorOnDiscard=null;
       P.view="print";
+      if(window._printR){window.R=window._printR;window._printR=null;}
       R();
     }
   });
@@ -863,6 +866,7 @@ function closeEditor(){
   window._editorOnSave=null;
   window._editorOnDiscard=null;
   P.view="print";
+  if(window._printR){window.R=window._printR;window._printR=null;}
   R();
 }
 
@@ -895,7 +899,10 @@ function initDesigner(opts){
   window._editorOnSave = opts.onSaveReturn;
   window._editorOnDiscard = opts.onDiscard;
 
-  // Expose renderDesigner as R for onclick handlers
+  // Save the print screen's R() so we can restore it on return
+  window._printR = window._printR || R;
+
+  // Expose renderDesigner as R for onclick handlers in the designer
   window.R = renderDesigner;
 
   renderDesigner();
