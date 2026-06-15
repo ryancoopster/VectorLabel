@@ -101,16 +101,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             object: win, queue: .main
         ) { [weak self] _ in
             guard let self = self else { return }
-            // Nil delegate before releasing to prevent EXC_BAD_ACCESS
             self.designerWebView?.navigationDelegate = nil
             self.designerWebView = nil
             self.designerWindow = nil
-            // Remove this observer so it can't fire again
             if let token = self.designerCloseObserver {
                 NotificationCenter.default.removeObserver(token)
                 self.designerCloseObserver = nil
             }
-            Task { @MainActor in TemplateStore.shared.reload() }
+            Task { @MainActor in
+                TemplateStore.shared.reload()
+                // Resign active status so the menu bar extra remains clickable.
+                // LSUIElement apps must not stay "active" with no open windows.
+                NSApp.deactivate()
+            }
         }
     }
 
