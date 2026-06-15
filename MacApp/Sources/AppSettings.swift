@@ -97,9 +97,16 @@ final class AppSettings: ObservableObject {
         defaultPrintRange = defaults.string(forKey: "defaultPrintRange") ?? "all"
         recentPrintsCount = defaults.object(forKey: "recentPrintsCount") as? Int ?? 3
         showInDock        = defaults.object(forKey: "showInDock") as? Bool ?? false
+        devRepoPath       = defaults.string(forKey: "devRepoPath") ?? ""
 
         // Sync ExportSettings singleton
         ExportSettings.maxExportsPerProject = maxExportsPerProject
+    }
+
+    /// Path to the VectorLabel repo checkout, used to load HTML files live during development.
+    /// Leave empty to use the bundled HTML (production).
+    @Published var devRepoPath: String {
+        didSet { UserDefaults.standard.set(devRepoPath, forKey: "devRepoPath") }
     }
 
     func resetToDefaults() {
@@ -114,5 +121,6 @@ final class AppSettings: ObservableObject {
         defaultPrintRange    = "all"
         recentPrintsCount    = 3
         showInDock           = false
+        devRepoPath          = ""
     }
 }

@@ -153,19 +153,11 @@ final class PrintWindowController: NSObject {
     /// Finds an HTML file in the live repo checkout first, then falls back to the bundle.
     /// This ensures git pull changes are reflected without a full Xcode rebuild.
     static func findHTMLFile(_ name: String) -> URL? {
-        let home = NSHomeDirectory()
-        let searchPaths = [
-            "Documents/VectorLabel/MacApp/Sources",
-            "Developer/VectorLabel/MacApp/Sources",
-            "Desktop/VectorLabel/MacApp/Sources",
-        ]
-        for rel in searchPaths {
-            let url = URL(fileURLWithPath: home)
-                .appendingPathComponent(rel)
-                .appendingPathComponent("\(name).html")
-            if FileManager.default.fileExists(atPath: url.path) { return url }
-        }
-        return nil
+        let configured = AppSettings.shared.devRepoPath
+        guard !configured.isEmpty else { return nil }
+        let url = URL(fileURLWithPath: configured)
+            .appendingPathComponent("MacApp/Sources/\(name).html")
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 }
 
