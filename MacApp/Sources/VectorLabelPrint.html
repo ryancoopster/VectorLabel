@@ -41,6 +41,11 @@ label.lbl{font-size:10px;color:#8888a8;display:block;margin-bottom:3px}
 .col-resizer{position:absolute;right:-3px;top:0;bottom:0;width:6px;cursor:col-resize;z-index:5;display:flex;align-items:center;justify-content:center}
 .col-resizer:hover::after,.col-resizer.dragging::after{content:'';position:absolute;width:2px;top:4px;bottom:4px;background:#6C8EF5;border-radius:1px}
 .rec-hdr-cell{position:relative;padding:6px 8px;font-size:10px;color:#44445a;font-weight:600;text-transform:uppercase;letter-spacing:.5px;overflow:hidden;white-space:nowrap;user-select:none}
+.ed-rec-row{display:grid;grid-template-columns:var(--ed-col-field) var(--ed-col-key) var(--ed-col-value);align-items:center;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;min-height:32px}
+.ed-rec-row:hover{background:rgba(108,142,245,0.06)}
+.ed-rec-row.ed-selrow{background:rgba(108,142,245,0.18)}
+.ed-rec-cell{padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ed-rec-hdr{position:relative;padding:5px 8px;font-size:10px;color:#44445a;font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;user-select:none}
 
 
 *{box-sizing:border-box;margin:0;padding:0}
@@ -201,9 +206,7 @@ const SAMPLE_TPL={
   ]
 };
 
-// ── Column widths ────────────────────────────────────────────────────────────
-// Fixed columns (px): cb=28, pair=28, num=36
-// Resizable columns (px), saved in localStorage
+// ── Column widths — Print screen ──────────────────────────────────────────────
 const COL_DEFAULTS={side:90,number:72,cable:140,signal:72,device:160,socket:140};
 let COLS=(()=>{
   try{const s=localStorage.getItem('vl-col-widths');if(s)return Object.assign({},COL_DEFAULTS,JSON.parse(s));}catch(e){}
@@ -222,23 +225,36 @@ function applyColVars(){
   r.style.setProperty('--col-device',COLS.device+'px');
   r.style.setProperty('--col-socket',COLS.socket+'px');
 }
-
 function startColResize(e,col){
   e.preventDefault();e.stopPropagation();
   const el=e.currentTarget;el.classList.add('dragging');
   const startX=e.clientX,startW=COLS[col];
-  function mv(e){
-    COLS[col]=Math.max(40,startW+(e.clientX-startX));
-    applyColVars();
-  }
-  function mu(){
-    el.classList.remove('dragging');
-    saveCols();
-    window.removeEventListener('mousemove',mv);
-    window.removeEventListener('mouseup',mu);
-  }
-  window.addEventListener('mousemove',mv);
-  window.addEventListener('mouseup',mu);
+  function mv(e){COLS[col]=Math.max(40,startW+(e.clientX-startX));applyColVars();}
+  function mu(){el.classList.remove('dragging');saveCols();window.removeEventListener('mousemove',mv);window.removeEventListener('mouseup',mu);}
+  window.addEventListener('mousemove',mv);window.addEventListener('mouseup',mu);
+}
+
+// ── Column widths — Live editor record table ───────────────────────────────────
+// Separate key so editor and print screen columns are independent
+const ED_COL_DEFAULTS={field:130,colkey:110,value:200};
+let ED_COLS=(()=>{
+  try{const s=localStorage.getItem('vl-ed-col-widths');if(s)return Object.assign({},ED_COL_DEFAULTS,JSON.parse(s));}catch(e){}
+  return Object.assign({},ED_COL_DEFAULTS);
+})();
+function saveEdCols(){try{localStorage.setItem('vl-ed-col-widths',JSON.stringify(ED_COLS));}catch(e){}}
+function applyEdColVars(){
+  const r=document.documentElement;
+  r.style.setProperty('--ed-col-field', ED_COLS.field+'px');
+  r.style.setProperty('--ed-col-key',   ED_COLS.colkey+'px');
+  r.style.setProperty('--ed-col-value', ED_COLS.value+'px');
+}
+function startEdColResize(e,col){
+  e.preventDefault();e.stopPropagation();
+  const el=e.currentTarget;el.classList.add('dragging');
+  const startX=e.clientX,startW=ED_COLS[col];
+  function mv(e){ED_COLS[col]=Math.max(60,startW+(e.clientX-startX));applyEdColVars();}
+  function mu(){el.classList.remove('dragging');saveEdCols();window.removeEventListener('mousemove',mv);window.removeEventListener('mouseup',mu);}
+  window.addEventListener('mousemove',mv);window.addEventListener('mouseup',mu);
 }
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -1130,19 +1146,37 @@ function buildProps(){
 
 // ── Record table ──────────────────────────────────────────────────────────────
 function _dup_buildRecordTable(){
-  const cols=FD.slice(0,9);
-  const rows=RX.map((r,i)=>`<tr class="recrow${S.recIdx===i?" selrow":""}" onclick="S.recIdx=${i};R()">
-    ${cols.map(f=>`<td style="color:${r[f.c]?"#e8e8f0":"#44445a"}">${(r[f.c]||"—").substring(0,22)}</td>`).join("")}
-  </tr>`).join("");
-  const heads=cols.map(f=>`<th style="padding:5px 8px;text-align:left;border-bottom:1px solid rgba(255,255,255,0.07);background:#1a1a28;white-space:nowrap;position:sticky;top:0">
-    <div style="color:#e8e8f0;font-size:11px;font-weight:600">${f.f}</div>
-    <div style="color:#44445a;font-size:10px">${f.c}</div>
-  </th>`).join("");
-  return `<div style="overflow-x:auto;border-top:1px solid rgba(255,255,255,0.07)">
-    <table style="width:100%;border-collapse:collapse;font-size:11px">
-      <thead><tr>${heads}</tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
+  // Use the current record as the active record source (RX or window._editorRecords)
+  const records=window._editorRecords||RX;
+  const hdr=`<div class="ed-rec-row" style="background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.1);position:sticky;top:0;z-index:2">
+    <div class="ed-rec-hdr">Field name
+      <div class="col-resizer" onmousedown="startEdColResize(event,'field')"></div>
+    </div>
+    <div class="ed-rec-hdr">Column key
+      <div class="col-resizer" onmousedown="startEdColResize(event,'colkey')"></div>
+    </div>
+    <div class="ed-rec-hdr">Value (record ${S.recIdx+1})
+      <div class="col-resizer" onmousedown="startEdColResize(event,'value')"></div>
+    </div>
+  </div>`;
+  // Show field values for the currently selected record
+  const rec=records[S.recIdx]||{};
+  const rows=FD.map((f,i)=>{
+    const val=rec[f.c]||"";
+    return`<div class="ed-rec-row" onclick="S.recIdx=${i%records.length};R()">
+      <div class="ed-rec-cell" style="color:#8888a8">${f.f}</div>
+      <div class="ed-rec-cell" style="color:#44445a;font-family:monospace;font-size:10px">${f.c}</div>
+      <div class="ed-rec-cell" style="color:${val?"#e8e8f0":"#333344"}">${val||"—"}</div>
+    </div>`;
+  }).join("");
+  // Also show a record switcher above
+  const switcher=`<div style="display:flex;gap:4px;padding:6px 8px;overflow-x:auto;flex-shrink:0;border-bottom:1px solid rgba(255,255,255,0.07)">
+    ${records.map((r,i)=>`<button onclick="S.recIdx=${i};R()" style="padding:2px 8px;border-radius:4px;border:1px solid ${S.recIdx===i?'#6C8EF5':'rgba(255,255,255,0.1)'};background:${S.recIdx===i?'rgba(108,142,245,0.2)':'transparent'};color:${S.recIdx===i?'#e8e8f0':'#8888a8'};font-size:10px;cursor:pointer;white-space:nowrap">${r._Side||'Record'} ${r.Number||i+1}</button>`).join('')}
+  </div>`;
+  return `<div style="overflow-y:auto;overflow-x:hidden">
+    ${switcher}
+    ${hdr}
+    ${rows}
   </div>`;
 }
 
@@ -1250,6 +1284,9 @@ function renderDesigner(){
 
   const fx=document.getElementById("fxbar");
   if(fx&&S._ef!==undefined)fx.value=S._ef;
+
+  // Apply column CSS variables for the editor record table
+  applyEdColVars();
 
   // Render modal if active
   renderModal();
