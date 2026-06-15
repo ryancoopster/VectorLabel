@@ -229,11 +229,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // 3. #file-relative path (source-build fallback)
         let home = NSHomeDirectory()
         let searchPaths = [
-            "Downloads/VectorLabel/MacApp/Sources",
             "Documents/VectorLabel/MacApp/Sources",
             "Developer/VectorLabel/MacApp/Sources",
             "Desktop/VectorLabel/MacApp/Sources",
-            "Projects/VectorLabel/MacApp/Sources",
         ]
         for rel in searchPaths {
             let candidate = URL(fileURLWithPath: home)

@@ -155,11 +155,9 @@ final class PrintWindowController: NSObject {
     static func findHTMLFile(_ name: String) -> URL? {
         let home = NSHomeDirectory()
         let searchPaths = [
-            "Downloads/VectorLabel/MacApp/Sources",
             "Documents/VectorLabel/MacApp/Sources",
             "Developer/VectorLabel/MacApp/Sources",
             "Desktop/VectorLabel/MacApp/Sources",
-            "Projects/VectorLabel/MacApp/Sources",
         ]
         for rel in searchPaths {
             let url = URL(fileURLWithPath: home)
