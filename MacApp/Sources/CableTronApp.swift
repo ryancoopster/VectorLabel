@@ -22,9 +22,6 @@ struct VectorLabelApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Settings {
-            PreferencesView()
-        }
     }
 }
 
@@ -36,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var printWindowController: PrintWindowController!
     private var designerWindow: NSWindow?
     private var designerWebView: WKWebView?
+    private var preferencesWindow: NSWindow?
 
     @MainActor func applicationDidFinishLaunching(_ notification: Notification) {
         printWindowController = PrintWindowController()
@@ -100,6 +98,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             self?.designerWebView = nil
             Task { @MainActor in TemplateStore.shared.reload() }
         }
+    }
+
+    func openPreferences() {
+        if let win = preferencesWindow {
+            win.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let controller = NSHostingController(rootView: PreferencesView())
+        let win = NSWindow(contentViewController: controller)
+        win.title = "VectorLabel Preferences"
+        win.styleMask = [.titled, .closable]
+        win.setContentSize(NSSize(width: 540, height: 400))
+        win.center()
+        win.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        preferencesWindow = win
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: win, queue: .main
+        ) { [weak self] _ in self?.preferencesWindow = nil }
     }
 
     func openExportFolder() {

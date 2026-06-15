@@ -133,7 +133,7 @@ struct MenuBarView: View {
             .keyboardShortcut("e", modifiers: .command)
 
             Button {
-                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                appDelegate.openPreferences()
             } label: {
                 HStack {
                     Image(systemName: "gearshape")
