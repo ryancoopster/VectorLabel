@@ -136,6 +136,73 @@ function uobj(id,p){S.objs=S.objs.map(o=>o.id===id?Object.assign({},o,p):o);}
 // ── Canvas ────────────────────────────────────────────────────────────────────
 const SC=185;
 
+// ── Column widths — Live editor record table ───────────────────────────────────
+// Matches print screen columns but saved separately so widths are independent.
+const ED_COL_DEFAULTS={side:90,number:72,cable:150,signal:72,device:160,socket:150};
+let ED_COLS=(()=>{
+  try{const s=localStorage.getItem('vl-ed-col-widths');if(s)return Object.assign({},ED_COL_DEFAULTS,JSON.parse(s));}catch(e){}
+  return Object.assign({},ED_COL_DEFAULTS);
+})();
+function saveEdCols(){try{localStorage.setItem('vl-ed-col-widths',JSON.stringify(ED_COLS));}catch(e){}}
+function applyEdColVars(){
+  const r=document.documentElement;
+  r.style.setProperty('--edr-side',   ED_COLS.side+'px');
+  r.style.setProperty('--edr-number', ED_COLS.number+'px');
+  r.style.setProperty('--edr-cable',  ED_COLS.cable+'px');
+  r.style.setProperty('--edr-signal', ED_COLS.signal+'px');
+  r.style.setProperty('--edr-device', ED_COLS.device+'px');
+  r.style.setProperty('--edr-socket', ED_COLS.socket+'px');
+}
+function startEdColResize(e,col){
+  e.preventDefault();e.stopPropagation();
+  const el=e.currentTarget;el.classList.add('dragging');
+  const startX=e.clientX,startW=ED_COLS[col];
+  function mv(e){ED_COLS[col]=Math.max(40,startW+(e.clientX-startX));applyEdColVars();}
+  function mu(){el.classList.remove('dragging');saveEdCols();window.removeEventListener('mousemove',mv);window.removeEventListener('mouseup',mu);}
+  window.addEventListener('mousemove',mv);window.addEventListener('mouseup',mu);
+}
+
+function buildEditorRecordTable(){
+  const records=window._editorRecords||RX;
+  const hdrCols=[
+    {label:'Side',   col:'side'},
+    {label:'Number', col:'number'},
+    {label:'Cable',  col:'cable'},
+    {label:'Signal', col:'signal'},
+    {label:'Device', col:'device'},
+    {label:'Socket', col:'socket'},
+  ];
+  const hdr=`<div style="display:grid;grid-template-columns:var(--edr-side) var(--edr-number) var(--edr-cable) var(--edr-signal) var(--edr-device) var(--edr-socket);background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.1);position:sticky;top:0;z-index:2">
+    ${hdrCols.map(h=>`
+      <div style="position:relative;padding:5px 8px;font-size:10px;color:#44445a;font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;user-select:none">
+        ${h.label}
+        <div class="col-resizer" onmousedown="startEdColResize(event,'${h.col}')"></div>
+      </div>`).join('')}
+  </div>`;
+
+  const rows=records.map((r,i)=>{
+    const isActive=S.recIdx===i;
+    const side=r._Side==="Source"?"src":"dst";
+    return`<div onclick="S.recIdx=${i};R()"
+      style="display:grid;grid-template-columns:var(--edr-side) var(--edr-number) var(--edr-cable) var(--edr-signal) var(--edr-device) var(--edr-socket);
+             border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;min-height:34px;align-items:center;
+             background:${isActive?'rgba(108,142,245,0.18)':'transparent'}"
+      onmouseover="if(!${isActive})this.style.background='rgba(108,142,245,0.06)'"
+      onmouseout="if(!${isActive})this.style.background='transparent'">
+      <div style="padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+        <span class="tag ${side}">${r._Side||"—"}</span>
+      </div>
+      <div style="padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${r.Number?"#e8e8f0":"#44445a"};font-weight:${r.Number?600:400}">${r.Number||"—"}</div>
+      <div style="padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8888a8">${r.Cable||"—"}</div>
+      <div style="padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8888a8">${r.Signal||"—"}</div>
+      <div style="padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8888a8">${r.Device_Name||"—"}</div>
+      <div style="padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8888a8">${r.Socket_Name||"—"}</div>
+    </div>`;
+  }).join('');
+
+  return`<div style="overflow-x:auto">${hdr}${rows}</div>`;
+}
+
 // ── Snap helpers ──────────────────────────────────────────────────────────────
 const SNAP_PX=4; // screen pixels threshold for smart snap
 S._snapLines=[];
@@ -406,9 +473,7 @@ function R(){
       <div style="display:flex;align-items:center;gap:6px;margin-left:4px">
         <span style="color:#8888a8;font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${S.tplName}">${S.tplName}</span>
       </div>
-      <button class="btn" onclick="showModal('new')" style="padding:4px 10px">New</button>
-      <button class="btn" onclick="openTemplate()" style="padding:4px 10px">Open…</button>
-      <button class="btn" onclick="showModal('save')" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600;padding:5px 14px">Save…</button>
+      <span id="ed-toolbar-btns"></span>
     </div>
 
     <!-- Second toolbar: snap/grid controls -->
@@ -452,13 +517,12 @@ function R(){
         <div id="rec-panel" style="height:${S.recH||160}px;overflow:auto;background:#13131a;flex-shrink:0">
           <div style="padding:5px 10px 4px;display:flex;align-items:center;gap:6px;border-top:1px solid rgba(255,255,255,0.07);flex-shrink:0">
             <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px">Records</span>
-            <span style="color:#8888a8;font-size:10px">${RX.length} labels</span>
             <div style="flex:1"></div>
-            <span style="color:#44445a;font-size:10px">${S.recIdx+1} / ${RX.length}</span>
+            <span style="color:#44445a;font-size:10px">${S.recIdx+1} / ${(RX).length}</span>
             <button onclick="S.recIdx=Math.max(0,S.recIdx-1);R()" class="btn" style="padding:2px 7px;font-size:13px;line-height:1" ${S.recIdx===0?"disabled":""}>‹</button>
-            <button onclick="S.recIdx=Math.min(RX.length-1,S.recIdx+1);R()" class="btn" style="padding:2px 7px;font-size:13px;line-height:1" ${S.recIdx===RX.length-1?"disabled":""}>›</button>
+            <button onclick="S.recIdx=Math.min((RX).length-1,S.recIdx+1);R()" class="btn" style="padding:2px 7px;font-size:13px;line-height:1" ${S.recIdx===(RX).length-1?"disabled":""}>›</button>
           </div>
-          ${buildRecordTable()}
+          ${buildEditorRecordTable()}
         </div>
       </div>
 
@@ -471,6 +535,20 @@ function R(){
 
   const fx=document.getElementById("fxbar");
   if(fx&&S._ef!==undefined)fx.value=S._ef;
+
+  // Standalone designer: always show New/Open/Save
+  const tb=document.getElementById("ed-toolbar-btns");
+  if(tb){
+    tb.innerHTML=`
+      <button class="btn" onclick="showModal('new')" style="padding:4px 10px">New</button>
+      <button class="btn" onclick="openTemplate()" style="padding:4px 10px">Open…</button>
+      <button class="btn" onclick="showModal('save')" style="padding:4px 10px">Save as…</button>
+      <button class="btn" onclick="showModal('save')" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600;padding:5px 14px">Save…</button>
+    `;
+  }
+
+  // Apply column CSS variables for the editor record table
+  applyEdColVars();
 
   // Render modal if active
   renderModal();
