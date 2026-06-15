@@ -304,11 +304,9 @@ function buildEditorRecordTable(){
 
 // ── State ─────────────────────────────────────────────────────────────────────
 // ── Simulated printer list (in Swift app this comes from USB device scan) ────
-const PRINTERS=[
-  {id:"m610-001",name:"Brady M610",model:"M610",status:"ready",serial:"M610-A3F2"},
-  {id:"m611-001",name:"Brady M611",model:"M611",status:"ready",serial:"M611-B891"},
-  {id:"m610-002",name:"Brady M610 (Lab)",model:"M610",status:"busy",serial:"M610-C104"},
-];
+// Printers are populated by initPrintWindow() from the Swift USB scan.
+// This array is empty by default; the demo fallback shows a placeholder.
+const PRINTERS=[];
 
 let P={
   records: SAMPLE_CSV,
@@ -325,7 +323,10 @@ let P={
   activePrinter: "m610-001",
   view: "print", // "print" | "editor"
 };
-function printer(){return PRINTERS.find(p=>p.id===P.activePrinter)||PRINTERS[0];}
+function printer(){
+  const pool=window._swiftPrinters||PRINTERS;
+  return pool.find(p=>p.id===P.activePrinter)||pool[0]||{id:"",name:"No printer connected",model:"",status:"offline",serial:""};
+}
 
 function tpl(){return P.templates[P.activeTpl]||null;}
 
@@ -555,7 +556,9 @@ function buildPrintBar(){
       <div style="position:relative">
         <select class="inp" style="width:220px;padding:5px 28px 5px 32px;appearance:none;-webkit-appearance:none;cursor:pointer"
           onchange="P.activePrinter=this.value;R()">
-          ${PRINTERS.map(p=>`<option value="${p.id}" ${P.activePrinter===p.id?"selected":""}>${p.name} — ${p.serial}</option>`).join("")}
+          ${(window._swiftPrinters||PRINTERS).length===0
+            ? `<option value="">No printers connected</option>`
+            : (window._swiftPrinters||PRINTERS).map(p=>`<option value="${p.id}" ${P.activePrinter===p.id?"selected":""}>${p.name}${p.serial?" — "+p.serial:""}</option>`).join("")}
         </select>
         <div style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:${pr.status==="ready"?"#5cc896":pr.status==="busy"?"#f5c96c":"#f56c6c"};pointer-events:none"></div>
         <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:#8888a8;font-size:9px;pointer-events:none">▼</div>
@@ -1869,12 +1872,7 @@ function initPrintWindow(opts){
   R();
 }
 
-// Override printer() to use Swift-injected printers if available
-const _origPrinterFn=printer;
-function printer(){
-  const pool=window._swiftPrinters||PRINTERS;
-  return pool.find(p=>p.id===P.activePrinter)||pool[0]||PRINTERS[0];
-}
+// printer() already uses window._swiftPrinters — see definition above
 
 // Tell Swift the page is ready to receive data
 function notifyReady(){
