@@ -85,15 +85,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         wv.loadFileURL(htmlURL, allowingReadAccessTo: htmlURL.deletingLastPathComponent())
         designerWebView = wv
 
-        let win = NSWindow(
+        // Use NSPanel with .nonactivatingPanel so the window appears without
+        // stealing activation from the menu bar status item.
+        let win = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 1200, height: 820),
-            styleMask: [.titled, .closable, .resizable, .miniaturizable],
+            styleMask: [.titled, .closable, .resizable, .miniaturizable, .nonactivatingPanel],
             backing: .buffered, defer: false
         )
         win.title = "VectorLabel — Template Designer"
         win.contentView = wv
         win.center()
-        win.makeKeyAndOrderFront(nil)
+        win.orderFrontRegardless()
         designerWindow = win
 
         designerCloseObserver = NotificationCenter.default.addObserver(
@@ -140,12 +142,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             return
         }
         let controller = NSHostingController(rootView: PreferencesView())
-        let win = NSWindow(contentViewController: controller)
+        let win = NSPanel(contentViewController: controller)
         win.title = "VectorLabel Preferences"
-        win.styleMask = [.titled, .closable]
+        win.styleMask = [.titled, .closable, .nonactivatingPanel]
         win.setContentSize(NSSize(width: 600, height: 480))
         win.center()
-        win.makeKeyAndOrderFront(nil)
+        win.orderFrontRegardless()
         preferencesWindow = win
         NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,

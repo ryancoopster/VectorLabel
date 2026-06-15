@@ -74,16 +74,16 @@ final class PrintWindowController: NSObject {
         let accessURL = htmlURL.deletingLastPathComponent()
         wv.loadFileURL(htmlURL, allowingReadAccessTo: accessURL)
 
-        let win = NSWindow(
+        let win = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 1100, height: 720),
-            styleMask: [.titled, .closable, .resizable, .miniaturizable],
+            styleMask: [.titled, .closable, .resizable, .miniaturizable, .nonactivatingPanel],
             backing: .buffered, defer: false
         )
         win.title = "VectorLabel — Print"
         win.contentView = wv
         win.center()
         win.delegate = self
-        win.makeKeyAndOrderFront(nil)
+        win.orderFrontRegardless()
         self.window = win
     }
 
