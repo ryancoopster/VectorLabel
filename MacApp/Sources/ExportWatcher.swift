@@ -115,19 +115,20 @@ final class ExportWatcher {
         // Skip if we already processed this file in this session
         guard !processedPaths.contains(path) else { return }
 
-        // Verify the file is directly inside a project subfolder, not floating
-        // at the Exports root level.
-        let parent = fileURL.deletingLastPathComponent()
-        guard parent.path != exportsRootURL.path else {
-            // File is at Exports/ root — not expected, ignore it
-            return
-        }
-
         // Verify the filename matches our export pattern
         guard ExportFilenameParser.isVectorLabelExport(fileURL.lastPathComponent) else { return }
 
-        // Small delay to make sure the file is fully written before reading
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+        // Verify the file is inside a project subfolder (depth = Exports/<project>/<file>)
+        // Use standardized paths to avoid trailing-slash mismatches
+        let parent = fileURL.deletingLastPathComponent().standardized
+        let root   = exportsRootURL.standardized
+        // File must be exactly one level below root (project subfolder), not at root itself
+        guard parent != root else { return }
+
+        print("[ExportWatcher] New export detected: \(fileURL.lastPathComponent)")
+
+        // Delay to ensure file is fully written
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             self?.processFile(at: fileURL)
         }
     }

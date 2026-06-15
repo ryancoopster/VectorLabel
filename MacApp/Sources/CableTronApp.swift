@@ -34,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var designerWindow: NSWindow?
     private var designerWebView: WKWebView?
     private var preferencesWindow: NSWindow?
+    private var designerCloseObserver: NSObjectProtocol?
 
     @MainActor func applicationDidFinishLaunching(_ notification: Notification) {
         // Ensure bundle identifier is set — required for WKWebView sandbox
@@ -95,15 +96,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         NSApp.activate(ignoringOtherApps: true)
         designerWindow = win
 
-        NotificationCenter.default.addObserver(
+        designerCloseObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
             object: win, queue: .main
         ) { [weak self] _ in
-            // Nil the navigation delegate before releasing the webview
-            // to prevent EXC_BAD_ACCESS on dealloc
-            self?.designerWebView?.navigationDelegate = nil
-            self?.designerWebView = nil
-            self?.designerWindow = nil
+            guard let self = self else { return }
+            // Nil delegate before releasing to prevent EXC_BAD_ACCESS
+            self.designerWebView?.navigationDelegate = nil
+            self.designerWebView = nil
+            self.designerWindow = nil
+            // Remove this observer so it can't fire again
+            if let token = self.designerCloseObserver {
+                NotificationCenter.default.removeObserver(token)
+                self.designerCloseObserver = nil
+            }
             Task { @MainActor in TemplateStore.shared.reload() }
         }
     }
