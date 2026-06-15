@@ -110,7 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         let win = NSWindow(contentViewController: controller)
         win.title = "VectorLabel Preferences"
         win.styleMask = [.titled, .closable]
-        win.setContentSize(NSSize(width: 540, height: 400))
+        win.setContentSize(NSSize(width: 600, height: 480))
         win.center()
         win.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
