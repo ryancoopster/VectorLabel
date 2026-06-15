@@ -197,6 +197,15 @@ extension PrintWindowController: WKScriptMessageHandler {
             handlePrintAction(body["payload"])
 
         case "close":
+            // The ✕ Cancel button sends the configured job flagged cancelled so
+            // it's still saved to Recent Prints (for reprint), even though it was
+            // never printed. Skip when there's nothing printable.
+            if let payload = body["payload"] as? [String: Any],
+               payload["cancelled"] as? Bool == true,
+               let indices = payload["recordIndices"] as? [Int], !indices.isEmpty,
+               let recent = makeRecentPrint(from: payload, labelCount: indices.count) {
+                RecentPrintsStore.shared.add(recent)
+            }
             close()
 
         case "ready":
@@ -234,14 +243,6 @@ extension PrintWindowController: WKScriptMessageHandler {
             jobs.append(job)
         }
 
-        // Determine print range
-        let printRange: RecentPrint.PrintRange
-        if let rangeStr = payload["printRange"] as? String {
-            printRange = RecentPrint.PrintRange(rawValue: rangeStr) ?? .selected
-        } else {
-            printRange = .selected
-        }
-
         // Submit to printer and mirror its progress into the web view's modal.
         let job = PrinterManager.shared.submit(
             jobs: jobs,
@@ -252,19 +253,39 @@ extension PrintWindowController: WKScriptMessageHandler {
         observePrintJob(job)
 
         // Record in recent prints
-        let recent = RecentPrint(
+        if let recent = makeRecentPrint(from: payload, labelCount: jobs.count) {
+            RecentPrintsStore.shared.add(recent)
+        }
+    }
+
+    /// Builds a RecentPrint from a print/cancel payload, or nil if required
+    /// fields are missing. Shared by the print and the cancel-records paths.
+    private func makeRecentPrint(from payload: [String: Any], labelCount: Int) -> RecentPrint? {
+        guard let printerID     = payload["printerID"]     as? String,
+              let title         = payload["title"]         as? String,
+              let templateName  = payload["templateName"]  as? String,
+              let recordIndices = payload["recordIndices"] as? [Int]
+        else { return nil }
+
+        let printRange: RecentPrint.PrintRange
+        if let rangeStr = payload["printRange"] as? String {
+            printRange = RecentPrint.PrintRange(rawValue: rangeStr) ?? .selected
+        } else {
+            printRange = .selected
+        }
+
+        return RecentPrint(
             date: Date(),
             title: title,
             sourceFileName: sourceFileURL?.lastPathComponent ?? reprinting?.sourceFileName ?? "",
             templateName: templateName,
             printerName: PrinterManager.shared.printers.first { $0.id == printerID }?.name ?? printerID,
-            labelCount: jobs.count,
+            labelCount: labelCount,
             printRange: printRange,
             selectedIndices: recordIndices,
             rangeFrom: payload["rangeFrom"] as? Int,
             rangeTo: payload["rangeTo"] as? Int
         )
-        RecentPrintsStore.shared.add(recent)
     }
 
     /// Bridge a job's progress into the print window's modal. The HTML defines

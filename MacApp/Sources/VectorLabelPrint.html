@@ -331,11 +331,12 @@ function printer(){
 function tpl(){return P.templates[P.activeTpl]||null;}
 
 function cancelAndClose(){
-  // Record as cancelled in recent prints if a print was in progress
-  // (nothing to record if we never printed)
-  // Post close to Swift
+  // Always record the configured job to recent prints so it can be reprinted
+  // later, then close. Swift skips recording when nothing is printable.
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
-    window.webkit.messageHandlers.vectorlabel.postMessage({action:"close",payload:{cancelled:true}});
+    const body=buildPrintPayloadBody(printIndices());
+    body.cancelled=true;
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"close",payload:body});
   }else{
     // Browser demo: just show a toast
     showToast("Window closed — return to Vectorworks");
@@ -582,11 +583,8 @@ function printCount(){
   return 0;
 }
 
-function doPrint(){
-  const n=printCount();
-  if(n===0)return;
-
-  // Build list of record indices to print
+// Build the record indices to print, honoring the current print range.
+function printIndices(){
   let indices=[];
   if(P.printRange==="all"){
     indices=P.records.map((_,i)=>i);
@@ -595,22 +593,31 @@ function doPrint(){
   } else if(P.printRange==="range"){
     for(let i=P.rangeFrom-1;i<P.rangeTo&&i<P.records.length;i++) indices.push(i);
   }
+  return indices;
+}
 
+// The payload body describing the configured job, shared by Print and Cancel.
+function buildPrintPayloadBody(indices){
   const t=tpl();
   const pr=printer();
-  const payload={
-    action:"print",
-    payload:{
-      printerID: pr.id,
-      title: buildJobTitle(indices),
-      templateName: t?t.name:"",
-      templateID: t?t.id:"",
-      recordIndices: indices,
-      printRange: P.printRange,
-      rangeFrom: P.rangeFrom,
-      rangeTo: P.rangeTo,
-    }
+  return {
+    printerID: pr.id,
+    title: buildJobTitle(indices),
+    templateName: t?t.name:"",
+    templateID: t?t.id:"",
+    recordIndices: indices,
+    printRange: P.printRange,
+    rangeFrom: P.rangeFrom,
+    rangeTo: P.rangeTo,
   };
+}
+
+function doPrint(){
+  const n=printCount();
+  if(n===0)return;
+
+  const indices=printIndices();
+  const payload={ action:"print", payload:buildPrintPayloadBody(indices) };
 
   // If running inside the Swift app, post to native bridge
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
