@@ -75,6 +75,7 @@ final class PrintWindowController: NSObject {
 
         // Prefer live repo file during development so git pull is reflected immediately
         let htmlURL = Self.findHTMLFile("VectorLabelPrint")
+            ?? Bundle.module.url(forResource: "VectorLabelPrint", withExtension: "html")
             ?? Bundle.main.url(forResource: "VectorLabelPrint", withExtension: "html")
         guard let htmlURL = htmlURL else { return }
         // Grant access to the parent directory so WKWebView can read the file.

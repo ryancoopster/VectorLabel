@@ -81,7 +81,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             return
         }
 
-        guard let htmlURL = Bundle.main.url(forResource: "VectorLabelDesigner", withExtension: "html")
+        // SPM places bundled resources in Bundle.module (the generated resource
+        // bundle next to the executable), NOT Bundle.main. Try module first so
+        // the debug `swift build` binary works; fall back to Bundle.main for a
+        // proper .app build, then dev paths.
+        guard let htmlURL = Bundle.module.url(forResource: "VectorLabelDesigner", withExtension: "html")
+                            ?? Bundle.main.url(forResource: "VectorLabelDesigner", withExtension: "html")
                             ?? devHTMLURL("VectorLabelDesigner")
         else { return }
 
