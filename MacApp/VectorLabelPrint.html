@@ -193,11 +193,11 @@ const SAMPLE_TPL={
   name:"Standard Wire Label",
   specN:"BM-32-427",
   objs:[
-    {t:"tx",x:.02,y:.03,w:.44,h:.28,f:'=IF(Connector<>"",Connector,"")',al:"left",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100},
-    {t:"tx",x:.62,y:.03,w:.36,h:.28,f:'=IF(Rack<>"",Rack,"")',al:"right",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100},
-    {t:"tx",x:.02,y:.08,w:.96,h:.34,f:'=IF(Number<>"",Number&IF(Cable<>""," - "&Cable,""),IF(Cable<>"",Cable,""))',al:"center",valign:"middle",fs:19,bold:true,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100},
-    {t:"ln",x:0,y:.44,w:1,h:0,lw:1},
-    {t:"tx",x:.02,y:.47,w:.96,h:.24,f:'=IF(Other_Device<>"","@ "&Other_Device&IF(Other_Socket<>""," : "&Other_Socket,""),"")',al:"center",valign:"middle",fs:12,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100}
+    {id:"st1",t:"tx",x:.02,y:.03,w:.44,h:.28,f:'=IF(Connector<>"",Connector,"")',al:"left",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100},
+    {id:"st2",t:"tx",x:.62,y:.03,w:.36,h:.28,f:'=IF(Rack<>"",Rack,"")',al:"right",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100},
+    {id:"st3",t:"tx",x:.02,y:.08,w:.96,h:.34,f:'=IF(Number<>"",Number&IF(Cable<>""," - "&Cable,""),IF(Cable<>"",Cable,""))',al:"center",valign:"middle",fs:19,bold:true,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100},
+    {id:"st4",t:"ln",x:0,y:.44,w:1,h:0,lw:1},
+    {id:"st5",t:"tx",x:.02,y:.47,w:.96,h:.24,f:'=IF(Other_Device<>"","@ "&Other_Device&IF(Other_Socket<>""," : "&Other_Socket,""),"")',al:"center",valign:"middle",fs:12,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100}
   ]
 };
 
@@ -802,7 +802,11 @@ function initDesigner(opts){
   // Patch S initial values
   S.tplName = _initTpl.name || "Untitled";
   S.spec = BL.find(l=>l.n===_initTpl.specN) || BL[1];
-  S.objs = JSON.parse(JSON.stringify(_initTpl.objs || []));
+  // Deep clone and ensure every object has a valid string ID
+  S.objs = JSON.parse(JSON.stringify(_initTpl.objs || [])).map(o=>({
+    ...o,
+    id: (o.id && o.id !== 'undefined') ? String(o.id) : mid()
+  }));
   S.selId = null;
   S._ef = undefined;
   S.modal = null;
@@ -1685,7 +1689,7 @@ function initPrintWindow(opts){
       id: t.id||t.name,
       name: t.name||"Unnamed",
       specN: t.specN||"BM-32-427",
-      objs: t.objs||[]
+      objs: (t.objs||[]).map(o=>({...o, id:(o.id&&o.id!=='undefined')?String(o.id):('t'+Math.random().toString(36).slice(2,8))}))
     }));
     P.activeTpl=0;
   }
