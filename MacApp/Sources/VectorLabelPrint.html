@@ -327,6 +327,18 @@ let P={
 function printer(){return PRINTERS.find(p=>p.id===P.activePrinter)||PRINTERS[0];}
 
 function tpl(){return P.templates[P.activeTpl]||null;}
+
+function cancelAndClose(){
+  // Record as cancelled in recent prints if a print was in progress
+  // (nothing to record if we never printed)
+  // Post close to Swift
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"close",payload:{cancelled:true}});
+  }else{
+    // Browser demo: just show a toast
+    showToast("Window closed — return to Vectorworks");
+  }
+}
 function selCount(){return P.selected.size;}
 
 // Records come in Source/Destination pairs. pairIdx(i) returns the partner index.
@@ -747,6 +759,7 @@ function R(){
       <span style="color:#8888a8;font-size:11px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${P.sourceFile}">${P.sourceFile}</span>
       <div style="flex:1"></div>
       <button class="btn" onclick="loadCSV()" style="font-size:11px">Load CSV…</button>
+      <button class="btn" onclick="cancelAndClose()" style="color:#f56c6c;border-color:rgba(245,108,108,0.3);font-size:11px">✕ Cancel</button>
     </div>
 
     <!-- Template bar -->
@@ -1227,15 +1240,7 @@ function renderDesigner(){
       <div style="display:flex;align-items:center;gap:6px;margin-left:4px">
         <span style="color:#8888a8;font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${S.tplName}">${S.tplName}</span>
       </div>
-      ${window._editorOnSave?`
-        <button class="btn" onclick="if(window._editorOnDiscard)window._editorOnDiscard()" style="padding:4px 12px">← Discard</button>
-        <button class="btn" onclick="showModal('save')" style="padding:4px 10px">Save as…</button>
-        <button class="btn" onclick="if(window._editorOnSave)window._editorOnSave({name:S.tplName,specN:S.spec.n,objs:JSON.parse(JSON.stringify(S.objs))})" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600;padding:5px 16px">Save & Return</button>
-      `:`
-        <button class="btn" onclick="showModal('new')" style="padding:4px 10px">New</button>
-        <button class="btn" onclick="openTemplate()" style="padding:4px 10px">Open…</button>
-        <button class="btn" onclick="showModal('save')" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600;padding:5px 14px">Save…</button>
-      `}
+      <span id="ed-toolbar-btns"></span>
     </div>
 
     <!-- Second toolbar: snap/grid controls -->
@@ -1295,11 +1300,55 @@ function renderDesigner(){
   const fx=document.getElementById("fxbar");
   if(fx&&S._ef!==undefined)fx.value=S._ef;
 
+  // Render toolbar buttons now that DOM exists and window._editorOnSave is set
+  const tb=document.getElementById("ed-toolbar-btns");
+  if(tb){
+    if(window._editorOnSave){
+      tb.innerHTML=`
+        <button class="btn" onclick="edCancelAndReturn()" style="padding:4px 12px;color:#f56c6c;border-color:rgba(245,108,108,0.3)">✕ Cancel</button>
+        <button class="btn" onclick="edDiscardAndReturn()" style="padding:4px 12px">Discard & Return</button>
+        <button class="btn" onclick="edSaveAsAndReturn()" style="padding:4px 10px">Save as & Return</button>
+        <button class="btn" onclick="edSaveAndReturn()" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600;padding:5px 16px">Save & Return</button>
+      `;
+    }else{
+      tb.innerHTML=`
+        <button class="btn" onclick="showModal('new')" style="padding:4px 10px">New</button>
+        <button class="btn" onclick="openTemplate()" style="padding:4px 10px">Open…</button>
+        <button class="btn" onclick="showModal('save')" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600;padding:5px 14px">Save…</button>
+      `;
+    }
+  }
+
   // Apply column CSS variables for the editor record table
   applyEdColVars();
 
   // Render modal if active
   renderModal();
+}
+
+// ── Editor action helpers ─────────────────────────────────────────────────────
+function edSaveAndReturn(){
+  if(!window._editorOnSave)return;
+  window._editorOnSave({name:S.tplName,specN:S.spec.n,objs:JSON.parse(JSON.stringify(S.objs))});
+}
+
+function edSaveAsAndReturn(){
+  // Save to file first, then call onSave with the current state
+  S._afterSave=edSaveAndReturn;
+  showModal('save');
+}
+
+function edDiscardAndReturn(){
+  if(window._editorOnDiscard)window._editorOnDiscard();
+}
+
+function edCancelAndReturn(){
+  // Cancel: discard changes AND notify Swift/print to close
+  if(window._editorOnDiscard)window._editorOnDiscard();
+  // Post cancel to Swift if in native app
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"close",payload:null});
+  }
 }
 
 function renderModal(){
@@ -1598,7 +1647,8 @@ async function saveTemplate(){
       await writable.close();
       S.modal=null;
       showToast("Saved: "+S.tplName);
-      R();
+      const cb=S._afterSave;S._afterSave=null;
+      if(cb)cb();else R();
       return;
     }catch(e){
       if(e.name==="AbortError"){S.modal=null;renderModal();return;}
@@ -1613,7 +1663,8 @@ async function saveTemplate(){
   URL.revokeObjectURL(url);
   S.modal=null;
   showToast("Downloaded: "+filename+" — move to ~/Documents/VectorLabel/Templates/");
-  R();
+  const cb2=S._afterSave;S._afterSave=null;
+  if(cb2)cb2();else R();
 }
 
 function newTemplate(){
