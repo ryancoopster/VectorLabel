@@ -13,10 +13,10 @@ let package = Package(
         // Prerequisites (run in Terminal before opening in Xcode):
         //   brew install libusb pkg-config
         //
-        // The module.modulemap path depends on your Mac architecture:
+        // module.modulemap header path by architecture:
         //   Apple Silicon: /opt/homebrew/include/libusb-1.0/libusb.h  ← default
         //   Intel Mac:     /usr/local/include/libusb-1.0/libusb.h
-        // Edit MacApp/Sources/CLibUSB/module.modulemap if you're on Intel.
+        // Edit MacApp/Sources/CLibUSB/module.modulemap if on Intel.
         .systemLibrary(
             name: "CLibUSB",
             path: "MacApp/Sources/CLibUSB",
@@ -28,12 +28,15 @@ let package = Package(
             dependencies: ["CLibUSB"],
             path: "MacApp/Sources",
             exclude: [
-                "CLibUSB",   // system library lives in its own subfolder
+                "CLibUSB",  // system library in its own subfolder
             ],
             resources: [
                 .copy("VectorLabelPrint.html"),
                 .copy("VectorLabelDesigner.html"),
             ],
+            // Info.plist is at the repo root.
+            // In Xcode: Target → Build Settings → INFOPLIST_FILE = Info.plist
+            // For swift build: set MACOSX_BUNDLE_INFO_PLIST environment variable.
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("WebKit"),
