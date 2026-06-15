@@ -441,7 +441,7 @@ function buildRecordTable(){
 
 // ── Render ────────────────────────────────────────────────────────────────────
 function R(){
-  const rec=RX[S.recIdx];
+  const rec=(window._editorRecords||RX)[S.recIdx];
   const selObj=S.selId?gobj(S.selId):null;
 
   const fbar=selObj&&selObj.t==="tx"?`
