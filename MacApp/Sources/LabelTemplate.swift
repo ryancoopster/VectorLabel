@@ -155,7 +155,7 @@ enum LabelRenderer {
             attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue
         }
         if let tracking = obj.tracking, tracking != 0 {
-            attrs[.kern] = CGFloat(tracking) * CGFloat(pw) / CGFloat(sc)
+            attrs[.kern] = CGFloat(tracking) * (300.0 / 185.0)  // scale from designer px to print px
         }
 
         let attrStr = NSAttributedString(string: text, attributes: attrs)
