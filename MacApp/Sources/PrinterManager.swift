@@ -30,6 +30,7 @@ final class PrintJob: ObservableObject, Identifiable {
 
     @Published var completedLabels: Int = 0
     @Published var isComplete: Bool = false
+    @Published var isPrinting: Bool = false   // false while queued, true once printing
 
     // Read from the background print task and written from the main thread, so it
     // needs its own synchronization rather than relying on @Published/main-actor.
@@ -146,9 +147,28 @@ final class PrinterManager: ObservableObject {
         setPrinterBusy(printerID, busy: true)
 
         Task.detached {
-            // Serialize all USB access (printing vs. SmartCell polling) — the
-            // device allows only one owner at a time.
-            BradyUSB.deviceLock.wait()
+            // Per-printer lock: jobs to the SAME printer queue and run one at a
+            // time, but different printers print concurrently.
+            let lock = BradyUSB.deviceLock(for: printerID)
+
+            func finish() async {
+                await MainActor.run {
+                    job.isComplete = true
+                    // Keep this printer busy if it still has queued/printing jobs.
+                    let stillBusy = self.activeJobs.contains {
+                        $0.printerID == printerID && !$0.isComplete && $0.id != job.id
+                    }
+                    self.setPrinterBusy(printerID, busy: stillBusy)
+                    self.activeJobs.removeAll { $0.isComplete }
+                }
+            }
+
+            // Cancelled while still queued — finish without touching the device.
+            if job.isCancelled { await finish(); return }
+            lock.wait()
+            if job.isCancelled { lock.signal(); await finish(); return }
+            await MainActor.run { job.isPrinting = true }
+
             do {
                 let handle = try BradyUSB.openPrinterByID(printerID)
                 defer { BradyUSB.close(handle) }
@@ -164,16 +184,26 @@ final class PrinterManager: ObservableObject {
             } catch {
                 print("[PrinterManager] Print failed: \(error)")
             }
-            BradyUSB.deviceLock.signal()
-            await MainActor.run {
-                job.isComplete = true
-                self.setPrinterBusy(printerID, busy: false)
-                // Clean up completed jobs older than 60s on next scan
-                self.activeJobs.removeAll { $0.isComplete }
-            }
+            lock.signal()
+            await finish()
         }
 
         return job
+    }
+
+    /// Cancel a specific job.
+    func cancel(_ job: PrintJob) { job.requestCancel() }
+
+    /// Cancel every queued/printing job for a printer.
+    func cancelAll(for printerID: String) {
+        for job in activeJobs where job.printerID == printerID && !job.isComplete {
+            job.requestCancel()
+        }
+    }
+
+    /// Jobs currently queued or printing on a printer, in submit order.
+    func jobs(for printerID: String) -> [PrintJob] {
+        activeJobs.filter { $0.printerID == printerID && !$0.isComplete }
     }
 
     private func setPrinterBusy(_ id: String, busy: Bool) {
@@ -203,7 +233,8 @@ final class PrinterManager: ObservableObject {
            Date().timeIntervalSince(at) < cassetteTTL { return }
 
         Task.detached {
-            BradyUSB.deviceLock.wait()
+            let lock = BradyUSB.deviceLock(for: printerID)
+            lock.wait()
             var info: BradyUSB.SmartCellInfo?
             do {
                 let handle = try BradyUSB.openPrinterByID(printerID)
@@ -212,7 +243,7 @@ final class PrinterManager: ObservableObject {
             } catch {
                 // LIBUSB_ERROR_ACCESS or not found — keep any cached value.
             }
-            BradyUSB.deviceLock.signal()
+            lock.signal()
 
             if let info {
                 await MainActor.run {

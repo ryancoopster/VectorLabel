@@ -43,6 +43,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             UserDefaults.standard.set("com.sai.vectorlabel", forKey: "CFBundleIdentifier")
         }
         printWindowController = PrintWindowController()
+        // After a print starts, the print window closes itself and asks us to
+        // pop open the menu so the user can watch printer/queue status.
+        printWindowController.onPrintStarted = { [weak self] in self?.showMenuPopover() }
 
         // Set up the NSStatusItem — reliable for LSUIElement apps, no activation issues
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -146,12 +149,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var menuPopover: NSPopover?
 
     @objc func toggleMenuBarPopover() {
-        guard let button = statusItem?.button else { return }
         if let popover = menuPopover, popover.isShown {
             popover.performClose(nil)
             menuPopover = nil
             return
         }
+        showMenuPopover()
+    }
+
+    /// Open the status-item popover (the "toolbar menu"). No-op if already shown.
+    func showMenuPopover() {
+        guard let button = statusItem?.button else { return }
+        if let popover = menuPopover, popover.isShown { return }
         let popover = NSPopover()
         let hosting = NSHostingController(
             rootView: MenuBarView().environmentObject(self)

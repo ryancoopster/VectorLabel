@@ -14,16 +14,10 @@ struct MenuBarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Printers
+            // Printers (with each printer's print queue inline)
             printersSection
 
             vlDivider
-
-            // Active jobs
-            if !printerManager.activeJobs.filter({ !$0.isComplete }).isEmpty {
-                activeJobsSection
-                vlDivider
-            }
 
             // Recent prints
             recentPrintsSection
@@ -78,20 +72,10 @@ struct MenuBarView: View {
                 emptyState("No printers connected")
             } else {
                 ForEach(printerManager.printers) { printer in
-                    PrinterRow(printer: printer, cassette: printerManager.cassettes[printer.id])
+                    PrinterRow(printer: printer,
+                               cassette: printerManager.cassettes[printer.id],
+                               jobs: printerManager.jobs(for: printer.id))
                 }
-            }
-        }
-    }
-
-    // MARK: – Active jobs
-
-    private var activeJobsSection: some View {
-        Group {
-            sectionHeader("Active Jobs")
-
-            ForEach(printerManager.activeJobs.filter { !$0.isComplete }) { job in
-                ActiveJobRow(job: job)
             }
         }
     }
@@ -199,6 +183,7 @@ struct MenuActionRow: View {
 struct PrinterRow: View {
     let printer: PrinterDevice
     var cassette: BradyUSB.SmartCellInfo? = nil
+    var jobs: [PrintJob] = []
 
     var statusColor: Color {
         switch printer.status {
@@ -209,99 +194,98 @@ struct PrinterRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(statusColor)
-                .frame(width: 7, height: 7)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(printer.name)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.vlLabel)
-                Text("\(printer.serial) · \(printer.status.displayName)")
-                    .font(.system(size: 10))
-                    .foregroundColor(.vlSecondary)
-                if let c = cassette, !c.partNumber.isEmpty {
-                    Text("\(c.partNumber) · \(c.supplyRemainingPct)% supply")
-                        .font(.system(size: 10))
-                        .foregroundColor(.vlAccent)
-                }
-            }
-
-            Spacer()
-
-            Text(printer.status.displayName)
-                .font(.system(size: 11))
-                .foregroundColor(statusColor)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 5)
-    }
-}
-
-struct ActiveJobRow: View {
-    @ObservedObject var job: PrintJob
-    @State private var showCancelConfirm = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                Image(systemName: "printer.fill")
-                    .foregroundColor(.vlAccent)
-                    .frame(width: 20, height: 20)
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 7, height: 7)
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(job.title)
+                    Text(printer.name)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.vlLabel)
-                        .lineLimit(1)
-                    Text("\(job.templateName) · \(job.labelCount) labels")
+                    Text("\(printer.serial) · \(printer.status.displayName)")
                         .font(.system(size: 10))
                         .foregroundColor(.vlSecondary)
+                    if let c = cassette, !c.partNumber.isEmpty {
+                        Text("\(c.partNumber) · \(c.supplyRemainingPct)% supply")
+                            .font(.system(size: 10))
+                            .foregroundColor(.vlAccent)
+                    }
                 }
 
                 Spacer()
 
-                if showCancelConfirm {
-                    Button("Yes, cancel") {
-                        job.requestCancel()
-                        showCancelConfirm = false
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundColor(.vlRed)
-                    .font(.system(size: 10, weight: .medium))
+                Text(printer.status.displayName)
+                    .font(.system(size: 11))
+                    .foregroundColor(statusColor)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 5)
 
-                    Button("Keep") { showCancelConfirm = false }
-                        .buttonStyle(.plain)
-                        .foregroundColor(.vlSecondary)
-                        .font(.system(size: 10))
-                } else {
-                    Button("Cancel") { showCancelConfirm = true }
-                        .buttonStyle(.plain)
-                        .foregroundColor(.vlRed)
-                        .font(.system(size: 10))
+            // Print queue for this printer
+            if !jobs.isEmpty {
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack {
+                        Text("Queue · \(jobs.count)")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(.vlDim)
+                        Spacer()
+                        Button("Cancel all") { PrinterManager.shared.cancelAll(for: printer.id) }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundColor(.vlRed)
+                    }
+                    ForEach(jobs) { job in JobRow(job: job) }
                 }
+                .padding(.horizontal, 14)
+                .padding(.bottom, 6)
+            }
+        }
+    }
+}
+
+/// One queued/printing job under a printer: title, progress bar, %, cancel.
+struct JobRow: View {
+    @ObservedObject var job: PrintJob
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Image(systemName: job.isPrinting ? "printer.fill" : "clock")
+                    .font(.system(size: 9))
+                    .foregroundColor(job.isPrinting ? .vlAccent : .vlSecondary)
+                Text(job.title)
+                    .font(.system(size: 11))
+                    .foregroundColor(.vlLabel)
+                    .lineLimit(1)
+                Spacer(minLength: 4)
+                Text("\(Int(job.progress * 100))%")
+                    .font(.system(size: 10))
+                    .foregroundColor(.vlSecondary)
+                    .monospacedDigit()
+                Button { job.requestCancel() } label: {
+                    Image(systemName: "xmark.circle.fill").font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.vlRed)
             }
 
-            // Progress bar
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 2).fill(Color.vlSurface2).frame(height: 3)
                     RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.vlSurface2)
-                        .frame(height: 3)
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.vlAccent)
+                        .fill(job.isPrinting ? Color.vlAccent : Color.vlDim)
                         .frame(width: geo.size.width * CGFloat(job.progress), height: 3)
                 }
             }
             .frame(height: 3)
 
-            Text("\(job.completedLabels) of \(job.labelCount)")
-                .font(.system(size: 10))
+            Text(job.isPrinting ? "\(job.completedLabels) of \(job.labelCount)"
+                                : "Queued · \(job.labelCount) label\(job.labelCount == 1 ? "" : "s")")
+                .font(.system(size: 9))
                 .foregroundColor(.vlSecondary)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
     }
 }
 

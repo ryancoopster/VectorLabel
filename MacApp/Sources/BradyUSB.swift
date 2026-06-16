@@ -35,13 +35,21 @@ enum BradyUSB {
     static let chunkSize           = 512
     static let chunkTimeoutMs: UInt32 = 10_000
 
-    /// The M610 allows only one owner of the USB interface at a time
-    /// (`LIBUSB_ERROR_ACCESS` otherwise). Every code path that opens/claims the
-    /// device — printing and SmartCell polling — must serialize behind this
-    /// semaphore. A semaphore (not NSLock) because the print task `await`s while
-    /// holding it and may resume on a different thread; NSLock must be released by
-    /// the locking thread, a semaphore can be signalled from any thread.
-    static let deviceLock = DispatchSemaphore(value: 1)
+    /// Per-printer mutex. The M610 allows only one owner of a given device at a
+    /// time (`LIBUSB_ERROR_ACCESS` otherwise), but *different* printers are
+    /// independent — so locking per device id lets multiple printers print
+    /// simultaneously while serializing jobs (and SmartCell polling) to the same
+    /// printer. A semaphore (not NSLock) because the print task `await`s while
+    /// holding it and may resume on a different thread.
+    private static let locksLock = NSLock()
+    private static var deviceLocks: [String: DispatchSemaphore] = [:]
+    static func deviceLock(for id: String) -> DispatchSemaphore {
+        locksLock.lock(); defer { locksLock.unlock() }
+        if let s = deviceLocks[id] { return s }
+        let s = DispatchSemaphore(value: 1)
+        deviceLocks[id] = s
+        return s
+    }
 
     enum USBError: Error, LocalizedError {
         case initFailed

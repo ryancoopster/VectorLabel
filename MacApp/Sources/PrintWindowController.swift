@@ -39,9 +39,23 @@ final class PrintWindowController: NSObject {
     // clicked; while nil, a ✕ Cancel records a "cancelled before printing" entry.
     private var currentRecentPrintID: UUID?
 
+    // Long-lived observers that update a Recent Print's status when its job
+    // finishes. Kept here (not in jobObservers) so they survive the window
+    // closing immediately after the print starts.
+    private var printStatusObservers: Set<AnyCancellable> = []
+
+    // The app that was frontmost before the print window appeared, so we can
+    // return the user to it after the print starts.
+    private var previousApp: NSRunningApplication?
+
+    /// Called after a print is submitted: the window has closed and the caller
+    /// should open the menu-bar popover so the user can watch printer status.
+    var onPrintStarted: (() -> Void)?
+
     // MARK: – Show / hide
 
     func showForNewExport(fileURL: URL, records: [WireRecord]) {
+        capturePreviousApp()
         self.records = records
         self.sourceFileURL = fileURL
         self.reprinting = nil
@@ -50,7 +64,18 @@ final class PrintWindowController: NSObject {
         sendInitialState()
     }
 
+    /// Remember the frontmost app (unless it's us) so we can return to it once
+    /// the user starts a print.
+    private func capturePreviousApp() {
+        if window != nil { return }  // already open; keep the original previousApp
+        let front = NSWorkspace.shared.frontmostApplication
+        if front?.processIdentifier != NSRunningApplication.current.processIdentifier {
+            previousApp = front
+        }
+    }
+
     func showForReprint(_ recent: RecentPrint) {
+        capturePreviousApp()
         self.reprinting = recent
         self.currentRecentPrintID = nil
         // Clear any stale export URL so the recorded source filename comes from
@@ -340,21 +365,33 @@ extension PrintWindowController: WKScriptMessageHandler {
             jobs.append(job)
         }
 
-        // Submit to printer and mirror its progress into the web view's modal.
+        // Nothing printable — keep the window open.
+        guard !jobs.isEmpty else { return }
+
+        // Submit (queues on the chosen printer; prints concurrently with others).
         let job = PrinterManager.shared.submit(
             jobs: jobs,
             title: title,
             templateName: templateName,
             printerID: printerID
         )
-        observePrintJob(job)
 
-        // Record in recent prints as in-progress; status is updated on completion
-        // or mid-print cancellation by observePrintJob.
+        // Record in Recent Prints as in-progress; a long-lived observer updates
+        // the status when the job finishes (survives the window closing below).
         if let recent = makeRecentPrint(from: payload, labelCount: jobs.count, status: .printing) {
             currentRecentPrintID = recent.id
             RecentPrintsStore.shared.add(recent)
+            trackPrintStatus(job: job, recentID: recent.id)
         }
+
+        // The print has started: close the window, return the user to the app
+        // they were in, and pop open the menu so they can watch the queue.
+        let started = onPrintStarted
+        let prior = previousApp
+        previousApp = nil
+        close()
+        prior?.activate()
+        started?()
     }
 
     /// Builds a RecentPrint from a print/cancel payload, or nil if required
@@ -389,37 +426,22 @@ extension PrintWindowController: WKScriptMessageHandler {
         )
     }
 
-    /// Bridge a job's progress into the print window's modal. The HTML defines
-    /// `updatePrintProgress(done,total)` and `completePrint()`; without these
-    /// calls the modal would sit at 0% forever even though printing succeeds.
-    private func observePrintJob(_ job: PrintJob) {
-        jobObservers.removeAll()
-        let total = job.labelCount
-
-        job.$completedLabels
-            .sink { [weak self] done in
-                Task { @MainActor in
-                    self?.evalJS("if(typeof updatePrintProgress==='function')updatePrintProgress(\(done),\(total));")
-                }
+    /// Update a Recent Print's status when its job finishes. The observer lives
+    /// in `printStatusObservers` so it outlives the print window (which closes
+    /// immediately after the print starts).
+    private func trackPrintStatus(job: PrintJob, recentID: UUID) {
+        var cancellable: AnyCancellable?
+        cancellable = job.$isComplete.sink { [weak self] complete in
+            guard complete else { return }
+            Task { @MainActor in
+                RecentPrintsStore.shared.updateStatus(
+                    id: recentID,
+                    to: job.isCancelled ? .cancelledMidPrint : .complete
+                )
+                if let c = cancellable { self?.printStatusObservers.remove(c) }
             }
-            .store(in: &jobObservers)
-
-        job.$isComplete
-            .sink { [weak self, weak job] complete in
-                guard complete else { return }
-                Task { @MainActor in
-                    guard let self = self else { return }
-                    self.evalJS("if(typeof completePrint==='function')completePrint();")
-                    if let id = self.currentRecentPrintID {
-                        RecentPrintsStore.shared.updateStatus(
-                            id: id,
-                            to: (job?.isCancelled ?? false) ? .cancelledMidPrint : .complete
-                        )
-                    }
-                    self.jobObservers.removeAll()
-                }
-            }
-            .store(in: &jobObservers)
+        }
+        if let c = cancellable { printStatusObservers.insert(c) }
     }
 
     private func evalJS(_ js: String) {
