@@ -1032,39 +1032,29 @@ function R(){
 
 
 // ── Editor open/close ────────────────────────────────────────────────────────
+// Editing is handled by the single Template Designer window (opened by Swift).
+// We keep the print window open so the print task is preserved; the designer
+// returns here via refreshTemplates() after Save/Cancel.
 function openEditor(){
-  const tplCopy=JSON.parse(JSON.stringify(P.templates[P.activeTpl]));
-  P.view="editor";
-  initDesigner({
-    template: tplCopy,
-    records: P.records,
-    onSaveReturn: function(updatedTpl){
-      cleanupEditorDOM();
-      // Preserve the original template's id so saving overwrites it in place.
-      const origId=P.templates[P.activeTpl]&&P.templates[P.activeTpl].id;
-      if(origId)updatedTpl.id=origId;
-      P.templates[P.activeTpl]=updatedTpl;
-      // Persist to ~/Documents/VectorLabel/Templates/ via the native bridge
-      // (WKWebView has no File System Access API, so the browser save path
-      // silently fails — the Swift side writes the .vlt.json file).
-      if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
-        window.webkit.messageHandlers.vectorlabel.postMessage({action:"saveTemplate",payload:updatedTpl});
-      }
-      window._editorOnSave=null;
-      window._editorOnDiscard=null;
-      P.view="print";
-      if(window._printR){window.R=window._printR;window._printR=null;}
-      R();
-    },
-    onDiscard: function(){
-      cleanupEditorDOM();
-      window._editorOnSave=null;
-      window._editorOnDiscard=null;
-      P.view="print";
-      if(window._printR){window.R=window._printR;window._printR=null;}
-      R();
-    }
-  });
+  const t=P.templates[P.activeTpl];
+  if(!t)return;
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"editTemplate",payload:{id:t.id,name:t.name}});
+  }
+}
+
+// Called by Swift after the user saves/cancels in the designer: refresh the
+// template list without disturbing the current selection or print task.
+function refreshTemplates(templates){
+  if(!Array.isArray(templates))return;
+  const prevName=P.templates[P.activeTpl]&&P.templates[P.activeTpl].name;
+  P.templates=templates.map(t=>({
+    id:t.id||t.name, name:t.name||"Unnamed", specN:t.specN||"BM-32-427",
+    objs:(t.objs||[]).map(o=>({...o, id:(o.id&&o.id!=='undefined')?String(o.id):('t'+Math.random().toString(36).slice(2,8))}))
+  }));
+  const idx=P.templates.findIndex(t=>t.name===prevName);
+  P.activeTpl=idx>=0?idx:Math.max(0,Math.min(P.activeTpl,P.templates.length-1));
+  R();
 }
 
 function cleanupEditorDOM(){

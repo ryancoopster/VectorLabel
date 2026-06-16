@@ -715,15 +715,24 @@ function R(){
   const fx=document.getElementById("fxbar");
   if(fx&&S._ef!==undefined)fx.value=S._ef;
 
-  // Standalone designer: always show New/Open/Save
+  // Toolbar: standalone shows New/Open/Save; when editing a template for the
+  // print window, show Cancel/Save As/Save & Return buttons instead.
   const tb=document.getElementById("ed-toolbar-btns");
   if(tb){
-    tb.innerHTML=`
-      <button class="btn" onclick="showModal('new')" style="padding:4px 10px">New</button>
-      <button class="btn" onclick="openTemplate()" style="padding:4px 10px">Open…</button>
-      <button class="btn" onclick="showModal('save')" style="padding:4px 10px">Save as…</button>
-      <button class="btn" onclick="showModal('save')" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600;padding:5px 14px">Save…</button>
-    `;
+    if(window._printEdit){
+      tb.innerHTML=`
+        <button class="btn" onclick="edPrintCancel()" style="padding:4px 10px;color:#f56c6c;border-color:rgba(245,108,108,0.3)">✕ Cancel & Return</button>
+        <button class="btn" onclick="edPrintSaveAs()" style="padding:4px 10px">Save As & Return</button>
+        <button class="btn" onclick="edPrintSave()" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600;padding:5px 14px">Save & Return</button>
+      `;
+    }else{
+      tb.innerHTML=`
+        <button class="btn" onclick="showModal('new')" style="padding:4px 10px">New</button>
+        <button class="btn" onclick="openTemplate()" style="padding:4px 10px">Open…</button>
+        <button class="btn" onclick="showModal('save')" style="padding:4px 10px">Save as…</button>
+        <button class="btn" onclick="showModal('save')" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600;padding:5px 14px">Save…</button>
+      `;
+    }
   }
 
   // Apply column CSS variables for the editor record table
@@ -1004,6 +1013,38 @@ function templateData(){
   };
 }
 
+// ── Print-window edit mode ─────────────────────────────────────────────────────
+// When the print window's "Edit" opens this designer, Swift calls initPrintEdit
+// to load the template and show Save/Save As/Cancel & Return buttons.
+function _vlPost(action,payload){
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
+    window.webkit.messageHandlers.vectorlabel.postMessage({action,payload:payload===undefined?null:payload});
+}
+function initPrintEdit(template){
+  window._printEdit=true;
+  if(template){
+    S.tplName=template.name||"Untitled Template";
+    S._loadedId=template.id||null;
+    S.spec=BL.find(l=>l.n===template.specN)||BL[1];
+    S.objs=JSON.parse(JSON.stringify(template.objs||[])).map(o=>({...o,id:(o.id&&o.id!=='undefined')?String(o.id):mid()}));
+    S.selId=null;S._ef=undefined;S.modal=null;
+  }
+  R();
+}
+function edPrintCancel(){ _vlPost("editReturn",null); }
+function edPrintSave(){
+  const data=templateData();
+  const payload={name:S.tplName,specN:data.specN,objs:data.objs};
+  if(S._loadedId)payload.id=S._loadedId;
+  _vlPost("saveTemplate",payload);
+  _vlPost("editReturn",{name:S.tplName});
+}
+function edPrintSaveAs(){
+  S._loadedId=null;               // save as a new template (fresh id/file)
+  window._printReturnAfterSave=true;
+  showModal('save');
+}
+
 async function saveTemplate(){
   const nameEl=document.getElementById("tpl-name-inp");
   if(nameEl)S.tplName=nameEl.value.trim()||"Untitled Template";
@@ -1019,6 +1060,8 @@ async function saveTemplate(){
     window.webkit.messageHandlers.vectorlabel.postMessage({action:"saveTemplate",payload});
     S.modal=null;
     showToast("Saved: "+S.tplName);
+    // When editing for the print window via the Save As modal, return afterward.
+    if(window._printReturnAfterSave){ window._printReturnAfterSave=false; _vlPost("editReturn",{name:S.tplName}); return; }
     R();
     return;
   }

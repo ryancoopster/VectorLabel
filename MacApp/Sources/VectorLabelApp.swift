@@ -48,6 +48,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // After a print starts, the print window closes itself and asks us to
         // pop open the menu so the user can watch printer/queue status.
         printWindowController.onPrintStarted = { [weak self] in self?.showMenuPopover() }
+        // Editing from the print window opens the single Template Designer.
+        printWindowController.onEditTemplate = { [weak self] id in
+            self?.openTemplateDesigner(editTemplateID: id)
+        }
 
         // Keep the designer's column config in sync with the shared setting.
         AppSettings.shared.$recordColumnOrder.dropFirst().receive(on: RunLoop.main)
@@ -88,10 +92,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     // MARK: – Actions called by MenuBarView
 
-    func openTemplateDesigner() {
+    // Template id to load for print-window editing on the next designer load.
+    private var pendingEditTemplateID: String?
+
+    func openTemplateDesigner(editTemplateID: String? = nil) {
+        pendingEditTemplateID = editTemplateID
         if let win = designerWindow {
             NSApp.activate(ignoringOtherApps: true)
             win.makeKeyAndOrderFront(nil)
+            win.makeFirstResponder(designerWebView)
+            if let id = editTemplateID { applyPendingEdit(id) }
             return
         }
 
@@ -289,6 +299,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         )
     }
 
+    /// Load a specific template into the designer for print-window editing.
+    private func applyPendingEdit(_ id: String) {
+        pendingEditTemplateID = nil
+        guard let wv = designerWebView,
+              let tpl = TemplateStore.shared.templates.first(where: { $0.id == id }),
+              let data = try? JSONEncoder().encode(tpl),
+              let json = String(data: data, encoding: .utf8)
+        else { return }
+        wv.evaluateJavaScript("if(typeof initPrintEdit==='function')initPrintEdit(\(json));",
+                              completionHandler: nil)
+    }
+
     /// Push the shared record-column config (order/hidden/widths) into the designer.
     private func injectColumnConfig() {
         guard let wv = designerWebView else { return }
@@ -408,8 +430,13 @@ extension AppDelegate: WKNavigationDelegate {
         // Inject the templates-folder list so the designer's Open dialog can list them.
         injectDesignerTemplates()
         injectColumnConfig()
-        // Open the template picker on launch instead of landing on a default template.
-        webView.evaluateJavaScript("if(typeof openTemplate==='function')openTemplate();", completionHandler: nil)
+        if let id = pendingEditTemplateID {
+            // Editing for the print window: load that template, skip the picker.
+            applyPendingEdit(id)
+        } else {
+            // Open the template picker on launch instead of a default template.
+            webView.evaluateJavaScript("if(typeof openTemplate==='function')openTemplate();", completionHandler: nil)
+        }
     }
 }
 
@@ -470,6 +497,11 @@ extension AppDelegate: WKScriptMessageHandler {
 
         case "setColumnConfig":
             AppSettings.shared.applyColumnConfigPayload(body["payload"])
+
+        case "editReturn":
+            // Done editing for the print window: close the designer and return.
+            designerWindow?.close()
+            printWindowController.returnFromEdit()
 
         default:
             break

@@ -56,6 +56,10 @@ final class PrintWindowController: NSObject {
     /// should open the menu-bar popover so the user can watch printer status.
     var onPrintStarted: (() -> Void)?
 
+    /// Called when the user taps Edit on a template — the caller opens the
+    /// Template Designer for that template id (the print window stays open).
+    var onEditTemplate: ((String) -> Void)?
+
     // MARK: – Show / hide
 
     func showForNewExport(fileURL: URL, records: [WireRecord]) {
@@ -172,6 +176,17 @@ final class PrintWindowController: NSObject {
         NSApp.activate(ignoringOtherApps: true)
         win.makeKeyAndOrderFront(nil)
         self.window = win
+    }
+
+    /// Called when the designer finishes editing for the print window: refocus
+    /// the print window and refresh its template list (selection/task preserved).
+    func returnFromEdit() {
+        guard window != nil else { return }
+        NSApp.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
+        guard let data = try? JSONEncoder().encode(TemplateStore.shared.templates),
+              let json = String(data: data, encoding: .utf8) else { return }
+        evalJS("if(typeof refreshTemplates==='function')refreshTemplates(\(json));")
     }
 
     // MARK: – Template persistence
@@ -327,6 +342,11 @@ extension PrintWindowController: WKScriptMessageHandler {
 
         case "setColumnConfig":
             AppSettings.shared.applyColumnConfigPayload(body["payload"])
+
+        case "editTemplate":
+            if let id = (body["payload"] as? [String: Any])?["id"] as? String {
+                onEditTemplate?(id)
+            }
 
         case "setDefaultTemplate":
             // payload {id, name} to set, or null to clear. Persists in AppSettings.
