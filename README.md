@@ -52,22 +52,24 @@ If you're on Intel, change it to:
 
 ## Vectorworks plugin
 
-`VectorworksPlugin/export_circuits.py` backs **two** menu commands. Install each
-as its own command plug-in:
+There are **two** menu commands, one per script. Each is its own command
+plug-in (Vectorworks shows one menu command per registered plug-in):
 
-1. Vectorworks → Tools → Plug-ins → Plug-in Manager → New Command
-2. Language: Python, paste the contents of `export_circuits.py`
-3. At the bottom of the script, leave exactly one entry-point call active:
-   - **Export Selected Circuits to VectorLabel** → `export_selected_circuits()`
-   - **Export All Circuits to VectorLabel** → `export_all_circuits()`
-4. Add both commands to your workspace toolbar/menu.
+1. Vectorworks → Tools → Plug-ins → Plug-in Manager → **New Command**
+2. Name it **Export Selected Circuits to VectorLabel**, Language: Python,
+   paste the entire contents of `export_selected.py`.
+3. **New Command** again, name it **Export All Circuits to VectorLabel**,
+   paste the entire contents of `export_all.py`.
+4. Tools → Workspaces → Edit Current Workspace → drag both commands into your
+   menu, then save the workspace.
 
 - *Selected* exports the current selection.
 - *All* exports every ConnectCAD circuit on the **active design layer**.
 
-The CSV lands in `~/Documents/VectorLabel/Exports/<VWFileName>/` and VectorLabel
-opens the print window automatically. The export runs silently (no confirmation
-dialog); only error conditions alert.
+Each script is self-contained (no shared import needed) — just paste the whole
+file. The CSV lands in `~/Documents/VectorLabel/Exports/<VWFileName>/` and
+VectorLabel opens the print window automatically. Exports run silently (no
+confirmation dialog); only error conditions alert.
 
 ## Brady USB PID
 
@@ -93,4 +95,5 @@ dialog); only error conditions alert.
 | `PreferencesView.swift` | Preferences window (6 tabs) |
 | `VectorLabelPrint.html` | Print UI (record table, template picker, printer selector, live editor) |
 | `VectorLabelDesigner.html` | Standalone template designer |
-| `VectorworksPlugin/export_circuits.py` | Vectorworks ConnectCAD → CSV exporter |
+| `VectorworksPlugin/export_selected.py` | Vectorworks command: export selected ConnectCAD circuits → CSV |
+| `VectorworksPlugin/export_all.py` | Vectorworks command: export all circuits on the active layer → CSV |

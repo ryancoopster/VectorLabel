@@ -1,9 +1,13 @@
-# VectorLabel - Vectorworks ConnectCAD Circuit Export
-# Exports selected ConnectCAD circuits to:
+# VectorLabel - "Export Selected Circuits to VectorLabel"
+# Exports the CURRENTLY SELECTED ConnectCAD circuits to:
 #   ~/Documents/VectorLabel/Exports/<VectorworksFileName>/
 # Each project folder keeps a maximum of MAX_EXPORTS_PER_PROJECT files.
 # Pruning is based on the datecode embedded in the filename, not file system
 # metadata, so it works correctly across copies, cloud sync, etc.
+#
+# Install: Plug-in Manager → New Command → name it
+#   "Export Selected Circuits to VectorLabel" → paste this whole file.
+# (The companion "Export All Circuits to VectorLabel" command uses export_all.py.)
 
 import vs
 import os
@@ -201,10 +205,10 @@ def write_export(handles, empty_msg):
     # the new CSV automatically. (Error conditions above still alert the user.)
 
 
-# ── Menu commands ─────────────────────────────────────────────────────────────
+# ── Menu command: Export Selected Circuits to VectorLabel ───────────────────────
 
 def export_selected_circuits():
-    """'Export Selected Circuits to VectorLabel' — only the current selection."""
+    """Export only the current selection."""
     handles = collect_handles("(SEL=TRUE)")
     if not handles:
         vs.AlrtDialog("No objects selected. Select one or more ConnectCAD circuits.")
@@ -217,21 +221,4 @@ def export_selected_circuits():
                  "({skipped} non-circuit object(s) skipped)")
 
 
-def export_all_circuits():
-    """'Export All Circuits to VectorLabel' — every circuit on the active layer."""
-    layer_name = vs.GetLName(vs.ActLayer())
-    handles = collect_handles("(L='{}')".format(layer_name))
-    write_export(handles,
-                 "No ConnectCAD circuits found on the active layer ('{}').\n"
-                 "({{skipped}} non-circuit object(s) skipped)".format(layer_name))
-
-
-# ── Entry point ───────────────────────────────────────────────────────────────
-# This one file backs TWO Vectorworks menu commands. When pasting it into the
-# Plug-in Manager, leave exactly ONE of the calls below active per command:
-#
-#   Command "Export Selected Circuits to VectorLabel"  →  export_selected_circuits()
-#   Command "Export All Circuits to VectorLabel"        →  export_all_circuits()
-
 export_selected_circuits()
-# export_all_circuits()
