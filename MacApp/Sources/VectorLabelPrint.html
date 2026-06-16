@@ -1023,6 +1023,7 @@ function buildPreviewPanel(){
       <button onclick="P.previewIdx=${prevIdx};R()" title="Previous label" class="btn" style="padding:3px 10px;font-size:15px;line-height:1" ${vpos<=0?"disabled":""}>‹</button>
       <span style="color:var(--text2);font-size:11px;min-width:60px;text-align:center">${vpos+1} / ${total}</span>
       <button onclick="P.previewIdx=${nextIdx};R()" title="Next label" class="btn" style="padding:3px 10px;font-size:15px;line-height:1" ${vpos>=total-1?"disabled":""}>›</button>
+      <button onclick="openExpandedPreview()" title="Expanded preview — show all labels" class="btn" style="padding:3px 9px;font-size:14px;line-height:1">⊞</button>
     </div>
     ${renderLabel(t,rec,scale)}
     <div style="text-align:center">
@@ -1275,6 +1276,8 @@ window.addEventListener("keydown",function(e){
   const ae=document.activeElement, tag=ae&&ae.tagName;
   const inInput = tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT"||(ae&&ae.isContentEditable);
   const modalOpen = P.modal||document.querySelector(".modal-overlay")||document.getElementById("vl-filter-modal");
+  // Escape closes the expanded preview.
+  if(e.key==="Escape"&&P.modal==="preview"){ e.preventDefault(); closeExpandedPreview(); return; }
   // ⌘Return (or Ctrl+Return) prints, mirroring the Print button.
   if((e.metaKey||e.ctrlKey)&&(e.key==="Enter"||e.key==="Return")){
     if(modalOpen||!canPrintNow())return;
@@ -1403,6 +1406,34 @@ function buildPrintingModal(){
         <div class="prog-bar" style="height:100%;background:var(--accent);border-radius:4px;transition:width .1s;width:${pct}%"></div>
       </div>
       <div style="color:var(--text3);font-size:11px;text-align:right">${pct}%</div>
+    </div>
+  </div>`;
+}
+
+// ── Expanded preview (grid of all labels) ──────────────────────────────────────
+function openExpandedPreview(){ P.modal="preview"; R(); }
+function closeExpandedPreview(){ P.modal=null; R(); }
+function buildExpandedPreviewModal(){
+  const t=tpl();
+  const vis=visibleIndices();
+  const scale=0.55;
+  const tiles = (t&&vis.length) ? vis.map((i,vpos)=>{
+    const rec=P.records[i];
+    const isPrev=P.previewIdx===i;
+    return `<div onclick="P.previewIdx=${i};R()" title="Click to preview this label" style="display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;padding:8px;border-radius:6px;border:1px solid ${isPrev?'var(--accent)':'transparent'};background:${isPrev?'rgba(108,142,245,0.12)':'transparent'}">
+      ${renderLabel(t,rec,scale)}
+      <div style="font-size:11px;color:var(--text2);text-align:center">Label ${vpos+1}</div>
+    </div>`;
+  }).join("") : "";
+  return `<div class="modal-overlay" id="vl-preview-modal" onclick="if(event.target===this)closeExpandedPreview()">
+    <div class="modal" style="width:90vw;max-width:1100px;height:88vh;display:flex;flex-direction:column;padding:0;overflow:hidden">
+      <div class="modal-title" style="padding:16px 20px;margin:0;border-bottom:1px solid var(--bd3)">Print preview — ${vis.length} label${vis.length!==1?"s":""}</div>
+      <div style="flex:1;overflow:auto;padding:18px;display:flex;flex-wrap:wrap;gap:14px;align-content:flex-start;justify-content:center">
+        ${tiles||'<div style="color:var(--text3);font-size:13px;margin:auto">'+(t?"No labels match the current filter.":"No template selected.")+'</div>'}
+      </div>
+      <div style="padding:14px 20px;border-top:1px solid var(--bd3);display:flex;justify-content:flex-end">
+        <button class="btn primary" onclick="closeExpandedPreview()" style="padding:8px 22px">Close preview</button>
+      </div>
     </div>
   </div>`;
 }
@@ -1623,6 +1654,7 @@ function R(){
     <!-- Modal -->
 
     ${P.modal==="printing"||P.modal==="done"?buildPrintingModal():""}
+    ${P.modal==="preview"?buildExpandedPreviewModal():""}
   `;
   applyColVars();
   // Restore scroll position and wire wheel acceleration (bound once on #app,
