@@ -187,22 +187,25 @@ enum LabelRenderer {
         }
         drawRect.size.height = max(r.height, suggestedSize.height)
 
-        // Horizontal stretch (scaleX)
+        // The context is globally y-flipped so rects/lines use a top-left origin,
+        // but CTFrameDraw respects that flip and would render text upside-down
+        // (the cause of "scrambled"/mirrored printed text). Counter the flip
+        // around this text block's vertical center so glyphs stay upright while
+        // keeping the top-left positioning.
         let stretch = (obj.stretch ?? 100.0) / 100.0
+        ctx.saveGState()
+        ctx.translateBy(x: 0, y: drawRect.midY * 2)
+        ctx.scaleBy(x: 1, y: -1)
         if abs(stretch - 1.0) > 0.01 {
-            ctx.saveGState()
-            ctx.translateBy(x: drawRect.origin.x, y: drawRect.origin.y)
+            // Horizontal stretch around the block's left edge.
+            ctx.translateBy(x: drawRect.origin.x, y: 0)
             ctx.scaleBy(x: CGFloat(stretch), y: 1.0)
-            let scaledRect = CGRect(origin: .zero, size: drawRect.size)
-            let path = CGPath(rect: scaledRect, transform: nil)
-            let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: 0), path, nil)
-            CTFrameDraw(frame, ctx)
-            ctx.restoreGState()
-        } else {
-            let path = CGPath(rect: drawRect, transform: nil)
-            let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: 0), path, nil)
-            CTFrameDraw(frame, ctx)
+            ctx.translateBy(x: -drawRect.origin.x, y: 0)
         }
+        let path = CGPath(rect: drawRect, transform: nil)
+        let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: 0), path, nil)
+        CTFrameDraw(frame, ctx)
+        ctx.restoreGState()
     }
 
     private static func drawLine(_ obj: TemplateObject, in ctx: CGContext, dpi: Int) {
