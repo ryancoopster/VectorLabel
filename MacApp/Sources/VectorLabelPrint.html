@@ -690,9 +690,18 @@ function presetSummary(p){
   const out=[]; if(f)out.push("Filter: "+f); if(s)out.push("Sort: "+s);
   return out.length?out.join("\n"):"(no filter or sort)";
 }
+// Canonical JSON: recursively sort object keys so comparison is independent of
+// key order. Needed because reprint's filter/sort round-trips through Swift's
+// JSONSerialization, which emits dictionary keys in arbitrary order.
+function _canon(x){
+  if(x===null||x===undefined) return null;
+  if(Array.isArray(x)) return x.map(_canon);
+  if(typeof x==='object'){ const o={}; Object.keys(x).sort().forEach(k=>{ const v=_canon(x[k]); if(v!==undefined)o[k]=v; }); return o; }
+  return x;
+}
 function presetMatchesActive(p){
-  return JSON.stringify(p.filter||null)===JSON.stringify(P.filter||null)
-      && JSON.stringify(p.sort||null)===JSON.stringify(P.sort||null);
+  return JSON.stringify(_canon(p.filter||null))===JSON.stringify(_canon(P.filter||null))
+      && JSON.stringify(_canon(p.sort||null))===JSON.stringify(_canon(P.sort||null));
 }
 function applyPreset(id){
   const p=(window._presets||[]).find(x=>x.id===id); if(!p)return;
