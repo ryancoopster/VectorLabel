@@ -416,6 +416,39 @@ function resizeHandles(id){
   return H('tl','left:-5px;top:-5px','nwse-resize')+H('tr','right:-5px;top:-5px','nesw-resize')
         +H('bl','left:-5px;bottom:-5px','nesw-resize')+H('br','right:-5px;bottom:-5px','nwse-resize');
 }
+// ── Rulers ─────────────────────────────────────────────────────────────────────
+const RULER=16; // px thickness
+// Tick marks + optional highlight span (object extent, in inches) for one axis.
+// 0 is the printable origin; ticks run into the bleed margin on both sides.
+function rulerInner(horiz, hl){
+  const sc=SC, B=BLEED_IN*sc, len=horiz?S.spec.pw:S.spec.ph;
+  let out='';
+  if(hl){
+    const a=Math.min(hl.a,hl.b)*sc+B, b=Math.max(hl.a,hl.b)*sc+B, ext=Math.max(1,b-a);
+    out += horiz
+      ? '<rect x="'+a.toFixed(1)+'" y="0" width="'+ext.toFixed(1)+'" height="'+RULER+'" fill="rgba(255,77,106,0.30)"/>'
+      : '<rect x="0" y="'+a.toFixed(1)+'" width="'+RULER+'" height="'+ext.toFixed(1)+'" fill="rgba(255,77,106,0.30)"/>';
+  }
+  for(let v=Math.ceil((-BLEED_IN)/0.25)*0.25; v<=len+BLEED_IN+1e-6; v+=0.25){
+    const major=Math.abs(v-Math.round(v))<1e-6, half=!major&&Math.abs(v*2-Math.round(v*2))<1e-6;
+    const p=v*sc+B, tlen=major?RULER:half?9:5;
+    if(horiz){
+      out+='<line x1="'+p.toFixed(1)+'" y1="'+(RULER-tlen)+'" x2="'+p.toFixed(1)+'" y2="'+RULER+'" style="stroke:var(--text2)" stroke-width="0.75"/>';
+      if(major)out+='<text x="'+(p+2).toFixed(1)+'" y="8" font-size="8" style="fill:var(--text3)">'+Math.round(v)+'</text>';
+    }else{
+      out+='<line x1="'+(RULER-tlen)+'" y1="'+p.toFixed(1)+'" x2="'+RULER+'" y2="'+p.toFixed(1)+'" style="stroke:var(--text2)" stroke-width="0.75"/>';
+      if(major)out+='<text x="2" y="'+(p+8).toFixed(1)+'" font-size="8" style="fill:var(--text3)">'+Math.round(v)+'</text>';
+    }
+  }
+  return out;
+}
+// Highlight the dragged object's extent on both rulers (null clears it).
+function updateRulers(o){
+  const h=document.getElementById('ruler-h'), v=document.getElementById('ruler-v');
+  if(h)h.innerHTML=rulerInner(true,  o?{a:o.x||0,b:(o.x||0)+(o.w||0)}:null);
+  if(v)v.innerHTML=rulerInner(false, o?{a:o.y||0,b:(o.y||0)+(o.h||0)}:null);
+}
+
 function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
   const sc=SC;
   const pw=spec.pw*sc,ph=spec.ph*sc;
@@ -529,11 +562,18 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
   // every side. Objects can overhang the printable edges into that margin; only
   // the printable area prints. The margin is not visually called out.
   return `<div style="display:flex;flex-direction:column;align-items:flex-start;flex-shrink:0">
-    <div onmousedown="${readOnly?'':`if(event.target===this)deselect()`}" style="width:${bw}px;height:${bh}px;background:transparent;position:relative;overflow:hidden;flex-shrink:0">
-      <!-- Printable area (only this prints) -->
-      <div style="position:absolute;left:${B}px;top:${B}px;width:${pw}px;height:${ph}px;background:#fff;box-shadow:0 0 0 1.5px var(--accent);pointer-events:none"></div>
-      ${wrapZone}
-      ${gridSvg}<div id="snap-guide-layer">${snapSvg}</div>${objsHtml}
+    <div style="display:flex;flex-shrink:0">
+      <div style="width:${RULER}px;height:${RULER}px;background:var(--surface);flex-shrink:0"></div>
+      <svg id="ruler-h" width="${bw}" height="${RULER}" style="display:block;background:var(--surface);flex-shrink:0">${rulerInner(true,null)}</svg>
+    </div>
+    <div style="display:flex;flex-shrink:0">
+      <svg id="ruler-v" width="${RULER}" height="${bh}" style="display:block;background:var(--surface);flex-shrink:0">${rulerInner(false,null)}</svg>
+      <div onmousedown="${readOnly?'':`if(event.target===this)deselect()`}" style="width:${bw}px;height:${bh}px;background:transparent;position:relative;overflow:hidden;flex-shrink:0">
+        <!-- Printable area (only this prints) -->
+        <div style="position:absolute;left:${B}px;top:${B}px;width:${pw}px;height:${ph}px;background:#fff;box-shadow:0 0 0 1.5px var(--accent);pointer-events:none"></div>
+        ${wrapZone}
+        ${gridSvg}<div id="snap-guide-layer">${snapSvg}</div>${objsHtml}
+      </div>
     </div>
   </div>`;
 }
@@ -1269,6 +1309,7 @@ function startDrag(e,id){
     uobj(id,snapped);
     positionEl(id);       // live move without rebuilding the DOM
     renderSnapGuides();   // show the alignment guides live
+    updateRulers(gobj(id));   // highlight the object's extent on the rulers
   }
   function mu(){
     S._snapLines=[]; renderSnapGuides();

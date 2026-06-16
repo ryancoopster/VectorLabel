@@ -44,7 +44,10 @@ enum BradyCatalog {
     /// cassette's M6-prefixed part matches the BM-prefixed catalog entry.
     static func core(_ pn: String) -> String {
         guard let dash = pn.firstIndex(of: "-") else { return pn.uppercased() }
-        return String(pn[pn.index(after: dash)...]).uppercased()
+        var c = String(pn[pn.index(after: dash)...]).uppercased()
+        // Bulk-box ↔ cartridge equivalences (same physical label).
+        if c == "109-427" { c = "33-427" }   // BM-109-427 bulk box == M6-33-427
+        return c
     }
 
     /// Labels on one standard M6 cartridge, by part-number core. Researched from

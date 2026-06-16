@@ -1106,7 +1106,8 @@ function toggleDefaultTemplate(checked){
 function loadedCassette(){ return (window._cassettes||{})[P.activePrinter]||null; }
 
 // Strip the model prefix so "BM-32-427" (catalog) matches "M6-32-427" (SmartCell).
-function supplyCore(pn){ return (pn||"").replace(/^[A-Za-z0-9]+-/,"").toUpperCase(); }
+// BM-109-427 is the bulk box for M6-33-427, so treat them as the same supply.
+function supplyCore(pn){ let c=(pn||"").replace(/^[A-Za-z0-9]+-/,"").toUpperCase(); if(c==="109-427")c="33-427"; return c; }
 
 function cassetteMismatch(){
   const c=loadedCassette(), t=tpl();

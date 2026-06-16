@@ -69,6 +69,16 @@ enum LabelRenderer {
         ctx.translateBy(x: 0, y: CGFloat(ph))
         ctx.scaleBy(x: 1, y: -1)
 
+        // The 33-427 supply (M6-33-427 / BM-109-427) feeds rotated 90° relative
+        // to the designer layout, so the whole label is rotated to match. The
+        // printable area is square, so this stays in bounds.
+        if BradyCatalog.core(size.partNumber) == "33-427" {
+            let cx = CGFloat(pw) / 2, cy = CGFloat(ph) / 2
+            ctx.translateBy(x: cx, y: cy)
+            ctx.rotate(by: .pi / 2)   // 90° clockwise in this y-down space
+            ctx.translateBy(x: -cx, y: -cy)
+        }
+
         // Per-printer calibration shift (in top-left pixel space).
         ctx.translateBy(x: CGFloat(offset.dx), y: CGFloat(offset.dy))
 
