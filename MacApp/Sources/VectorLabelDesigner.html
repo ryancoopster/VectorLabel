@@ -417,37 +417,69 @@ function resizeHandles(id){
         +H('bl','left:-5px;bottom:-5px','nesw-resize')+H('br','right:-5px;bottom:-5px','nwse-resize');
 }
 // ── Rulers ─────────────────────────────────────────────────────────────────────
-const RULER=16; // px thickness
-// Tick marks + optional highlight span (object extent, in inches) for one axis.
-// 0 is the printable origin; ticks run into the bleed margin on both sides.
-function rulerInner(horiz, hl){
-  const sc=SC, B=BLEED_IN*sc, len=horiz?S.spec.pw:S.spec.ph;
-  let out='';
-  if(hl){
-    const a=Math.min(hl.a,hl.b)*sc+B, b=Math.max(hl.a,hl.b)*sc+B, ext=Math.max(1,b-a);
-    out += horiz
-      ? '<rect x="'+a.toFixed(1)+'" y="0" width="'+ext.toFixed(1)+'" height="'+RULER+'" fill="rgba(255,77,106,0.30)"/>'
-      : '<rect x="0" y="'+a.toFixed(1)+'" width="'+RULER+'" height="'+ext.toFixed(1)+'" fill="rgba(255,77,106,0.30)"/>';
-  }
-  for(let v=Math.ceil((-BLEED_IN)/0.25)*0.25; v<=len+BLEED_IN+1e-6; v+=0.25){
-    const major=Math.abs(v-Math.round(v))<1e-6, half=!major&&Math.abs(v*2-Math.round(v*2))<1e-6;
-    const p=v*sc+B, tlen=major?RULER:half?9:5;
-    if(horiz){
-      out+='<line x1="'+p.toFixed(1)+'" y1="'+(RULER-tlen)+'" x2="'+p.toFixed(1)+'" y2="'+RULER+'" style="stroke:var(--text2)" stroke-width="0.75"/>';
-      if(major)out+='<text x="'+(p+2).toFixed(1)+'" y="8" font-size="8" style="fill:var(--text3)">'+Math.round(v)+'</text>';
-    }else{
-      out+='<line x1="'+(RULER-tlen)+'" y1="'+p.toFixed(1)+'" x2="'+RULER+'" y2="'+p.toFixed(1)+'" style="stroke:var(--text2)" stroke-width="0.75"/>';
-      if(major)out+='<text x="2" y="'+(p+8).toFixed(1)+'" font-size="8" style="fill:var(--text3)">'+Math.round(v)+'</text>';
+const RULER=26; // px thickness of the fixed edge rulers
+// Fraction label for a quarter-inch position (whole inches show the integer).
+function rulerLabel(v){
+  const r=Math.round(v*16)/16, whole=Math.floor(r+1e-6), frac=r-whole;
+  if(Math.abs(frac)<1e-6) return {t:String(whole), big:true};
+  if(Math.abs(frac-0.25)<1e-6) return {t:'¼', big:false};
+  if(Math.abs(frac-0.5)<1e-6)  return {t:'½', big:false};
+  if(Math.abs(frac-0.75)<1e-6) return {t:'¾', big:false};
+  return null;
+}
+// Draw the fixed top/left rulers, zeroed at the label's (printable) top-left,
+// with 1/16" ticks and a label every 1/4". S._rulerObj (id) highlights the
+// dragged object's extent.
+function drawRulers(){
+  const pa=document.getElementById('printable-area');
+  const rh=document.getElementById('ruler-h'), rv=document.getElementById('ruler-v');
+  if(!rh||!rv)return;
+  if(!pa){ rh.innerHTML=''; rv.innerHTML=''; return; }
+  const paR=pa.getBoundingClientRect(), rhR=rh.getBoundingClientRect(), rvR=rv.getBoundingClientRect();
+  const ppiX=paR.width/S.spec.pw, ppiY=paR.height/S.spec.ph;   // screen px per inch (incl. zoom)
+  const hl=S._rulerObj?gobj(S._rulerObj):null;
+  const STEP=1/16;
+  function axis(horiz){
+    const ppi=horiz?ppiX:ppiY;
+    const originScreen=horiz?paR.left:paR.top;       // label 0 in screen coords
+    const rect=horiz?rhR:rvR, len=horiz?rhR.width:rvR.height, off=horiz?rhR.left:rvR.top;
+    if(!(ppi>0))return '';
+    let out='';
+    if(hl){
+      const a=(horiz?(hl.x||0):(hl.y||0)), b=a+(horiz?(hl.w||0):(hl.h||0));
+      const pa1=originScreen-off+Math.min(a,b)*ppi, pa2=originScreen-off+Math.max(a,b)*ppi;
+      out += horiz
+        ? '<rect x="'+pa1.toFixed(1)+'" y="0" width="'+Math.max(1,pa2-pa1).toFixed(1)+'" height="'+RULER+'" fill="rgba(255,77,106,0.28)"/>'
+        : '<rect x="0" y="'+pa1.toFixed(1)+'" width="'+RULER+'" height="'+Math.max(1,pa2-pa1).toFixed(1)+'" fill="rgba(255,77,106,0.28)"/>';
     }
+    const vMin=(off-originScreen)/ppi, vMax=(off+len-originScreen)/ppi;
+    let v=Math.floor(vMin/STEP)*STEP;
+    for(; v<=vMax+1e-6; v+=STEP){
+      const p=originScreen-off+v*ppi;
+      const sixteenth=Math.round(v/STEP);
+      const major=sixteenth%16===0, quarter=sixteenth%4===0;
+      const tlen=major?RULER:quarter?12:6;
+      if(horiz){
+        out+='<line x1="'+p.toFixed(1)+'" y1="'+(RULER-tlen)+'" x2="'+p.toFixed(1)+'" y2="'+RULER+'" style="stroke:var(--text2)" stroke-width="'+(major?1:0.6)+'"/>';
+      }else{
+        out+='<line x1="'+(RULER-tlen)+'" y1="'+p.toFixed(1)+'" x2="'+RULER+'" y2="'+p.toFixed(1)+'" style="stroke:var(--text2)" stroke-width="'+(major?1:0.6)+'"/>';
+      }
+      if(quarter){
+        const lab=rulerLabel(v); if(lab){
+          const fs=lab.big?11:9;
+          if(horiz) out+='<text x="'+(p+2).toFixed(1)+'" y="11" font-size="'+fs+'" style="fill:var(--text)">'+lab.t+'</text>';
+          else      out+='<text x="3" y="'+(p+(lab.big?10:9)).toFixed(1)+'" font-size="'+fs+'" style="fill:var(--text)">'+lab.t+'</text>';
+        }
+      }
+    }
+    return '<svg width="'+(horiz?len:RULER)+'" height="'+(horiz?RULER:len)+'" style="display:block">'+out+'</svg>';
   }
-  return out;
+  rh.innerHTML=axis(true);
+  rv.innerHTML=axis(false);
 }
-// Highlight the dragged object's extent on both rulers (null clears it).
-function updateRulers(o){
-  const h=document.getElementById('ruler-h'), v=document.getElementById('ruler-v');
-  if(h)h.innerHTML=rulerInner(true,  o?{a:o.x||0,b:(o.x||0)+(o.w||0)}:null);
-  if(v)v.innerHTML=rulerInner(false, o?{a:o.y||0,b:(o.y||0)+(o.h||0)}:null);
-}
+let _rafRuler=false;
+function scheduleRulers(){ if(_rafRuler)return; _rafRuler=true; requestAnimationFrame(function(){ _rafRuler=false; drawRulers(); }); }
+window.addEventListener('resize',scheduleRulers);
 
 function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
   const sc=SC;
@@ -562,18 +594,11 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
   // every side. Objects can overhang the printable edges into that margin; only
   // the printable area prints. The margin is not visually called out.
   return `<div style="display:flex;flex-direction:column;align-items:flex-start;flex-shrink:0">
-    <div style="display:flex;flex-shrink:0">
-      <div style="width:${RULER}px;height:${RULER}px;background:var(--surface);flex-shrink:0"></div>
-      <svg id="ruler-h" width="${bw}" height="${RULER}" style="display:block;background:var(--surface);flex-shrink:0">${rulerInner(true,null)}</svg>
-    </div>
-    <div style="display:flex;flex-shrink:0">
-      <svg id="ruler-v" width="${RULER}" height="${bh}" style="display:block;background:var(--surface);flex-shrink:0">${rulerInner(false,null)}</svg>
-      <div onmousedown="${readOnly?'':`if(event.target===this)deselect()`}" style="width:${bw}px;height:${bh}px;background:transparent;position:relative;overflow:hidden;flex-shrink:0">
-        <!-- Printable area (only this prints) -->
-        <div style="position:absolute;left:${B}px;top:${B}px;width:${pw}px;height:${ph}px;background:#fff;box-shadow:0 0 0 1.5px var(--accent);pointer-events:none"></div>
-        ${wrapZone}
-        ${gridSvg}<div id="snap-guide-layer">${snapSvg}</div>${objsHtml}
-      </div>
+    <div onmousedown="${readOnly?'':`if(event.target===this)deselect()`}" style="width:${bw}px;height:${bh}px;background:transparent;position:relative;overflow:hidden;flex-shrink:0">
+      <!-- Printable area (only this prints) -->
+      <div id="printable-area" style="position:absolute;left:${B}px;top:${B}px;width:${pw}px;height:${ph}px;background:#fff;box-shadow:0 0 0 1.5px var(--accent);pointer-events:none"></div>
+      ${wrapZone}
+      ${gridSvg}<div id="snap-guide-layer">${snapSvg}</div>${objsHtml}
     </div>
   </div>`;
 }
@@ -877,6 +902,7 @@ function renderCanvasOnly(){
   if(!host){ R(); return; }
   const rec=(window._editorRecords||RX)[S.recIdx];
   host.innerHTML=buildCanvas(S.spec,S.objs,S.selId,rec,S.wrap,false);
+  scheduleRulers();
 }
 let _rafCanvas=false;
 function scheduleCanvas(){
@@ -970,10 +996,18 @@ function R(){
 
       <!-- Center: canvas + records -->
       <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0">
-        <!-- Canvas area -->
-        <div style="flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;background:var(--canvas);padding:28px">
-          <div id="canvas-host" style="transform:scale(${S.zoom});transform-origin:center center;flex-shrink:0">
-            ${buildCanvas(S.spec,S.objs,S.selId,rec,S.wrap,false)}
+        <!-- Top ruler (fixed at the window edge) -->
+        <div style="display:flex;flex-shrink:0;height:${RULER}px;background:var(--surface);border-bottom:1px solid var(--bd2)">
+          <div style="width:${RULER}px;height:${RULER}px;flex-shrink:0;border-right:1px solid var(--bd2)"></div>
+          <div id="ruler-h" style="flex:1;height:${RULER}px;overflow:hidden;position:relative"></div>
+        </div>
+        <!-- Left ruler + scrollable canvas -->
+        <div style="display:flex;flex:1;overflow:hidden">
+          <div id="ruler-v" style="width:${RULER}px;flex-shrink:0;overflow:hidden;position:relative;background:var(--surface);border-right:1px solid var(--bd2)"></div>
+          <div id="canvas-scroll" onscroll="scheduleRulers()" style="flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;background:var(--canvas);padding:28px">
+            <div id="canvas-host" style="transform:scale(${S.zoom});transform-origin:center center;flex-shrink:0">
+              ${buildCanvas(S.spec,S.objs,S.selId,rec,S.wrap,false)}
+            </div>
           </div>
         </div>
         <!-- Resize handle -->
@@ -1012,6 +1046,7 @@ function R(){
       const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
     }
   }
+  scheduleRulers();   // redraw the edge rulers to match the (re)laid-out canvas
 
   // Toolbar: standalone shows New/Open/Save; when editing a template for the
   // print window, show Cancel/Save As/Save & Return buttons instead.
@@ -1298,6 +1333,7 @@ function startDrag(e,id){
   if(S.editingId&&S.editingId!==id)S.editingId=null;
   if(S.selId!==id){S.selId=id;S._ef=o.f;R();}
   snapshot();
+  S._rulerObj=id;   // highlight this object's extent on the rulers while dragging
   const sx=e.clientX,sy=e.clientY,ox=o.x,oy=o.y;
   let moved=false;
   function mv(e){
@@ -1309,10 +1345,10 @@ function startDrag(e,id){
     uobj(id,snapped);
     positionEl(id);       // live move without rebuilding the DOM
     renderSnapGuides();   // show the alignment guides live
-    updateRulers(gobj(id));   // highlight the object's extent on the rulers
+    drawRulers();         // highlight the object's extent on the rulers
   }
   function mu(){
-    S._snapLines=[]; renderSnapGuides();
+    S._snapLines=[]; renderSnapGuides(); S._rulerObj=null;
     window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",mu);
     // A click (no drag) on a static text box → edit it inline.
     if(!moved && o.t==="tx" && txMode(o)==="static"){ startTextEdit(id); return; }
