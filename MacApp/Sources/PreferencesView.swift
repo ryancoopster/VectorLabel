@@ -268,6 +268,92 @@ struct PreferencesView: View {
         return s
     }
 
+    private static let pxFormatter: NumberFormatter = {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal; f.maximumFractionDigits = 0; f.allowsFloats = false
+        return f
+    }()
+
+    /// Per-printer alignment controls: print a calibration grid, then nudge the
+    /// horizontal/vertical offset (in printer pixels) until the grid lands square
+    /// on the label. Offsets are keyed by serial so they follow the printer.
+    @ViewBuilder
+    private func calibrationControls(for printer: PrinterDevice) -> some View {
+        let dpi = printerManager.calibrationSize(for: printer.id).dpi
+        let dxB = Binding<Double>(
+            get: { settings.calibrationOffset(forSerial: printer.serial).dx },
+            set: { settings.setCalibrationOffset(forSerial: printer.serial, dx: $0,
+                     dy: settings.calibrationOffset(forSerial: printer.serial).dy) })
+        let dyB = Binding<Double>(
+            get: { settings.calibrationOffset(forSerial: printer.serial).dy },
+            set: { settings.setCalibrationOffset(forSerial: printer.serial,
+                     dx: settings.calibrationOffset(forSerial: printer.serial).dx, dy: $0) })
+        VStack(alignment: .leading, spacing: 8) {
+            PrefRow(label: printer.name,
+                    caption: "\(dpi) px = 1 inch  (\(dpi) DPI).  Positive Horizontal shifts content along the label; positive Vertical shifts it down. Saved for serial \(printer.serial).") {
+                Button("Print calibration grid") {
+                    PrinterManager.shared.printCalibrationGrid(for: printer.id)
+                }
+                .buttonStyle(VLButtonStyle())
+                .disabled(printer.status != .ready)
+            }
+            HStack(spacing: 16) {
+                offsetField("Horizontal", dxB)
+                offsetField("Vertical", dyB)
+                Button("Reset") {
+                    settings.setCalibrationOffset(forSerial: printer.serial, dx: 0, dy: 0)
+                }
+                .buttonStyle(VLButtonStyle())
+                Button("SmartCell dump") {
+                    PrinterManager.shared.dumpSmartCell(for: printer.id)
+                }
+                .buttonStyle(VLButtonStyle())
+                .disabled(printer.status != .ready)
+            }
+            .padding(.leading, 2)
+
+            if !printerManager.lastSmartCellDump.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("SmartCell diagnostics")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.vlSecondary)
+                        Spacer()
+                        Button("Copy") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(printerManager.lastSmartCellDump, forType: .string)
+                        }
+                        .buttonStyle(VLButtonStyle())
+                    }
+                    ScrollView {
+                        Text(printerManager.lastSmartCellDump)
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.vlSecondary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(height: 150)
+                    .padding(6)
+                    .background(Color.black.opacity(0.25))
+                    .cornerRadius(6)
+                }
+                .padding(.leading, 2)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func offsetField(_ label: String, _ binding: Binding<Double>) -> some View {
+        HStack(spacing: 6) {
+            Text(label).foregroundColor(.vlSecondary).font(.system(size: 12))
+            TextField("0", value: binding, formatter: Self.pxFormatter)
+                .frame(width: 52).textFieldStyle(.roundedBorder).colorScheme(.dark)
+                .font(.system(size: 12, design: .monospaced))
+            Stepper("", value: binding, step: 1).labelsHidden()
+            Text("px").foregroundColor(.vlDim).font(.system(size: 11))
+        }
+    }
+
     private var printersTab: some View {
         VStack(alignment: .leading, spacing: 0) {
             PrefSection(title: "Connected Printers") {
@@ -294,6 +380,15 @@ struct PreferencesView: View {
                         if printer.id != printerManager.printers.last?.id {
                             PrefDivider()
                         }
+                    }
+                }
+            }
+
+            if !printerManager.printers.isEmpty {
+                PrefSection(title: "Printer Calibration") {
+                    ForEach(Array(printerManager.printers.enumerated()), id: \.element.id) { idx, printer in
+                        calibrationControls(for: printer)
+                        if idx != printerManager.printers.count - 1 { PrefDivider() }
                     }
                 }
             }

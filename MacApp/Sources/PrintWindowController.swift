@@ -232,7 +232,7 @@ final class PrintWindowController: NSObject {
     private func cassettesJSONString() -> String {
         var dict: [String: [String: Any]] = [:]
         for (id, c) in PrinterManager.shared.cassettes {
-            dict[id] = [
+            var entry: [String: Any] = [
                 "partNumber": c.partNumber,
                 "labelWidthMils": c.labelWidthMils,
                 "labelHeightMils": c.labelHeightMils,
@@ -241,6 +241,10 @@ final class PrintWindowController: NSObject {
                 "pixelWidth": c.pixelWidth,
                 "pixelHeight": c.pixelHeight,
             ]
+            if let perRoll = BradyCatalog.labelsPerRoll(forPartNumber: c.partNumber) {
+                entry["labelsPerRoll"] = perRoll
+            }
+            dict[id] = entry
         }
         if let data = try? JSONSerialization.data(withJSONObject: dict),
            let json = String(data: data, encoding: .utf8) { return json }
@@ -419,9 +423,13 @@ extension PrintWindowController: WKScriptMessageHandler {
             return records[i]
         }
 
+        // Per-printer calibration offset (keyed by the printer's serial).
+        let serial = printerID.split(separator: ":").dropFirst(2).joined(separator: ":")
+        let offset = AppSettings.shared.calibrationOffset(forSerial: serial)
+
         var jobs: [[UInt8]] = []
         for record in selectedRecords {
-            guard let rendered = LabelRenderer.render(template: template, record: record) else { continue }
+            guard let rendered = LabelRenderer.render(template: template, record: record, offset: offset) else { continue }
             let job = BradyVGL.buildPrintJob(pixels: rendered.pixels, width: rendered.width, height: rendered.height)
             jobs.append(job)
         }

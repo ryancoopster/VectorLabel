@@ -43,7 +43,11 @@ enum LabelRenderer {
     /// SC is the coordinate scale used by the HTML designer: 185 px per inch-unit.
     /// Template object coordinates are in 0…1 relative to the printable area.
     /// We map those onto the actual print DPI here.
-    static func render(template: VLTemplate, record: WireRecord) -> (pixels: [UInt8], width: Int, height: Int)? {
+    /// `offset` shifts all drawn content by (dx, dy) printer pixels — the
+    /// per-printer calibration offset. dx is along the label width, dy along
+    /// the label height (same sense as the designer's x/y).
+    static func render(template: VLTemplate, record: WireRecord,
+                       offset: (dx: Double, dy: Double) = (0, 0)) -> (pixels: [UInt8], width: Int, height: Int)? {
         guard let size = template.labelSize else { return nil }
         let pw  = size.printablePixelWidth
         let ph  = size.printablePixelHeight
@@ -64,6 +68,9 @@ enum LabelRenderer {
         // Flip so (0,0) is top-left (matches HTML canvas convention)
         ctx.translateBy(x: 0, y: CGFloat(ph))
         ctx.scaleBy(x: 1, y: -1)
+
+        // Per-printer calibration shift (in top-left pixel space).
+        ctx.translateBy(x: CGFloat(offset.dx), y: CGFloat(offset.dy))
 
         for obj in template.objs {
             // Rotation is clockwise about the object's center, matching the
@@ -242,6 +249,62 @@ enum LabelRenderer {
         ctx.setStrokeColor(gray: 0.0, alpha: 1.0)
         ctx.setLineWidth(CGFloat(lw))
         ctx.stroke(r)
+    }
+
+    // MARK: – Calibration grid
+
+    /// Render a calibration target for the given label: a 1px grid at 1/8"
+    /// spacing across the printable area, a border at the printable bounds,
+    /// heavier lines every 1", and a solid 1/8" square marking the origin
+    /// corner (so feed direction / mirroring is obvious). The per-printer
+    /// `offset` is applied so reprinting after a tweak shows the shift.
+    static func renderCalibrationGrid(size: BradyLabelSize,
+                                      offset: (dx: Double, dy: Double) = (0, 0))
+        -> (pixels: [UInt8], width: Int, height: Int)? {
+        let pw  = size.printablePixelWidth
+        let ph  = size.printablePixelHeight
+        let dpi = Double(size.dpi)
+        guard pw > 0, ph > 0 else { return nil }
+
+        let colorSpace = CGColorSpaceCreateDeviceGray()
+        guard let ctx = CGContext(
+            data: nil, width: pw, height: ph,
+            bitsPerComponent: 8, bytesPerRow: pw,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.none.rawValue
+        ) else { return nil }
+
+        ctx.setFillColor(gray: 1.0, alpha: 1.0)
+        ctx.fill(CGRect(x: 0, y: 0, width: pw, height: ph))
+
+        ctx.translateBy(x: 0, y: CGFloat(ph)); ctx.scaleBy(x: 1, y: -1)
+        ctx.translateBy(x: CGFloat(offset.dx), y: CGFloat(offset.dy))
+        ctx.setFillColor(gray: 0.0, alpha: 1.0)
+
+        let step = dpi / 8.0          // 1/8" grid
+        func vline(_ x: Double, _ w: Double) { ctx.fill(CGRect(x: x, y: 0, width: w, height: Double(ph))) }
+        func hline(_ y: Double, _ h: Double) { ctx.fill(CGRect(x: 0, y: y, width: Double(pw), height: h)) }
+
+        // 1/8" grid (1px), with every 8th line (= 1") drawn at 3px.
+        var i = 0
+        var x = 0.0
+        while x <= Double(pw) + 0.5 { vline(x.rounded(), (i % 8 == 0) ? 3 : 1); x += step; i += 1 }
+        i = 0
+        var y = 0.0
+        while y <= Double(ph) + 0.5 { hline(y.rounded(), (i % 8 == 0) ? 3 : 1); y += step; i += 1 }
+
+        // Border at the exact printable bounds.
+        vline(0, 3); vline(Double(pw) - 3, 3)
+        hline(0, 3); hline(Double(ph) - 3, 3)
+
+        // Solid 1/8" square at the origin corner.
+        ctx.fill(CGRect(x: 0, y: 0, width: step, height: step))
+
+        guard let data = ctx.data else { return nil }
+        let raw = data.bindMemory(to: UInt8.self, capacity: pw * ph)
+        var pixels = [UInt8](repeating: 0, count: pw * ph)
+        for j in 0 ..< (pw * ph) { pixels[j] = raw[j] < 0x80 ? 0xFF : 0x00 }
+        return (pixels, pw, ph)
     }
 }
 

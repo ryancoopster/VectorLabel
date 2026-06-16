@@ -191,6 +191,64 @@ final class PrinterManager: ObservableObject {
         return job
     }
 
+    // MARK: – Calibration
+
+    /// The label-size whose printable area the calibration grid is drawn for:
+    /// the loaded cassette's supply if recognised, else a sensible default.
+    func calibrationSize(for printerID: String) -> BradyLabelSize {
+        func core(_ pn: String) -> String {
+            guard let dash = pn.firstIndex(of: "-") else { return pn.uppercased() }
+            return String(pn[pn.index(after: dash)...]).uppercased()
+        }
+        if let c = cassettes[printerID], !c.partNumber.isEmpty,
+           let match = BradyCatalog.sizes.first(where: { core($0.partNumber) == core(c.partNumber) }) {
+            return match
+        }
+        return BradyCatalog.size(forPartNumber: "BM-32-427") ?? BradyCatalog.sizes[0]
+    }
+
+    /// Print a 1/8" calibration grid on the loaded label, applying the printer's
+    /// current calibration offset so the user can iteratively dial it in.
+    func printCalibrationGrid(for printerID: String) {
+        let serial = printerID.split(separator: ":").dropFirst(2).joined(separator: ":")
+        let offset = AppSettings.shared.calibrationOffset(forSerial: serial)
+        let size = calibrationSize(for: printerID)
+        guard let grid = LabelRenderer.renderCalibrationGrid(size: size, offset: offset) else { return }
+        let job = BradyVGL.buildPrintJob(pixels: grid.pixels, width: grid.width, height: grid.height)
+        submit(jobs: [job], title: "Calibration grid (\(size.partNumber))",
+               templateName: "Calibration", printerID: printerID)
+    }
+
+    /// Most recent raw SmartCell hex dump (debug). Shown in Preferences so its
+    /// bytes can be compared against the printer's front-panel supply/ribbon.
+    @Published var lastSmartCellDump: String = ""
+
+    /// Read the loaded cassette's raw SmartCell bytes and log/publish an
+    /// annotated hex dump. Used to debug the supply-% reading and to hunt for
+    /// an undocumented ribbon-remaining byte.
+    func dumpSmartCell(for printerID: String) {
+        if activeJobs.contains(where: { !$0.isComplete }) {
+            lastSmartCellDump = "Printer is busy — finish or cancel the queue first."
+            return
+        }
+        lastSmartCellDump = "Reading SmartCell… (can take several seconds)"
+        Task.detached {
+            let lock = BradyUSB.deviceLock(for: printerID)
+            lock.wait()
+            var raw: [UInt8]?
+            do {
+                let handle = try BradyUSB.openPrinterByID(printerID)
+                defer { BradyUSB.close(handle) }
+                raw = BradyUSB.querySmartCellRaw(handle: handle)
+            } catch {}
+            lock.signal()
+            let text = raw.map { BradyUSB.describeRaw($0) }
+                ?? "SmartCell read failed — no response after priming (or the printer is busy / access-denied)."
+            print("[SmartCell] \(text)")
+            await MainActor.run { self.lastSmartCellDump = text }
+        }
+    }
+
     /// Cancel a specific job.
     func cancel(_ job: PrintJob) { job.requestCancel() }
 

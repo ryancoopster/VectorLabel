@@ -98,6 +98,30 @@ final class AppSettings: ObservableObject {
         didSet { UserDefaults.standard.set(designerGridSize, forKey: "designerGridSize") }
     }
 
+    // MARK: – Printer calibration (per printer, keyed by serial number)
+
+    /// Print-alignment offset in printer pixels, keyed by the printer's serial
+    /// number so it persists across disconnect/reconnect and survives relaunch.
+    /// Value is [dx, dy]; dx shifts along the tape feed, dy across the tape.
+    /// Keyed by serial (not the full USB id) so it follows the physical printer.
+    @Published var printerCalibration: [String: [Double]] {
+        didSet {
+            UserDefaults.standard.set(try? JSONEncoder().encode(printerCalibration),
+                                      forKey: "printerCalibration")
+        }
+    }
+
+    /// Calibration offset (in printer pixels) for a printer serial. (0,0) if none.
+    func calibrationOffset(forSerial serial: String) -> (dx: Double, dy: Double) {
+        let a = printerCalibration[serial] ?? []
+        return (a.count > 0 ? a[0] : 0, a.count > 1 ? a[1] : 0)
+    }
+
+    /// Set the calibration offset (printer pixels) for a printer serial.
+    func setCalibrationOffset(forSerial serial: String, dx: Double, dy: Double) {
+        printerCalibration[serial] = [dx, dy]
+    }
+
     // MARK: – App behaviour
 
     /// Whether to also show VectorLabel in the Dock (menu-bar-only by default).
@@ -170,6 +194,12 @@ final class AppSettings: ObservableObject {
         designerSnapGrid    = defaults.object(forKey: "designerSnapGrid") as? Bool ?? true
         designerSnapObjects = defaults.object(forKey: "designerSnapObjects") as? Bool ?? true
         designerGridSize    = defaults.object(forKey: "designerGridSize") as? Double ?? 0.05
+        if let d = defaults.data(forKey: "printerCalibration"),
+           let m = try? JSONDecoder().decode([String: [Double]].self, from: d) {
+            printerCalibration = m
+        } else {
+            printerCalibration = [:]
+        }
         showInDock        = defaults.object(forKey: "showInDock") as? Bool ?? false
 
         // Sync ExportSettings singleton

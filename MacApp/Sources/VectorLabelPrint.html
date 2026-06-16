@@ -606,6 +606,15 @@ function cassetteMatched(){
   return supplyCore(c.partNumber)===supplyCore(t.specN);
 }
 
+// Estimated labels remaining on the loaded roll = labelsPerRoll × supply%/100.
+// Returns null when we don't know the roll capacity or supply level.
+function supplyEstimate(){
+  const c=loadedCassette();
+  if(!c||typeof c.supplyRemainingPct!=='number'||typeof c.labelsPerRoll!=='number')return null;
+  return {remaining:Math.floor(c.labelsPerRoll*c.supplyRemainingPct/100),
+          perRoll:c.labelsPerRoll, pct:c.supplyRemainingPct};
+}
+
 // BM (bulk box) and M6 (small roll) are the same label in different packaging,
 // so show the required supply as "BM/M6-<core>" and treat either as a match.
 function requiredSupplyDisplay(specN){
@@ -690,6 +699,11 @@ function buildPrintBar(){
         return `<div onclick="detectCassette()" title="${c.partNumber} — click to re-detect" style="cursor:pointer;font-size:11px;color:#8888a8;white-space:nowrap">${typeof c.supplyRemainingPct==='number'?c.supplyRemainingPct+'% supply':c.partNumber}</div>`;
       })()}
     </div>
+
+    ${(()=>{const est=supplyEstimate();
+      if(est&&pCount>est.remaining)
+        return `<div title="About ${est.remaining} labels left on this roll (${est.pct}% of ${est.perRoll}/roll). This job needs ${pCount}." style="display:flex;align-items:center;gap:5px;color:#f5c96c;font-size:11px;font-weight:600;line-height:1.2;max-width:180px;white-space:normal;text-align:right">⚠ Not enough labels: ~${est.remaining} left, need ${pCount}</div>`;
+      return "";})()}
 
     <!-- Print button — goes straight to printing, no confirmation -->
     <button class="btn primary" onclick="doPrint()" style="padding:7px 22px;font-size:13px" ${canPrint?"":"disabled"}>

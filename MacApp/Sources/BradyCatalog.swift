@@ -38,4 +38,25 @@ enum BradyCatalog {
     static func size(forPartNumber pn: String) -> BradyLabelSize? {
         sizes.first { $0.partNumber == pn }
     }
+
+    /// Part-number "core" — everything after the first dash, upper-cased
+    /// (e.g. "BM-32-427" and "M6-32-427" both → "32-427"), so a loaded
+    /// cassette's M6-prefixed part matches the BM-prefixed catalog entry.
+    static func core(_ pn: String) -> String {
+        guard let dash = pn.firstIndex(of: "-") else { return pn.uppercased() }
+        return String(pn[pn.index(after: dash)...]).uppercased()
+    }
+
+    /// Labels on one standard M6 cartridge, by part-number core. Researched from
+    /// Brady / distributor listings (M6-31-427 & M6-32-427 = 250/roll,
+    /// M6-33-427 = 100/roll). The bulk "BM-" rolls hold far more; these are the
+    /// common cartridges the SmartCell reports. Returns nil if unknown.
+    static func labelsPerRoll(forPartNumber pn: String) -> Int? {
+        switch core(pn) {
+        case "31-427": return 250
+        case "32-427": return 250
+        case "33-427": return 100
+        default:       return nil
+        }
+    }
 }
