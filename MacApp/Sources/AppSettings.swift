@@ -73,6 +73,19 @@ final class AppSettings: ObservableObject {
         didSet { UserDefaults.standard.set(recordColumnOrder, forKey: "recordColumnOrder") }
     }
 
+    /// Record-table columns the user has hidden. Shared + persisted.
+    @Published var recordHiddenColumns: [String] {
+        didSet { UserDefaults.standard.set(recordHiddenColumns, forKey: "recordHiddenColumns") }
+    }
+
+    /// Per-column widths in px (CSV key → width). Shared + persisted.
+    @Published var recordColumnWidths: [String: Double] {
+        didSet {
+            UserDefaults.standard.set(try? JSONEncoder().encode(recordColumnWidths),
+                                      forKey: "recordColumnWidths")
+        }
+    }
+
     // MARK: – App behaviour
 
     /// Whether to also show VectorLabel in the Dock (menu-bar-only by default).
@@ -84,6 +97,30 @@ final class AppSettings: ObservableObject {
                 NSApp.setActivationPolicy(self.showInDock ? .regular : .accessory)
             }
         }
+    }
+
+    /// Apply a column config payload {order, hidden, widths} posted from a web view.
+    func applyColumnConfigPayload(_ payload: Any?) {
+        guard let dict = payload as? [String: Any] else { return }
+        if let order = dict["order"] as? [String] { recordColumnOrder = order }
+        if let hidden = dict["hidden"] as? [String] { recordHiddenColumns = hidden }
+        if let widths = dict["widths"] as? [String: Any] {
+            var m: [String: Double] = [:]
+            for (k, v) in widths { if let d = (v as? NSNumber)?.doubleValue { m[k] = d } }
+            recordColumnWidths = m
+        }
+    }
+
+    /// The shared column config as a JSON object string for injection.
+    func columnConfigJSON() -> String {
+        let cfg: [String: Any] = [
+            "order": recordColumnOrder,
+            "hidden": recordHiddenColumns,
+            "widths": recordColumnWidths,
+        ]
+        if let data = try? JSONSerialization.data(withJSONObject: cfg),
+           let s = String(data: data, encoding: .utf8) { return s }
+        return "{}"
     }
 
     // MARK: – Computed helpers
@@ -111,6 +148,13 @@ final class AppSettings: ObservableObject {
         recentPrintsCount = defaults.object(forKey: "recentPrintsCount") as? Int ?? 5
         defaultTemplateID = defaults.string(forKey: "defaultTemplateID") ?? ""
         recordColumnOrder = (defaults.array(forKey: "recordColumnOrder") as? [String]) ?? []
+        recordHiddenColumns = (defaults.array(forKey: "recordHiddenColumns") as? [String]) ?? []
+        if let d = defaults.data(forKey: "recordColumnWidths"),
+           let m = try? JSONDecoder().decode([String: Double].self, from: d) {
+            recordColumnWidths = m
+        } else {
+            recordColumnWidths = [:]
+        }
         showInDock        = defaults.object(forKey: "showInDock") as? Bool ?? false
 
         // Sync ExportSettings singleton
@@ -130,6 +174,8 @@ final class AppSettings: ObservableObject {
         recentPrintsCount    = 5
         defaultTemplateID    = ""
         recordColumnOrder    = []
+        recordHiddenColumns  = []
+        recordColumnWidths   = [:]
         showInDock           = false
     }
 }

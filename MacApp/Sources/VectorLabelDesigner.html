@@ -169,8 +169,14 @@ function startEdColResize(e,col){
   window.addEventListener('mousemove',mv);window.addEventListener('mouseup',mu);
 }
 
-// Column order for the record table: the user's saved arrangement first (shared
-// with the print window via Swift), then friendly columns, then anything else.
+// ── Shared record-column system (order, visibility, widths) ────────────────────
+// All three persisted bits (order/hidden/widths) are shared with the print
+// window via Swift (AppSettings) and applied with applyColumnConfig().
+function currentRecords(){ return window._editorRecords||RX; }
+const DEFAULT_COL_W=120;
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// Full column list (incl. hidden): saved order first, then friendly, then rest.
 function recordColumns(records){
   const present=[];
   records.forEach(r=>Object.keys(r).forEach(k=>{ if(!present.includes(k)) present.push(k); }));
@@ -180,52 +186,103 @@ function recordColumns(records){
   return out;
 }
 function colLabel(k){ return k==='_Side'?'Side':k.replace(/_/g,' '); }
+function visibleColumns(records){ const h=window._hiddenColumns||[]; return recordColumns(records).filter(c=>!h.includes(c)); }
+function colWidth(c){ const w=window._colWidths&&window._colWidths[c]; return (typeof w==='number'&&w>0)?w:DEFAULT_COL_W; }
+function colGridTemplate(cols){ return cols.map(c=>colWidth(c)+'px').join(' '); }
 
-// Drag-to-reorder columns; the new order is shared + persisted via Swift.
-function applyColumnOrder(order){ window._columnOrder=Array.isArray(order)?order:[]; R(); }
+function applyColumnConfig(cfg){
+  if(!cfg)return;
+  if(Array.isArray(cfg.order)) window._columnOrder=cfg.order;
+  if(Array.isArray(cfg.hidden)) window._hiddenColumns=cfg.hidden;
+  if(cfg.widths&&typeof cfg.widths==='object') window._colWidths=cfg.widths;
+  R();
+}
+function postColumnConfig(){
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"setColumnConfig",payload:{
+      order:window._columnOrder||[], hidden:window._hiddenColumns||[], widths:window._colWidths||{} }});
+}
+
+// Reorder via header drag (operates on the full column list).
 let _vlDragCol=null;
-function colDragStart(e,c){ _vlDragCol=c; if(e.dataTransfer)e.dataTransfer.effectAllowed='move'; }
+function colDragStart(e,c){ _vlDragCol=c; if(e.dataTransfer){e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',c);}catch(_){}} }
 function colDrop(e,target){
-  e.preventDefault();
-  const drag=_vlDragCol; _vlDragCol=null;
+  e.preventDefault(); const drag=_vlDragCol; _vlDragCol=null;
   if(!drag||drag===target)return;
-  let cols=recordColumns(window._editorRecords||RX);
+  let cols=recordColumns(currentRecords());
   const from=cols.indexOf(drag), to=cols.indexOf(target);
   if(from<0||to<0)return;
   cols.splice(to,0,cols.splice(from,1)[0]);
-  window._columnOrder=cols;
-  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
-    window.webkit.messageHandlers.vectorlabel.postMessage({action:"setColumnOrder",payload:cols});
-  R();
+  window._columnOrder=cols; postColumnConfig(); R();
+}
+
+// Resize via a right-edge handle on the header cell.
+function colResizeStart(e,c){
+  e.preventDefault(); e.stopPropagation();
+  const startX=e.clientX, startW=colWidth(c);
+  const hdr=e.target.closest('[data-colhdr]'); if(hdr)hdr.setAttribute('draggable','false');
+  function mv(ev){ window._colWidths=window._colWidths||{}; window._colWidths[c]=Math.max(48,Math.round(startW+(ev.clientX-startX))); R(); }
+  function up(){ window.removeEventListener('mousemove',mv); window.removeEventListener('mouseup',up); postColumnConfig(); }
+  window.addEventListener('mousemove',mv); window.addEventListener('mouseup',up);
+}
+
+// Show/hide.
+function hideColumn(c){ window._hiddenColumns=Array.from(new Set([...(window._hiddenColumns||[]),c])); postColumnConfig(); R(); }
+function showColumn(c){ window._hiddenColumns=(window._hiddenColumns||[]).filter(x=>x!==c); postColumnConfig(); R(); }
+function toggleColumn(c){ (window._hiddenColumns||[]).includes(c)?showColumn(c):hideColumn(c); }
+function colHeaderContextMenu(e,c){ e.preventDefault(); hideColumn(c); }
+
+// One header cell: drag to reorder, right-edge to resize, right-click to hide.
+function colHeaderCell(c){
+  return `<div data-colhdr draggable="true" ondragstart="colDragStart(event,'${c}')" ondragover="event.preventDefault()" ondrop="colDrop(event,'${c}')" oncontextmenu="colHeaderContextMenu(event,'${c}')" title="Drag to reorder · right-click to hide" style="position:relative;padding:5px 8px;font-size:10px;color:#44445a;font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;cursor:grab;box-sizing:border-box">${esc(colLabel(c))}<div onmousedown="colResizeStart(event,'${c}')" style="position:absolute;top:0;right:0;width:6px;height:100%;cursor:col-resize"></div></div>`;
+}
+
+// Columns dropdown: checkboxes to show/hide + grab handle to reorder.
+function toggleColumnsMenu(){ window._colMenuOpen=!window._colMenuOpen; R(); }
+function buildColumnsMenu(){
+  if(!window._colMenuOpen)return '';
+  const cols=recordColumns(currentRecords());
+  const hidden=new Set(window._hiddenColumns||[]);
+  return `<div onclick="event.stopPropagation()" style="position:absolute;right:8px;top:26px;z-index:30;background:#1e1e2e;border:1px solid rgba(255,255,255,0.15);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.5);padding:5px;max-height:280px;overflow-y:auto;min-width:190px">
+    <div style="font-size:9px;color:#44445a;text-transform:uppercase;letter-spacing:1px;padding:3px 6px 5px">Columns</div>
+    ${cols.map(c=>`<div draggable="true" ondragstart="colDragStart(event,'${c}')" ondragover="event.preventDefault()" ondrop="colDrop(event,'${c}')" style="display:flex;align-items:center;gap:7px;padding:3px 6px;border-radius:4px">
+      <span title="Drag to reorder" style="cursor:grab;color:#6b6f7d;font-size:12px;user-select:none">⋮⋮</span>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;font-size:12px;color:#e8e8f0">
+        <input type="checkbox" ${hidden.has(c)?'':'checked'} onchange="toggleColumn('${c}')"> ${esc(colLabel(c))}
+      </label>
+    </div>`).join('')}
+  </div>`;
+}
+
+// One wrapping data cell. Text wraps and the grid row grows to fit.
+function colDataCell(c,r){
+  const v=r[c]; const has=v!==undefined&&v!=='';
+  const val=has?String(v):'—';
+  if(c==='_Side'){const side=v==='Source'?'src':'dst';return`<div style="padding:5px 8px;font-size:11px;display:flex;align-items:center"><span class="tag ${side}">${esc(val)}</span></div>`;}
+  return`<div style="padding:5px 8px;font-size:11px;white-space:normal;overflow-wrap:anywhere;word-break:break-word;color:${has?'#e8e8f0':'#44445a'};${(c==='Number'&&has)?'font-weight:600;':''}">${esc(val)}</div>`;
 }
 
 function buildEditorRecordTable(){
   const records=window._editorRecords||RX;
   if(!records.length)return`<div style="padding:12px;color:#44445a;font-size:11px">No records loaded</div>`;
-  const cols=recordColumns(records);
+  const cols=visibleColumns(records);
+  if(!cols.length)return`<div style="padding:12px;color:#44445a;font-size:11px">All columns hidden — use the Columns menu to show some.</div>`;
+  const gt=colGridTemplate(cols);
 
-  const hdr=`<div style="display:flex;background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.1);position:sticky;top:0;z-index:2;width:max-content;min-width:100%">
-    ${cols.map(c=>`<div draggable="true" ondragstart="colDragStart(event,'${c}')" ondragover="event.preventDefault()" ondrop="colDrop(event,'${c}')" title="Drag to reorder" style="flex:0 0 auto;min-width:96px;padding:5px 8px;font-size:10px;color:#44445a;font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;cursor:grab">${colLabel(c)}</div>`).join('')}
+  const hdr=`<div style="display:grid;grid-template-columns:${gt};width:max-content;min-width:100%;background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.1);position:sticky;top:0;z-index:2">
+    ${cols.map(colHeaderCell).join('')}
   </div>`;
 
   const rows=records.map((r,i)=>{
     const isActive=S.recIdx===i;
     return`<div onclick="S.recIdx=${i};R()"
-      style="display:flex;width:max-content;min-width:100%;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;min-height:30px;align-items:center;
-             background:${isActive?'rgba(108,142,245,0.18)':'transparent'}"
-      onmouseover="if(!${isActive})this.style.background='rgba(108,142,245,0.06)'"
-      onmouseout="if(!${isActive})this.style.background='transparent'">
-      ${cols.map(c=>{
-        const v=r[c];
-        const has=v!==undefined&&v!=='';
-        const val=has?String(v):'—';
-        if(c==='_Side'){const side=v==='Source'?'src':'dst';return`<div style="flex:0 0 auto;min-width:96px;padding:5px 8px;font-size:11px;overflow:hidden;white-space:nowrap"><span class="tag ${side}">${val}</span></div>`;}
-        return`<div title="${val.replace(/"/g,'&quot;')}" style="flex:0 0 auto;min-width:96px;padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${has?'#e8e8f0':'#44445a'};font-weight:${(c==='Number'&&has)?600:400}">${val}</div>`;
-      }).join('')}
+      style="display:grid;grid-template-columns:${gt};width:max-content;min-width:100%;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;align-items:stretch;
+             background:${isActive?'rgba(108,142,245,0.18)':'transparent'}">
+      ${cols.map(c=>colDataCell(c,r)).join('')}
     </div>`;
   }).join('');
 
-  return`<div style="overflow-x:auto">${hdr}${rows}</div>`;
+  return`<div style="overflow:auto">${hdr}${rows}</div>`;
 }
 
 // ── Snap helpers ──────────────────────────────────────────────────────────────
@@ -610,12 +667,14 @@ function R(){
         <div id="rec-resizer" style="height:5px;cursor:row-resize;background:rgba(108,142,245,0.0);border-top:1px solid rgba(255,255,255,0.1);flex-shrink:0" onmouseenter="this.style.background='rgba(108,142,245,0.25)'" onmouseleave="this.style.background='rgba(108,142,245,0)'" onmousedown="startRecResize(event)"></div>
         <!-- Record selector -->
         <div id="rec-panel" style="height:${S.recH||160}px;overflow:auto;background:#13131a;flex-shrink:0">
-          <div style="padding:5px 10px 4px;display:flex;align-items:center;gap:6px;border-top:1px solid rgba(255,255,255,0.07);flex-shrink:0">
+          <div style="position:relative;padding:5px 10px 4px;display:flex;align-items:center;gap:6px;border-top:1px solid rgba(255,255,255,0.07);flex-shrink:0">
             <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px">Records</span>
             <div style="flex:1"></div>
             <span style="color:#44445a;font-size:10px">${S.recIdx+1} / ${(RX).length}</span>
             <button onclick="S.recIdx=Math.max(0,S.recIdx-1);R()" class="btn" style="padding:2px 7px;font-size:13px;line-height:1" ${S.recIdx===0?"disabled":""}>‹</button>
             <button onclick="S.recIdx=Math.min((RX).length-1,S.recIdx+1);R()" class="btn" style="padding:2px 7px;font-size:13px;line-height:1" ${S.recIdx===(RX).length-1?"disabled":""}>›</button>
+            <button class="btn${window._colMenuOpen?' on':''}" onclick="event.stopPropagation();toggleColumnsMenu()" style="padding:2px 8px;font-size:11px">Columns ▾</button>
+            ${buildColumnsMenu()}
           </div>
           ${buildEditorRecordTable()}
         </div>

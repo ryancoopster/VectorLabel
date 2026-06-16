@@ -34,9 +34,9 @@ final class PrintWindowController: NSObject {
     // Pushes detected cassette (SmartCell) info into the web view as it updates.
     private var cassetteObserver: AnyCancellable?
 
-    // Pushes the shared record-column order into the web view when it changes
-    // (e.g. the user reorders columns in the designer).
-    private var columnObserver: AnyCancellable?
+    // Pushes the shared record-column config (order/hidden/widths) into the web
+    // view when it changes (e.g. the user reorders columns in the designer).
+    private var columnObservers: Set<AnyCancellable> = []
 
     // Recent-print record for the job submitted this session, so its status can
     // be updated (printing → complete / cancelled-mid-print). nil until Print is
@@ -97,7 +97,7 @@ final class PrintWindowController: NSObject {
         jobObservers.removeAll()
         printerObserver = nil
         cassetteObserver = nil
-        columnObserver = nil
+        columnObservers.removeAll()
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "vectorlabel")
         window?.close()
         window = nil
@@ -135,10 +135,13 @@ final class PrintWindowController: NSObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.pushCassettes() }
 
-        // Keep the column order in sync with the designer / persisted setting.
-        columnObserver = AppSettings.shared.$recordColumnOrder
-            .receive(on: RunLoop.main)
-            .sink { [weak self] order in self?.pushColumnOrder(order) }
+        // Keep the column config in sync with the designer / persisted setting.
+        AppSettings.shared.$recordColumnOrder.dropFirst().receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.pushColumnConfig() }.store(in: &columnObservers)
+        AppSettings.shared.$recordHiddenColumns.dropFirst().receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.pushColumnConfig() }.store(in: &columnObservers)
+        AppSettings.shared.$recordColumnWidths.dropFirst().receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.pushColumnConfig() }.store(in: &columnObservers)
 
         // Prefer live repo file during development so git pull is reflected immediately
         let htmlURL = Self.findHTMLFile("VectorLabelPrint")
@@ -218,19 +221,9 @@ final class PrintWindowController: NSObject {
         evalJS("if(typeof updateCassettes==='function')updateCassettes(\(cassettesJSONString()));")
     }
 
-    /// The shared record-column order as a JSON array string.
-    private func columnOrderJSON() -> String {
-        if let data = try? JSONSerialization.data(withJSONObject: AppSettings.shared.recordColumnOrder),
-           let s = String(data: data, encoding: .utf8) { return s }
-        return "[]"
-    }
-
-    /// Push a column order into the web view's record tables.
-    private func pushColumnOrder(_ order: [String]) {
-        if let data = try? JSONSerialization.data(withJSONObject: order),
-           let json = String(data: data, encoding: .utf8) {
-            evalJS("if(typeof applyColumnOrder==='function')applyColumnOrder(\(json));")
-        }
+    /// Push the shared column config (order/hidden/widths) into the web view.
+    private func pushColumnConfig() {
+        evalJS("if(typeof applyColumnConfig==='function')applyColumnConfig(\(AppSettings.shared.columnConfigJSON()));")
     }
 
     private func sendInitialState() {
@@ -272,7 +265,7 @@ final class PrintWindowController: NSObject {
               sourceFile: \(sourceFile.jsonQuoted),
               defaultTemplateID: \(AppSettings.shared.defaultTemplateID.jsonQuoted),
               cassettes: \(cassettesJSONString()),
-              columnOrder: \(columnOrderJSON()),
+              columnConfig: \(AppSettings.shared.columnConfigJSON()),
               reprint: \(reprintJSON)
             });
           }
@@ -332,10 +325,8 @@ extension PrintWindowController: WKScriptMessageHandler {
                 PrinterManager.shared.refreshCassette(for: printerID, force: true)
             }
 
-        case "setColumnOrder":
-            if let order = body["payload"] as? [String] {
-                AppSettings.shared.recordColumnOrder = order
-            }
+        case "setColumnConfig":
+            AppSettings.shared.applyColumnConfigPayload(body["payload"])
 
         case "setDefaultTemplate":
             // payload {id, name} to set, or null to clear. Persists in AppSettings.
@@ -488,7 +479,7 @@ extension PrintWindowController: NSWindowDelegate {
         jobObservers.removeAll()
         printerObserver = nil
         cassetteObserver = nil
-        columnObserver = nil
+        columnObservers.removeAll()
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "vectorlabel")
         webView = nil
         window = nil

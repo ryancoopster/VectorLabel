@@ -49,11 +49,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // pop open the menu so the user can watch printer/queue status.
         printWindowController.onPrintStarted = { [weak self] in self?.showMenuPopover() }
 
-        // Keep the designer's column order in sync with the shared setting.
-        AppSettings.shared.$recordColumnOrder
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.injectColumnOrder() }
-            .store(in: &cancellables)
+        // Keep the designer's column config in sync with the shared setting.
+        AppSettings.shared.$recordColumnOrder.dropFirst().receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.injectColumnConfig() }.store(in: &cancellables)
+        AppSettings.shared.$recordHiddenColumns.dropFirst().receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.injectColumnConfig() }.store(in: &cancellables)
+        AppSettings.shared.$recordColumnWidths.dropFirst().receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.injectColumnConfig() }.store(in: &cancellables)
 
         // Set up the NSStatusItem — reliable for LSUIElement apps, no activation issues
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -287,14 +289,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         )
     }
 
-    /// Push the shared record-column order into the designer.
-    private func injectColumnOrder() {
-        guard let wv = designerWebView,
-              let data = try? JSONSerialization.data(withJSONObject: AppSettings.shared.recordColumnOrder),
-              let json = String(data: data, encoding: .utf8)
-        else { return }
+    /// Push the shared record-column config (order/hidden/widths) into the designer.
+    private func injectColumnConfig() {
+        guard let wv = designerWebView else { return }
         wv.evaluateJavaScript(
-            "if(typeof applyColumnOrder==='function')applyColumnOrder(\(json));",
+            "if(typeof applyColumnConfig==='function')applyColumnConfig(\(AppSettings.shared.columnConfigJSON()));",
             completionHandler: nil
         )
     }
@@ -383,7 +382,7 @@ extension AppDelegate: WKNavigationDelegate {
         }
         // Inject the templates-folder list so the designer's Open dialog can list them.
         injectDesignerTemplates()
-        injectColumnOrder()
+        injectColumnConfig()
     }
 }
 
@@ -439,10 +438,8 @@ extension AppDelegate: WKScriptMessageHandler {
         case "browseTemplate":
             browseForTemplate()
 
-        case "setColumnOrder":
-            if let order = body["payload"] as? [String] {
-                AppSettings.shared.recordColumnOrder = order
-            }
+        case "setColumnConfig":
+            AppSettings.shared.applyColumnConfigPayload(body["payload"])
 
         default:
             break
