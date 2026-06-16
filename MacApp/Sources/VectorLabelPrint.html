@@ -1758,6 +1758,12 @@ function R(){
   // e.g. on the 5s printer rescan or any row click).
   const _prevScroll=(document.getElementById("recScroll")||{}).scrollTop||0;
   const _prevPreviewScroll=(document.getElementById("vl-preview-scroll")||{}).scrollTop||0;
+  // Preserve the inline cell-edit input's focus + caret across the rebuild, so a
+  // background re-render (printer/cassette poll, job updates) doesn't kick the
+  // user out of the text box mid-typing.
+  let _editCaret=null;
+  { const _ei=document.getElementById("cell-edit-input");
+    if(_ei && document.activeElement===_ei) _editCaret=[_ei.selectionStart,_ei.selectionEnd]; }
   document.getElementById("app").innerHTML=`
     <!-- Top bar -->
     <div style="background:var(--surface);border-bottom:1px solid var(--bd2);padding:0 16px;display:flex;align-items:center;gap:12px;height:44px;flex-shrink:0">
@@ -1873,6 +1879,8 @@ function R(){
   if(_recEl) _recEl.scrollTop=_prevScroll;
   const _pvEl=document.getElementById("vl-preview-scroll");
   if(_pvEl) _pvEl.scrollTop=_prevPreviewScroll;
+  if(_editCaret){ const _ei=document.getElementById("cell-edit-input");
+    if(_ei){ _ei.focus(); try{ _ei.setSelectionRange(_editCaret[0],_editCaret[1]); }catch(_){} } }
   fitPreviewLabel();
   if(!window._recWheelBound){
     document.getElementById("app").addEventListener("wheel", onRecWheel, {passive:false});
