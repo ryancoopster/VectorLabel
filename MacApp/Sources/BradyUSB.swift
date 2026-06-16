@@ -198,36 +198,45 @@ enum BradyUSB {
         #endif
     }
 
-    /// Best-effort wait for the printer to finish physically printing the label
-    /// whose job was just sent. The printer processes its command stream serially,
-    /// so a status query (ESC I) issued right after a complete job is not answered
-    /// until that job has finished printing — making "the printer replied" a proxy
-    /// for "the label is done." Returns true if the printer replied within `maxMs`,
-    /// false on timeout (or when no bidirectional channel is available).
-    ///
-    /// Safety: bounded by `maxMs` so it can never hang a job; only ever called
-    /// BETWEEN complete jobs, so it can't corrupt an in-progress label. Caller must
-    /// hold the device lock.
-    static func waitForLabelDone(handle: OpaquePointer, maxMs: Int) -> Bool {
+    /// Read the cassette's "labels remaining" counter (decrements by exactly one
+    /// per printed label). Returns -1 if unavailable. The response has
+    /// variable-length part-number / ribbon-code strings, so the counter is located
+    /// relative to the field block (fb), not at a fixed offset. Caller must hold the
+    /// device lock.
+    static func labelsRemaining(handle: OpaquePointer) -> Int {
         #if canImport(CLibUSB)
-        var query: [UInt8] = [0x1B, 0x49, 0x00]   // ESC I — info/status request
+        var query: [UInt8] = [0x1B, 0x49, 0x00]
         var readBuf = [UInt8](repeating: 0, count: 256)
-        let deadline = DispatchTime.now().uptimeNanoseconds &+ UInt64(max(0, maxMs)) &* 1_000_000
-        while DispatchTime.now().uptimeNanoseconds < deadline {
+        for _ in 0 ..< 4 {
             var sent: Int32 = 0
             _ = query.withUnsafeMutableBufferPointer { buf in
-                libusb_bulk_transfer(handle, outEndpoint, buf.baseAddress, Int32(buf.count), &sent, 400)
+                libusb_bulk_transfer(handle, outEndpoint, buf.baseAddress, Int32(buf.count), &sent, 300)
             }
             var got: Int32 = 0
             let rrc = readBuf.withUnsafeMutableBufferPointer { buf in
-                libusb_bulk_transfer(handle, inEndpoint, buf.baseAddress, Int32(buf.count), &got, 400)
+                libusb_bulk_transfer(handle, inEndpoint, buf.baseAddress, Int32(buf.count), &got, 300)
             }
-            if rrc == 0 && got > 0 { return true }   // printer answered → prior job has printed
-            usleep(40_000)                           // 40 ms between polls
+            if rrc == 0 && got >= 0x16 {
+                let data = Array(readBuf.prefix(Int(got)))
+                // Locate field block exactly like parseSmartCell (variable-length).
+                func nulFrom(_ start: Int, _ maxLen: Int) -> Int {
+                    var e = start
+                    while e < data.count, e < start + maxLen, data[e] != 0 { e += 1 }
+                    return e
+                }
+                let partNul = nulFrom(0x06, 16)
+                let ribbonNul = nulFrom(partNul + 1, 32)
+                let fb = ribbonNul + 13
+                let off = fb + 0x37   // labels-remaining counter (16-bit LE)
+                if off + 1 < data.count {
+                    return Int(data[off]) | (Int(data[off + 1]) << 8)
+                }
+            }
+            usleep(30_000)
         }
-        return false
+        return -1
         #else
-        return false
+        return -1
         #endif
     }
 

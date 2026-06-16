@@ -135,6 +135,7 @@ final class PrinterManager: ObservableObject {
         title: String,
         templateName: String,
         printerID: String,
+        estLabelMs: Int = 1000,
         delayMs: Int = AppSettings.shared.interLabelDelayMs
     ) -> PrintJob {
         let job = PrintJob(
@@ -173,26 +174,45 @@ final class PrinterManager: ObservableObject {
                 let handle = try BradyUSB.openPrinterByID(printerID)
                 defer { BradyUSB.close(handle) }
 
-                // Drive progress from actual printing, not just "sent over USB":
-                // after each label's data is sent, wait for the printer to confirm
-                // it has finished (it only answers a status query once the label has
-                // physically printed). Self-disables if the printer never reports
-                // status, so unsupported firmware just falls back to send-based
-                // progress with no added per-label delay.
-                let perLabelMaxMs = 9000
-                var statusPolling = true
-                for (i, vglJob) in jobs.enumerated() {
+                // The printer accepts the whole job into its buffer almost instantly
+                // (no USB backpressure) and gives no per-label status — so "sent" is
+                // not "printed". Instead: send everything, then drive the progress
+                // bar from (a) a print-time estimate for smooth motion and (b) the
+                // cassette's real "labels remaining" counter, which decrements by the
+                // job's label count when printing actually finishes — snapping the
+                // bar to done at the true completion moment.
+                let count = jobs.count
+                let initialRem = BradyUSB.labelsRemaining(handle: handle)   // -1 if unavailable
+                for vglJob in jobs {
                     if job.isCancelled { break }
                     try BradyUSB.sendJob(vglJob, handle: handle)
-                    if statusPolling {
-                        let printed = BradyUSB.waitForLabelDone(handle: handle, maxMs: perLabelMaxMs)
-                        if !printed && i == 0 { statusPolling = false }   // firmware doesn't report status
-                    }
-                    await MainActor.run { job.completedLabels = i + 1 }
-                    if i < jobs.count - 1 {
-                        usleep(useconds_t(delayMs * 1000))
-                    }
                 }
+                if !job.isCancelled {
+                    let estTotalMs = max(800, count * max(200, estLabelMs))
+                    let startNs = DispatchTime.now().uptimeNanoseconds
+                    // Hard cap so a stuck/silent printer can never hang the job.
+                    let capMs = estTotalMs * 3 + 8000
+                    var realDone = false
+                    while !job.isCancelled {
+                        let elapsedMs = Int((DispatchTime.now().uptimeNanoseconds &- startNs) / 1_000_000)
+                        // Smooth, estimate-based motion (never reaches 100% on its own).
+                        let timeLabels = min(count - 1, Int(Double(count) * Double(elapsedMs) / Double(estTotalMs)))
+                        // Real completion from the printer's counter.
+                        var counterLabels = 0
+                        if initialRem >= 0 {
+                            let rem = BradyUSB.labelsRemaining(handle: handle)
+                            if rem >= 0 { counterLabels = max(0, min(count, initialRem - rem)) }
+                        }
+                        let shown = max(0, max(timeLabels, counterLabels))
+                        await MainActor.run { job.completedLabels = min(count, shown) }
+                        if initialRem >= 0 && counterLabels >= count { realDone = true; break }   // truly finished
+                        if initialRem < 0 && elapsedMs >= estTotalMs { break }                    // no counter → estimate only
+                        if elapsedMs >= capMs { break }                                            // safety
+                        usleep(150_000)
+                    }
+                    _ = realDone
+                }
+                await MainActor.run { job.completedLabels = count }
             } catch {
                 print("[PrinterManager] Print failed: \(error)")
             }
