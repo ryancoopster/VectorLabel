@@ -724,6 +724,7 @@ function presetMenu(e,id){
   item("Apply (activate)",()=>applyPreset(id));
   item("Edit…",()=>editPreset(id));
   item("Rename…",()=>renamePreset(id));
+  item("Update preset with current",()=>updatePresetWithCurrent(id));
   item("Delete",()=>deletePreset(id),true);
   document.body.appendChild(menu);
   setTimeout(()=>document.addEventListener('mousedown',closePresetMenu,{once:true}),0);
@@ -814,6 +815,25 @@ function savePresetEdits(){
   const p=(window._presets||[]).find(x=>x.id===P._editingPresetId); if(!p)return;
   p.filter=draftToFilter(); p.sort=draftToSort();
   savePresets(); closeFilterModal(); R();
+}
+// Save the edited preset AND make it the active filter/sort in one step.
+function savePresetEditsAndApply(){
+  const p=(window._presets||[]).find(x=>x.id===P._editingPresetId); if(!p)return;
+  p.filter=draftToFilter(); p.sort=draftToSort();
+  savePresets();
+  P.filter=p.filter?JSON.parse(JSON.stringify(p.filter)):null;
+  P.sort=p.sort?JSON.parse(JSON.stringify(p.sort)):null;
+  closeFilterModal();
+  const vis=visibleIndices(); if(vis.length&&!vis.includes(P.previewIdx))P.previewIdx=vis[0];
+  R();
+}
+// Overwrite a preset's stored filter/sort with the currently active settings.
+function updatePresetWithCurrent(id){
+  const p=(window._presets||[]).find(x=>x.id===id); if(!p)return;
+  p.filter=P.filter?JSON.parse(JSON.stringify(P.filter)):null;
+  p.sort=P.sort?JSON.parse(JSON.stringify(P.sort)):null;
+  savePresets(); R();
+  showToast("Preset updated: "+p.name);
 }
 // Sort-draft mutators
 function sdAddRule(){ P._sortDraft.rules.push({field:"",dir:"asc"}); renderFilterModal(); }
@@ -968,7 +988,8 @@ function renderFilterModal(){
       <div style="display:flex;gap:8px">
         <button class="btn" onclick="closeFilterModal()">Cancel</button>
         ${editing
-          ? `<button class="btn" onclick="savePresetEdits()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Save preset</button>`
+          ? `<button class="btn" onclick="savePresetEdits()">Save preset</button>
+             <button class="btn" onclick="savePresetEditsAndApply()" title="Save these changes and apply them as the active filter/sort" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Save &amp; apply</button>`
           : `<button class="btn" onclick="applyFilterDraft()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Apply</button>`}
       </div>
     </div>
