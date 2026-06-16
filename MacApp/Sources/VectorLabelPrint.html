@@ -26,6 +26,10 @@ label.lbl{font-size:10px;color:#8888a8;display:block;margin-bottom:3px}
 .modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.07)}
 .rec-row{display:grid;grid-template-columns:var(--col-cb) var(--col-pair) var(--col-num) var(--col-side) var(--col-number) var(--col-cable) var(--col-signal) var(--col-device) var(--col-socket);align-items:center;gap:0;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;min-height:36px}
 .rec-row:hover{background:rgba(108,142,245,0.06)}
+/* Off-screen data rows skip layout/paint — keeps 1500+ record lists smooth
+   while preserving wrapping. intrinsic-size estimates an off-screen row so the
+   scrollbar stays stable. */
+.recv{content-visibility:auto;contain-intrinsic-size:auto 36px}
 .rec-row.selected{background:rgba(108,142,245,0.12)}
 .rec-row.active-preview{background:rgba(108,142,245,0.2)}
 .rec-cell{padding:6px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1180,26 +1184,28 @@ function parseCSV(text){
 }
 
 // ── Main render ───────────────────────────────────────────────────────────────
-// Wheel acceleration for the record list. Native scrolling handles a single
-// flick; when the user keeps scrolling the same direction on a large list we
-// ramp a multiplier so 1500-record files don't take forever to traverse.
-let _wheelMult=1, _wheelDir=0, _wheelLast=0;
+// Wheel acceleration for the record list. Normal and small scrolls stay fully
+// native (smooth); only sustained, continuous scrolling on a genuinely large
+// list ramps up speed, so 1500-record files don't take forever to traverse.
+let _wg={dir:0, t:0, count:0};
 function onRecWheel(e){
   const el=document.getElementById("recScroll");
   if(!el||!el.contains(e.target))return;
   if(Math.abs(e.deltaX)>Math.abs(e.deltaY))return;          // leave horizontal alone
-  if(el.scrollHeight-el.clientHeight<600)return;            // small lists: native only
+  if(el.scrollHeight-el.clientHeight<1800)return;           // only big lists accelerate
   const now=Date.now(), dir=Math.sign(e.deltaY);
-  if(dir===_wheelDir && now-_wheelLast<150) _wheelMult=Math.min(_wheelMult+0.5,6);
-  else _wheelMult=1;                                        // new gesture / direction change → reset
-  _wheelDir=dir; _wheelLast=now;
-  if(_wheelMult>1){                                         // only take over once accelerating
-    let delta=e.deltaY;
-    if(e.deltaMode===1) delta*=16;                          // lines → px
-    else if(e.deltaMode===2) delta*=el.clientHeight;        // pages → px
-    e.preventDefault();
-    el.scrollTop+=delta*_wheelMult;
-  }
+  if(dir===_wg.dir && now-_wg.t<130) _wg.count++;           // same gesture, continuing
+  else { _wg.dir=dir; _wg.count=1; }                        // new gesture / direction / pause
+  _wg.t=now;
+  // Stay native for the first stretch of a gesture — small/normal scrolls are
+  // never boosted. Only deep into a sustained scroll do we ramp (gently).
+  if(_wg.count<=8) return;
+  const mult=Math.min(1+(_wg.count-8)*0.25, 3.5);
+  let delta=e.deltaY;
+  if(e.deltaMode===1) delta*=16;                            // lines → px
+  else if(e.deltaMode===2) delta*=el.clientHeight;          // pages → px
+  e.preventDefault();
+  el.scrollTop+=delta*mult;
 }
 
 function R(){
@@ -1274,7 +1280,7 @@ function R(){
             const isSel=P.selected.has(i);
             const isPrev=P.previewIdx===i;
             const ps2=pairChkState(i);
-            return`<div class="rec-row${isSel?" selected":""}${isPrev?" active-preview":""}" style="grid-template-columns:${gridT};align-items:stretch" onclick="P.previewIdx=${i};P.lastClickIdx=null;R()">
+            return`<div class="rec-row recv${isSel?" selected":""}${isPrev?" active-preview":""}" style="grid-template-columns:${gridT};align-items:stretch" onclick="P.previewIdx=${i};P.lastClickIdx=null;R()">
               <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();if(event.shiftKey&&P.lastClickIdx!==null){const lo=Math.min(P.lastClickIdx,${i}),hi=Math.max(P.lastClickIdx,${i});for(let j=lo;j<=hi;j++)P.selected.add(j);P.printRange='selected';R();}else{P.lastClickIdx=${i};toggleSel(${i});}">
                 <div class="cb ${isSel?"chk":""}"><span class="check-tick">${isSel?"✓":""}</span></div>
               </div>
