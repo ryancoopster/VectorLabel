@@ -255,68 +255,6 @@ enum BradyUSB {
         #endif
     }
 
-    /// Like `querySmartCell` but returns the raw bytes of the first successful
-    /// response (≥108 bytes) for diagnostics — so we can compare byte values
-    /// against the printer's own front-panel readings (supply %, ribbon
-    /// remaining) and identify undocumented fields. Caller must hold deviceLock.
-    static func querySmartCellRaw(handle: OpaquePointer, maxAttempts: Int = 25) -> [UInt8]? {
-        #if canImport(CLibUSB)
-        var query: [UInt8] = [0x1B, 0x49, 0x00]
-        var readBuf = [UInt8](repeating: 0, count: 512)
-        for _ in 0 ..< maxAttempts {
-            var transferred: Int32 = 0
-            _ = query.withUnsafeMutableBufferPointer { buf in
-                libusb_bulk_transfer(handle, outEndpoint, buf.baseAddress,
-                                     Int32(buf.count), &transferred, 1_000)
-            }
-            usleep(50_000)
-            var readCount: Int32 = 0
-            let rc = readBuf.withUnsafeMutableBufferPointer { buf in
-                libusb_bulk_transfer(handle, inEndpoint, buf.baseAddress,
-                                     Int32(buf.count), &readCount, 500)
-            }
-            if rc == 0, readCount >= 108 {
-                return Array(readBuf.prefix(Int(readCount)))
-            }
-        }
-        return nil
-        #else
-        return nil
-        #endif
-    }
-
-    /// Format a raw SmartCell response as an annotated hex dump for the log —
-    /// offset column, hex bytes, and the values at each documented field so an
-    /// undocumented byte (e.g. ribbon remaining) can be spotted by comparison.
-    static func describeRaw(_ data: [UInt8]) -> String {
-        func u16(_ o: Int) -> Int { o + 1 < data.count ? Int(data[o]) | (Int(data[o+1]) << 8) : -1 }
-        var out = "SmartCell raw dump (\(data.count) bytes):\n"
-        var i = 0
-        while i < data.count {
-            let row = data[i..<min(i+16, data.count)]
-            let hex = row.map { String(format: "%02X", $0) }.joined(separator: " ")
-            out += String(format: "0x%02X: %@\n", i, hex)
-            i += 16
-        }
-        out += "Decoded fields:\n"
-        out += "  0x22 horizontalGap = \(u16(0x22))\n"
-        out += "  0x24 verticalGap   = \(u16(0x24))\n"
-        out += "  0x26 supply %%      = \(u16(0x26))\n"
-        out += "  0x2E linerWidth    = \(u16(0x2E))\n"
-        out += "  0x36 labelWidth    = \(u16(0x36))\n"
-        out += "  0x38 labelHeight   = \(u16(0x38))\n"
-        out += "  0x3A printableW    = \(u16(0x3A))\n"
-        // Candidate ribbon-remaining bytes: any u16 in 0..100 not already mapped.
-        out += "  Bytes that look like a 0-100 percentage (candidate ribbon %):\n"
-        for off in stride(from: 0, to: data.count - 1, by: 2) {
-            let v = u16(off)
-            if (0...100).contains(v) && ![0x22,0x24,0x26].contains(off) {
-                out += String(format: "    0x%02X = %d\n", off, v)
-            }
-        }
-        return out
-    }
-
     /// Parse the 108-byte SmartCell response (all integers little-endian, §8).
     static func parseSmartCell(_ data: [UInt8]) -> SmartCellInfo? {
         guard data.count >= 108 else { return nil }

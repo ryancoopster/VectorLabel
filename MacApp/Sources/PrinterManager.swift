@@ -219,36 +219,6 @@ final class PrinterManager: ObservableObject {
                templateName: "Calibration", printerID: printerID)
     }
 
-    /// Most recent raw SmartCell hex dump (debug). Shown in Preferences so its
-    /// bytes can be compared against the printer's front-panel supply/ribbon.
-    @Published var lastSmartCellDump: String = ""
-
-    /// Read the loaded cassette's raw SmartCell bytes and log/publish an
-    /// annotated hex dump. Used to debug the supply-% reading and to hunt for
-    /// an undocumented ribbon-remaining byte.
-    func dumpSmartCell(for printerID: String) {
-        if activeJobs.contains(where: { !$0.isComplete }) {
-            lastSmartCellDump = "Printer is busy — finish or cancel the queue first."
-            return
-        }
-        lastSmartCellDump = "Reading SmartCell… (can take several seconds)"
-        Task.detached {
-            let lock = BradyUSB.deviceLock(for: printerID)
-            lock.wait()
-            var raw: [UInt8]?
-            do {
-                let handle = try BradyUSB.openPrinterByID(printerID)
-                defer { BradyUSB.close(handle) }
-                raw = BradyUSB.querySmartCellRaw(handle: handle)
-            } catch {}
-            lock.signal()
-            let text = raw.map { BradyUSB.describeRaw($0) }
-                ?? "SmartCell read failed — no response after priming (or the printer is busy / access-denied)."
-            print("[SmartCell] \(text)")
-            await MainActor.run { self.lastSmartCellDump = text }
-        }
-    }
-
     /// Cancel a specific job.
     func cancel(_ job: PrintJob) { job.requestCancel() }
 

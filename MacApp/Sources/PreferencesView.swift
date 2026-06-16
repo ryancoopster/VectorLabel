@@ -295,11 +295,6 @@ struct PreferencesView: View {
                 }
                 .buttonStyle(VLButtonStyle())
                 .disabled(printer.status != .ready)
-                Button("SmartCell dump") {
-                    PrinterManager.shared.dumpSmartCell(for: printer.id)
-                }
-                .buttonStyle(VLButtonStyle())
-                .disabled(printer.status != .ready)
                 Text("\(dpi) px = 1 inch  (\(dpi) DPI)")
                     .foregroundColor(.vlDim).font(.system(size: 11))
             }
@@ -311,36 +306,10 @@ struct PreferencesView: View {
                 }
                 .buttonStyle(VLButtonStyle())
             }
-
-            if !printerManager.lastSmartCellDump.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("SmartCell diagnostics")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(.vlSecondary)
-                        Spacer()
-                        Button("Copy") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(printerManager.lastSmartCellDump, forType: .string)
-                        }
-                        .buttonStyle(VLButtonStyle())
-                    }
-                    ScrollView {
-                        Text(printerManager.lastSmartCellDump)
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundColor(.vlSecondary)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(height: 150)
-                    .padding(6)
-                    .background(Color.black.opacity(0.25))
-                    .cornerRadius(6)
-                }
-                .padding(.leading, 2)
-            }
         }
-        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 10)
     }
 
     private func offsetField(_ label: String, _ binding: Binding<Double>) -> some View {
