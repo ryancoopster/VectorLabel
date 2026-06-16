@@ -277,14 +277,12 @@ enum BradyUSB {
 
     /// Parse a SmartCell response (all integers little-endian, §8).
     ///
-    /// IMPORTANT: the documented layout assumes a 6-byte ribbon-code field at
-    /// 0x10, but the ribbon code is actually a variable-length NUL-terminated
-    /// string. A longer code (e.g. "R10010-WT", 4 bytes longer than "R4310")
-    /// pushes every later field forward by the same amount and grows the total
-    /// length (108 → 112). So we DON'T read the data/dimension fields at fixed
-    /// offsets — we locate them relative to the end of the ribbon string. The
-    /// 12 bytes between the ribbon-code NUL and the field block (a 4-byte ROM
-    /// marker + 4-byte unit serial + 4 zero bytes) are constant across samples.
+    /// IMPORTANT: BOTH the part number and the ribbon code are variable-length
+    /// NUL-terminated strings (not fixed-width fields). A longer part number
+    /// (e.g. "BM-109-427", 10 chars) or ribbon code (e.g. "R10010-WT") pushes
+    /// every later field forward. So we parse the part number from 0x06, then
+    /// the ribbon code immediately after its terminator, and locate the data/
+    /// dimension block 13 bytes past the ribbon-code terminator.
     static func parseSmartCell(_ data: [UInt8]) -> SmartCellInfo? {
         guard data.count >= 0x16 else { return nil }
         func u16(_ off: Int) -> Int {
@@ -298,8 +296,8 @@ enum BradyUSB {
             return (String(bytes: data[start..<end], encoding: .ascii) ?? "", end)
         }
 
-        let (partNumber, _)        = cstr(0x06, 10)   // fixed 10-byte field
-        let (ribbonCode, ribbonNul) = cstr(0x10, 32)  // variable length
+        let (partNumber, partNul)   = cstr(0x06, 16)            // variable length
+        let (ribbonCode, ribbonNul) = cstr(partNul + 1, 32)     // right after the part number
 
         // Field block begins 13 bytes past the ribbon-code terminator.
         let fb = ribbonNul + 13
