@@ -731,24 +731,33 @@ function presetMenu(e,id){
 
 // Reusable text-input overlay (WKWebView blocks window.prompt without a delegate).
 // cb(value, viaExtra) — viaExtra is true when the optional extra button is used.
+// A name is required: Save / the extra button stay disabled-feeling and show
+// helper text until something is typed; only Cancel exits with an empty field.
 function vlPrompt(title,def,cb,extraLabel){
   const o=document.createElement('div'); o.className='modal-overlay'; o.style.zIndex='2600';
-  o.onclick=e=>{ if(e.target===o){ o.remove(); cb(null); } };
+  o.onclick=e=>{ if(e.target===o){ o.remove(); cb(null,false); } };
   o.innerHTML=`<div class="modal" style="min-width:360px">
     <div class="modal-title">${esc(title)}</div>
     <input id="vlpi" class="inp" value="${(def||'').replace(/"/g,'&quot;')}">
+    <div id="vlperr" style="display:none;color:var(--red);font-size:11px;margin-top:6px">You must enter a name.</div>
     <div class="modal-footer"><button class="btn" id="vlpc">Cancel</button>
       <button class="btn" id="vlpo" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Save</button>
       ${extraLabel?`<button class="btn" id="vlpx" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">${esc(extraLabel)}</button>`:''}
     </div>
   </div>`;
   document.body.appendChild(o);
-  const inp=o.querySelector('#vlpi'); inp.focus(); inp.select();
-  function done(v,extra){ o.remove(); cb(v,!!extra); }
-  o.querySelector('#vlpo').onclick=()=>done(inp.value.trim()||null,false);
-  o.querySelector('#vlpc').onclick=()=>done(null,false);
-  const xb=o.querySelector('#vlpx'); if(xb)xb.onclick=()=>done(inp.value.trim()||null,true);
-  inp.onkeydown=e=>{ if(e.key==='Enter')done(inp.value.trim()||null,false); if(e.key==='Escape')done(null,false); };
+  const inp=o.querySelector('#vlpi'), err=o.querySelector('#vlperr');
+  inp.focus(); inp.select();
+  function attempt(extra){
+    const v=inp.value.trim();
+    if(!v){ err.style.display='block'; inp.focus(); return; }   // require a name; stay open
+    o.remove(); cb(v,!!extra);
+  }
+  inp.oninput=()=>{ if(inp.value.trim())err.style.display='none'; };
+  o.querySelector('#vlpo').onclick=()=>attempt(false);
+  o.querySelector('#vlpc').onclick=()=>{ o.remove(); cb(null,false); };
+  const xb=o.querySelector('#vlpx'); if(xb)xb.onclick=()=>attempt(true);
+  inp.onkeydown=e=>{ if(e.key==='Enter')attempt(false); if(e.key==='Escape'){ o.remove(); cb(null,false); } };
 }
 
 // ── Filter dialog ─────────────────────────────────────────────────────────────
