@@ -397,6 +397,8 @@ let P={
   rangeTo: SAMPLE_CSV.length,
   filter: null,          // {rules:[{field,op,valueType,value}], connectors:['and'|'or'], showBothSides:bool}
   _filterDraft: null,    // working copy while the filter dialog is open
+  sort: null,            // {rules:[{field,dir:'asc'|'desc'}], pairMode:'break'|'source'|'dest'}
+  _sortDraft: null,      // working copy while the dialog is open
   sourceFile: "ESM_Kodak_Hall_Master_export_20260614_172508.csv",
   activePrinter: "m610-001",
   view: "print", // "print" | "editor"
@@ -597,10 +599,60 @@ function passesFilter(i){
   return false;
 }
 
-// Absolute indices of records currently shown (filter applied).
+// ── Sorting ───────────────────────────────────────────────────────────────────
+function sortActive(){ return !!(P.sort && (P.sort.rules||[]).some(r=>r.field)); }
+
+// Natural, case-insensitive compare of two records by the active sort rules.
+function cmpRecs(ra,rb){
+  for(const r of (P.sort.rules||[])){
+    if(!r.field)continue;
+    const a=ra?ra[r.field]:"", b=rb?rb[r.field]:"";
+    let c=String(a==null?"":a).localeCompare(String(b==null?"":b),undefined,{numeric:true,sensitivity:"base"});
+    if(r.dir==="desc")c=-c;
+    if(c)return c;
+  }
+  return 0;
+}
+
+// Order a list of filtered indices per the sort spec + pair mode:
+//  break  → sort each row independently (pairs may separate)
+//  source → keep each Source+Destination pair together, ordered by the Source
+//  dest   → keep pairs together, ordered by the Destination
+function applySort(idx){
+  const mode=(P.sort.pairMode)||"break";
+  if(mode==="break") return idx.slice().sort((i,j)=>cmpRecs(P.records[i],P.records[j])||(i-j));
+  const vis=new Set(idx), consumed=new Set(), units=[];
+  for(const i of idx){
+    if(consumed.has(i))continue;
+    const r=P.records[i];
+    if(r._Side==="Source"){ const j=pairIdx(i); if(j!=null&&vis.has(j)){ units.push([i,j]); consumed.add(i);consumed.add(j); continue; } }
+    units.push([i]); consumed.add(i);
+  }
+  function keyRow(u){
+    const want=mode==="source"?"Source":"Destination";
+    for(const k of u){ if(P.records[k]._Side===want)return P.records[k]; }
+    return P.records[u[0]];
+  }
+  units.sort((ua,ub)=>cmpRecs(keyRow(ua),keyRow(ub))||(ua[0]-ub[0]));
+  const out=[]; for(const u of units) for(const k of u) out.push(k);
+  return out;
+}
+
+// Absolute indices of records currently shown, in display order (filter + sort).
 function visibleIndices(){
   const all=P.records.map((_,i)=>i);
-  return filterActive()?all.filter(passesFilter):all;
+  let idx=filterActive()?all.filter(passesFilter):all;
+  if(sortActive()) idx=applySort(idx);
+  return idx;
+}
+
+function sortSummary(){
+  if(!sortActive())return "";
+  const parts=P.sort.rules.filter(r=>r.field).map(r=>colLabel(r.field)+(r.dir==="desc"?" ↓":" ↑"));
+  const modeTxt=P.sort.pairMode==="source"?" · pairs follow source"
+              :P.sort.pairMode==="dest"?" · pairs follow destination"
+              :" · pairs may split";
+  return parts.join(", ")+modeTxt;
 }
 
 // Human-readable summary of the active filter for the table header.
@@ -647,9 +699,18 @@ function openFilterModal(){
     P._filterDraft={groups:[newFilterGroup()],groupConnectors:[],showBothSides:false};
   }
   P._filterDraft.groups.forEach(g=>{ if(!g.rules||!g.rules.length)g.rules=[newFilterRule()]; if(!Array.isArray(g.connectors))g.connectors=[]; });
+  P._sortDraft = P.sort ? JSON.parse(JSON.stringify(P.sort))
+                        : {rules:[{field:"",dir:"asc"}], pairMode:"break"};
+  if(!P._sortDraft.rules.length)P._sortDraft.rules.push({field:"",dir:"asc"});
+  if(!P._sortDraft.pairMode)P._sortDraft.pairMode="break";
   renderFilterModal();
 }
-function closeFilterModal(){ P._filterDraft=null; const m=document.getElementById('vl-filter-modal'); if(m)m.remove(); }
+function closeFilterModal(){ P._filterDraft=null; P._sortDraft=null; const m=document.getElementById('vl-filter-modal'); if(m)m.remove(); }
+// Sort-draft mutators
+function sdAddRule(){ P._sortDraft.rules.push({field:"",dir:"asc"}); renderFilterModal(); }
+function sdRemoveRule(i){ P._sortDraft.rules.splice(i,1); if(!P._sortDraft.rules.length)P._sortDraft.rules.push({field:"",dir:"asc"}); renderFilterModal(); }
+function sdSet(i,prop,val){ P._sortDraft.rules[i][prop]=val; renderFilterModal(); }
+function sdSetPairMode(m){ P._sortDraft.pairMode=m; renderFilterModal(); }
 function fdAddRule(gi){
   const g=P._filterDraft.groups[gi];
   g.rules.push(newFilterRule());
@@ -687,11 +748,15 @@ function applyFilterDraft(){
   const d=P._filterDraft;
   const hasReady=(d.groups||[]).some(groupReady);
   P.filter = hasReady ? {groups:d.groups, groupConnectors:d.groupConnectors, showBothSides:!!d.showBothSides} : null;
+  const s=P._sortDraft;
+  const hasSort=(s.rules||[]).some(r=>r.field);
+  P.sort = hasSort ? {rules:s.rules.filter(r=>r.field), pairMode:s.pairMode||"break"} : null;
   closeFilterModal();
   const vis=visibleIndices(); if(vis.length&&!vis.includes(P.previewIdx))P.previewIdx=vis[0];
   R();
 }
 function clearFilter(){ P.filter=null; closeFilterModal(); R(); }
+function clearSort(){ P.sort=null; closeFilterModal(); R(); }
 
 function connToggle(curr,onclickPrefix){
   return `<div style="display:flex;gap:4px">${['and','or'].map(c=>`<button onclick="${onclickPrefix}'${c}')" class="btn${(curr||'and')===c?' on':''}" style="padding:1px 14px;font-size:11px;text-transform:uppercase">${c}</button>`).join('')}</div>`;
@@ -745,21 +810,54 @@ function renderFilterModal(){
     return between+renderFilterGroup(g,gi,multi);
   }).join('');
 
+  const sd=P._sortDraft, cols=recordColumns(currentRecords());
+  const pairModes=[
+    ['break','Sort sources & destinations (breaks pairs)'],
+    ['source','Sort by source — destinations stay with sources'],
+    ['dest','Sort by destination — sources stay with destinations']
+  ];
+  const pairHtml=`<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px">
+    ${pairModes.map(([mm,lbl])=>`<button class="btn${sd.pairMode===mm?' on':''}" onclick="sdSetPairMode('${mm}')" style="text-align:left;font-size:11px;padding:5px 10px">${lbl}</button>`).join('')}
+  </div>`;
+  const sortRows=sd.rules.map((r,i)=>`<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
+      <span style="color:var(--text2);font-size:11px;width:42px;flex-shrink:0">${i===0?'Sort by':'then by'}</span>
+      <select class="inp" style="flex:1;min-width:0" onchange="sdSet(${i},'field',this.value)">
+        <option value="">— none —</option>
+        ${cols.map(c=>`<option value="${c}" ${r.field===c?'selected':''}>${esc(colLabel(c))}</option>`).join('')}
+      </select>
+      <select class="inp" style="width:auto;flex-shrink:0" onchange="sdSet(${i},'dir',this.value)">
+        <option value="asc" ${r.dir!=='desc'?'selected':''}>A→Z</option>
+        <option value="desc" ${r.dir==='desc'?'selected':''}>Z→A</option>
+      </select>
+      <button onclick="sdRemoveRule(${i})" title="Remove" ${sd.rules.length<=1?'disabled':''} style="flex-shrink:0;background:rgba(245,108,108,0.12);border:1px solid rgba(245,108,108,0.3);color:var(--red);border-radius:5px;padding:3px 9px;cursor:pointer;font-size:13px">×</button>
+    </div>`).join('');
+
   let m=document.getElementById('vl-filter-modal');
   if(!m){ m=document.createElement('div'); m.id='vl-filter-modal'; m.className='modal-overlay'; m.onclick=e=>{if(e.target===m)closeFilterModal();}; document.body.appendChild(m); }
   m.innerHTML=`<div class="modal" style="min-width:600px;max-width:720px">
-    <div class="modal-title">Filter records</div>
-    <div style="max-height:380px;overflow-y:auto;padding-right:2px;display:flex;flex-direction:column;gap:2px">${groupsHtml}</div>
-    <button class="btn" onclick="fdAddGroup()" title="Add another group of conditions" style="margin-top:8px;font-size:12px">+ Add group</button>
-    <label style="display:flex;align-items:center;gap:8px;margin-top:16px;cursor:pointer;color:var(--text-soft);font-size:12px">
-      <input type="checkbox" ${d.showBothSides?'checked':''} onchange="fdSetBoth(this.checked)">
-      Show Source and Destination when only Source or Destination matches
-    </label>
+    <div class="modal-title">Filter &amp; sort</div>
+    <div style="max-height:440px;overflow-y:auto;padding-right:2px">
+      <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Filter</div>
+      <div style="display:flex;flex-direction:column;gap:2px">${groupsHtml}</div>
+      <button class="btn" onclick="fdAddGroup()" title="Add another group of conditions" style="margin-top:8px;font-size:12px">+ Add group</button>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:14px;cursor:pointer;color:var(--text-soft);font-size:12px">
+        <input type="checkbox" ${d.showBothSides?'checked':''} onchange="fdSetBoth(this.checked)">
+        Show Source and Destination when only Source or Destination matches
+      </label>
+      <hr style="border:none;border-top:1px solid var(--bd2);margin:16px 0 12px">
+      <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Sort</div>
+      ${pairHtml}
+      ${sortRows}
+      <button class="btn" onclick="sdAddRule()" title="Add another sort level" style="margin-top:4px;font-size:12px">+ Add sort</button>
+    </div>
     <div class="modal-footer" style="justify-content:space-between">
-      <div>${P.filter?`<button class="btn" onclick="clearFilter()" style="color:var(--warn);border-color:rgba(245,201,108,0.4)">Clear filter</button>`:''}</div>
+      <div style="display:flex;gap:8px">
+        ${P.filter?`<button class="btn" onclick="clearFilter()" style="color:var(--warn);border-color:rgba(245,201,108,0.4)">Clear filter</button>`:''}
+        ${P.sort?`<button class="btn" onclick="clearSort()" style="color:var(--warn);border-color:rgba(245,201,108,0.4)">Clear sort</button>`:''}
+      </div>
       <div style="display:flex;gap:8px">
         <button class="btn" onclick="closeFilterModal()">Cancel</button>
-        <button class="btn" onclick="applyFilterDraft()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Apply filter</button>
+        <button class="btn" onclick="applyFilterDraft()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Apply</button>
       </div>
     </div>
   </div>`;
@@ -1273,16 +1371,16 @@ function R(){
             ? `<span style="color:var(--text2);font-size:11px">${visibleIndices().length} of ${P.records.length} shown</span>`
             : `<span style="color:var(--text2);font-size:11px">${P.records.length} total · click row to preview · checkbox to select</span>`}
           <div style="flex:1"></div>
-          <button class="btn${filterActive()?' on':''}" onclick="event.stopPropagation();openFilterModal()" style="padding:2px 8px;font-size:11px" title="Filter which records are shown and printed">⧩ Filter</button>
+          <button class="btn${(filterActive()||sortActive())?' on':''}" onclick="event.stopPropagation();openFilterModal()" style="padding:2px 8px;font-size:11px" title="Filter & sort which records are shown and printed">⧩ Filter &amp; sort</button>
           ${filterActive()?`<button class="btn" onclick="event.stopPropagation();clearFilter()" style="padding:2px 8px;font-size:11px;color:var(--warn);border-color:rgba(245,201,108,0.4)">Clear filter</button>`:""}
+          ${sortActive()?`<button class="btn" onclick="event.stopPropagation();clearSort()" style="padding:2px 8px;font-size:11px;color:var(--warn);border-color:rgba(245,201,108,0.4)">Clear sort</button>`:""}
           <button class="btn${window._colMenuOpen?' on':''}" onclick="event.stopPropagation();toggleColumnsMenu()" style="padding:2px 8px;font-size:11px">Columns ▾</button>
           ${buildColumnsMenu()}
         </div>
-        <!-- Active-filter summary, shown directly above the records -->
-        ${filterActive()?`<div style="padding:5px 16px;background:rgba(108,142,245,0.08);border-bottom:1px solid rgba(108,142,245,0.18);font-size:11px;color:var(--accent-soft);display:flex;align-items:center;gap:6px;flex-shrink:0">
-          <span style="color:var(--accent);font-weight:600;flex-shrink:0">Filter:</span>
-          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(filterSummary())}">${esc(filterSummary())}</span>
-          ${P.filter.showBothSides?`<span style="color:var(--text2);flex-shrink:0">· incl. matching pairs</span>`:""}
+        <!-- Active filter/sort summary, shown directly above the records -->
+        ${(filterActive()||sortActive())?`<div style="padding:5px 16px;background:rgba(108,142,245,0.08);border-bottom:1px solid rgba(108,142,245,0.18);font-size:11px;color:var(--accent-soft);display:flex;align-items:center;gap:10px;flex-shrink:0;overflow:hidden">
+          ${filterActive()?`<span style="display:flex;align-items:center;gap:5px;min-width:0;overflow:hidden"><span style="color:var(--accent);font-weight:600;flex-shrink:0">Filter:</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(filterSummary())+(P.filter.showBothSides?' (incl. matching pairs)':'')}">${esc(filterSummary())}${P.filter.showBothSides?' · incl. pairs':''}</span></span>`:""}
+          ${sortActive()?`<span style="display:flex;align-items:center;gap:5px;min-width:0;overflow:hidden"><span style="color:var(--accent);font-weight:600;flex-shrink:0">Sort:</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(sortSummary())}">${esc(sortSummary())}</span></span>`:""}
         </div>`:""}
         <!-- Grid headers -->
         ${(()=>{
