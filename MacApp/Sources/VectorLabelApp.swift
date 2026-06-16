@@ -118,7 +118,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         win.contentView = wv
         win.hidesOnDeactivate = false
         win.isReleasedWhenClosed = false
-        win.center()
+        win.applyVLSizing(autosaveName: "VLDesignerWindow",
+                          defaultContentSize: NSSize(width: 1280, height: 860))
         NSApp.activate(ignoringOtherApps: true)
         win.makeKeyAndOrderFront(nil)
         // Make the web view first responder so keyboard shortcuts (arrow-key
@@ -192,8 +193,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // The print window floats; keep Preferences just above it so it always
         // opens in front of any other VectorLabel window.
         win.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
-        win.setContentSize(NSSize(width: 600, height: 480))
-        win.center()
+        win.applyVLSizing(autosaveName: "VLPreferencesWindow",
+                          defaultContentSize: NSSize(width: 680, height: 560))
         NSApp.activate(ignoringOtherApps: true)
         win.makeKeyAndOrderFront(nil)
         preferencesWindow = win
@@ -362,6 +363,37 @@ extension AppDelegate: WKNavigationDelegate {
         }
         // Inject the templates-folder list so the designer's Open dialog can list them.
         injectDesignerTemplates()
+    }
+}
+
+// MARK: – Window sizing + persistence
+
+extension NSWindow {
+    /// Size a window so it opens at a sensible default (the smallest size where
+    /// its controls don't wrap), remembers the user's manual resize across
+    /// opens/launches (via frame autosave), and never exceeds the current screen.
+    func applyVLSizing(autosaveName: String, defaultContentSize: NSSize) {
+        let visible = (screen ?? NSScreen.main)?.visibleFrame
+            ?? NSRect(x: 0, y: 0, width: defaultContentSize.width, height: defaultContentSize.height)
+
+        // Default = the no-wrap size, but never larger than the screen.
+        let defSize = NSSize(width: min(defaultContentSize.width, visible.width),
+                             height: min(defaultContentSize.height, visible.height))
+        contentMinSize = defSize
+        setContentSize(defSize)
+        center()
+
+        // Restore the user's last frame (size + position) if we have one.
+        setFrameUsingName(autosaveName)
+        setFrameAutosaveName(autosaveName)
+
+        // Clamp the (possibly restored) frame to the visible screen area.
+        var f = frame
+        f.size.width = min(f.size.width, visible.width)
+        f.size.height = min(f.size.height, visible.height)
+        f.origin.x = max(visible.minX, min(f.origin.x, visible.maxX - f.size.width))
+        f.origin.y = max(visible.minY, min(f.origin.y, visible.maxY - f.size.height))
+        setFrame(f, display: false)
     }
 }
 

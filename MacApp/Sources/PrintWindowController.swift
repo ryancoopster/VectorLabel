@@ -153,7 +153,8 @@ final class PrintWindowController: NSObject {
         win.level = .floating
         win.hidesOnDeactivate = false
         win.isReleasedWhenClosed = false
-        win.center()
+        win.applyVLSizing(autosaveName: "VLPrintWindow",
+                          defaultContentSize: NSSize(width: 1180, height: 760))
         win.delegate = self
         NSApp.activate(ignoringOtherApps: true)
         win.makeKeyAndOrderFront(nil)
