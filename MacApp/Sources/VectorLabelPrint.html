@@ -161,6 +161,7 @@ function renderLabel(tpl,rec,scale=1){
   const sc=SC*scale;
   const objs=(tpl.objs||[]).map(o=>{
     const x=o.x*sc,y=o.y*sc,w=(o.w||1)*sc,h=(o.h||0)*sc;
+    const rc=o.rot?`transform:rotate(${o.rot}deg);transform-origin:center center;`:"";
     if(o.t==="tx"){
       const {v,e}=rec?evalF(o.f,rec):{v:"",e:null};
       const fz=Math.max(5,(o.fs||14)*(sc/100));
@@ -173,12 +174,12 @@ function renderLabel(tpl,rec,scale=1){
       const sx=(o.stretch||100)/100;
       const col=e?"#f56c6c":"#000";
       const txt=(e?`⚠`:v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-      return `<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${Math.max(h,8)}px;overflow:hidden;display:flex;align-items:${va};padding:0 1px;box-sizing:border-box">
+      return `<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${Math.max(h,8)}px;${rc}overflow:hidden;display:flex;align-items:${va};padding:0 1px;box-sizing:border-box">
         <div style="width:100%;font-family:'${o.font||"Helvetica Neue"}',Arial,sans-serif;font-size:${fz}px;font-weight:${fw};font-style:${fs};text-decoration:${td};color:${col};white-space:${ws};overflow:hidden;text-overflow:ellipsis;line-height:1.15;text-align:${o.al||"left"};transform:scaleX(${sx});transform-origin:left center">${txt}</div>
       </div>`;
     }
-    if(o.t==="ln")return`<div style="position:absolute;left:${x}px;top:${y}px;width:${(o.w||1)*sc}px;height:${Math.max(1,o.lw||1)}px;background:#000"></div>`;
-    if(o.t==="rc")return`<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border:${o.lw||1}px solid #000;background:transparent"></div>`;
+    if(o.t==="ln")return`<div style="position:absolute;left:${x}px;top:${y}px;width:${(o.w||1)*sc}px;height:${Math.max(1,o.lw||1)}px;background:#000;${rc}"></div>`;
+    if(o.t==="rc")return`<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border:${o.lw||1}px solid #000;background:transparent;${rc}"></div>`;
     return"";
   }).join("");
   return`<div style="width:${pw}px;height:${ph}px;background:#fff;border:1.5px solid rgba(255,255,255,0.15);border-radius:2px;position:relative;overflow:hidden;flex-shrink:0">${objs}</div>`;

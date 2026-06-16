@@ -86,6 +86,18 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    // MARK: – Template designer preferences (persisted)
+
+    @Published var designerSnapGrid: Bool {
+        didSet { UserDefaults.standard.set(designerSnapGrid, forKey: "designerSnapGrid") }
+    }
+    @Published var designerSnapObjects: Bool {
+        didSet { UserDefaults.standard.set(designerSnapObjects, forKey: "designerSnapObjects") }
+    }
+    @Published var designerGridSize: Double {
+        didSet { UserDefaults.standard.set(designerGridSize, forKey: "designerGridSize") }
+    }
+
     // MARK: – App behaviour
 
     /// Whether to also show VectorLabel in the Dock (menu-bar-only by default).
@@ -155,6 +167,9 @@ final class AppSettings: ObservableObject {
         } else {
             recordColumnWidths = [:]
         }
+        designerSnapGrid    = defaults.object(forKey: "designerSnapGrid") as? Bool ?? true
+        designerSnapObjects = defaults.object(forKey: "designerSnapObjects") as? Bool ?? true
+        designerGridSize    = defaults.object(forKey: "designerGridSize") as? Double ?? 0.05
         showInDock        = defaults.object(forKey: "showInDock") as? Bool ?? false
 
         // Sync ExportSettings singleton
@@ -176,6 +191,9 @@ final class AppSettings: ObservableObject {
         recordColumnOrder    = []
         recordHiddenColumns  = []
         recordColumnWidths   = [:]
+        designerSnapGrid     = true
+        designerSnapObjects  = true
+        designerGridSize     = 0.05
         showInDock           = false
     }
 }

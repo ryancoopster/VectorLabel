@@ -129,6 +129,18 @@ let S={
   // user picks a template rather than landing on a default one.
   objs:[]
 };
+// Persisted snap/grid prefs — Swift injects on load, we post on change.
+function initDesignerPrefs(p){
+  if(!p)return;
+  if(typeof p.snapGrid==='boolean')S.snapGrid=p.snapGrid;
+  if(typeof p.snapObjects==='boolean')S.snapObjects=p.snapObjects;
+  if(typeof p.gridSize==='number')S.gridSize=p.gridSize;
+  R();
+}
+function saveDesignerPrefs(){
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"setDesignerPrefs",payload:{snapGrid:S.snapGrid,snapObjects:S.snapObjects,gridSize:S.gridSize}});
+}
 function gobj(id){return S.objs.find(o=>o.id===id);}
 function uobj(id,p){S.objs=S.objs.map(o=>o.id===id?Object.assign({},o,p):o);}
 
@@ -389,6 +401,9 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
     const sel=o.id===selId;
     const ss=sel?"outline:1.5px solid #6C8EF5;outline-offset:1px;":"";
     const drag=readOnly?"":`onmousedown="startDrag(event,'${o.id}')"`;
+    const rotDeg=o.rot||0;
+    const rotCss=rotDeg?`transform:rotate(${rotDeg}deg);transform-origin:center center;`:"";
+    const rotH=sel&&!readOnly?`<div style="position:absolute;left:50%;top:-22px;width:1px;height:22px;background:#6C8EF5;transform:translateX(-50%);z-index:10;pointer-events:none"></div><div onmousedown="startRotate(event,'${o.id}')" title="Drag to rotate" style="position:absolute;left:50%;top:-26px;transform:translateX(-50%);width:11px;height:11px;background:#6C8EF5;border:1px solid #fff;border-radius:50%;cursor:grab;z-index:11"></div>`:"";
 
     if(o.t==="tx"){
       const {v,e}=rec?evalF(o.f,rec):{v:(o.f||"").replace(/^=/,""),e:null};
@@ -405,14 +420,18 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
       const textAlign=o.al||"left";
       const dispVal=e?`⚠ ${e.substring(0,40)}`:v.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
       const rb=sel&&!readOnly?`<div onmousedown="startResize(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:#6C8EF5;border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";
-      return `<div ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${Math.max(h,12)}px;${ss}border-radius:2px;cursor:${readOnly?"default":"move"};overflow:hidden;display:flex;align-items:${va};padding:0 2px;box-sizing:border-box">
+      return `<div data-obj="${o.id}" ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${Math.max(h,12)}px;${rotCss}${ss}border-radius:2px;cursor:${readOnly?"default":"move"};display:flex;align-items:${va};padding:0 2px;box-sizing:border-box">
         <div style="width:100%;font-family:'${o.font||"Helvetica Neue"}',Arial,sans-serif;font-size:${fz}px;font-weight:${fontWeight};font-style:${fontStyle};text-decoration:${textDecoration};color:${txtColor};white-space:${whiteSpace};word-break:${wordBreak};overflow:hidden;text-overflow:${o.wrapText?"clip":"ellipsis"};line-height:1.15;letter-spacing:${letterSpacing};text-align:${textAlign};transform:scaleX(${scaleX});transform-origin:left center;pointer-events:none">${dispVal}</div>
-        ${rb}</div>`;
+        ${rotH}${rb}</div>`;
     }
-    if(o.t==="ln") return `<div ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${(o.w||1)*sc}px;height:${Math.max(1,o.lw||1)}px;background:#000;cursor:${readOnly?"default":"move"};${ss}"></div>`;
+    if(o.t==="ln"){
+      const lh=sel&&!readOnly?`<div onmousedown="startLineResize(event,'${o.id}','l')" title="Drag to stretch" style="position:absolute;left:-5px;top:50%;transform:translateY(-50%);width:9px;height:9px;background:#6C8EF5;border:1px solid #fff;border-radius:50%;cursor:ew-resize;z-index:10"></div>`:"";
+      const rh=sel&&!readOnly?`<div onmousedown="startLineResize(event,'${o.id}','r')" title="Drag to stretch" style="position:absolute;right:-5px;top:50%;transform:translateY(-50%);width:9px;height:9px;background:#6C8EF5;border:1px solid #fff;border-radius:50%;cursor:ew-resize;z-index:10"></div>`:"";
+      return `<div data-obj="${o.id}" ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${(o.w||1)*sc}px;height:${Math.max(1,o.lw||1)}px;background:#000;cursor:${readOnly?"default":"move"};${rotCss}${ss}">${lh}${rh}${rotH}</div>`;
+    }
     if(o.t==="rc"){
       const rb=sel&&!readOnly?`<div onmousedown="startResize(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:#6C8EF5;border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";
-      return `<div ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border:${o.lw||1}px solid #000;background:transparent;cursor:${readOnly?"default":"move"};${ss}">${rb}</div>`;
+      return `<div data-obj="${o.id}" ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border:${o.lw||1}px solid #000;background:transparent;cursor:${readOnly?"default":"move"};${rotCss}${ss}">${rotH}${rb}</div>`;
     }
     return"";
   }).join("");
@@ -487,7 +506,23 @@ function posButtons(o){
         <button class="fmt-btn" title="Align to bottom edge" onclick="posObj('${o.id}','v','bottom')">⤓</button>
       </div>
     </div>
+    <div style="margin-bottom:8px">
+      <label class="lbl">Rotation</label>
+      <div style="display:flex;gap:4px;align-items:center">
+        <button class="fmt-btn" title="Rotate 90° left" onclick="rotateObj('${o.id}',-90)">⟲</button>
+        <button class="fmt-btn" title="Rotate 90° right" onclick="rotateObj('${o.id}',90)">⟳</button>
+        <input type="number" class="inp" style="width:60px" step="1" value="${Math.round(o.rot||0)}" onchange="uobj('${o.id}',{rot:(((parseFloat(this.value)||0)%360)+360)%360});R()">
+        <span style="color:#8888a8;font-size:11px">°</span>
+      </div>
+    </div>
     <hr class="divider">`;
+}
+
+function rotateObj(id,delta){
+  const o=gobj(id);if(!o)return;
+  snapshot();
+  uobj(id,{rot:((((o.rot||0)+delta)%360)+360)%360});
+  R();
 }
 
 // ── Properties panel ──────────────────────────────────────────────────────────
@@ -556,7 +591,8 @@ function buildProps(){
       ${posButtons(o)}
       <div class="sec">Line</div>
       <div style="margin-bottom:6px"><label class="lbl">Weight (px)</label><input type="number" class="inp" value="${o.lw||1}" min="1" max="10" onchange="uobj('${o.id}',{lw:parseInt(this.value)});R()"></div>
-      ${ni("Y position","y",.005,o.y)}
+      ${ni("X","x",.01,o.x)}
+      ${ni("Y","y",.005,o.y)}
       ${ni("Width","w",.01,o.w)}
     </div>`;
   }
@@ -639,11 +675,11 @@ function R(){
     <!-- Second toolbar: snap/grid controls -->
     <div style="background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.07);padding:0 14px;display:flex;align-items:center;gap:10px;height:34px;flex-shrink:0">
       <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px">Snap</span>
-      <button class="btn${S.snapGrid?" on":""}" onclick="S.snapGrid=!S.snapGrid;R()">⊞ Grid</button>
-      <button class="btn${S.snapObjects?" on":""}" onclick="S.snapObjects=!S.snapObjects;R()">⊡ Objects</button>
+      <button class="btn${S.snapGrid?" on":""}" onclick="S.snapGrid=!S.snapGrid;saveDesignerPrefs();R()">⊞ Grid</button>
+      <button class="btn${S.snapObjects?" on":""}" onclick="S.snapObjects=!S.snapObjects;saveDesignerPrefs();R()">⊡ Objects</button>
       <div style="display:flex;align-items:center;gap:5px">
         <span style="color:#44445a;font-size:10px">Grid size</span>
-        <select class="inp" style="width:148px" onchange="S.gridSize=parseFloat(this.value);R()">
+        <select class="inp" style="width:148px" onchange="S.gridSize=parseFloat(this.value);saveDesignerPrefs();R()">
           ${[0.01,0.025,0.05,0.1,0.125,0.25].map(v=>`<option value="${v}"${S.gridSize===v?" selected":""}>${Math.round(v*1000)/10}mm / ${v.toFixed(3)}"</option>`).join("")}
         </select>
       </div>
@@ -908,6 +944,50 @@ function startDrag(e,id){
 }
 
 // Wrap startResize to snapshot on mousedown
+// Drag a line's end handle to stretch it. 'r' = move right end (width),
+// 'l' = move left end (x + width, keeping the right end fixed).
+function startLineResize(e,id,end){
+  e.stopPropagation();
+  const o=gobj(id);if(!o)return;
+  if(S.selId!==id){S.selId=id;S._ef=o.f;}
+  snapshot();
+  const sx=e.clientX, ox=o.x, ow=o.w;
+  function mv(ev){
+    const dx=(ev.clientX-sx)/(SC*S.zoom);
+    if(end==='r'){
+      uobj(id,{w:snapToGrid(Math.max(.02,ow+dx))});
+    }else{
+      let nx=snapToGrid(ox+dx);
+      nx=Math.max(-BLEED_IN,Math.min(nx,ox+ow-.02));
+      uobj(id,{x:nx,w:(ox+ow)-nx});
+    }
+    R();
+  }
+  function mu(){window.removeEventListener('mousemove',mv);window.removeEventListener('mouseup',mu);}
+  window.addEventListener('mousemove',mv);window.addEventListener('mouseup',mu);
+}
+
+// Drag the rotate handle: angle = direction from the object's on-screen
+// center to the cursor. Handle points "up" at 0°. Hold Shift to snap to 15°.
+function startRotate(e,id){
+  e.stopPropagation();e.preventDefault();
+  const o=gobj(id);if(!o)return;
+  if(S.selId!==id){S.selId=id;S._ef=o.f;}
+  snapshot();
+  const el=e.currentTarget.closest('[data-obj]');
+  if(!el)return;
+  const r=el.getBoundingClientRect();
+  const cx=r.left+r.width/2, cy=r.top+r.height/2;
+  function mv(ev){
+    let deg=Math.atan2(ev.clientY-cy,ev.clientX-cx)*180/Math.PI+90;
+    deg=((deg%360)+360)%360;
+    if(ev.shiftKey) deg=Math.round(deg/15)*15;
+    uobj(id,{rot:Math.round(deg)%360});R();
+  }
+  function mu(){window.removeEventListener('mousemove',mv);window.removeEventListener('mouseup',mu);}
+  window.addEventListener('mousemove',mv);window.addEventListener('mouseup',mu);
+}
+
 function startResize(e,id){
   e.stopPropagation();
   const o=gobj(id);if(!o)return;

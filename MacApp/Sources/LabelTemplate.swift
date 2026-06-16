@@ -66,12 +66,25 @@ enum LabelRenderer {
         ctx.scaleBy(x: 1, y: -1)
 
         for obj in template.objs {
+            // Rotation is clockwise about the object's center, matching the
+            // designer's CSS `transform:rotate(deg)`. User space is y-down here
+            // (we flipped above), so a positive CG rotation is clockwise too.
+            let rotDeg = obj.rot ?? 0
+            let rotated = abs(rotDeg) > 0.0001
+            if rotated {
+                let c = rect(for: obj, dpi: dpi)
+                ctx.saveGState()
+                ctx.translateBy(x: c.midX, y: c.midY)
+                ctx.rotate(by: CGFloat(rotDeg * .pi / 180.0))
+                ctx.translateBy(x: -c.midX, y: -c.midY)
+            }
             switch obj.t {
             case "tx": drawText(obj, record: record, in: ctx, dpi: dpi)
             case "ln": drawLine(obj, in: ctx, dpi: dpi)
             case "rc": drawRect(obj, in: ctx, dpi: dpi)
             default: break
             }
+            if rotated { ctx.restoreGState() }
         }
 
         guard let data = ctx.data else { return nil }

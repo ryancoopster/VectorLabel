@@ -29,6 +29,9 @@ struct TemplateObject: Codable, Identifiable, Hashable {
 
     // Line / rectangle
     var lw: Double?         // border/line weight in px
+
+    // Rotation in degrees, clockwise, about the object's center. nil/0 = none.
+    var rot: Double?
 }
 
 /// A saved VectorLabel template, matching .vlt.json exactly.

@@ -347,6 +347,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
     }
 
+    /// Push persisted snap/grid preferences into the designer.
+    private func injectDesignerPrefs() {
+        guard let wv = designerWebView else { return }
+        let s = AppSettings.shared
+        wv.evaluateJavaScript(
+            "if(typeof initDesignerPrefs==='function')initDesignerPrefs({snapGrid:\(s.designerSnapGrid),snapObjects:\(s.designerSnapObjects),gridSize:\(s.designerGridSize)});",
+            completionHandler: nil
+        )
+    }
+
     /// Push the shared record-column config (order/hidden/widths) into the designer.
     private func injectColumnConfig() {
         guard let wv = designerWebView else { return }
@@ -466,6 +476,7 @@ extension AppDelegate: WKNavigationDelegate {
         // Inject the templates-folder list so the designer's Open dialog can list them.
         injectDesignerTemplates()
         injectColumnConfig()
+        injectDesignerPrefs()
         if let idx = pendingEditTemplateIndex {
             // Editing for the print window: load that template, skip the picker.
             applyPendingEdit(idx)
@@ -539,6 +550,13 @@ extension AppDelegate: WKScriptMessageHandler {
 
         case "setColumnConfig":
             AppSettings.shared.applyColumnConfigPayload(body["payload"])
+
+        case "setDesignerPrefs":
+            if let p = body["payload"] as? [String: Any] {
+                if let v = p["snapGrid"] as? Bool { AppSettings.shared.designerSnapGrid = v }
+                if let v = p["snapObjects"] as? Bool { AppSettings.shared.designerSnapObjects = v }
+                if let v = p["gridSize"] as? Double { AppSettings.shared.designerGridSize = v }
+            }
 
         case "editReturn":
             // Save first (if requested) so the print window refreshes with the
