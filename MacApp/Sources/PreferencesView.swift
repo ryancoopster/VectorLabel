@@ -263,7 +263,7 @@ struct PreferencesView: View {
         var s = "Serial: \(printer.serial)  ·  \(printer.status.displayName)"
         if let c = cassette, !c.partNumber.isEmpty {
             let dims = "\(c.labelWidthMils)×\(c.labelHeightMils) mil"
-            s += "  ·  Loaded: \(c.partNumber) (\(dims), \(c.supplyRemainingPct)% left)"
+            s += "  ·  Loaded: \(c.partNumber) (\(dims))"
             if !c.ribbonCode.isEmpty { s += "  ·  Ribbon: \(c.ribbonCode)" }
         }
         return s

@@ -208,7 +208,7 @@ struct PrinterRow: View {
                         .font(.system(size: 10))
                         .foregroundColor(.vlSecondary)
                     if let c = cassette, !c.partNumber.isEmpty {
-                        Text("\(c.partNumber) · \(c.supplyRemainingPct)% supply" + (c.ribbonCode.isEmpty ? "" : " · \(c.ribbonCode)"))
+                        Text(c.partNumber + (c.ribbonCode.isEmpty ? "" : " · \(c.ribbonCode)"))
                             .font(.system(size: 10))
                             .foregroundColor(.vlAccent)
                     }
