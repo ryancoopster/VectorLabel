@@ -35,9 +35,11 @@ struct TemplateObject: Codable, Identifiable, Hashable {
     var arrowEnd: Bool?     // arrowhead at the end (x + w)
     var arrowSize: Double?  // arrowhead length in designer px
 
-    // Image (t == "im") — embedded as a data URL (monochrome PNG with alpha),
-    // so the template is self-contained and never references an external file.
+    // Image (t == "im") / Symbol (t == "sy") — embedded as a data URL
+    // (monochrome PNG with alpha), so the template is self-contained and never
+    // references an external file. `sym` is the symbol-library key (sy only).
     var src: String?
+    var sym: String?
 
     // Rotation in degrees, clockwise, about the object's center. nil/0 = none.
     var rot: Double?

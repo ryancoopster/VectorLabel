@@ -91,7 +91,7 @@ enum LabelRenderer {
             case "rc": drawRect(obj, in: ctx, dpi: dpi)
             case "ci", "ov": drawEllipse(obj, in: ctx, dpi: dpi)
             case "ar": drawArrow(obj, in: ctx, dpi: dpi)
-            case "im": drawImage(obj, in: ctx, dpi: dpi)
+            case "im", "sy": drawImage(obj, in: ctx, dpi: dpi)
             default: break
             }
             if rotated { ctx.restoreGState() }
