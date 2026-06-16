@@ -390,6 +390,7 @@ let P={
   activeTpl: 0,
   selected: new Set(SAMPLE_CSV.map((_,i)=>i)),
   previewIdx: 0,
+  search: "",         // quick search across all fields
   lastClickIdx: null, // for shift-click range selection
   modal: null,
   printRange: "all",
@@ -642,9 +643,31 @@ function applySort(idx){
 function visibleIndices(){
   const all=P.records.map((_,i)=>i);
   let idx=filterActive()?all.filter(passesFilter):all;
+  if(searchActive()) idx=idx.filter(i=>passesSearch(P.records[i]));
   if(sortActive()) idx=applySort(idx);
   return idx;
 }
+
+// ── Quick search (all fields) ───────────────────────────────────────────────────
+function searchActive(){ return !!(P.search||"").trim(); }
+// Every whitespace-separated term must appear somewhere in the record's fields
+// (case-insensitive) — so "amp lan" matches a row containing both.
+function passesSearch(rec){
+  const q=(P.search||"").trim().toLowerCase();
+  if(!q)return true;
+  const hay=Object.keys(rec).map(k=>String(rec[k]==null?"":rec[k])).join(" ").toLowerCase();
+  return q.split(/\s+/).every(t=>hay.indexOf(t)>=0);
+}
+// Re-render on input while preserving the search box's focus and caret.
+function onRecSearchInput(v){
+  const old=document.getElementById("rec-search");
+  const pos=old?old.selectionStart:(v||"").length;
+  P.search=v;
+  R();
+  const el=document.getElementById("rec-search");
+  if(el){ el.focus(); try{ el.setSelectionRange(pos,pos); }catch(_){} }
+}
+function clearRecSearch(){ P.search=""; R(); const el=document.getElementById("rec-search"); if(el)el.focus(); }
 
 function sortSummaryOf(s){
   if(!s||!(s.rules||[]).some(r=>r.field))return "";
@@ -1654,9 +1677,13 @@ function R(){
         <!-- Table header info -->
         <div style="position:relative;padding:7px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0;border-bottom:1px solid var(--bd1)">
           <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Labels</span>
-          ${filterActive()
+          ${(filterActive()||searchActive())
             ? `<span style="color:var(--text2);font-size:11px">${visibleIndices().length} of ${P.records.length} shown</span>`
             : `<span style="color:var(--text2);font-size:11px">${P.records.length} total · click row to preview · checkbox to select</span>`}
+          <div style="display:flex;align-items:center;gap:3px;margin-left:6px">
+            <input id="rec-search" type="text" value="${esc(P.search||'')}" oninput="onRecSearchInput(this.value)" placeholder="Search all fields…" title="Search across every field — space-separated terms must all match" style="width:190px;padding:3px 8px;font-size:11px;background:var(--surface);border:1px solid var(--bd3);border-radius:5px;color:var(--text)">
+            ${searchActive()?`<button class="btn" onclick="clearRecSearch()" title="Clear search" style="padding:2px 8px;font-size:11px">✕</button>`:''}
+          </div>
           <div style="flex:1"></div>
           ${(window._presets&&window._presets.length)?`<div style="display:flex;gap:5px;align-items:center;max-width:360px;overflow-x:auto">
             <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px;flex-shrink:0">Presets</span>
