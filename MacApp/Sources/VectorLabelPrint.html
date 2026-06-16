@@ -1455,6 +1455,18 @@ function buildPrintingModal(){
 // ── Expanded preview (grid of all labels) ──────────────────────────────────────
 function openExpandedPreview(){ P.modal="preview"; R(); }
 function closeExpandedPreview(){ P.modal=null; R(); }
+
+// Zoom multiplier for the enlarged preview grid (applied as CSS zoom on the grid
+// so it scales live without re-rendering). Persisted across sessions.
+let PREVIEW_ZOOM=(function(){ try{ const v=parseFloat(localStorage.getItem("vl-preview-zoom")); if(v>=0.4&&v<=3)return v; }catch(_){}; return 1; })();
+function previewZoomLive(v){
+  PREVIEW_ZOOM=Math.max(0.4,Math.min(3,parseFloat(v)||1));
+  const sp=document.getElementById("vl-preview-scroll"); if(sp)sp.style.zoom=PREVIEW_ZOOM;
+  const lbl=document.getElementById("vl-preview-zoom-val"); if(lbl)lbl.textContent=Math.round(PREVIEW_ZOOM*100)+"%";
+}
+function previewZoomCommit(v){ previewZoomLive(v); try{ localStorage.setItem("vl-preview-zoom",String(PREVIEW_ZOOM)); }catch(_){}; }
+function previewZoomStep(d){ previewZoomCommit(PREVIEW_ZOOM+d); R(); }
+
 function buildExpandedPreviewModal(){
   const t=tpl();
   const vis=visibleIndices();
@@ -1480,8 +1492,17 @@ function buildExpandedPreviewModal(){
   }).join("") : "";
   return `<div class="modal-overlay" id="vl-preview-modal" onclick="if(event.target===this)closeExpandedPreview()">
     <div class="modal" style="width:96vw;max-width:none;height:95vh;display:flex;flex-direction:column;padding:0;overflow:hidden">
-      <div class="modal-title" style="padding:16px 20px;margin:0;border-bottom:1px solid var(--bd3)">Print preview — ${vis.length} label${vis.length!==1?"s":""}</div>
-      <div id="vl-preview-scroll" style="flex:1;overflow:auto;padding:18px;display:flex;flex-wrap:wrap;gap:14px;align-content:flex-start;justify-content:center">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 20px;border-bottom:1px solid var(--bd3)">
+        <div class="modal-title" style="margin:0;padding:0">Print preview — ${vis.length} label${vis.length!==1?"s":""}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:11px;color:var(--text2)">Zoom</span>
+          <button class="btn" onclick="previewZoomStep(-0.2)" title="Zoom out" style="padding:2px 9px;font-size:14px;line-height:1">−</button>
+          <input type="range" min="0.4" max="3" step="0.1" value="${PREVIEW_ZOOM}" oninput="previewZoomLive(this.value)" onchange="previewZoomCommit(this.value)" style="width:140px">
+          <button class="btn" onclick="previewZoomStep(0.2)" title="Zoom in" style="padding:2px 9px;font-size:14px;line-height:1">+</button>
+          <span id="vl-preview-zoom-val" style="font-size:11px;color:var(--text2);min-width:40px;text-align:right">${Math.round(PREVIEW_ZOOM*100)}%</span>
+        </div>
+      </div>
+      <div id="vl-preview-scroll" style="flex:1;overflow:auto;padding:18px;display:flex;flex-wrap:wrap;gap:14px;align-content:flex-start;justify-content:center;zoom:${PREVIEW_ZOOM}">
         ${tiles||'<div style="color:var(--text3);font-size:13px;margin:auto">'+(t?"No labels match the current filter.":"No template selected.")+'</div>'}
       </div>
       <div style="padding:14px 20px;border-top:1px solid var(--bd3);display:flex;justify-content:flex-end">
