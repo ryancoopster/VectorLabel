@@ -136,6 +136,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         config.preferences.setValue(true, forKey: "developerExtrasEnabled")
         let contentController = WKUserContentController()
         contentController.add(self, name: "vectorlabel")
+        // Set the theme before first paint (avoids a flash of the old theme when
+        // the designer reopens after a light/dark switch).
+        let theme = AppSettings.shared.isLight ? "light" : ""
+        contentController.addUserScript(WKUserScript(
+            source: "document.documentElement.dataset.theme='\(theme)';",
+            injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController = contentController
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.navigationDelegate = self

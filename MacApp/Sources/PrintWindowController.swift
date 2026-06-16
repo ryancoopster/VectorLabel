@@ -126,6 +126,12 @@ final class PrintWindowController: NSObject {
         let config = WKWebViewConfiguration()
         let contentController = WKUserContentController()
         contentController.add(self, name: "vectorlabel")
+        // Set the theme before first paint so reopening after a theme change
+        // doesn't flash the old colors.
+        let theme = AppSettings.shared.isLight ? "light" : ""
+        contentController.addUserScript(WKUserScript(
+            source: "document.documentElement.dataset.theme='\(theme)';",
+            injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController = contentController
         config.preferences.setValue(true, forKey: "developerExtrasEnabled")
 
