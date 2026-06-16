@@ -118,6 +118,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         win.center()
         NSApp.activate(ignoringOtherApps: true)
         win.makeKeyAndOrderFront(nil)
+        // Make the web view first responder so keyboard shortcuts (arrow-key
+        // nudge, delete, undo) reach the designer immediately.
+        win.makeFirstResponder(wv)
         designerWindow = win
 
         designerCloseObserver = NotificationCenter.default.addObserver(

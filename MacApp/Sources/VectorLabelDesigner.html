@@ -165,41 +165,40 @@ function startEdColResize(e,col){
   window.addEventListener('mousemove',mv);window.addEventListener('mouseup',mu);
 }
 
+// Column order for the record table: a few friendly ones first, then every
+// other CSV column in the order it appears in the data.
+function recordColumns(records){
+  const preferred=['_Side','Number','Cable','Signal','Device_Name','Socket_Name'];
+  const cols=[];
+  preferred.forEach(k=>{ if(records.some(r=>k in r)) cols.push(k); });
+  records.forEach(r=>Object.keys(r).forEach(k=>{ if(!cols.includes(k)) cols.push(k); }));
+  return cols;
+}
+function colLabel(k){ return k==='_Side'?'Side':k.replace(/_/g,' '); }
+
 function buildEditorRecordTable(){
   const records=window._editorRecords||RX;
-  const hdrCols=[
-    {label:'Side',   col:'side'},
-    {label:'Number', col:'number'},
-    {label:'Cable',  col:'cable'},
-    {label:'Signal', col:'signal'},
-    {label:'Device', col:'device'},
-    {label:'Socket', col:'socket'},
-  ];
-  const hdr=`<div style="display:grid;grid-template-columns:var(--edr-side) var(--edr-number) var(--edr-cable) var(--edr-signal) var(--edr-device) var(--edr-socket);background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.1);position:sticky;top:0;z-index:2">
-    ${hdrCols.map(h=>`
-      <div style="position:relative;padding:5px 8px;font-size:10px;color:#44445a;font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;user-select:none">
-        ${h.label}
-        <div class="col-resizer" onmousedown="startEdColResize(event,'${h.col}')"></div>
-      </div>`).join('')}
+  if(!records.length)return`<div style="padding:12px;color:#44445a;font-size:11px">No records loaded</div>`;
+  const cols=recordColumns(records);
+
+  const hdr=`<div style="display:flex;background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.1);position:sticky;top:0;z-index:2;width:max-content;min-width:100%">
+    ${cols.map(c=>`<div style="flex:0 0 auto;min-width:96px;padding:5px 8px;font-size:10px;color:#44445a;font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden">${colLabel(c)}</div>`).join('')}
   </div>`;
 
   const rows=records.map((r,i)=>{
     const isActive=S.recIdx===i;
-    const side=r._Side==="Source"?"src":"dst";
     return`<div onclick="S.recIdx=${i};R()"
-      style="display:grid;grid-template-columns:var(--edr-side) var(--edr-number) var(--edr-cable) var(--edr-signal) var(--edr-device) var(--edr-socket);
-             border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;min-height:34px;align-items:center;
+      style="display:flex;width:max-content;min-width:100%;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;min-height:30px;align-items:center;
              background:${isActive?'rgba(108,142,245,0.18)':'transparent'}"
       onmouseover="if(!${isActive})this.style.background='rgba(108,142,245,0.06)'"
       onmouseout="if(!${isActive})this.style.background='transparent'">
-      <div style="padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-        <span class="tag ${side}">${r._Side||"—"}</span>
-      </div>
-      <div style="padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${r.Number?"#e8e8f0":"#44445a"};font-weight:${r.Number?600:400}">${r.Number||"—"}</div>
-      <div style="padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8888a8">${r.Cable||"—"}</div>
-      <div style="padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8888a8">${r.Signal||"—"}</div>
-      <div style="padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8888a8">${r.Device_Name||"—"}</div>
-      <div style="padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8888a8">${r.Socket_Name||"—"}</div>
+      ${cols.map(c=>{
+        const v=r[c];
+        const has=v!==undefined&&v!=='';
+        const val=has?String(v):'—';
+        if(c==='_Side'){const side=v==='Source'?'src':'dst';return`<div style="flex:0 0 auto;min-width:96px;padding:5px 8px;font-size:11px;overflow:hidden;white-space:nowrap"><span class="tag ${side}">${val}</span></div>`;}
+        return`<div title="${val.replace(/"/g,'&quot;')}" style="flex:0 0 auto;min-width:96px;padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${has?'#e8e8f0':'#44445a'};font-weight:${(c==='Number'&&has)?600:400}">${val}</div>`;
+      }).join('')}
     </div>`;
   }).join('');
 
@@ -340,6 +339,43 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
   </div>`;
 }
 
+// ── Object positioning (snap the whole object to a label edge/center) ──────────
+// Distinct from text justification: this moves the selected object's box within
+// the label's printable area.
+function posObj(id,axis,where){
+  const o=gobj(id); if(!o)return;
+  snapshot();
+  const W=S.spec.pw, H=S.spec.ph, w=o.w||0, h=o.h||0;
+  const r=v=>Math.max(0,Math.round(v*1000)/1000);
+  if(axis==='h'){
+    uobj(id,{x:r(where==='left'?0:where==='center'?(W-w)/2:W-w)});
+  }else{
+    uobj(id,{y:r(where==='top'?0:where==='middle'?(H-h)/2:H-h)});
+  }
+  R();
+}
+
+function posButtons(o){
+  return `<div class="sec">Position object</div>
+    <div style="margin-bottom:6px">
+      <label class="lbl">Horizontal</label>
+      <div style="display:flex;gap:3px">
+        <button class="fmt-btn" title="Align to left edge" onclick="posObj('${o.id}','h','left')">⇤</button>
+        <button class="fmt-btn" title="Center horizontally" onclick="posObj('${o.id}','h','center')">⇔</button>
+        <button class="fmt-btn" title="Align to right edge" onclick="posObj('${o.id}','h','right')">⇥</button>
+      </div>
+    </div>
+    <div style="margin-bottom:8px">
+      <label class="lbl">Vertical</label>
+      <div style="display:flex;gap:3px">
+        <button class="fmt-btn" title="Align to top edge" onclick="posObj('${o.id}','v','top')">⤒</button>
+        <button class="fmt-btn" title="Center vertically" onclick="posObj('${o.id}','v','middle')">⇕</button>
+        <button class="fmt-btn" title="Align to bottom edge" onclick="posObj('${o.id}','v','bottom')">⤓</button>
+      </div>
+    </div>
+    <hr class="divider">`;
+}
+
 // ── Properties panel ──────────────────────────────────────────────────────────
 function buildProps(){
   const o=S.selId?gobj(S.selId):null;
@@ -354,6 +390,7 @@ function buildProps(){
     const vaBtns=["top","middle","bottom"].map(a=>`<button class="fmt-btn${(o.valign||"middle")===a?" on":""}" onclick="uobj('${o.id}',{valign:'${a}'});R()" title="${a}">${a==="top"?"⬆":a==="middle"?"↕":"⬇"}</button>`).join("");
     const fontOpts=FONTS.map(f=>`<option value="${f}"${o.font===f?" selected":""}>${f}</option>`).join("");
     return `<div style="display:flex;flex-direction:column;gap:0">
+      ${posButtons(o)}
       <div class="sec">Text formatting</div>
       <div style="margin-bottom:8px">
         <label class="lbl">Font</label>
@@ -402,6 +439,7 @@ function buildProps(){
   }
   if(o.t==="ln"){
     return `<div style="display:flex;flex-direction:column;gap:0">
+      ${posButtons(o)}
       <div class="sec">Line</div>
       <div style="margin-bottom:6px"><label class="lbl">Weight (px)</label><input type="number" class="inp" value="${o.lw||1}" min="1" max="10" onchange="uobj('${o.id}',{lw:parseInt(this.value)});R()"></div>
       ${ni("Y position","y",.005,o.y)}
@@ -410,6 +448,7 @@ function buildProps(){
   }
   if(o.t==="rc"){
     return `<div style="display:flex;flex-direction:column;gap:0">
+      ${posButtons(o)}
       <div class="sec">Rectangle</div>
       <div style="margin-bottom:6px"><label class="lbl">Border (px)</label><input type="number" class="inp" value="${o.lw||1}" min="1" max="10" onchange="uobj('${o.id}',{lw:parseInt(this.value)});R()"></div>
       ${ni("X","x",.01,o.x)}
@@ -499,14 +538,31 @@ function R(){
     <!-- Main body -->
     <div style="display:flex;flex:1;overflow:hidden">
 
-      <!-- Left: add objects -->
-      <div style="width:70px;background:#1a1a28;border-right:1px solid rgba(255,255,255,0.07);padding:10px 6px;display:flex;flex-direction:column;gap:5px;align-items:center;flex-shrink:0">
+      <!-- Left: add objects + object list -->
+      <div style="width:148px;background:#1a1a28;border-right:1px solid rgba(255,255,255,0.07);padding:10px 8px;display:flex;flex-direction:column;gap:5px;flex-shrink:0;overflow:hidden">
         <span style="color:#44445a;font-size:9px;margin-bottom:3px;text-transform:uppercase;letter-spacing:1px">Add</span>
-        <button class="tbtn" onclick="addObj('tx')"><span style="font-size:14px;font-weight:700">T</span>Text</button>
-        <button class="tbtn" onclick="addObj('ln')"><span style="font-size:14px;font-weight:700">╌</span>Line</button>
-        <button class="tbtn" onclick="addObj('rc')"><span style="font-size:14px;font-weight:700">▭</span>Rect</button>
-        <div style="flex:1"></div>
-        ${S.selId?`<button class="btn" onclick="delObj()" style="background:rgba(245,108,108,0.15);border-color:rgba(245,108,108,0.3);color:#f56c6c;width:56px;padding:5px 0;font-size:10px">Delete</button>`:""}
+        <div style="display:flex;gap:5px">
+          <button class="tbtn" style="flex:1;width:auto" onclick="addObj('tx')"><span style="font-size:14px;font-weight:700">T</span>Text</button>
+          <button class="tbtn" style="flex:1;width:auto" onclick="addObj('ln')"><span style="font-size:14px;font-weight:700">╌</span>Line</button>
+          <button class="tbtn" style="flex:1;width:auto" onclick="addObj('rc')"><span style="font-size:14px;font-weight:700">▭</span>Rect</button>
+        </div>
+        <div style="height:1px;background:rgba(255,255,255,0.08);margin:6px 0"></div>
+        <span style="color:#44445a;font-size:9px;text-transform:uppercase;letter-spacing:1px">Objects (${S.objs.length})</span>
+        <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:2px;margin:2px -2px 0">
+          ${S.objs.length===0?`<div style="color:#44445a;font-size:10px;padding:6px 4px">No objects yet</div>`
+            :S.objs.map(o=>{
+              const sel=o.id===S.selId;
+              const icon=o.t==='tx'?'T':o.t==='ln'?'╌':'▭';
+              const lbl=objListLabel(o);
+              return`<div onclick="selectObj('${o.id}')" title="${lbl.replace(/"/g,'&quot;')}"
+                style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;cursor:pointer;font-size:11px;white-space:nowrap;overflow:hidden;
+                       background:${sel?'rgba(108,142,245,0.18)':'transparent'};border:1px solid ${sel?'rgba(108,142,245,0.4)':'transparent'};color:${sel?'#e8e8f0':'#8888a8'}">
+                <span style="width:13px;text-align:center;color:#6C8EF5;flex-shrink:0">${icon}</span>
+                <span style="overflow:hidden;text-overflow:ellipsis">${lbl}</span>
+              </div>`;
+            }).join('')}
+        </div>
+        ${S.selId?`<button class="btn" onclick="delObj()" style="background:rgba(245,108,108,0.15);border-color:rgba(245,108,108,0.3);color:#f56c6c;padding:5px 0;font-size:10px;flex-shrink:0">Delete selected</button>`:""}
       </div>
 
       <!-- Center: canvas + formula bar + records -->
@@ -747,6 +803,23 @@ function delObj(){
   snapshot();
   S.objs=S.objs.filter(o=>o.id!==S.selId);
   S.selId=null;
+  R();
+}
+
+// Short label for an object in the object list.
+function objListLabel(o){
+  if(o.t==='tx'){
+    const f=(o.f||'').replace(/^=/,'').trim();
+    return f && f!=='""' ? f : 'Text';
+  }
+  return o.t==='ln'?'Line':'Rectangle';
+}
+
+// Select an object from the object list (mirrors clicking it on the canvas).
+function selectObj(id){
+  const o=gobj(id); if(!o)return;
+  S.selId=id;
+  S._ef=o.t==='tx'?o.f:undefined;
   R();
 }
 
