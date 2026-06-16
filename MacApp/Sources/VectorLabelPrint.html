@@ -438,12 +438,19 @@ function buildPreviewPanel(){
     </div>
     <div class="print-info" style="width:100%;max-width:260px">
       <label class="lbl">Required supply</label>
-      <div style="display:flex;align-items:center;gap:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
         <div style="color:#e8e8f0;font-size:12px;font-weight:600;font-family:monospace">${requiredSupplyDisplay(t.specN)}</div>
         ${cassetteMatched()?`<span title="Loaded cassette matches the required supply" style="color:#5cc896;font-size:22px;line-height:1;font-weight:800">✓</span>`
-          :cassetteMismatch()?`<span title="Loaded ${loadedCassette().partNumber} doesn't match — the label may print misaligned or cropped" style="color:#f56c6c;font-size:16px;line-height:1">⚠ mismatch</span>`:""}
+          :cassetteMismatch()?`<span title="Loaded ${loadedCassette().partNumber} doesn't match — the label may print misaligned or cropped" style="color:#f56c6c;font-size:13px;line-height:1;white-space:nowrap">⚠ mismatch</span>`:""}
       </div>
-      <div style="color:#8888a8;font-size:11px;margin-top:2px">${spec.lb.split("—")[1]?.trim()||""}</div>
+      <div style="display:flex;justify-content:space-between;gap:8px;margin-top:7px;font-size:11px">
+        <span style="color:#8888a8">Label size</span>
+        <span style="color:#e8e8f0;font-family:monospace">${fmtIn(spec.tw)} × ${fmtIn(spec.th)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;gap:8px;margin-top:2px;font-size:11px">
+        <span style="color:#8888a8">Printable area</span>
+        <span style="color:#e8e8f0;font-family:monospace">${fmtIn(spec.pw)} × ${fmtIn(spec.ph)}</span>
+      </div>
     </div>
   </div>`;
 }
@@ -492,8 +499,14 @@ function buildRecordTable(){
 // ── Template selector ─────────────────────────────────────────────────────────
 function buildTemplateBar(){
   const t=tpl();
-  return`<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.07);flex-shrink:0">
-    <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px;white-space:nowrap">Template</span>
+  return`<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 16px;background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.07);flex-shrink:0">
+    <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;padding-top:3px">
+      <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px;white-space:nowrap">Template</span>
+      ${t?`<label title="Pre-select this template every time the print window opens" style="display:flex;align-items:center;gap:5px;cursor:pointer;color:#8888a8;font-size:10px;white-space:nowrap">
+        <input type="checkbox" ${P._makeDefaultChecked?"checked":""} onchange="toggleDefaultTemplate(this.checked)" style="cursor:pointer;margin:0">
+        Make default
+      </label>`:""}
+    </div>
     <div style="display:flex;gap:6px;flex:1;overflow-x:auto;padding-bottom:2px">
       ${P.templates.map((tl,i)=>`
         <div style="display:flex;align-items:center;gap:0;background:${P.activeTpl===i?"#2a2a42":"#252538"};border:1px solid ${P.activeTpl===i?"#6C8EF5":"rgba(255,255,255,0.1)"};border-radius:5px;overflow:hidden;flex-shrink:0;white-space:nowrap">
@@ -508,10 +521,6 @@ function buildTemplateBar(){
         </div>`).join("")}
       <button class="btn" onclick="loadTemplateFile()" style="flex-shrink:0;padding:5px 10px;font-size:11px">+ Load template…</button>
     </div>
-    ${t?`<label title="Pre-select this template every time the print window opens" style="flex-shrink:0;display:flex;align-items:center;gap:6px;cursor:pointer;color:#8888a8;font-size:11px;white-space:nowrap">
-      <input type="checkbox" ${P._makeDefaultChecked?"checked":""} onchange="toggleDefaultTemplate(this.checked)" style="cursor:pointer">
-      Make default
-    </label>`:""}
   </div>`;
 }
 
@@ -554,6 +563,9 @@ function requiredSupplyDisplay(specN){
   const core=supplyCore(specN);
   return core ? "BM/M6-"+core : (specN||"");
 }
+
+// Format an inch value, e.g. 1.5 -> 1.5", 1 -> 1".
+function fmtIn(v){ return (v==null?"—":(+v).toString())+'"'; }
 
 // Called by Swift when detected cassette info changes (auto-detect or manual).
 function updateCassettes(map){
