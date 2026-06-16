@@ -524,19 +524,42 @@ function ruleReady(r){
   return r.value!==undefined&&r.value!=="";
 }
 
-// Combine a record's rule results left-to-right with the AND/OR connectors.
-function recordMatchesFilter(rec,f){
-  const rules=(f.rules||[]).filter(ruleReady);
+function groupReady(g){ return !!(g&&(g.rules||[]).some(ruleReady)); }
+
+// Evaluate one group: its ready rules combined left-to-right via the group's
+// connectors (default AND).
+function groupMatches(rec,g){
+  const rules=(g.rules||[]).filter(ruleReady);
   if(!rules.length)return true;
   let res=ruleMatches(rec,rules[0]);
   for(let k=1;k<rules.length;k++){
-    const c=(f.connectors&&f.connectors[k-1])||"and";
+    const c=(g.connectors&&g.connectors[k-1])||"and";
     res = c==="or" ? (res||ruleMatches(rec,rules[k])) : (res&&ruleMatches(rec,rules[k]));
   }
   return res;
 }
 
-function filterActive(){ return !!(P.filter && (P.filter.rules||[]).some(ruleReady)); }
+// Normalise the old flat {rules,connectors} shape into {groups,groupConnectors}.
+function filterGroups(f){
+  if(!f)return [];
+  if(Array.isArray(f.groups))return f.groups;
+  if(Array.isArray(f.rules))return [{rules:f.rules,connectors:f.connectors||[]}];
+  return [];
+}
+
+// Combine group results left-to-right via the group connectors (default OR).
+function recordMatchesFilter(rec,f){
+  const groups=filterGroups(f).filter(groupReady);
+  if(!groups.length)return true;
+  let res=groupMatches(rec,groups[0]);
+  for(let k=1;k<groups.length;k++){
+    const c=(f.groupConnectors&&f.groupConnectors[k-1])||"or";
+    res = c==="and" ? (res&&groupMatches(rec,groups[k])) : (res||groupMatches(rec,groups[k]));
+  }
+  return res;
+}
+
+function filterActive(){ return filterGroups(P.filter).some(groupReady); }
 
 // Does record i pass the active filter? With showBothSides, a row also passes
 // when its Source/Destination partner matches.
@@ -554,99 +577,153 @@ function visibleIndices(){
 }
 
 // Human-readable summary of the active filter for the table header.
+function ruleSummary(r){
+  const opl=(FILTER_OPS.find(o=>o.op===r.op)||{}).label||r.op;
+  const val=opNeedsValue(r.op)?(r.valueType==="field"?("["+colLabel(r.value)+"]"):('"'+r.value+'"')):"";
+  return colLabel(r.field)+" "+opl+(val?" "+val:"");
+}
 function filterSummary(){
   if(!filterActive())return "";
-  const rules=P.filter.rules.filter(ruleReady);
-  const parts=rules.map((r,k)=>{
-    const opl=(FILTER_OPS.find(o=>o.op===r.op)||{}).label||r.op;
-    const val=opNeedsValue(r.op)?(r.valueType==="field"?("["+colLabel(r.value)+"]"):('"'+r.value+'"')):"";
-    const conn=k>0?((P.filter.connectors[k-1]||"and").toUpperCase()+" "):"";
-    return conn+colLabel(r.field)+" "+opl+(val?" "+val:"");
+  const groups=filterGroups(P.filter).filter(groupReady);
+  const groupStrs=groups.map(g=>{
+    const rules=g.rules.filter(ruleReady);
+    const parts=rules.map((r,k)=>(k>0?((g.connectors[k-1]||"and").toUpperCase()+" "):"")+ruleSummary(r));
+    const inner=parts.join(" ");
+    return groups.length>1?("("+inner+")"):inner;
   });
-  return parts.join(" ");
+  let out=groupStrs[0]||"";
+  for(let k=1;k<groupStrs.length;k++){
+    out+=" "+((P.filter.groupConnectors&&P.filter.groupConnectors[k-1])||"or").toUpperCase()+" "+groupStrs[k];
+  }
+  return out;
 }
 
 // ── Filter dialog ─────────────────────────────────────────────────────────────
 // Rendered as a standalone overlay on <body> (not inside #app) so the live R()
-// re-render doesn't destroy it while the user is editing rules.
+// re-render doesn't destroy it while the user is editing rules. The draft model
+// is {groups:[{rules,connectors}], groupConnectors:[], showBothSides}. Rules
+// within a group combine with AND/OR; groups combine with AND/OR.
 function newFilterRule(){
   const cols=recordColumns(currentRecords());
   return {field:cols[0]||"",op:"contains",valueType:"text",value:""};
 }
+function newFilterGroup(){ return {rules:[newFilterRule()],connectors:[]}; }
 function openFilterModal(){
-  P._filterDraft = P.filter ? JSON.parse(JSON.stringify(P.filter))
-                            : {rules:[newFilterRule()],connectors:[],showBothSides:false};
-  if(!P._filterDraft.rules.length)P._filterDraft.rules.push(newFilterRule());
-  if(!Array.isArray(P._filterDraft.connectors))P._filterDraft.connectors=[];
+  if(P.filter){
+    const d=JSON.parse(JSON.stringify(P.filter));
+    // Migrate legacy flat shape → groups.
+    if(!Array.isArray(d.groups)) d.groups=[{rules:d.rules||[newFilterRule()],connectors:d.connectors||[]}];
+    if(!Array.isArray(d.groupConnectors)) d.groupConnectors=[];
+    delete d.rules; delete d.connectors;
+    P._filterDraft=d;
+  }else{
+    P._filterDraft={groups:[newFilterGroup()],groupConnectors:[],showBothSides:false};
+  }
+  P._filterDraft.groups.forEach(g=>{ if(!g.rules||!g.rules.length)g.rules=[newFilterRule()]; if(!Array.isArray(g.connectors))g.connectors=[]; });
   renderFilterModal();
 }
 function closeFilterModal(){ P._filterDraft=null; const m=document.getElementById('vl-filter-modal'); if(m)m.remove(); }
-function fdAddRule(){
-  P._filterDraft.rules.push(newFilterRule());
-  if(P._filterDraft.rules.length>1)P._filterDraft.connectors.push('and');
+function fdAddRule(gi){
+  const g=P._filterDraft.groups[gi];
+  g.rules.push(newFilterRule());
+  if(g.rules.length>1)g.connectors.push('and');
   renderFilterModal();
 }
-function fdRemoveRule(k){
-  P._filterDraft.rules.splice(k,1);
-  P._filterDraft.connectors.splice(Math.max(0,k-1),1);
-  if(!P._filterDraft.rules.length)P._filterDraft.rules.push(newFilterRule());
+function fdRemoveRule(gi,ri){
+  const g=P._filterDraft.groups[gi];
+  g.rules.splice(ri,1);
+  g.connectors.splice(Math.max(0,ri-1),1);
+  if(!g.rules.length)g.rules.push(newFilterRule());
   renderFilterModal();
 }
-function fdSet(k,prop,val){
-  const r=P._filterDraft.rules[k]; r[prop]=val;
+function fdAddGroup(){
+  P._filterDraft.groups.push(newFilterGroup());
+  if(P._filterDraft.groups.length>1)P._filterDraft.groupConnectors.push('or');
+  renderFilterModal();
+}
+function fdRemoveGroup(gi){
+  P._filterDraft.groups.splice(gi,1);
+  P._filterDraft.groupConnectors.splice(Math.max(0,gi-1),1);
+  if(!P._filterDraft.groups.length)P._filterDraft.groups.push(newFilterGroup());
+  renderFilterModal();
+}
+function fdSet(gi,ri,prop,val){
+  const r=P._filterDraft.groups[gi].rules[ri]; r[prop]=val;
   if(prop==='valueType') r.value = val==='field' ? (recordColumns(currentRecords())[0]||'') : '';
   if(prop==='op'||prop==='valueType') renderFilterModal();
 }
-function fdSetText(k,val){ P._filterDraft.rules[k].value=val; }   // no re-render → keeps focus
-function fdSetConn(k,val){ P._filterDraft.connectors[k]=val; renderFilterModal(); }
+function fdSetText(gi,ri,val){ P._filterDraft.groups[gi].rules[ri].value=val; }   // no re-render → keeps focus
+function fdSetConn(gi,ci,val){ P._filterDraft.groups[gi].connectors[ci]=val; renderFilterModal(); }
+function fdSetGroupConn(gci,val){ P._filterDraft.groupConnectors[gci]=val; renderFilterModal(); }
 function fdSetBoth(v){ P._filterDraft.showBothSides=v; }
 function applyFilterDraft(){
   const d=P._filterDraft;
-  const valid=(d.rules||[]).filter(ruleReady);
-  P.filter = valid.length ? {rules:d.rules, connectors:d.connectors, showBothSides:!!d.showBothSides} : null;
+  const hasReady=(d.groups||[]).some(groupReady);
+  P.filter = hasReady ? {groups:d.groups, groupConnectors:d.groupConnectors, showBothSides:!!d.showBothSides} : null;
   closeFilterModal();
   const vis=visibleIndices(); if(vis.length&&!vis.includes(P.previewIdx))P.previewIdx=vis[0];
   R();
 }
 function clearFilter(){ P.filter=null; closeFilterModal(); R(); }
 
-function renderFilterModal(){
-  const d=P._filterDraft; if(!d)return;
+function connToggle(curr,onclickPrefix){
+  return `<div style="display:flex;gap:4px">${['and','or'].map(c=>`<button onclick="${onclickPrefix}'${c}')" class="btn${(curr||'and')===c?' on':''}" style="padding:1px 14px;font-size:11px;text-transform:uppercase">${c}</button>`).join('')}</div>`;
+}
+
+function renderFilterGroup(g,gi,multi){
   const cols=recordColumns(currentRecords());
   const fieldOpts=sel=>cols.map(c=>`<option value="${c}" ${c===sel?'selected':''}>${esc(colLabel(c))}</option>`).join('');
   const opOpts=sel=>FILTER_OPS.map(o=>`<option value="${o.op}" ${o.op===sel?'selected':''}>${o.label}</option>`).join('');
-
-  const rowsHtml=d.rules.map((r,k)=>{
-    const conn = k>0 ? `<div style="display:flex;gap:4px;margin:6px 0">
-        ${['and','or'].map(c=>`<button onclick="fdSetConn(${k-1},'${c}')" class="btn${(d.connectors[k-1]||'and')===c?' on':''}" style="padding:1px 14px;font-size:11px;text-transform:uppercase">${c}</button>`).join('')}
-      </div>` : '';
+  const rowsHtml=g.rules.map((r,ri)=>{
+    const conn = ri>0 ? `<div style="margin:6px 0">${connToggle(g.connectors[ri-1],`fdSetConn(${gi},${ri-1},`)}</div>` : '';
     const valTypeToggle = !opNeedsValue(r.op) ? '' :
-      `<select class="inp" style="width:auto;flex-shrink:0" onchange="fdSet(${k},'valueType',this.value)" title="Compare against typed text or another column's value">
+      `<select class="inp" style="width:auto;flex-shrink:0" onchange="fdSet(${gi},${ri},'valueType',this.value)" title="Compare against typed text or another column's value">
          <option value="text" ${r.valueType==='text'?'selected':''}>Text</option>
          <option value="field" ${r.valueType==='field'?'selected':''}>Field</option>
        </select>`;
     const valCell = !opNeedsValue(r.op) ? '<div style="flex:1"></div>' :
       r.valueType==='field'
-        ? `<select class="inp" style="flex:1;min-width:0" onchange="fdSet(${k},'value',this.value)">${cols.map(c=>`<option value="${c}" ${c===r.value?'selected':''}>${esc(colLabel(c))}</option>`).join('')}</select>`
-        : `<input class="inp" style="flex:1;min-width:0" value="${esc(r.value||'')}" oninput="fdSetText(${k},this.value)" placeholder="match value">`;
+        ? `<select class="inp" style="flex:1;min-width:0" onchange="fdSet(${gi},${ri},'value',this.value)">${cols.map(c=>`<option value="${c}" ${c===r.value?'selected':''}>${esc(colLabel(c))}</option>`).join('')}</select>`
+        : `<input class="inp" style="flex:1;min-width:0" value="${esc(r.value||'')}" oninput="fdSetText(${gi},${ri},this.value)" placeholder="match value">`;
     return `<div style="margin-bottom:4px">
       ${conn}
       <div style="display:flex;gap:6px;align-items:center">
-        <select class="inp" style="width:140px;flex-shrink:0" onchange="fdSet(${k},'field',this.value)">${fieldOpts(r.field)}</select>
-        <select class="inp" style="width:120px;flex-shrink:0" onchange="fdSet(${k},'op',this.value)">${opOpts(r.op)}</select>
+        <select class="inp" style="width:140px;flex-shrink:0" onchange="fdSet(${gi},${ri},'field',this.value)">${fieldOpts(r.field)}</select>
+        <select class="inp" style="width:120px;flex-shrink:0" onchange="fdSet(${gi},${ri},'op',this.value)">${opOpts(r.op)}</select>
         ${valTypeToggle}
         ${valCell}
-        <button onclick="fdRemoveRule(${k})" title="Remove this filter" ${d.rules.length<=1?'disabled':''} style="flex-shrink:0;background:rgba(245,108,108,0.12);border:1px solid rgba(245,108,108,0.3);color:#f56c6c;border-radius:5px;padding:3px 9px;cursor:pointer;font-size:13px">×</button>
+        <button onclick="fdRemoveRule(${gi},${ri})" title="Remove this condition" ${g.rules.length<=1?'disabled':''} style="flex-shrink:0;background:rgba(245,108,108,0.12);border:1px solid rgba(245,108,108,0.3);color:#f56c6c;border-radius:5px;padding:3px 9px;cursor:pointer;font-size:13px">×</button>
       </div>
     </div>`;
+  }).join('');
+  return `<div style="border:1px solid rgba(108,142,245,0.25);border-radius:7px;padding:10px 12px;background:rgba(108,142,245,0.04)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <span style="color:#6C8EF5;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Group ${gi+1}</span>
+      ${multi?`<button onclick="fdRemoveGroup(${gi})" title="Remove this group" style="background:rgba(245,108,108,0.12);border:1px solid rgba(245,108,108,0.3);color:#f56c6c;border-radius:5px;padding:2px 8px;cursor:pointer;font-size:11px">Remove group</button>`:''}
+    </div>
+    ${rowsHtml}
+    <button class="btn" onclick="fdAddRule(${gi})" title="Add a condition to this group" style="margin-top:4px;font-size:11px">+ Add condition</button>
+  </div>`;
+}
+
+function renderFilterModal(){
+  const d=P._filterDraft; if(!d)return;
+  const multi=d.groups.length>1;
+  const groupsHtml=d.groups.map((g,gi)=>{
+    const between = gi>0 ? `<div style="display:flex;align-items:center;gap:8px;margin:8px 0">
+        <div style="flex:1;height:1px;background:rgba(255,255,255,0.08)"></div>
+        ${connToggle(d.groupConnectors[gi-1]||'or',`fdSetGroupConn(${gi-1},`)}
+        <div style="flex:1;height:1px;background:rgba(255,255,255,0.08)"></div>
+      </div>` : '';
+    return between+renderFilterGroup(g,gi,multi);
   }).join('');
 
   let m=document.getElementById('vl-filter-modal');
   if(!m){ m=document.createElement('div'); m.id='vl-filter-modal'; m.className='modal-overlay'; m.onclick=e=>{if(e.target===m)closeFilterModal();}; document.body.appendChild(m); }
-  m.innerHTML=`<div class="modal" style="min-width:560px;max-width:680px">
+  m.innerHTML=`<div class="modal" style="min-width:600px;max-width:720px">
     <div class="modal-title">Filter records</div>
-    <div style="max-height:340px;overflow-y:auto;padding-right:2px">${rowsHtml}</div>
-    <button class="btn" onclick="fdAddRule()" style="margin-top:6px;font-size:12px">+ Add filter</button>
+    <div style="max-height:380px;overflow-y:auto;padding-right:2px;display:flex;flex-direction:column;gap:2px">${groupsHtml}</div>
+    <button class="btn" onclick="fdAddGroup()" title="Add another group of conditions" style="margin-top:8px;font-size:12px">+ Add group</button>
     <label style="display:flex;align-items:center;gap:8px;margin-top:16px;cursor:pointer;color:#cfcfe0;font-size:12px">
       <input type="checkbox" ${d.showBothSides?'checked':''} onchange="fdSetBoth(this.checked)">
       Show Source and Destination when only Source or Destination matches
@@ -676,9 +753,9 @@ function buildPreviewPanel(){
   const scale=0.9;
   return`<div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:20px">
     <div style="display:flex;align-items:center;gap:6px;width:100%;justify-content:center">
-      <button onclick="P.previewIdx=${prevIdx};R()" class="btn" style="padding:3px 10px;font-size:15px;line-height:1" ${vpos<=0?"disabled":""}>‹</button>
+      <button onclick="P.previewIdx=${prevIdx};R()" title="Previous label" class="btn" style="padding:3px 10px;font-size:15px;line-height:1" ${vpos<=0?"disabled":""}>‹</button>
       <span style="color:#8888a8;font-size:11px;min-width:60px;text-align:center">${vpos+1} / ${total}</span>
-      <button onclick="P.previewIdx=${nextIdx};R()" class="btn" style="padding:3px 10px;font-size:15px;line-height:1" ${vpos>=total-1?"disabled":""}>›</button>
+      <button onclick="P.previewIdx=${nextIdx};R()" title="Next label" class="btn" style="padding:3px 10px;font-size:15px;line-height:1" ${vpos>=total-1?"disabled":""}>›</button>
     </div>
     ${renderLabel(t,rec,scale)}
     <div style="text-align:center">

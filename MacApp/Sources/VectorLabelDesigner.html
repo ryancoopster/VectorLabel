@@ -552,9 +552,9 @@ function buildProps(){
       <div style="margin-bottom:8px">
         <label class="lbl">Style</label>
         <div style="display:flex;gap:3px">
-          <button class="fmt-btn${o.bold?" on":""}" onclick="uobj('${o.id}',{bold:!${!!o.bold}});R()"><b>B</b></button>
-          <button class="fmt-btn${o.italic?" on":""}" onclick="uobj('${o.id}',{italic:!${!!o.italic}});R()"><i>I</i></button>
-          <button class="fmt-btn${o.underline?" on":""}" onclick="uobj('${o.id}',{underline:!${!!o.underline}});R()"><u>U</u></button>
+          <button class="fmt-btn${o.bold?" on":""}" title="Bold" onclick="uobj('${o.id}',{bold:!${!!o.bold}});R()"><b>B</b></button>
+          <button class="fmt-btn${o.italic?" on":""}" title="Italic" onclick="uobj('${o.id}',{italic:!${!!o.italic}});R()"><i>I</i></button>
+          <button class="fmt-btn${o.underline?" on":""}" title="Underline" onclick="uobj('${o.id}',{underline:!${!!o.underline}});R()"><u>U</u></button>
         </div>
       </div>
       <div style="margin-bottom:8px">
@@ -657,9 +657,9 @@ function R(){
       </select>
       <button class="btn${S.wrap?" on":""}" onclick="S.wrap=!S.wrap;R()">${S.wrap?"Hide wrap":"Show wrap"}</button>
       <div style="display:flex;align-items:center;gap:4px;background:#2a2a42;border:1px solid rgba(255,255,255,0.13);border-radius:4px;padding:2px 6px">
-        <button onclick="S.zoom=Math.max(0.25,S.zoom-0.25);R()" style="background:none;border:none;color:#8888a8;cursor:pointer;font-size:16px;padding:0 2px;line-height:1">−</button>
+        <button onclick="S.zoom=Math.max(0.25,S.zoom-0.25);R()" title="Zoom out" style="background:none;border:none;color:#8888a8;cursor:pointer;font-size:16px;padding:0 2px;line-height:1">−</button>
         <span style="color:#e8e8f0;font-size:11px;min-width:36px;text-align:center">${Math.round(S.zoom*100)}%</span>
-        <button onclick="S.zoom=Math.min(4,S.zoom+0.25);R()" style="background:none;border:none;color:#8888a8;cursor:pointer;font-size:16px;padding:0 2px;line-height:1">+</button>
+        <button onclick="S.zoom=Math.min(4,S.zoom+0.25);R()" title="Zoom in" style="background:none;border:none;color:#8888a8;cursor:pointer;font-size:16px;padding:0 2px;line-height:1">+</button>
       </div>
       <button onclick="S.zoom=1;R()" class="btn" style="padding:4px 7px;font-size:10px">Reset</button>
       <div style="display:flex;align-items:center;gap:6px;margin-left:4px">
@@ -732,8 +732,8 @@ function R(){
             <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px">Records</span>
             <div style="flex:1"></div>
             <span style="color:#44445a;font-size:10px">${S.recIdx+1} / ${(RX).length}</span>
-            <button onclick="S.recIdx=Math.max(0,S.recIdx-1);R()" class="btn" style="padding:2px 7px;font-size:13px;line-height:1" ${S.recIdx===0?"disabled":""}>‹</button>
-            <button onclick="S.recIdx=Math.min((RX).length-1,S.recIdx+1);R()" class="btn" style="padding:2px 7px;font-size:13px;line-height:1" ${S.recIdx===(RX).length-1?"disabled":""}>›</button>
+            <button onclick="S.recIdx=Math.max(0,S.recIdx-1);R()" title="Previous record" class="btn" style="padding:2px 7px;font-size:13px;line-height:1" ${S.recIdx===0?"disabled":""}>‹</button>
+            <button onclick="S.recIdx=Math.min((RX).length-1,S.recIdx+1);R()" title="Next record" class="btn" style="padding:2px 7px;font-size:13px;line-height:1" ${S.recIdx===(RX).length-1?"disabled":""}>›</button>
             <button class="btn${window._colMenuOpen?' on':''}" onclick="event.stopPropagation();toggleColumnsMenu()" style="padding:2px 8px;font-size:11px">Columns ▾</button>
             ${buildColumnsMenu()}
           </div>

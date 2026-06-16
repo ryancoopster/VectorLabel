@@ -269,6 +269,7 @@ struct JobRow: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(.vlRed)
+                .help("Cancel this print job")
             }
 
             GeometryReader { geo in
