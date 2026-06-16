@@ -325,6 +325,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                               completionHandler: nil)
     }
 
+    /// Confirm (native dialog), then delete a template by id and refresh the
+    /// designer's Open list.
+    private func confirmAndDeleteTemplate(id: String, name: String) {
+        guard let tpl = TemplateStore.shared.templates.first(where: { $0.id == id }) else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Delete “\(name)”?"
+        alert.informativeText = "This permanently removes the template file from ~/Documents/VectorLabel/Templates/. This can’t be undone."
+        alert.addButton(withTitle: "Delete")
+        alert.addButton(withTitle: "Cancel")
+        if let win = designerWindow {
+            alert.beginSheetModal(for: win) { [weak self] resp in
+                guard resp == .alertFirstButtonReturn else { return }
+                try? TemplateStore.shared.delete(tpl)
+                self?.injectDesignerTemplates()
+            }
+        } else if alert.runModal() == .alertFirstButtonReturn {
+            try? TemplateStore.shared.delete(tpl)
+            injectDesignerTemplates()
+        }
+    }
+
     /// Push the shared record-column config (order/hidden/widths) into the designer.
     private func injectColumnConfig() {
         guard let wv = designerWebView else { return }
@@ -509,6 +531,11 @@ extension AppDelegate: WKScriptMessageHandler {
 
         case "browseDataSource":
             browseForDataSource()
+
+        case "deleteTemplate":
+            if let p = body["payload"] as? [String: Any], let id = p["id"] as? String {
+                confirmAndDeleteTemplate(id: id, name: p["name"] as? String ?? "this template")
+            }
 
         case "setColumnConfig":
             AppSettings.shared.applyColumnConfigPayload(body["payload"])

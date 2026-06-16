@@ -810,12 +810,13 @@ function renderModal(){
         <div class="modal-title">Open Template</div>
         ${cards.length===0?`<div style="color:#44445a;text-align:center;padding:24px 0;font-size:13px">No templates loaded yet.<br>Use the file picker below to open a saved template.</div>`
           :cards.map((t,i)=>`
-            <div class="tpl-card${S._openSel===i?" active":""}" onclick="S._openSel=${i};renderModal()">
+            <div class="tpl-card${S._openSel===i?" active":""}" style="display:flex;align-items:center;gap:10px" onclick="S._openSel=${i};renderModal()">
               <div class="tpl-preview"></div>
-              <div>
-                <div style="color:#e8e8f0;font-size:13px;font-weight:600">${t.name}</div>
+              <div style="flex:1;min-width:0">
+                <div style="color:#e8e8f0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.name}</div>
                 <div style="color:#8888a8;font-size:11px;margin-top:2px">${t.specN} · ${t.objs.length} object${t.objs.length!==1?"s":""}</div>
               </div>
+              <button onclick="event.stopPropagation();deleteTemplateCard(${i})" title="Delete this template" style="flex-shrink:0;background:rgba(245,108,108,0.12);border:1px solid rgba(245,108,108,0.3);color:#f56c6c;border-radius:5px;padding:4px 9px;cursor:pointer;font-size:13px">🗑</button>
             </div>`).join("")}
         <div class="modal-footer" style="justify-content:space-between">
           <button class="btn" onclick="pickTemplateFile()">Browse file…</button>
@@ -1047,6 +1048,15 @@ function edPrintSaveAs(){
 
 // Save As (standalone): open the dialog to enter a new name → saves as a new template.
 function saveAsTemplate(){ S._loadedId=null; showModal('save'); }
+
+// Delete a template from the Open dialog (Swift confirms, deletes, refreshes list).
+function deleteTemplateCard(i){
+  const t=(S._loadedTemplates||[])[i];
+  if(!t)return;
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"deleteTemplate",payload:{id:t.id,name:t.name}});
+  }
+}
 
 async function saveTemplate(){
   const nameEl=document.getElementById("tpl-name-inp");

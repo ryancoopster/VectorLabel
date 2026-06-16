@@ -67,19 +67,33 @@ final class TemplateStore: ObservableObject {
         ) else { return }
 
         let decoder = JSONDecoder()
-        templates = contents
-            .filter { $0.pathExtension.lowercased() == "json" }
-            .sorted { $0.lastPathComponent < $1.lastPathComponent }
-            .compactMap { url -> VLTemplate? in
-                guard let data = try? Data(contentsOf: url),
-                      var tpl = try? decoder.decode(VLTemplate.self, from: data)
-                else { return nil }
-                // Use filename (without extension) as display name fallback
-                if tpl.name.isEmpty {
-                    tpl.name = url.deletingPathExtension().lastPathComponent
-                }
-                return tpl
+        let encoder = JSONEncoder()
+        var seenIDs = Set<String>()
+        var result: [VLTemplate] = []
+
+        for url in contents
+            .filter({ $0.pathExtension.lowercased() == "json" })
+            .sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+            guard let data = try? Data(contentsOf: url),
+                  var tpl = try? decoder.decode(VLTemplate.self, from: data)
+            else { continue }
+            // Use filename (without extension) as display name fallback
+            if tpl.name.isEmpty {
+                tpl.name = url.deletingPathExtension().lastPathComponent
             }
+            // De-duplicate ids: legacy "Save As" copies could share an id, which
+            // breaks identifying templates. Give any collision a fresh id and
+            // rewrite the file so the data is permanently clean.
+            if seenIDs.contains(tpl.id) {
+                tpl.id = UUID().uuidString
+                if let newData = try? encoder.encode(tpl) {
+                    try? newData.write(to: url, options: .atomic)
+                }
+            }
+            seenIDs.insert(tpl.id)
+            result.append(tpl)
+        }
+        templates = result
     }
 
     /// Decode a template from a JS editor payload ({id?, name, specN, objs}) and
