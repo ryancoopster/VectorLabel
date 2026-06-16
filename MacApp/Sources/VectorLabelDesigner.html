@@ -135,7 +135,7 @@ function textValue(o,rec){
 // ── State ─────────────────────────────────────────────────────────────────────
 let nid=1;const mid=()=>`o${nid++}`;
 let S={
-  spec:BL[1],selId:null,recIdx:0,wrap:true,showFields:false,zoom:1.0,
+  spec:BL[1],selId:null,selIds:[],recIdx:0,wrap:true,showFields:false,zoom:1.0,
   snapGrid:true,snapObjects:true,gridSize:0.05,
   tplName:'Untitled Template',modal:null,
   // Start blank — the standalone designer opens the Open dialog on launch so the
@@ -157,6 +157,30 @@ function saveDesignerPrefs(){
 }
 function gobj(id){return S.objs.find(o=>o.id===id);}
 function uobj(id,p){S.objs=S.objs.map(o=>o.id===id?Object.assign({},o,p):o);}
+
+// ── Multi-selection ────────────────────────────────────────────────────────────
+// S.selId is the "primary" (anchor / single-object props) selection; S.selIds is
+// the full set (always includes selId when non-empty). Single-select code paths
+// throughout just set S.selId directly — normSel() then collapses selIds to match,
+// so only the explicit multi-select paths below produce a multi-selection.
+function setSel(id){ S.selId=id; S.selIds=id?[id]:[]; }
+function toggleSel(id){
+  if(!gobj(id))return;
+  S.selIds=(S.selIds||[]).slice();
+  const i=S.selIds.indexOf(id);
+  if(i>=0){ S.selIds.splice(i,1); if(S.selId===id) S.selId=S.selIds[S.selIds.length-1]||null; }
+  else { S.selIds.push(id); S.selId=id; }
+  S._ef=(S.selId?((gobj(S.selId)||{}).f):undefined);
+  S.editingId=null;
+}
+function normSel(){
+  if(!S.selIds)S.selIds=[];
+  S.selIds=S.selIds.filter(id=>S.objs.some(o=>o.id===id));
+  if(S.selId && !S.selIds.includes(S.selId)) S.selIds=[S.selId];
+  if(!S.selId) S.selIds=[];
+}
+function selObjs(){ return (S.selIds||[]).map(id=>gobj(id)).filter(Boolean); }
+function uobjAll(patch){ snapshot(); (S.selIds||[]).forEach(id=>uobj(id,patch)); R(); }
 
 // ── Canvas ────────────────────────────────────────────────────────────────────
 const SC=185;
@@ -498,12 +522,15 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
 
   const objsHtml=objs.map(o=>{
     const x=o.x*SC+B,y=o.y*SC+B,w=(o.w||1)*SC,h=(o.h||0)*SC;
-    const sel=o.id===selId;
+    const sel=!readOnly&&(S.selIds||[]).includes(o.id);
+    // Resize/rotate handles only when exactly one object is selected; a multi-
+    // selection shows just the outlines and supports drag/nudge as a group.
+    const single=sel&&(S.selIds||[]).length===1;
     const ss=sel?"outline:1.5px solid var(--accent);outline-offset:1px;":"";
     const drag=readOnly?"":`onmousedown="startDrag(event,'${o.id}')"`;
     const rotDeg=o.rot||0;
     const rotCss=rotDeg?`transform:rotate(${rotDeg}deg);transform-origin:center center;`:"";
-    const rotH=sel&&!readOnly?`<div style="position:absolute;left:50%;top:-22px;width:1px;height:22px;background:var(--accent);transform:translateX(-50%);z-index:10;pointer-events:none"></div><div onmousedown="startRotate(event,'${o.id}')" title="Drag to rotate" style="position:absolute;left:50%;top:-26px;transform:translateX(-50%);width:11px;height:11px;background:var(--accent);border:1px solid #fff;border-radius:50%;cursor:grab;z-index:11"></div>`:"";
+    const rotH=single&&!readOnly?`<div style="position:absolute;left:50%;top:-22px;width:1px;height:22px;background:var(--accent);transform:translateX(-50%);z-index:10;pointer-events:none"></div><div onmousedown="startRotate(event,'${o.id}')" title="Drag to rotate" style="position:absolute;left:50%;top:-26px;transform:translateX(-50%);width:11px;height:11px;background:var(--accent);border:1px solid #fff;border-radius:50%;cursor:grab;z-index:11"></div>`:"";
 
     if(o.t==="tx"){
       const {v,e}=textValue(o,rec);
@@ -519,7 +546,7 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
       const txtColor=e?"var(--red)":"#000";
       const textAlign=o.al||"left";
       const dispVal=e?`⚠ ${e.substring(0,40)}`:v.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-      const rb=sel&&!readOnly?resizeHandles(o.id):"";
+      const rb=single&&!readOnly?resizeHandles(o.id):"";
       const dropAttr=readOnly?"":`ondragover="event.preventDefault()" ondrop="onColDropToText(event,'${o.id}')"`;
       const isStatic=txMode(o)==="static";
       const editing=!readOnly&&isStatic&&S.editingId===o.id;
@@ -531,16 +558,16 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
         ${rotH}${rb}</div>`;
     }
     if(o.t==="ln"){
-      const lh=sel&&!readOnly?`<div onmousedown="startLineResize(event,'${o.id}','l')" title="Drag to stretch" style="position:absolute;left:-5px;top:50%;transform:translateY(-50%);width:9px;height:9px;background:var(--accent);border:1px solid #fff;border-radius:50%;cursor:ew-resize;z-index:10"></div>`:"";
-      const rh=sel&&!readOnly?`<div onmousedown="startLineResize(event,'${o.id}','r')" title="Drag to stretch" style="position:absolute;right:-5px;top:50%;transform:translateY(-50%);width:9px;height:9px;background:var(--accent);border:1px solid #fff;border-radius:50%;cursor:ew-resize;z-index:10"></div>`:"";
+      const lh=single&&!readOnly?`<div onmousedown="startLineResize(event,'${o.id}','l')" title="Drag to stretch" style="position:absolute;left:-5px;top:50%;transform:translateY(-50%);width:9px;height:9px;background:var(--accent);border:1px solid #fff;border-radius:50%;cursor:ew-resize;z-index:10"></div>`:"";
+      const rh=single&&!readOnly?`<div onmousedown="startLineResize(event,'${o.id}','r')" title="Drag to stretch" style="position:absolute;right:-5px;top:50%;transform:translateY(-50%);width:9px;height:9px;background:var(--accent);border:1px solid #fff;border-radius:50%;cursor:ew-resize;z-index:10"></div>`:"";
       return `<div data-obj="${o.id}" ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${(o.w||1)*sc}px;height:${Math.max(1,o.lw||1)}px;background:#000;cursor:${readOnly?"default":"move"};${rotCss}${ss}">${lh}${rh}${rotH}</div>`;
     }
     if(o.t==="rc"){
-      const rb=sel&&!readOnly?resizeHandles(o.id):"";
+      const rb=single&&!readOnly?resizeHandles(o.id):"";
       return `<div data-obj="${o.id}" ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border:${o.lw||1}px solid #000;background:transparent;cursor:${readOnly?"default":"move"};${rotCss}${ss}">${rotH}${rb}</div>`;
     }
     if(o.t==="ci"||o.t==="ov"){
-      const rb=sel&&!readOnly?resizeHandles(o.id):"";
+      const rb=single&&!readOnly?resizeHandles(o.id):"";
       return `<div data-obj="${o.id}" ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border:${o.lw||1}px solid #000;background:transparent;border-radius:50%;cursor:${readOnly?"default":"move"};${rotCss}${ss}">${rotH}${rb}</div>`;
     }
     if(o.t==="ar"){
@@ -555,13 +582,13 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
       if(o.arrowStart) svg+=`<polygon points="0,${vh} ${as},${vh-hw} ${as},${vh+hw}" fill="#000"/>`;
       if(o.arrowEnd)   svg+=`<polygon points="${aw},${vh} ${aw-as},${vh-hw} ${aw-as},${vh+hw}" fill="#000"/>`;
       svg+=`</svg>`;
-      const lh=sel&&!readOnly?`<div onmousedown="startLineResize(event,'${o.id}','l')" title="Drag to stretch" style="position:absolute;left:-5px;top:50%;transform:translateY(-50%);width:9px;height:9px;background:var(--accent);border:1px solid #fff;border-radius:50%;cursor:ew-resize;z-index:10"></div>`:"";
-      const rh=sel&&!readOnly?`<div onmousedown="startLineResize(event,'${o.id}','r')" title="Drag to stretch" style="position:absolute;right:-5px;top:50%;transform:translateY(-50%);width:9px;height:9px;background:var(--accent);border:1px solid #fff;border-radius:50%;cursor:ew-resize;z-index:10"></div>`:"";
+      const lh=single&&!readOnly?`<div onmousedown="startLineResize(event,'${o.id}','l')" title="Drag to stretch" style="position:absolute;left:-5px;top:50%;transform:translateY(-50%);width:9px;height:9px;background:var(--accent);border:1px solid #fff;border-radius:50%;cursor:ew-resize;z-index:10"></div>`:"";
+      const rh=single&&!readOnly?`<div onmousedown="startLineResize(event,'${o.id}','r')" title="Drag to stretch" style="position:absolute;right:-5px;top:50%;transform:translateY(-50%);width:9px;height:9px;background:var(--accent);border:1px solid #fff;border-radius:50%;cursor:ew-resize;z-index:10"></div>`:"";
       return `<div data-obj="${o.id}" ${drag} style="position:absolute;left:${x}px;top:${y-vh}px;width:${aw}px;height:${2*vh}px;cursor:${readOnly?"default":"move"};${rotCss}${ss}">${svg}${lh}${rh}${rotH}</div>`;
     }
     if(o.t==="im"||o.t==="sy"){
       const fit=o.t==="sy"?"contain":"fill";
-      const rb=sel&&!readOnly?resizeHandles(o.id):"";
+      const rb=single&&!readOnly?resizeHandles(o.id):"";
       return `<div data-obj="${o.id}" ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;cursor:${readOnly?"default":"move"};${rotCss}${ss}"><img src="${o.src||''}" style="width:100%;height:100%;object-fit:${fit};pointer-events:none;display:block">${rotH}${rb}</div>`;
     }
     return"";
@@ -706,9 +733,65 @@ function posSizeBlock(o,showWH){
 }
 
 // ── Properties panel ──────────────────────────────────────────────────────────
+// Properties panel when 2+ objects are selected. Same-type selections expose the
+// shared formatting controls; a field whose values differ across the selection
+// shows "Multiple" and, once edited, applies the new value to every object.
+function buildMultiProps(sels){
+  const n=sels.length;
+  const types=Array.from(new Set(sels.map(o=>o.t)));
+  const head=`<div style="display:flex;flex-direction:column;gap:0">
+    <div class="sec">${n} objects selected</div>
+    <div style="color:var(--text3);font-size:10px;line-height:1.5;margin-bottom:8px">Drag or use the arrow keys to move them together.</div>`;
+  const delBtn=`<hr class="divider"><button class="btn" onclick="delObj()" style="background:rgba(245,108,108,0.15);border-color:rgba(245,108,108,0.3);color:var(--red);padding:6px 0;font-size:11px">Delete ${n} objects</button></div>`;
+  if(types.length>1){
+    return head+`<div style="color:var(--text2);font-size:11px;line-height:1.5;margin-bottom:8px">Mixed object types — select objects of the same type to edit their formatting together.</div>`+delBtn;
+  }
+  const t=types[0];
+  // Shared value across the selection: {multi:true} if values differ, else {v}.
+  function sh(key,def){ let v=(sels[0][key]!=null?sels[0][key]:def); for(const o of sels){ const ov=(o[key]!=null?o[key]:def); if(ov!==v) return {multi:true}; } return {multi:false,v:v}; }
+  function num(lbl,key,step,def,parse){ const s=sh(key,def); const pf=parse==='int'?'parseInt':'parseFloat'; return `<div style="margin-bottom:8px"><label class="lbl">${lbl}</label><input type="number" class="inp" step="${step}" ${s.multi?'value="" placeholder="Multiple"':'value="'+s.v+'"'} onchange="uobjAll({${key}:${pf}(this.value)})"></div>`; }
+  function tog(key,lbl,inner){ const s=sh(key,false); const on=!s.multi&&s.v===true; return `<button class="fmt-btn${on?' on':''}" title="${lbl}${s.multi?' (mixed)':''}"${s.multi?' style="opacity:.6"':''} onclick="uobjAll({${key}:${on?'false':'true'}})">${inner}</button>`; }
+  function btnset(key,def,opts){ const s=sh(key,def); return opts.map(([v,l,ti])=>`<button class="fmt-btn${!s.multi&&s.v===v?' on':''}" title="${ti||l}" onclick="uobjAll({${key}:'${v}'})">${l}</button>`).join(''); }
+  function check(key,lbl,def){ const s=sh(key,def); return `<div style="margin-bottom:8px"><label class="lbl" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" ${(!s.multi&&s.v===true)?'checked':''} onchange="uobjAll({${key}:this.checked})"> ${lbl}${s.multi?' <span style=\"color:var(--text3)\">(mixed)</span>':''}</label></div>`; }
+  function fontsel(){ const s=sh('font','Helvetica Neue'); const ho=s.multi?'<option value="__m__" selected>Multiple</option>':''; const body=FONTS.map(f=>`<option value="${f}"${!s.multi&&s.v===f?' selected':''}>${f}</option>`).join(''); return `<div style="margin-bottom:8px"><label class="lbl">Font</label><select class="inp" onchange="if(this.value!=='__m__')uobjAll({font:this.value})">${ho}${body}</select></div>`; }
+
+  let body='';
+  if(t==='tx'){
+    const alOpts=[["left","⬅"],["center","☰"],["right","➡"],["justify","⬌"]];
+    const vaOpts=[["top","⬆"],["middle","↕"],["bottom","⬇"]];
+    body=`<div class="sec">Text formatting</div>
+      ${fontsel()}
+      ${num('Size (pt)','fs',1,16,'int')}
+      <div style="margin-bottom:8px"><label class="lbl">Style</label><div style="display:flex;gap:3px">${tog('bold','Bold','<b>B</b>')}${tog('italic','Italic','<i>I</i>')}${tog('underline','Underline','<u>U</u>')}</div></div>
+      <div style="margin-bottom:8px"><label class="lbl">Horizontal align</label><div style="display:flex;gap:3px">${btnset('al','left',alOpts)}</div></div>
+      <div style="margin-bottom:8px"><label class="lbl">Vertical align</label><div style="display:flex;gap:3px">${btnset('valign','middle',vaOpts)}</div></div>
+      ${check('wrapText','Wrap text',false)}
+      ${num('Tracking (px)','tracking',0.5,0,'float')}
+      ${num('Width stretch (%)','stretch',1,100,'float')}`;
+  } else if(t==='ln'){
+    body=`<div class="sec">Line</div>${num('Weight (px)','lw',1,1,'int')}`;
+  } else if(t==='rc'){
+    body=`<div class="sec">Rectangle</div>${num('Border (px)','lw',1,1,'int')}`;
+  } else if(t==='ov'){
+    body=`<div class="sec">Oval</div>${num('Border (px)','lw',1,1,'int')}`;
+  } else if(t==='ci'){
+    body=`<div class="sec">Circle</div>${num('Border (px)','lw',1,1,'int')}`;
+  } else if(t==='ar'){
+    body=`<div class="sec">Arrow</div>${num('Thickness (px)','lw',1,2,'int')}${num('Arrowhead size (px)','arrowSize',1,12,'float')}
+      <div style="margin-bottom:8px"><label class="lbl">Heads</label><div style="display:flex;gap:3px">${tog('arrowStart','Arrowhead at start','◄ Start')}${tog('arrowEnd','Arrowhead at end','End ►')}</div></div>`;
+  } else if(t==='im'){
+    body=`<div class="sec">Image</div>${check('lockAspect','Lock aspect ratio',true)}`;
+  } else if(t==='sy'){
+    body=`<div class="sec">Symbol</div><div style="color:var(--text2);font-size:11px;margin-bottom:8px">Position the symbols together; size each individually.</div>`;
+  }
+  return head+body+delBtn;
+}
+
 function buildProps(){
+  const sels=selObjs();
+  if(sels.length>1) return buildMultiProps(sels);
   const o=S.selId?gobj(S.selId):null;
-  if(!o)return`<div style="color:var(--text3);font-size:11px;text-align:center;margin-top:40px;line-height:1.8">Click an object on<br>the canvas to edit it</div>`;
+  if(!o)return`<div style="color:var(--text3);font-size:11px;text-align:center;margin-top:40px;line-height:1.8">Click an object on the canvas to edit it.<br><br>Shift-click to select several at once.</div>`;
 
   function ni(lbl,key,step,val,extra){
     return `<div style="margin-bottom:6px"><label class="lbl">${lbl}</label><input type="number" class="inp" step="${step}" value="${(+val||0).toFixed(3)}" onchange="uobj('${o.id}',{${key}:parseFloat(this.value)});R()" ${extra||""}></div>`;
@@ -912,6 +995,7 @@ function scheduleCanvas(){
 }
 
 function R(){
+  normSel();
   const rec=(window._editorRecords||RX)[S.recIdx];
   const selObj=S.selId?gobj(S.selId):null;
 
@@ -980,10 +1064,10 @@ function R(){
         <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:2px;margin:2px -2px 0">
           ${S.objs.length===0?`<div style="color:var(--text3);font-size:10px;padding:6px 4px">No objects yet</div>`
             :S.objs.map(o=>{
-              const sel=o.id===S.selId;
+              const sel=(S.selIds||[]).includes(o.id);
               const icon=o.t==='tx'?'T':o.t==='ln'?'╌':o.t==='ar'?'→':o.t==='ci'?'◯':o.t==='ov'?'⬭':o.t==='im'?'▦':o.t==='sy'?'△':'▭';
               const lbl=objListLabel(o);
-              return`<div onclick="selectObj('${o.id}')" title="${lbl.replace(/"/g,'&quot;')}"
+              return`<div onclick="selectObj('${o.id}',event)" title="${lbl.replace(/"/g,'&quot;')}"
                 style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;cursor:pointer;font-size:11px;white-space:nowrap;overflow:hidden;
                        background:${sel?'rgba(108,142,245,0.18)':'transparent'};border:1px solid ${sel?'rgba(108,142,245,0.4)':'transparent'};color:${sel?'var(--text)':'var(--text2)'}">
                 <span style="width:13px;text-align:center;color:var(--accent);flex-shrink:0">${icon}</span>
@@ -991,7 +1075,7 @@ function R(){
               </div>`;
             }).join('')}
         </div>
-        ${S.selId?`<button class="btn" onclick="delObj()" style="background:rgba(245,108,108,0.15);border-color:rgba(245,108,108,0.3);color:var(--red);padding:5px 0;font-size:10px;flex-shrink:0">Delete selected</button>`:""}
+        ${S.selId?`<button class="btn" onclick="delObj()" style="background:rgba(245,108,108,0.15);border-color:rgba(245,108,108,0.3);color:var(--red);padding:5px 0;font-size:10px;flex-shrink:0">${(S.selIds||[]).length>1?`Delete ${S.selIds.length} selected`:'Delete selected'}</button>`:""}
       </div>
 
       <!-- Center: canvas + records -->
@@ -1331,9 +1415,16 @@ function startDrag(e,id){
   e.stopPropagation();
   const o=gobj(id);if(!o)return;
   if(S.editingId&&S.editingId!==id)S.editingId=null;
-  if(S.selId!==id){S.selId=id;S._ef=o.f;R();}
+  // Shift-click toggles this object in/out of the multi-selection (no drag).
+  if(e.shiftKey){ toggleSel(id); R(); return; }
+  // Grabbing an object already part of a multi-selection drags the whole group;
+  // grabbing anything else selects just it first.
+  const inMulti=(S.selIds||[]).length>1 && S.selIds.includes(id);
+  if(!inMulti && (S.selId!==id||(S.selIds||[]).length>1)){ setSel(id); S._ef=o.f; R(); }
   snapshot();
   S._rulerObj=id;   // highlight this object's extent on the rulers while dragging
+  const ids=((S.selIds||[]).length?S.selIds:[id]).slice();
+  const origs={}; ids.forEach(i=>{const oo=gobj(i); if(oo)origs[i]={x:oo.x,y:oo.y};});
   const sx=e.clientX,sy=e.clientY,ox=o.x,oy=o.y;
   let moved=false;
   function mv(e){
@@ -1342,16 +1433,18 @@ function startDrag(e,id){
     const rawY=oy+(e.clientY-sy)/(SC*S.zoom);
     const o2=gobj(id);
     const snapped=applySnap(rawX,rawY,o2?o2.w:0.1,o2?o2.h:0.1,id);
-    uobj(id,snapped);
-    positionEl(id);       // live move without rebuilding the DOM
+    // Apply the grabbed object's (snapped) delta to every selected object so the
+    // whole group moves rigidly together.
+    const dx=snapped.x-ox, dy=snapped.y-oy;
+    ids.forEach(i=>{ const og=origs[i]; if(!og)return; uobj(i,{x:og.x+dx,y:og.y+dy}); positionEl(i); });
     renderSnapGuides();   // show the alignment guides live
     drawRulers();         // highlight the object's extent on the rulers
   }
   function mu(){
     S._snapLines=[]; renderSnapGuides(); S._rulerObj=null;
     window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",mu);
-    // A click (no drag) on a static text box → edit it inline.
-    if(!moved && o.t==="tx" && txMode(o)==="static"){ startTextEdit(id); return; }
+    // A click (no drag) on a lone static text box → edit it inline.
+    if(!moved && o.t==="tx" && txMode(o)==="static" && (S.selIds||[]).length<=1){ startTextEdit(id); return; }
     R();
   }
   window.addEventListener("mousemove",mv);window.addEventListener("mouseup",mu);
@@ -1432,10 +1525,11 @@ function startResize(e,id,corner){
 }
 
 function delObj(){
-  if(!S.selId)return;
+  const ids=(S.selIds||[]).length?S.selIds.slice():(S.selId?[S.selId]:[]);
+  if(!ids.length)return;
   snapshot();
-  S.objs=S.objs.filter(o=>o.id!==S.selId);
-  S.selId=null;
+  S.objs=S.objs.filter(o=>!ids.includes(o.id));
+  S.selId=null; S.selIds=[];
   R();
 }
 
@@ -1443,29 +1537,36 @@ function delObj(){
 let _objClipboard=null;
 const PASTE_OFFSET=0.1;   // inches
 
-function _selectNew(c){ S.objs.push(c); S.selId=c.id; S._ef=(c.t==='tx'?c.f:undefined); S.editingId=null; R(); }
+function _selectNew(c){ S.objs.push(c); setSel(c.id); S._ef=(c.t==='tx'?c.f:undefined); S.editingId=null; R(); }
+// Select a freshly created batch of objects (used by multi duplicate/paste).
+function _selectNewBatch(ids){ S.selIds=ids.slice(); S.selId=ids[ids.length-1]||null; S.editingId=null; const p=S.selId&&gobj(S.selId); S._ef=(p&&p.t==='tx')?p.f:undefined; R(); }
 
-// Cmd+D — duplicate in place (same position, new id).
+// Cmd+D — duplicate in place (same position, new ids); duplicates all selected.
 function duplicateObj(){
-  if(!S.selId)return;
-  const o=gobj(S.selId); if(!o)return;
+  const sels=selObjs(); if(!sels.length)return;
   snapshot();
-  const c=JSON.parse(JSON.stringify(o)); c.id=mid();
-  _selectNew(c);
+  const ids=sels.map(o=>{ const c=JSON.parse(JSON.stringify(o)); c.id=mid(); S.objs.push(c); return c.id; });
+  _selectNewBatch(ids);
 }
 function copyObj(){
-  if(!S.selId)return;
-  const o=gobj(S.selId); if(o){ _objClipboard=JSON.parse(JSON.stringify(o)); if(typeof showToast==='function')showToast('Copied'); }
+  const sels=selObjs(); if(!sels.length)return;
+  _objClipboard=JSON.parse(JSON.stringify(sels));
+  if(typeof showToast==='function')showToast(sels.length>1?('Copied '+sels.length+' objects'):'Copied');
 }
-// Cmd+V — paste offset from the original; repeated pastes cascade.
+// Cmd+V — paste offset from the originals; repeated pastes cascade.
 function pasteObj(){
   if(!_objClipboard)return;
+  const arr=Array.isArray(_objClipboard)?_objClipboard:[_objClipboard];
+  if(!arr.length)return;
   snapshot();
-  const c=JSON.parse(JSON.stringify(_objClipboard)); c.id=mid();
-  c.x=Math.max(-BLEED_IN,(c.x||0)+PASTE_OFFSET);
-  c.y=Math.max(-BLEED_IN,(c.y||0)+PASTE_OFFSET);
-  _objClipboard.x=c.x; _objClipboard.y=c.y;   // cascade next paste
-  _selectNew(c);
+  const ids=arr.map(src=>{
+    const c=JSON.parse(JSON.stringify(src)); c.id=mid();
+    c.x=Math.max(-BLEED_IN,(c.x||0)+PASTE_OFFSET);
+    c.y=Math.max(-BLEED_IN,(c.y||0)+PASTE_OFFSET);
+    src.x=c.x; src.y=c.y;   // cascade next paste
+    S.objs.push(c); return c.id;
+  });
+  _selectNewBatch(ids);
 }
 
 // Short label for an object in the object list.
@@ -1481,9 +1582,10 @@ function objListLabel(o){
 }
 
 // Select an object from the object list (mirrors clicking it on the canvas).
-function selectObj(id){
+function selectObj(id,e){
   const o=gobj(id); if(!o)return;
-  S.selId=id;
+  if(e&&e.shiftKey){ toggleSel(id); R(); return; }
+  setSel(id);
   S.editingId=null;
   S._ef=o.t==='tx'?o.f:undefined;
   R();
@@ -1703,12 +1805,11 @@ document.addEventListener("keydown",function(e){
   // Arrow keys — nudge selected object by 1px (0.5px with shift)
   if(["ArrowLeft","ArrowRight","ArrowUp","ArrowDown"].includes(e.key)&&!inInput&&S.selId){
     e.preventDefault();
-    const o=gobj(S.selId);if(!o)return;
+    const sels=selObjs();if(!sels.length)return;
     const step=S.snapGrid?S.gridSize:(e.shiftKey?0.5:1)/SC;
-    if(e.key==="ArrowLeft")uobj(S.selId,{x:Math.max(-BLEED_IN,o.x-step)});
-    if(e.key==="ArrowRight")uobj(S.selId,{x:o.x+step});
-    if(e.key==="ArrowUp")uobj(S.selId,{y:Math.max(-BLEED_IN,o.y-step)});
-    if(e.key==="ArrowDown")uobj(S.selId,{y:o.y+step});
+    const dx=e.key==="ArrowLeft"?-step:e.key==="ArrowRight"?step:0;
+    const dy=e.key==="ArrowUp"?-step:e.key==="ArrowDown"?step:0;
+    sels.forEach(o=>uobj(o.id,{x:Math.max(-BLEED_IN,o.x+dx),y:Math.max(-BLEED_IN,o.y+dy)}));
     R();
     return;
   }
