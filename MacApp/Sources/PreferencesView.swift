@@ -289,13 +289,19 @@ struct PreferencesView: View {
             set: { settings.setCalibrationOffset(forSerial: printer.serial,
                      dx: settings.calibrationOffset(forSerial: printer.serial).dx, dy: $0) })
         VStack(alignment: .leading, spacing: 8) {
-            PrefRow(label: printer.name,
-                    caption: "\(dpi) px = 1 inch  (\(dpi) DPI).  Positive Horizontal shifts content along the label; positive Vertical shifts it down. Saved for serial \(printer.serial).") {
+            HStack(spacing: 8) {
                 Button("Print calibration grid") {
                     PrinterManager.shared.printCalibrationGrid(for: printer.id)
                 }
                 .buttonStyle(VLButtonStyle())
                 .disabled(printer.status != .ready)
+                Button("SmartCell dump") {
+                    PrinterManager.shared.dumpSmartCell(for: printer.id)
+                }
+                .buttonStyle(VLButtonStyle())
+                .disabled(printer.status != .ready)
+                Text("\(dpi) px = 1 inch  (\(dpi) DPI)")
+                    .foregroundColor(.vlDim).font(.system(size: 11))
             }
             HStack(spacing: 16) {
                 offsetField("Horizontal", dxB)
@@ -304,13 +310,7 @@ struct PreferencesView: View {
                     settings.setCalibrationOffset(forSerial: printer.serial, dx: 0, dy: 0)
                 }
                 .buttonStyle(VLButtonStyle())
-                Button("SmartCell dump") {
-                    PrinterManager.shared.dumpSmartCell(for: printer.id)
-                }
-                .buttonStyle(VLButtonStyle())
-                .disabled(printer.status != .ready)
             }
-            .padding(.leading, 2)
 
             if !printerManager.lastSmartCellDump.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
@@ -364,49 +364,25 @@ struct PreferencesView: View {
                     }
                 } else {
                     ForEach(printerManager.printers) { printer in
-                        PrefRow(label: printer.name,
-                                caption: printerCaption(printer, printerManager.cassettes[printer.id])) {
-                            HStack(spacing: 8) {
-                                Button("Detect cassette") {
-                                    PrinterManager.shared.refreshCassette(for: printer.id, force: true)
+                        VStack(alignment: .leading, spacing: 8) {
+                            PrefRow(label: printer.name,
+                                    caption: printerCaption(printer, printerManager.cassettes[printer.id])) {
+                                HStack(spacing: 8) {
+                                    Button("Detect cassette") {
+                                        PrinterManager.shared.refreshCassette(for: printer.id, force: true)
+                                    }
+                                    .buttonStyle(VLButtonStyle())
+                                    .disabled(printer.status != .ready)
+                                    Circle()
+                                        .fill(printer.status == .ready ? Color.vlGreen : printer.status == .busy ? Color.yellow : Color.vlDim)
+                                        .frame(width: 8, height: 8)
                                 }
-                                .buttonStyle(VLButtonStyle())
-                                .disabled(printer.status != .ready)
-                                Circle()
-                                    .fill(printer.status == .ready ? Color.vlGreen : printer.status == .busy ? Color.yellow : Color.vlDim)
-                                    .frame(width: 8, height: 8)
                             }
+                            calibrationControls(for: printer)
                         }
                         if printer.id != printerManager.printers.last?.id {
                             PrefDivider()
                         }
-                    }
-                }
-            }
-
-            if !printerManager.printers.isEmpty {
-                PrefSection(title: "Printer Calibration") {
-                    ForEach(Array(printerManager.printers.enumerated()), id: \.element.id) { idx, printer in
-                        calibrationControls(for: printer)
-                        if idx != printerManager.printers.count - 1 { PrefDivider() }
-                    }
-                }
-            }
-
-            PrefSection(title: "Brady M611 PID Override") {
-                PrefRow(
-                    label: "Product ID (hex)",
-                    caption: "The M611 PID hasn't been confirmed. If your M611 isn't detected, connect it, run  system_profiler SPUSBDataType  in Terminal, find the Brady entry, and enter the idProduct value here."
-                ) {
-                    HStack(spacing: 2) {
-                        Text("0x")
-                            .foregroundColor(.vlSecondary)
-                            .font(.system(size: 12, design: .monospaced))
-                        TextField("010C", text: $settings.m611ProductIDOverride)
-                            .font(.system(size: 12, design: .monospaced))
-                            .frame(width: 52)
-                            .textFieldStyle(.roundedBorder)
-                            .colorScheme(.dark)
                     }
                 }
             }

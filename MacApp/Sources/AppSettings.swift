@@ -38,11 +38,6 @@ final class AppSettings: ObservableObject {
 
     // MARK: – Printing
 
-    /// USB Product ID override for M611 (until confirmed).
-    @Published var m611ProductIDOverride: String {
-        didSet { UserDefaults.standard.set(m611ProductIDOverride, forKey: "m611ProductIDOverride") }
-    }
-
     /// Milliseconds to wait between sending consecutive label jobs.
     @Published var interLabelDelayMs: Int {
         didSet { UserDefaults.standard.set(interLabelDelayMs, forKey: "interLabelDelayMs") }
@@ -178,7 +173,6 @@ final class AppSettings: ObservableObject {
         maxExportsPerProject = defaults.object(forKey: "maxExportsPerProject") as? Int ?? 15
         templatesFolderPath = defaults.string(forKey: "templatesFolderPath")
                            ?? ((base as NSString).appendingPathComponent("Templates"))
-        m611ProductIDOverride = defaults.string(forKey: "m611ProductIDOverride") ?? ""
         interLabelDelayMs = defaults.object(forKey: "interLabelDelayMs") as? Int ?? 50
         defaultPrintRange = defaults.string(forKey: "defaultPrintRange") ?? "all"
         recentPrintsCount = defaults.object(forKey: "recentPrintsCount") as? Int ?? 5
@@ -213,7 +207,6 @@ final class AppSettings: ObservableObject {
         autoOpenPrintWindow  = true
         maxExportsPerProject = 15
         templatesFolderPath  = (base as NSString).appendingPathComponent("Templates")
-        m611ProductIDOverride = ""
         interLabelDelayMs    = 50
         defaultPrintRange    = "all"
         recentPrintsCount    = 5

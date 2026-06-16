@@ -21,14 +21,13 @@ struct BradyUSBDevice: Identifiable, Hashable {
 /// Add a CLibUSB system library target in Package.swift (see module.modulemap).
 ///
 /// VID 0x0E2E is confirmed for all Brady USB devices.
-/// M610 PID 0x010B is confirmed. M611 PID should be verified on first connect;
-/// set m611ProductIDOverride in AppSettings if it differs from 0x010C.
+/// M610 PID 0x010B and M611 PID 0x010C are both confirmed on hardware.
 enum BradyUSB {
 
     static let vendorID: UInt16 = 0x0E2E
     static let knownModels: [(pid: UInt16, model: String)] = [
         (0x010B, "M610"),
-        (0x010C, "M611"),   // assumed — verify and override in Preferences if wrong
+        (0x010C, "M611"),
     ]
     static let outEndpoint: UInt8  = 0x01   // bulk OUT — print data and queries
     static let inEndpoint: UInt8   = 0x82   // bulk IN — SmartCell responses
@@ -84,12 +83,7 @@ enum BradyUSB {
         defer { libusb_free_device_list(list, 1) }
         guard count > 0, let devices = list else { return [] }
 
-        // Check for PID override
-        var validPIDs = knownModels.map { $0.pid }
-        if let override = UInt16(AppSettings.shared.m611ProductIDOverride, radix: 16),
-           override != 0, !validPIDs.contains(override) {
-            validPIDs.append(override)
-        }
+        let validPIDs = knownModels.map { $0.pid }
 
         for i in 0 ..< count {
             guard let dev = devices[Int(i)] else { continue }
@@ -136,11 +130,7 @@ enum BradyUSB {
             throw USBError.deviceNotFound(deviceID)
         }
 
-        var validPIDs = knownModels.map { $0.pid }
-        if let override = UInt16(AppSettings.shared.m611ProductIDOverride, radix: 16),
-           override != 0, !validPIDs.contains(override) {
-            validPIDs.append(override)
-        }
+        let validPIDs = knownModels.map { $0.pid }
 
         for i in 0 ..< count {
             guard let dev = devices[Int(i)] else { continue }
