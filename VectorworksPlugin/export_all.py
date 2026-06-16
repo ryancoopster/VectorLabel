@@ -133,15 +133,18 @@ def prune_project_folder(folder_path, keep=MAX_EXPORTS_PER_PROJECT):
 
 # ── Export core ───────────────────────────────────────────────────────────────
 
-def collect_handles(criteria):
-    """Collect every object handle matching a Vectorworks criteria string."""
+def collect_active_layer_objects():
+    """Every object on the active design layer, ignoring selection entirely.
+    Walks the layer directly (FInLayer/NextObj) so there is no dependence on a
+    criteria string or on what happens to be selected."""
     handles = []
-
-    def collect(h):
+    layer = vs.ActLayer()
+    if not layer:
+        return handles
+    h = vs.FInLayer(layer)
+    while h:
         handles.append(h)
-        return True
-
-    vs.ForEachObject(collect, criteria)
+        h = vs.NextObj(h)
     return handles
 
 
@@ -193,12 +196,12 @@ def write_export(handles, empty_msg):
 # ── Menu command: Export All Circuits to VectorLabel ────────────────────────────
 
 def export_all_circuits():
-    """Export every ConnectCAD circuit on the active design layer."""
-    layer_name = vs.GetLName(vs.ActLayer())
-    handles = collect_handles("(L='{}')".format(layer_name))
+    """Export every ConnectCAD circuit on the active design layer, regardless
+    of what is selected."""
+    handles = collect_active_layer_objects()
     write_export(handles,
-                 "No ConnectCAD circuits found on the active layer ('{}').\n"
-                 "({{skipped}} non-circuit object(s) skipped)".format(layer_name))
+                 "No ConnectCAD circuits found on the active layer.\n"
+                 "({skipped} non-circuit object(s) skipped)")
 
 
 export_all_circuits()
