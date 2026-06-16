@@ -22,6 +22,9 @@ final class PrintWindowController: NSObject {
     // Data to pass into the print window
     private var records: [WireRecord] = []
     private var sourceFileURL: URL?
+    // The CSV on disk that `records` came from — used to persist inline edits.
+    // Tracked separately from sourceFileURL (which is cleared on reprint).
+    private var csvWritebackURL: URL?
     private var reprinting: RecentPrint?
 
     // Observes the active PrintJob so we can drive the web view's progress UI.
@@ -71,6 +74,7 @@ final class PrintWindowController: NSObject {
         capturePreviousApp()
         self.records = records
         self.sourceFileURL = fileURL
+        self.csvWritebackURL = fileURL
         self.reprinting = nil
         self.currentRecentPrintID = nil
         openWindowIfNeeded()
@@ -94,10 +98,12 @@ final class PrintWindowController: NSObject {
         // Clear any stale export URL so the recorded source filename comes from
         // the reprint record, not a previously-opened export.
         self.sourceFileURL = nil
+        self.csvWritebackURL = nil
         openWindowIfNeeded()
         // Recent prints store the CSV path; try to reload it
-        if let csv = loadCSVForReprint(recent) {
+        if let (csv, url) = loadCSVForReprint(recent) {
             self.records = csv
+            self.csvWritebackURL = url   // allow inline edits to persist on reprint too
         }
         sendInitialState()
     }
@@ -327,16 +333,46 @@ final class PrintWindowController: NSObject {
 
     // MARK: – Reprint CSV reload
 
-    private func loadCSVForReprint(_ recent: RecentPrint) -> [WireRecord]? {
+    private func loadCSVForReprint(_ recent: RecentPrint) -> ([WireRecord], URL)? {
         // Try to find the CSV in the exports tree
         let exportsRoot = AppSettings.shared.exportsFolderURL
         guard let enumerator = FileManager.default.enumerator(at: exportsRoot, includingPropertiesForKeys: nil) else { return nil }
         for case let url as URL in enumerator {
             if url.lastPathComponent == recent.sourceFileName {
-                return WireExportParser.parse(fileURL: url)
+                if let recs = WireExportParser.parse(fileURL: url) { return (recs, url) }
+                return nil
             }
         }
         return nil
+    }
+
+    /// Persist `records` back to the source CSV, preserving its column order.
+    /// Session inline edits → durable. No-op if there's no known source file.
+    private func writeRecordsBackToCSV() {
+        guard let url = csvWritebackURL else { return }
+        var headers: [String] = []
+        if let content = try? String(contentsOf: url, encoding: .utf8),
+           let firstLine = content.components(separatedBy: .newlines).first(where: { !$0.isEmpty }) {
+            headers = WireExportParser.parseCSVLine(firstLine)
+        }
+        if headers.isEmpty {
+            // Fallback: union of keys across records, with _Side & Number leading.
+            var seen = Set<String>(); var cols: [String] = []
+            for r in records { for k in r.fields.keys where !seen.contains(k) { seen.insert(k); cols.append(k) } }
+            cols.sort()
+            headers = ["_Side", "Number"].filter { cols.contains($0) }
+                    + cols.filter { $0 != "_Side" && $0 != "Number" }
+        }
+        guard !headers.isEmpty else { return }
+        func field(_ s: String) -> String {
+            if s.contains(",") || s.contains("\"") || s.contains("\n") || s.contains("\r") {
+                return "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+            }
+            return s
+        }
+        var lines = [headers.map(field).joined(separator: ",")]
+        for r in records { lines.append(headers.map { field(r.fields[$0] ?? "") }.joined(separator: ",")) }
+        try? (lines.joined(separator: "\r\n") + "\r\n").write(to: url, atomically: true, encoding: .utf8)
     }
 
     // MARK: – Dev HTML loader
@@ -390,6 +426,7 @@ extension PrintWindowController: WKScriptMessageHandler {
                 records[index] = WireRecord(side: f["_Side"] ?? records[index].side,
                                             wireID: f["Number"] ?? records[index].wireID,
                                             fields: f)
+                writeRecordsBackToCSV()
             }
 
         case "setColumnConfig":

@@ -332,7 +332,7 @@ enum WireExportParser {
     }
 
     /// RFC-4180 compliant CSV line parser.
-    private static func parseCSVLine(_ line: String) -> [String] {
+    static func parseCSVLine(_ line: String) -> [String] {
         var fields: [String] = []
         var current = ""
         var inQuotes = false
