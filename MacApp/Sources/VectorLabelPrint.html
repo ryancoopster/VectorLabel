@@ -438,7 +438,11 @@ function buildPreviewPanel(){
     </div>
     <div class="print-info" style="width:100%;max-width:260px">
       <label class="lbl">Required supply</label>
-      <div style="color:#e8e8f0;font-size:12px;font-weight:600;font-family:monospace">${spec.n}</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="color:#e8e8f0;font-size:12px;font-weight:600;font-family:monospace">${requiredSupplyDisplay(t.specN)}</div>
+        ${cassetteMatched()?`<span title="Loaded cassette matches the required supply" style="color:#5cc896;font-size:22px;line-height:1;font-weight:800">✓</span>`
+          :cassetteMismatch()?`<span title="Loaded ${loadedCassette().partNumber} doesn't match — the label may print misaligned or cropped" style="color:#f56c6c;font-size:16px;line-height:1">⚠ mismatch</span>`:""}
+      </div>
       <div style="color:#8888a8;font-size:11px;margin-top:2px">${spec.lb.split("—")[1]?.trim()||""}</div>
     </div>
   </div>`;
@@ -508,19 +512,6 @@ function buildTemplateBar(){
       <input type="checkbox" ${P._makeDefaultChecked?"checked":""} onchange="toggleDefaultTemplate(this.checked)" style="cursor:pointer">
       Make default
     </label>`:""}
-    ${cassetteMismatch()?`<div title="The loaded cassette differs from the template's required supply — the label may print misaligned or cropped" style="flex-shrink:0;display:flex;align-items:center;gap:5px;color:#f56c6c;font-size:11px;font-weight:600;white-space:nowrap">⚠ Supply mismatch</div>`:""}
-    ${t?`<div style="flex-shrink:0;text-align:right">
-      <div style="color:#44445a;font-size:10px">Required supply</div>
-      <div style="color:#6C8EF5;font-size:11px;font-weight:600;font-family:monospace">${t.specN}</div>
-    </div>`:""}
-    <div style="flex-shrink:0;text-align:right">
-      <div style="color:#44445a;font-size:10px">Loaded supply</div>
-      ${(()=>{const c=loadedCassette();
-        if(!c||!c.partNumber)return `<button class="btn" onclick="detectCassette()" style="padding:2px 8px;font-size:10px;margin-top:1px">Detect</button>`;
-        const mm=cassetteMismatch();
-        return `<div title="${typeof c.supplyRemainingPct==='number'?c.supplyRemainingPct+'% remaining — click to re-detect':'click to re-detect'}" onclick="detectCassette()" style="cursor:pointer;color:${mm?'#f56c6c':'#5cc896'};font-size:11px;font-weight:600;font-family:monospace">${c.partNumber}${typeof c.supplyRemainingPct==='number'?' · '+c.supplyRemainingPct+'%':''}</div>`;
-      })()}
-    </div>
   </div>`;
 }
 
@@ -549,6 +540,19 @@ function cassetteMismatch(){
   const c=loadedCassette(), t=tpl();
   if(!c||!t||!c.partNumber)return false;
   return supplyCore(c.partNumber)!==supplyCore(t.specN);
+}
+
+function cassetteMatched(){
+  const c=loadedCassette(), t=tpl();
+  if(!c||!t||!c.partNumber)return false;
+  return supplyCore(c.partNumber)===supplyCore(t.specN);
+}
+
+// BM (bulk box) and M6 (small roll) are the same label in different packaging,
+// so show the required supply as "BM/M6-<core>" and treat either as a match.
+function requiredSupplyDisplay(specN){
+  const core=supplyCore(specN);
+  return core ? "BM/M6-"+core : (specN||"");
 }
 
 // Called by Swift when detected cassette info changes (auto-detect or manual).
@@ -620,6 +624,10 @@ function buildPrintBar(){
       <div style="font-size:11px;${pr.status==="ready"?"color:#5cc896":pr.status==="busy"?"color:#f5c96c":"color:#f56c6c"}">
         ${pr.status==="ready"?"Ready":pr.status==="busy"?"Busy":"Offline"}
       </div>
+      ${(()=>{const c=loadedCassette();
+        if(!c||!c.partNumber)return `<button class="btn" onclick="detectCassette()" style="padding:3px 8px;font-size:10px">Detect supply</button>`;
+        return `<div onclick="detectCassette()" title="${c.partNumber} — click to re-detect" style="cursor:pointer;font-size:11px;color:#8888a8;white-space:nowrap">${typeof c.supplyRemainingPct==='number'?c.supplyRemainingPct+'% supply':c.partNumber}</div>`;
+      })()}
     </div>
 
     <!-- Print button — goes straight to printing, no confirmation -->
