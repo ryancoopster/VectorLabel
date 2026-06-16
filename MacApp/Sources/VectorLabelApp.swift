@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import WebKit
+import UniformTypeIdentifiers
 
 // MARK: – App entry point
 
@@ -90,9 +91,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                             ?? devHTMLURL("VectorLabelDesigner")
         else { return }
 
-        // WKWebView with navigation delegate so we can inject records after load
+        // WKWebView with navigation delegate so we can inject records after load,
+        // plus a message handler so the designer can save/list/browse templates
+        // through Swift (WKWebView has no File System Access API).
         let config = WKWebViewConfiguration()
         config.preferences.setValue(true, forKey: "developerExtrasEnabled")
+        let contentController = WKUserContentController()
+        contentController.add(self, name: "vectorlabel")
+        config.userContentController = contentController
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.navigationDelegate = self
         wv.loadFileURL(htmlURL, allowingReadAccessTo: htmlURL.deletingLastPathComponent())
@@ -121,6 +127,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             MainActor.assumeIsolated {
                 guard let self = self else { return }
                 self.designerWebView?.navigationDelegate = nil
+                self.designerWebView?.configuration.userContentController
+                    .removeScriptMessageHandler(forName: "vectorlabel")
                 self.designerWebView = nil
                 self.designerWindow = nil
                 if let token = self.designerCloseObserver {
@@ -245,6 +253,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         wv.evaluateJavaScript(js, completionHandler: nil)
     }
 
+    /// Push the current templates-folder contents into the designer so its Open
+    /// dialog lists every saved template.
+    private func injectDesignerTemplates() {
+        guard let wv = designerWebView,
+              let data = try? JSONEncoder().encode(TemplateStore.shared.templates),
+              let json = String(data: data, encoding: .utf8)
+        else { return }
+        wv.evaluateJavaScript(
+            "if(typeof initDesignerTemplates==='function')initDesignerTemplates(\(json));",
+            completionHandler: nil
+        )
+    }
+
+    /// Show a Finder open panel so the user can load a template from any folder,
+    /// then inject the chosen template into the designer.
+    private func browseForTemplate() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.directoryURL = AppSettings.shared.templatesFolderURL
+        panel.message = "Choose a VectorLabel template (.json) to open"
+        panel.level = .modalPanel  // above the floating designer window
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            MainActor.assumeIsolated { self?.injectBrowsedTemplate(from: url) }
+        }
+    }
+
+    private func injectBrowsedTemplate(from url: URL) {
+        guard let wv = designerWebView,
+              let data = try? Data(contentsOf: url),
+              let obj = try? JSONSerialization.jsonObject(with: data),
+              let dict = obj as? [String: Any], dict["objs"] != nil,
+              let reData = try? JSONSerialization.data(withJSONObject: dict),
+              let json = String(data: reData, encoding: .utf8)
+        else { return }
+        wv.evaluateJavaScript(
+            "if(typeof addBrowsedTemplate==='function')addBrowsedTemplate(\(json));",
+            completionHandler: nil
+        )
+    }
+
     // MARK: – Private
 
     private var watcher: ExportWatcher?
@@ -296,6 +347,35 @@ extension AppDelegate: WKNavigationDelegate {
         // Inject the most recent CSV with ≥10 records
         if let result = findMostRecentCSV(minRecords: 10) {
             injectDesignerRecords(result.records, filename: result.url.lastPathComponent)
+        }
+        // Inject the templates-folder list so the designer's Open dialog can list them.
+        injectDesignerTemplates()
+    }
+}
+
+// MARK: – WKScriptMessageHandler (designer save / list / browse)
+
+extension AppDelegate: WKScriptMessageHandler {
+    func userContentController(_ userContentController: WKUserContentController,
+                                didReceive message: WKScriptMessage) {
+        guard message.name == "vectorlabel",
+              let body = message.body as? [String: Any],
+              let action = body["action"] as? String
+        else { return }
+
+        switch action {
+        case "saveTemplate":
+            TemplateStore.shared.save(fromPayload: body["payload"])
+            injectDesignerTemplates()   // refresh the Open list with the new file
+
+        case "listTemplates":
+            injectDesignerTemplates()
+
+        case "browseTemplate":
+            browseForTemplate()
+
+        default:
+            break
         }
     }
 }

@@ -82,6 +82,25 @@ final class TemplateStore: ObservableObject {
             }
     }
 
+    /// Decode a template from a JS editor payload ({id?, name, specN, objs}) and
+    /// persist it. VLTemplate's synthesized Codable ignores property defaults, so
+    /// id/version are filled in when the payload omits them.
+    @discardableResult
+    func save(fromPayload payloadAny: Any?) -> Bool {
+        guard var dict = payloadAny as? [String: Any] else { return false }
+        if dict["id"] == nil { dict["id"] = UUID().uuidString }
+        if dict["version"] == nil { dict["version"] = 1 }
+        guard let data = try? JSONSerialization.data(withJSONObject: dict),
+              var tpl = try? JSONDecoder().decode(VLTemplate.self, from: data)
+        else {
+            print("[TemplateStore] save(fromPayload:) could not decode payload")
+            return false
+        }
+        if tpl.name.isEmpty { tpl.name = "Untitled Template" }
+        do { try save(tpl); return true }
+        catch { print("[TemplateStore] save failed: \(error)"); return false }
+    }
+
     func save(_ template: VLTemplate) throws {
         try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
         let safe = template.name

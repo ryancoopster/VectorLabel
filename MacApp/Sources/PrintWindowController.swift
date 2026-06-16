@@ -131,24 +131,7 @@ final class PrintWindowController: NSObject {
     /// Persist a template edited in the print window's designer to
     /// ~/Documents/VectorLabel/Templates/. The JS payload is {id?, name, specN, objs}.
     private func saveTemplate(from payloadAny: Any?) {
-        guard var dict = payloadAny as? [String: Any] else { return }
-        // VLTemplate's synthesized Codable ignores property defaults, so fill in
-        // id/version when the editor payload omits them.
-        if dict["id"] == nil { dict["id"] = UUID().uuidString }
-        if dict["version"] == nil { dict["version"] = 1 }
-
-        guard let data = try? JSONSerialization.data(withJSONObject: dict),
-              var tpl = try? JSONDecoder().decode(VLTemplate.self, from: data)
-        else {
-            print("[PrintWindowController] saveTemplate: could not decode payload")
-            return
-        }
-        if tpl.name.isEmpty { tpl.name = "Untitled Template" }
-        do {
-            try TemplateStore.shared.save(tpl)
-        } catch {
-            print("[PrintWindowController] saveTemplate failed: \(error)")
-        }
+        TemplateStore.shared.save(fromPayload: payloadAny)
     }
 
     // MARK: – JS bridge: push data into the web view
