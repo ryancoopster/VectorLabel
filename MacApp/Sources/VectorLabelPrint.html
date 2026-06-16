@@ -493,7 +493,7 @@ function buildTemplateBar(){
     <div style="display:flex;gap:6px;flex:1;overflow-x:auto;padding-bottom:2px">
       ${P.templates.map((tl,i)=>`
         <div style="display:flex;align-items:center;gap:0;background:${P.activeTpl===i?"#2a2a42":"#252538"};border:1px solid ${P.activeTpl===i?"#6C8EF5":"rgba(255,255,255,0.1)"};border-radius:5px;overflow:hidden;flex-shrink:0;white-space:nowrap">
-          <div onclick="P.activeTpl=${i};R()" style="display:flex;align-items:center;gap:8px;padding:5px 10px;cursor:pointer">
+          <div onclick="P.activeTpl=${i};P._makeDefaultChecked=false;R()" style="display:flex;align-items:center;gap:8px;padding:5px 10px;cursor:pointer">
             ${renderLabel(tl,P.records[0]||{},0.25)}
             <div>
               <div style="color:#e8e8f0;font-size:12px;font-weight:${P.activeTpl===i?600:400}">${tl.name}</div>
@@ -504,11 +504,29 @@ function buildTemplateBar(){
         </div>`).join("")}
       <button class="btn" onclick="loadTemplateFile()" style="flex-shrink:0;padding:5px 10px;font-size:11px">+ Load template…</button>
     </div>
+    ${t?`<label title="Pre-select this template every time the print window opens" style="flex-shrink:0;display:flex;align-items:center;gap:6px;cursor:pointer;color:#8888a8;font-size:11px;white-space:nowrap">
+      <input type="checkbox" ${P._makeDefaultChecked?"checked":""} onchange="toggleDefaultTemplate(this.checked)" style="cursor:pointer">
+      Make default
+    </label>`:""}
     ${t?`<div style="flex-shrink:0;text-align:right">
       <div style="color:#44445a;font-size:10px">Required supply</div>
       <div style="color:#6C8EF5;font-size:11px;font-weight:600;font-family:monospace">${t.specN}</div>
     </div>`:""}
   </div>`;
+}
+
+// Persist (or clear) the currently selected template as the print window's
+// default. The checkbox is a momentary action — it always renders unchecked on
+// reopen, but the chosen default itself persists (stored in AppSettings).
+function toggleDefaultTemplate(checked){
+  P._makeDefaultChecked=checked;
+  const t=tpl();
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
+    window.webkit.messageHandlers.vectorlabel.postMessage({
+      action:"setDefaultTemplate",
+      payload: (checked&&t) ? {id:t.id,name:t.name} : null
+    });
+  }
 }
 
 // ── Print bar ─────────────────────────────────────────────────────────────────
@@ -874,7 +892,16 @@ function openEditor(){
     records: P.records,
     onSaveReturn: function(updatedTpl){
       cleanupEditorDOM();
+      // Preserve the original template's id so saving overwrites it in place.
+      const origId=P.templates[P.activeTpl]&&P.templates[P.activeTpl].id;
+      if(origId)updatedTpl.id=origId;
       P.templates[P.activeTpl]=updatedTpl;
+      // Persist to ~/Documents/VectorLabel/Templates/ via the native bridge
+      // (WKWebView has no File System Access API, so the browser save path
+      // silently fails — the Swift side writes the .vlt.json file).
+      if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
+        window.webkit.messageHandlers.vectorlabel.postMessage({action:"saveTemplate",payload:updatedTpl});
+      }
       window._editorOnSave=null;
       window._editorOnDiscard=null;
       P.view="print";
@@ -1839,6 +1866,15 @@ function initPrintWindow(opts){
       objs: (t.objs||[]).map(o=>({...o, id:(o.id&&o.id!=='undefined')?String(o.id):('t'+Math.random().toString(36).slice(2,8))}))
     }));
     P.activeTpl=0;
+  }
+
+  // Pre-select the persisted default template, if set and present. The
+  // "Make default" checkbox always starts unchecked on open (the default
+  // itself persists in AppSettings, not the checkbox state).
+  P._makeDefaultChecked=false;
+  if(opts.defaultTemplateID){
+    const di=P.templates.findIndex(t=>t.id===opts.defaultTemplateID);
+    if(di>=0) P.activeTpl=di;
   }
 
   // Printers from USB scan

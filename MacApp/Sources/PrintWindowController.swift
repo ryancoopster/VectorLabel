@@ -126,6 +126,31 @@ final class PrintWindowController: NSObject {
         self.window = win
     }
 
+    // MARK: – Template persistence
+
+    /// Persist a template edited in the print window's designer to
+    /// ~/Documents/VectorLabel/Templates/. The JS payload is {id?, name, specN, objs}.
+    private func saveTemplate(from payloadAny: Any?) {
+        guard var dict = payloadAny as? [String: Any] else { return }
+        // VLTemplate's synthesized Codable ignores property defaults, so fill in
+        // id/version when the editor payload omits them.
+        if dict["id"] == nil { dict["id"] = UUID().uuidString }
+        if dict["version"] == nil { dict["version"] = 1 }
+
+        guard let data = try? JSONSerialization.data(withJSONObject: dict),
+              var tpl = try? JSONDecoder().decode(VLTemplate.self, from: data)
+        else {
+            print("[PrintWindowController] saveTemplate: could not decode payload")
+            return
+        }
+        if tpl.name.isEmpty { tpl.name = "Untitled Template" }
+        do {
+            try TemplateStore.shared.save(tpl)
+        } catch {
+            print("[PrintWindowController] saveTemplate failed: \(error)")
+        }
+    }
+
     // MARK: – JS bridge: push data into the web view
 
     /// Pushes the current printer list to the web view without resetting the
@@ -178,6 +203,7 @@ final class PrintWindowController: NSObject {
               templates: \(templatesJSON),
               printers: \(printerJSON),
               sourceFile: \(sourceFile.jsonQuoted),
+              defaultTemplateID: \(AppSettings.shared.defaultTemplateID.jsonQuoted),
               reprint: \(reprintJSON)
             });
           }
@@ -227,6 +253,18 @@ extension PrintWindowController: WKScriptMessageHandler {
         switch action {
         case "print":
             handlePrintAction(body["payload"])
+
+        case "saveTemplate":
+            saveTemplate(from: body["payload"])
+
+        case "setDefaultTemplate":
+            // payload {id, name} to set, or null to clear. Persists in AppSettings.
+            if let payload = body["payload"] as? [String: Any],
+               let id = payload["id"] as? String {
+                AppSettings.shared.defaultTemplateID = id
+            } else {
+                AppSettings.shared.defaultTemplateID = ""
+            }
 
         case "close":
             // The ✕ Cancel button sends the configured job flagged cancelled so

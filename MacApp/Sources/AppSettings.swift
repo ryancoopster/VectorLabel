@@ -60,6 +60,12 @@ final class AppSettings: ObservableObject {
         didSet { UserDefaults.standard.set(recentPrintsCount, forKey: "recentPrintsCount") }
     }
 
+    /// Template id pre-selected when the print window opens. Empty = none.
+    /// Persists across print-window open/close and app restarts.
+    @Published var defaultTemplateID: String {
+        didSet { UserDefaults.standard.set(defaultTemplateID, forKey: "defaultTemplateID") }
+    }
+
     // MARK: – App behaviour
 
     /// Whether to also show VectorLabel in the Dock (menu-bar-only by default).
@@ -96,6 +102,7 @@ final class AppSettings: ObservableObject {
         interLabelDelayMs = defaults.object(forKey: "interLabelDelayMs") as? Int ?? 50
         defaultPrintRange = defaults.string(forKey: "defaultPrintRange") ?? "all"
         recentPrintsCount = defaults.object(forKey: "recentPrintsCount") as? Int ?? 5
+        defaultTemplateID = defaults.string(forKey: "defaultTemplateID") ?? ""
         showInDock        = defaults.object(forKey: "showInDock") as? Bool ?? false
 
         // Sync ExportSettings singleton
@@ -113,6 +120,7 @@ final class AppSettings: ObservableObject {
         interLabelDelayMs    = 50
         defaultPrintRange    = "all"
         recentPrintsCount    = 5
+        defaultTemplateID    = ""
         showInDock           = false
     }
 }
