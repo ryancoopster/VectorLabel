@@ -1428,6 +1428,13 @@ window.addEventListener("keydown",function(e){
   const ae=document.activeElement, tag=ae&&ae.tagName;
   const inInput = tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT"||(ae&&ae.isContentEditable);
   const modalOpen = P.modal||document.querySelector(".modal-overlay")||document.getElementById("vl-filter-modal");
+  // While editing a cell: Enter saves, Escape cancels, and no other shortcut fires.
+  // (Other Enter/Escape behaviours below stay active when NOT editing a cell.)
+  if(P.editCell){
+    if(e.key==="Enter"||e.key==="Return"){ e.preventDefault(); saveCellEdit(); }
+    else if(e.key==="Escape"){ e.preventDefault(); cancelCellEdit(); }
+    return;
+  }
   // Escape closes the expanded preview.
   if(e.key==="Escape"&&P.modal==="preview"){ e.preventDefault(); closeExpandedPreview(); return; }
   // ⌘Return (or Ctrl+Return) prints, mirroring the Print button.
