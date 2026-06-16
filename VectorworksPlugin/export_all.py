@@ -67,9 +67,9 @@ def build_label_row(fields, side):
         row['Socket_Signal']  = fields.get('Src_Signal', '')
         row['Connector']      = fields.get('Src_Skt_Conn', '')
         row['Socket_Circs']   = fields.get('Src_Skt_Circs', '')
-        row['Room']           = ''
-        row['Rack']           = ''
-        row['RackU']          = ''
+        row['Room']           = fields.get('Src_Room', '')
+        row['Rack']           = fields.get('Src_Rack', '')
+        row['RackU']          = fields.get('Src_RackU', '')
         row['Other_Device']   = fields.get('Dst_Dev_Name', '')
         row['Other_Socket']   = fields.get('Dst_Skt_Name', '')
         row['Other_Connector']= fields.get('Dst_Skt_Conn', '')
