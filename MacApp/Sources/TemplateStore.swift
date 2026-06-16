@@ -40,6 +40,7 @@ struct TemplateObject: Codable, Identifiable, Hashable {
     // references an external file. `sym` is the symbol-library key (sy only).
     var src: String?
     var sym: String?
+    var lockAspect: Bool?   // image: keep width/height ratio when resizing
 
     // Rotation in degrees, clockwise, about the object's center. nil/0 = none.
     var rot: Double?

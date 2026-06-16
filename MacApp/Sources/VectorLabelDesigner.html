@@ -673,13 +673,17 @@ function buildProps(){
     </div>`;
   }
   if(o.t==="im"){
+    const locked=o.lockAspect!==false;   // default locked
     return `<div style="display:flex;flex-direction:column;gap:0">
       ${posButtons(o)}
       <div class="sec">Image</div>
       <button class="btn" onclick="reprocessImage('${o.id}')" style="margin-bottom:6px;font-size:11px">Adjust monochrome…</button>
       <button class="btn" onclick="pickImage()" style="margin-bottom:8px;font-size:11px">Replace image…</button>
-      ${ni("Width","w",.01,o.w)}
-      ${ni("Height","h",.01,o.h)}
+      <div style="margin-bottom:8px"><label class="lbl" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" ${locked?"checked":""} onchange="uobj('${o.id}',{lockAspect:this.checked});R()"> Lock aspect ratio
+      </label></div>
+      <div style="margin-bottom:6px"><label class="lbl">Width</label><input type="number" class="inp" step="0.01" value="${(+o.w||0).toFixed(3)}" onchange="imgSetDim('${o.id}','w',parseFloat(this.value))"></div>
+      <div style="margin-bottom:6px"><label class="lbl">Height</label><input type="number" class="inp" step="0.01" value="${(+o.h||0).toFixed(3)}" onchange="imgSetDim('${o.id}','h',parseFloat(this.value))"></div>
       ${ni("X","x",.01,o.x)}
       ${ni("Y","y",.005,o.y)}
     </div>`;
@@ -1102,12 +1106,14 @@ function startResize(e,id){
   const o=gobj(id);if(!o)return;
   snapshot();
   const sx=e.clientX,sy=e.clientY,ow=o.w,oh=o.h;
+  const ratio=(ow>0&&oh>0)?oh/ow:1;
   function mv(e){
     const dw=(e.clientX-sx)/(SC*S.zoom);
     const dh=(e.clientY-sy)/(SC*S.zoom);
     const nw=snapToGrid(Math.max(.05,ow+dw));
     const nh=snapToGrid(Math.max(.02,oh+dh));
-    if(o.t==="ci"||o.t==="sy"){ uobj(id,{w:nw,h:nw}); }   // circle/symbol stay square
+    if(o.t==="ci"||o.t==="sy"){ uobj(id,{w:nw,h:nw}); }              // circle/symbol stay square
+    else if(o.t==="im" && o.lockAspect!==false){ uobj(id,{w:nw,h:+(nw*ratio).toFixed(4)}); } // locked image keeps ratio
     else { uobj(id,{w:nw,h:nh}); }
     scheduleR();
   }
@@ -1180,6 +1186,20 @@ function loadImageForEdit(origURL, editId){
 
 function reprocessImage(id){ const o=gobj(id); if(o)loadImageForEdit(o.imgOrig||o.src, id); }
 
+// Set an image's width or height; when aspect is locked, scale the other to
+// preserve the current ratio.
+function imgSetDim(id,key,val){
+  const o=gobj(id); if(!o||!(val>0))return;
+  if(o.lockAspect!==false && o.w>0 && o.h>0){
+    const ar=o.h/o.w;
+    if(key==='w') uobj(id,{w:val,h:+(val*ar).toFixed(4)});
+    else          uobj(id,{h:val,w:+(val/ar).toFixed(4)});
+  }else{
+    uobj(id,{[key]:val});
+  }
+  R();
+}
+
 // Render the source image into `canvas` applying brightness/contrast and a
 // black/white threshold, preserving transparency. Caps the long side at 600px.
 function processToCanvas(canvas){
@@ -1218,7 +1238,7 @@ function applyImg(){
     const id=mid();
     const ar=(st.img.naturalHeight||1)/(st.img.naturalWidth||1);
     const w=1.0, h=+(Math.max(.05,w*ar)).toFixed(3);
-    S.objs.push({id,x:.1,y:.1,t:"im",w:w,h:h,src:procURL,imgOrig:st.origURL,imgB:st.b,imgC:st.c,imgT:st.t});
+    S.objs.push({id,x:.1,y:.1,t:"im",w:w,h:h,src:procURL,imgOrig:st.origURL,imgB:st.b,imgC:st.c,imgT:st.t,lockAspect:true});
     S.selId=id; S._ef=undefined;
   }
   closeImageModal(); R();
