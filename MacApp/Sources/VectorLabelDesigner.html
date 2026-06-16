@@ -1143,7 +1143,7 @@ function startRecResize(e){
   const startH=S.recH||160;
   function mv(e){
     const delta=startY-e.clientY;
-    S.recH=Math.max(60,Math.min(400,startH+delta));
+    S.recH=Math.max(60,startH+delta);
     const panel=document.getElementById("rec-panel");
     if(panel)panel.style.height=S.recH+"px";
   }
