@@ -138,6 +138,10 @@ function uobj(id,p){S.objs=S.objs.map(o=>o.id===id?Object.assign({},o,p):o);}
 
 // ── Canvas ────────────────────────────────────────────────────────────────────
 const SC=185;
+// Bleed: objects may be placed up to this many inches beyond the printable area
+// on any side. Only the printable area actually prints (the Swift renderer
+// clips to it); the bleed just lets you overhang the edges in the designer.
+const BLEED_IN=2;
 
 // ── Column widths — Live editor record table ───────────────────────────────────
 // Matches print screen columns but saved separately so widths are independent.
@@ -262,13 +266,16 @@ function applySnap(x,y,w,h,id){
   const rx=snapX(nx,w,id);
   const ry=snapY(ny,h,id);
   S._snapLines=[...rx.lines,...ry.lines];
-  return{x:Math.max(0,rx.v),y:Math.max(0,ry.v)};
+  return{x:Math.max(-BLEED_IN,rx.v),y:Math.max(-BLEED_IN,ry.v)};
 }
 function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
   const sc=SC;
   const pw=spec.pw*sc,ph=spec.ph*sc;
   const cw=(spec.tw-spec.pw)*sc,ch=(spec.th-spec.ph)*sc;
   const tw=pw,th=wrap?spec.th*sc:ph;
+  // Bleed margin around the printable area (objects can overhang into it).
+  const B=BLEED_IN*sc;
+  const bw=pw+2*B, bh=ph+2*B;
 
   // Printable zone is always on top; clear wrap zone shown below
   const wrapZone=wrap&&(cw>0||ch>0)?`
@@ -277,7 +284,7 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
     </div>`:"";
 
   const objsHtml=objs.map(o=>{
-    const x=o.x*SC,y=o.y*SC,w=(o.w||1)*SC,h=(o.h||0)*SC;
+    const x=o.x*SC+B,y=o.y*SC+B,w=(o.w||1)*SC,h=(o.h||0)*SC;
     const sel=o.id===selId;
     const ss=sel?"outline:1.5px solid #6C8EF5;outline-offset:1px;":"";
     const drag=readOnly?"":`onmousedown="startDrag(event,'${o.id}')"`;
@@ -316,7 +323,7 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
     for(let gx=0;gx<pw;gx+=gs) gridLines.push(`<line x1="${gx.toFixed(1)}" y1="0" x2="${gx.toFixed(1)}" y2="${ph}" stroke="rgba(108,142,245,0.18)" stroke-width="0.5"/>`);
     for(let gy=0;gy<ph;gy+=gs) gridLines.push(`<line x1="0" y1="${gy.toFixed(1)}" x2="${pw}" y2="${gy.toFixed(1)}" stroke="rgba(108,142,245,0.18)" stroke-width="0.5"/>`);
   }
-  const gridSvg=gridLines.length?`<svg style="position:absolute;top:0;left:0;width:${pw}px;height:${ph}px;pointer-events:none;z-index:0" width="${pw}" height="${ph}">${gridLines.join("")}</svg>`:"";
+  const gridSvg=gridLines.length?`<svg style="position:absolute;top:${B}px;left:${B}px;width:${pw}px;height:${ph}px;pointer-events:none;z-index:0" width="${pw}" height="${ph}">${gridLines.join("")}</svg>`:"";
 
   // Snap indicator lines — drawn during drag only
   const snapSvgLines=(S._snapLines||[]).map(l=>{
@@ -328,11 +335,17 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
       return '<line x1="0" y1="'+py+'" x2="'+pw+'" y2="'+py+'" stroke="#FF4D6A" stroke-width="1.5" stroke-dasharray="4,3"/><circle cx="'+(pw/2)+'" cy="'+py+'" r="3.5" fill="#FF4D6A"/>';
     }
   }).join("");
-  const snapSvg=snapSvgLines?'<svg style="position:absolute;top:0;left:0;width:'+pw+'px;height:'+ph+'px;pointer-events:none;z-index:5" width="'+pw+'" height="'+ph+'">'+snapSvgLines+'</svg>':"";
+  const snapSvg=snapSvgLines?'<svg style="position:absolute;top:'+B+'px;left:'+B+'px;width:'+pw+'px;height:'+ph+'px;pointer-events:none;z-index:5" width="'+pw+'" height="'+ph+'">'+snapSvgLines+'</svg>':"";
 
 
+  // Bleed container holds the printable area plus a 2" margin on every side.
+  // Objects (offset by B) can overhang the printable edges into the bleed; the
+  // bleed is dimmed and labelled to show it won't print. Clipped at ±2".
   return `<div style="display:flex;flex-direction:column;align-items:flex-start;flex-shrink:0">
-    <div onmousedown="${readOnly?'':`if(event.target===this||'svg,line,circle'.split(',').includes(event.target.tagName.toLowerCase()))deselect()`}" style="width:${pw}px;height:${ph}px;background:#fff;border:2px solid rgba(255,255,255,0.13);overflow:hidden;position:relative;flex-shrink:0">
+    <div onmousedown="${readOnly?'':`if(event.target===this)deselect()`}" style="width:${bw}px;height:${bh}px;background:#b9bdc9;position:relative;overflow:hidden;flex-shrink:0">
+      <!-- Printable area (only this prints) -->
+      <div style="position:absolute;left:${B}px;top:${B}px;width:${pw}px;height:${ph}px;background:#fff;box-shadow:0 0 0 1.5px #6C8EF5;pointer-events:none"></div>
+      <div style="position:absolute;left:5px;top:3px;font-size:9px;color:#6b6f7d;pointer-events:none;user-select:none">Bleed — not printed</div>
       ${gridSvg}${snapSvg}${objsHtml}
     </div>
     ${wrapZone}
@@ -346,7 +359,7 @@ function posObj(id,axis,where){
   const o=gobj(id); if(!o)return;
   snapshot();
   const W=S.spec.pw, H=S.spec.ph, w=o.w||0, h=o.h||0;
-  const r=v=>Math.max(0,Math.round(v*1000)/1000);
+  const r=v=>Math.max(-BLEED_IN,Math.round(v*1000)/1000);
   if(axis==='h'){
     uobj(id,{x:r(where==='left'?0:where==='center'?(W-w)/2:W-w)});
   }else{
@@ -859,9 +872,9 @@ document.addEventListener("keydown",function(e){
     e.preventDefault();
     const o=gobj(S.selId);if(!o)return;
     const step=S.snapGrid?S.gridSize:(e.shiftKey?0.5:1)/SC;
-    if(e.key==="ArrowLeft")uobj(S.selId,{x:Math.max(0,o.x-step)});
+    if(e.key==="ArrowLeft")uobj(S.selId,{x:Math.max(-BLEED_IN,o.x-step)});
     if(e.key==="ArrowRight")uobj(S.selId,{x:o.x+step});
-    if(e.key==="ArrowUp")uobj(S.selId,{y:Math.max(0,o.y-step)});
+    if(e.key==="ArrowUp")uobj(S.selId,{y:Math.max(-BLEED_IN,o.y-step)});
     if(e.key==="ArrowDown")uobj(S.selId,{y:o.y+step});
     R();
     return;
