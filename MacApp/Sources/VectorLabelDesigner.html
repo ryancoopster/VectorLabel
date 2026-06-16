@@ -132,6 +132,21 @@ function textValue(o,rec){
   return rec?evalF(o.f,rec):{v:(o.f||"").replace(/^=/,""),e:null};
 }
 
+// Auto-scale: return the largest font px ≤ basePx such that the single line fits
+// the box width. Measures with a canvas 2d context (no DOM). `pad` is total
+// horizontal padding in px.
+function autoFitPx(text,o,basePx,boxW,pad){
+  if(!text) return basePx;
+  const cx=autoFitPx._c||(autoFitPx._c=document.createElement('canvas').getContext('2d'));
+  cx.font=(o.italic?'italic ':'')+(o.bold?700:400)+' '+basePx+'px "'+(o.font||'Helvetica Neue')+'"';
+  let w=cx.measureText(text).width;
+  if(o.tracking) w+=o.tracking*Math.max(0,String(text).length-1);
+  w*=((o.stretch||100)/100);
+  const avail=boxW-(pad||0);
+  if(w<=avail||w<=0) return basePx;
+  return Math.max(3,basePx*(avail/w));
+}
+
 // ── State ─────────────────────────────────────────────────────────────────────
 let nid=1;const mid=()=>`o${nid++}`;
 let S={
@@ -541,7 +556,8 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
     if(o.t==="tx"){
       const {v,e}=textValue(o,rec);
       const va=o.valign==="top"?"flex-start":o.valign==="bottom"?"flex-end":"center";
-      const fz=Math.max(7,(o.fs||14)*(sc/100));
+      let fz=Math.max(7,(o.fs||14)*(sc/100));
+      if(o.autoScale&&!o.wrapText) fz=autoFitPx(v,o,fz,(o.w||1)*sc,4);
       const fontStyle=o.italic?"italic":"normal";
       const fontWeight=o.bold?700:400;
       const textDecoration=o.underline?"underline":"none";
@@ -772,6 +788,7 @@ function buildMultiProps(sels){
       <div style="margin-bottom:8px"><label class="lbl">Horizontal align</label><div style="display:flex;gap:3px">${btnset('al','left',alOpts)}</div></div>
       <div style="margin-bottom:8px"><label class="lbl">Vertical align</label><div style="display:flex;gap:3px">${btnset('valign','middle',vaOpts)}</div></div>
       ${check('wrapText','Wrap text',false)}
+      ${check('autoScale','Auto-scale to fit (max size)',false)}
       ${num('Tracking (px)','tracking',0.5,0,'float')}
       ${num('Width stretch (%)','stretch',1,100,'float')}`;
   } else if(t==='ln'){
@@ -838,7 +855,7 @@ function buildProps(){
         <select class="inp" onchange="uobj('${o.id}',{font:this.value});R()">${fontOpts}</select>
       </div>
       <div style="margin-bottom:8px">
-        <label class="lbl">Size (pt)</label>
+        <label class="lbl">${o.autoScale?"Size (pt) — max":"Size (pt)"}</label>
         <input type="number" class="inp" value="${o.fs||16}" min="6" max="144" onchange="uobj('${o.id}',{fs:parseInt(this.value)});R()">
       </div>
       <div style="margin-bottom:8px">
@@ -860,6 +877,11 @@ function buildProps(){
       <div style="margin-bottom:8px">
         <label class="lbl" style="display:flex;align-items:center;gap:6px;cursor:pointer">
           <input type="checkbox" ${o.wrapText?"checked":""} onchange="uobj('${o.id}',{wrapText:this.checked});R()"> Wrap text
+        </label>
+      </div>
+      <div style="margin-bottom:8px">
+        <label class="lbl" style="display:flex;align-items:center;gap:6px;cursor:pointer" title="Shrink the text to fit the box width. The Size above becomes the maximum — text never grows larger.">
+          <input type="checkbox" ${o.autoScale?"checked":""} onchange="uobj('${o.id}',{autoScale:this.checked});R()"> Auto-scale to fit (max size)
         </label>
       </div>
       <div style="margin-bottom:8px">

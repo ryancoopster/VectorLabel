@@ -167,20 +167,40 @@ enum LabelRenderer {
         // (185 px per inch). Reproduce that exact physical size at print DPI by
         // computing the designer pixel size, then scaling by dpi/185.
         let designerPx = max(7.0, (obj.fs ?? 14.0) * designerDPI / 100.0)
-        let fontSize   = designerPx * (Double(dpi) / designerDPI)
+        var fontSize   = designerPx * (Double(dpi) / designerDPI)
 
         var traits: NSFontTraitMask = []
         if obj.bold   == true { traits.insert(.boldFontMask) }
         if obj.italic == true { traits.insert(.italicFontMask) }
 
         let fontManager = NSFontManager.shared
-        var nsFont: NSFont
-        if let base = NSFont(name: fontName, size: CGFloat(fontSize)) {
-            nsFont = traits.isEmpty ? base : fontManager.convert(base, toHaveTrait: traits)
-        } else {
-            nsFont = NSFont.systemFont(ofSize: CGFloat(fontSize), weight: obj.bold == true ? .bold : .regular)
+        func makeFont(_ size: Double) -> NSFont {
+            if let base = NSFont(name: fontName, size: CGFloat(size)) {
+                return traits.isEmpty ? base : fontManager.convert(base, toHaveTrait: traits)
+            }
+            return NSFont.systemFont(ofSize: CGFloat(size), weight: obj.bold == true ? .bold : .regular)
         }
 
+        let stretchFactor = (obj.stretch ?? 100.0) / 100.0
+        let kern: CGFloat? = (obj.tracking.map { $0 != 0 ? CGFloat($0) * CGFloat(Double(dpi) / designerDPI) : nil } ?? nil)
+
+        // Auto-scale: `fs` is the maximum; shrink the font so the single line fits
+        // the box width (never grows it). Only for non-wrapped text.
+        if obj.autoScale == true && obj.wrapText != true {
+            var mattrs: [NSAttributedString.Key: Any] = [.font: makeFont(fontSize)]
+            if let kern = kern { mattrs[.kern] = kern }
+            let mstr = NSAttributedString(string: text, attributes: mattrs)
+            let mfs = CTFramesetterCreateWithAttributedString(mstr)
+            let natural = CTFramesetterSuggestFrameSizeWithConstraints(
+                mfs, CFRange(location: 0, length: 0), nil,
+                CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude), nil)
+            let effWidth = natural.width * CGFloat(stretchFactor)
+            if effWidth > r.width && effWidth > 0 {
+                fontSize = max(1.0, fontSize * Double(r.width / effWidth))
+            }
+        }
+
+        let nsFont = makeFont(fontSize)
         let ctFont = CTFontCreateWithName(nsFont.fontName as CFString, CGFloat(fontSize), nil)
 
         let paraStyle = NSMutableParagraphStyle()

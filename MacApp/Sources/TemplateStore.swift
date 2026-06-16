@@ -29,6 +29,7 @@ struct TemplateObject: Codable, Identifiable, Hashable {
     var wrapText: Bool?
     var tracking: Double?
     var stretch: Double?    // horizontal scale %, default 100
+    var autoScale: Bool?    // shrink text to fit the box width; `fs` is the max size
 
     // Line / rectangle / shapes
     var lw: Double?         // border/line weight in px

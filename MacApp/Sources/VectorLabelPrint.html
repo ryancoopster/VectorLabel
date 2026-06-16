@@ -171,6 +171,19 @@ const SC=185;
 // any side; only the printable area prints. (Mirrors the standalone designer.)
 const BLEED_IN=2;
 
+// Auto-scale: largest font px ≤ basePx so the single line fits the box width.
+function autoFitPx(text,o,basePx,boxW,pad){
+  if(!text) return basePx;
+  const cx=autoFitPx._c||(autoFitPx._c=document.createElement('canvas').getContext('2d'));
+  cx.font=(o.italic?'italic ':'')+(o.bold?700:400)+' '+basePx+'px "'+(o.font||'Helvetica Neue')+'"';
+  let w=cx.measureText(text).width;
+  if(o.tracking) w+=o.tracking*Math.max(0,String(text).length-1);
+  w*=((o.stretch||100)/100);
+  const avail=boxW-(pad||0);
+  if(w<=avail||w<=0) return basePx;
+  return Math.max(3,basePx*(avail/w));
+}
+
 function renderLabel(tpl,rec,scale=1){
   const spec=BL.find(l=>l.n===tpl.specN)||BL[1];
   const pw=spec.pw*SC*scale,ph=spec.ph*SC*scale;
@@ -180,7 +193,8 @@ function renderLabel(tpl,rec,scale=1){
     const rc=o.rot?`transform:rotate(${o.rot}deg);transform-origin:center center;`:"";
     if(o.t==="tx"){
       const {v,e}=textValue(o,rec);
-      const fz=Math.max(5,(o.fs||14)*(sc/100));
+      let fz=Math.max(5,(o.fs||14)*(sc/100));
+      if(o.autoScale&&!o.wrapText&&!e) fz=autoFitPx(v,o,fz,(o.w||1)*sc,2);
       const jc=o.al==="center"?"center":o.al==="right"?"flex-end":"flex-start";
       const va=o.valign==="top"?"flex-start":o.valign==="bottom"?"flex-end":"center";
       const fw=o.bold?700:400;
