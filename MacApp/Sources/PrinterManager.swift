@@ -173,9 +173,21 @@ final class PrinterManager: ObservableObject {
                 let handle = try BradyUSB.openPrinterByID(printerID)
                 defer { BradyUSB.close(handle) }
 
+                // Drive progress from actual printing, not just "sent over USB":
+                // after each label's data is sent, wait for the printer to confirm
+                // it has finished (it only answers a status query once the label has
+                // physically printed). Self-disables if the printer never reports
+                // status, so unsupported firmware just falls back to send-based
+                // progress with no added per-label delay.
+                let perLabelMaxMs = 9000
+                var statusPolling = true
                 for (i, vglJob) in jobs.enumerated() {
                     if job.isCancelled { break }
                     try BradyUSB.sendJob(vglJob, handle: handle)
+                    if statusPolling {
+                        let printed = BradyUSB.waitForLabelDone(handle: handle, maxMs: perLabelMaxMs)
+                        if !printed && i == 0 { statusPolling = false }   // firmware doesn't report status
+                    }
                     await MainActor.run { job.completedLabels = i + 1 }
                     if i < jobs.count - 1 {
                         usleep(useconds_t(delayMs * 1000))

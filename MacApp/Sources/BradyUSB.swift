@@ -198,6 +198,39 @@ enum BradyUSB {
         #endif
     }
 
+    /// Best-effort wait for the printer to finish physically printing the label
+    /// whose job was just sent. The printer processes its command stream serially,
+    /// so a status query (ESC I) issued right after a complete job is not answered
+    /// until that job has finished printing — making "the printer replied" a proxy
+    /// for "the label is done." Returns true if the printer replied within `maxMs`,
+    /// false on timeout (or when no bidirectional channel is available).
+    ///
+    /// Safety: bounded by `maxMs` so it can never hang a job; only ever called
+    /// BETWEEN complete jobs, so it can't corrupt an in-progress label. Caller must
+    /// hold the device lock.
+    static func waitForLabelDone(handle: OpaquePointer, maxMs: Int) -> Bool {
+        #if canImport(CLibUSB)
+        var query: [UInt8] = [0x1B, 0x49, 0x00]   // ESC I — info/status request
+        var readBuf = [UInt8](repeating: 0, count: 256)
+        let deadline = DispatchTime.now().uptimeNanoseconds &+ UInt64(max(0, maxMs)) &* 1_000_000
+        while DispatchTime.now().uptimeNanoseconds < deadline {
+            var sent: Int32 = 0
+            _ = query.withUnsafeMutableBufferPointer { buf in
+                libusb_bulk_transfer(handle, outEndpoint, buf.baseAddress, Int32(buf.count), &sent, 400)
+            }
+            var got: Int32 = 0
+            let rrc = readBuf.withUnsafeMutableBufferPointer { buf in
+                libusb_bulk_transfer(handle, inEndpoint, buf.baseAddress, Int32(buf.count), &got, 400)
+            }
+            if rrc == 0 && got > 0 { return true }   // printer answered → prior job has printed
+            usleep(40_000)                           // 40 ms between polls
+        }
+        return false
+        #else
+        return false
+        #endif
+    }
+
     // MARK: – SmartCell cassette detection (§8)
 
     /// Decoded contents of a Brady cassette's SmartCell chip.
