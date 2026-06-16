@@ -1468,15 +1468,15 @@ function R(){
             ? `<span style="color:var(--text2);font-size:11px">${visibleIndices().length} of ${P.records.length} shown</span>`
             : `<span style="color:var(--text2);font-size:11px">${P.records.length} total · click row to preview · checkbox to select</span>`}
           <div style="flex:1"></div>
+          ${(window._presets&&window._presets.length)?`<div style="display:flex;gap:5px;align-items:center;max-width:360px;overflow-x:auto">
+            <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px;flex-shrink:0">Presets</span>
+            ${window._presets.map(p=>`<button class="btn${presetMatchesActive(p)?' on':''}" onclick="event.stopPropagation();applyPreset('${p.id}')" oncontextmenu="presetMenu(event,'${p.id}')" title="${esc(presetSummary(p))}&#10;(right-click to edit/rename/delete)" style="padding:2px 8px;font-size:11px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0">${esc(p.name)}</button>`).join('')}
+          </div>`:''}
           <button class="btn${(filterActive()||sortActive())?' on':''}" onclick="event.stopPropagation();openFilterModal()" style="padding:2px 8px;font-size:11px" title="Filter & sort which records are shown and printed">⧩ Filter &amp; sort</button>
           ${(filterActive()||sortActive())?`
             <button class="btn" ${filterActive()?'':'disabled'} onclick="event.stopPropagation();clearFilter()" style="padding:2px 8px;font-size:11px;color:var(--warn);border-color:rgba(245,201,108,0.4)${filterActive()?'':';opacity:0.4;cursor:default'}">Clear filter</button>
             <button class="btn" ${sortActive()?'':'disabled'} onclick="event.stopPropagation();clearSort()" style="padding:2px 8px;font-size:11px;color:var(--warn);border-color:rgba(245,201,108,0.4)${sortActive()?'':';opacity:0.4;cursor:default'}">Clear sort</button>
           `:""}
-          ${(window._presets&&window._presets.length)?`<div style="display:flex;gap:5px;align-items:center;max-width:360px;overflow-x:auto">
-            <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px;flex-shrink:0">Presets</span>
-            ${window._presets.map(p=>`<button class="btn${presetMatchesActive(p)?' on':''}" onclick="event.stopPropagation();applyPreset('${p.id}')" oncontextmenu="presetMenu(event,'${p.id}')" title="${esc(presetSummary(p))}&#10;(right-click to edit/rename/delete)" style="padding:2px 8px;font-size:11px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0">${esc(p.name)}</button>`).join('')}
-          </div>`:''}
           <button class="btn${window._colMenuOpen?' on':''}" onclick="event.stopPropagation();toggleColumnsMenu()" style="padding:2px 8px;font-size:11px">Columns ▾</button>
           ${buildColumnsMenu()}
         </div>
