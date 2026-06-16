@@ -461,7 +461,13 @@ function drawRulers(){
   if(!pa){ rh.innerHTML=''; rv.innerHTML=''; return; }
   const paR=pa.getBoundingClientRect(), rhR=rh.getBoundingClientRect(), rvR=rv.getBoundingClientRect();
   const ppiX=paR.width/S.spec.pw, ppiY=paR.height/S.spec.ph;   // screen px per inch (incl. zoom)
-  const hl=S._rulerObj?gobj(S._rulerObj):null;
+  // Highlight the extent of the dragged object, or — when nothing is being
+  // dragged — of every currently selected object, so the band stays visible the
+  // whole time an object is selected.
+  const hls = S._rulerObj ? [gobj(S._rulerObj)].filter(Boolean)
+            : (S.selIds&&S.selIds.length ? S.selIds.map(gobj).filter(Boolean)
+            : (S.selId ? [gobj(S.selId)].filter(Boolean) : []));
+  const HL_FILL='rgba(140,140,150,0.32)';
   const STEP=1/16;
   function axis(horiz){
     const ppi=horiz?ppiX:ppiY;
@@ -469,13 +475,13 @@ function drawRulers(){
     const rect=horiz?rhR:rvR, len=horiz?rhR.width:rvR.height, off=horiz?rhR.left:rvR.top;
     if(!(ppi>0))return '';
     let out='';
-    if(hl){
+    hls.forEach(function(hl){
       const a=(horiz?(hl.x||0):(hl.y||0)), b=a+(horiz?(hl.w||0):(hl.h||0));
       const pa1=originScreen-off+Math.min(a,b)*ppi, pa2=originScreen-off+Math.max(a,b)*ppi;
       out += horiz
-        ? '<rect x="'+pa1.toFixed(1)+'" y="0" width="'+Math.max(1,pa2-pa1).toFixed(1)+'" height="'+RULER+'" fill="rgba(255,77,106,0.28)"/>'
-        : '<rect x="0" y="'+pa1.toFixed(1)+'" width="'+RULER+'" height="'+Math.max(1,pa2-pa1).toFixed(1)+'" fill="rgba(255,77,106,0.28)"/>';
-    }
+        ? '<rect x="'+pa1.toFixed(1)+'" y="0" width="'+Math.max(1,pa2-pa1).toFixed(1)+'" height="'+RULER+'" fill="'+HL_FILL+'"/>'
+        : '<rect x="0" y="'+pa1.toFixed(1)+'" width="'+RULER+'" height="'+Math.max(1,pa2-pa1).toFixed(1)+'" fill="'+HL_FILL+'"/>';
+    });
     const vMin=(off-originScreen)/ppi, vMax=(off+len-originScreen)/ppi;
     let v=Math.floor(vMin/STEP)*STEP;
     for(; v<=vMax+1e-6; v+=STEP){
