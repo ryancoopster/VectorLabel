@@ -799,8 +799,8 @@ function R(){
           <button class="tbtn" style="flex:1;width:auto" onclick="addObj('ov')"><span style="font-size:13px;font-weight:700">⬭</span>Oval</button>
         </div>
         <div style="display:flex;gap:5px">
-          <button class="tbtn" style="flex:1;width:auto" onclick="pickImage()"><span style="font-size:13px;font-weight:700">🖼</span>Image</button>
-          <button class="tbtn" style="flex:1;width:auto" onclick="symPicker()"><span style="font-size:13px;font-weight:700">⚠</span>Symbol</button>
+          <button class="tbtn" style="flex:1;width:auto" onclick="pickImage()"><span style="font-size:14px;font-weight:700">▦</span>Image</button>
+          <button class="tbtn" style="flex:1;width:auto" onclick="symPicker()"><span style="font-size:14px;font-weight:700">△</span>Symbol</button>
         </div>
         <input type="file" id="imgFilePicker" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml" style="display:none" onchange="onImagePicked(event)">
         <div style="height:1px;background:rgba(255,255,255,0.08);margin:6px 0"></div>
@@ -809,7 +809,7 @@ function R(){
           ${S.objs.length===0?`<div style="color:#44445a;font-size:10px;padding:6px 4px">No objects yet</div>`
             :S.objs.map(o=>{
               const sel=o.id===S.selId;
-              const icon=o.t==='tx'?'T':o.t==='ln'?'╌':o.t==='ar'?'→':o.t==='ci'?'◯':o.t==='ov'?'⬭':o.t==='im'?'🖼':o.t==='sy'?'⚠':'▭';
+              const icon=o.t==='tx'?'T':o.t==='ln'?'╌':o.t==='ar'?'→':o.t==='ci'?'◯':o.t==='ov'?'⬭':o.t==='im'?'▦':o.t==='sy'?'△':'▭';
               const lbl=objListLabel(o);
               return`<div onclick="selectObj('${o.id}')" title="${lbl.replace(/"/g,'&quot;')}"
                 style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;cursor:pointer;font-size:11px;white-space:nowrap;overflow:hidden;

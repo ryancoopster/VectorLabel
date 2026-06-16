@@ -131,6 +131,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         config.userContentController = contentController
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.navigationDelegate = self
+        wv.uiDelegate = self   // so <input type=file> shows an NSOpenPanel (image picker)
         wv.loadFileURL(htmlURL, allowingReadAccessTo: htmlURL.deletingLastPathComponent())
         designerWebView = wv
 
@@ -460,6 +461,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             .deletingLastPathComponent()
         let candidate = src.appendingPathComponent("\(name).html")
         return FileManager.default.fileExists(atPath: candidate.path) ? candidate : nil
+    }
+}
+
+// MARK: – WKUIDelegate (file picker for the designer's <input type=file>)
+
+extension AppDelegate: WKUIDelegate {
+    func webView(_ webView: WKWebView,
+                 runOpenPanelWith parameters: WKOpenPanelParameters,
+                 initiatedByFrame frame: WKFrameInfo,
+                 completionHandler: @escaping ([URL]?) -> Void) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+        panel.allowedFileTypes = ["png", "jpg", "jpeg", "svg"]
+        panel.prompt = "Choose Image"
+        panel.begin { response in
+            completionHandler(response == .OK ? panel.urls : nil)
+        }
     }
 }
 
