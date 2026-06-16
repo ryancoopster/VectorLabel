@@ -142,29 +142,27 @@ def run_diagnostic(handle):
     vs.AlrtDialog("Diagnostic written to:\n{}".format(diag_path))
 
 
-# ── Main export ───────────────────────────────────────────────────────────────
+# ── Export core ───────────────────────────────────────────────────────────────
 
-def export_selected_circuits():
-    selected_handles = []
+def collect_handles(criteria):
+    """Collect every object handle matching a Vectorworks criteria string."""
+    handles = []
 
     def collect(h):
-        selected_handles.append(h)
+        handles.append(h)
         return True
 
-    vs.ForEachObject(collect, "(SEL=TRUE)")
+    vs.ForEachObject(collect, criteria)
+    return handles
 
-    if not selected_handles:
-        vs.AlrtDialog("No objects selected. Select one or more ConnectCAD circuits.")
-        return
 
-    if DIAGNOSTIC:
-        run_diagnostic(selected_handles[0])
-        return
-
+def write_export(handles, empty_msg):
+    """Turn circuit handles into a CSV export. Silent on success; alerts only
+    when there's nothing to export. `empty_msg` accepts a {skipped} placeholder."""
     rows = []
     skipped = 0
 
-    for h in selected_handles:
+    for h in handles:
         fields = get_fields(h)
         if not is_circuit(fields):
             skipped += 1
@@ -173,8 +171,7 @@ def export_selected_circuits():
         rows.append(build_label_row(fields, 'Destination'))
 
     if not rows:
-        vs.AlrtDialog("No ConnectCAD circuits found in selection.\n"
-                      "({} non-circuit object(s) skipped)".format(skipped))
+        vs.AlrtDialog(empty_msg.format(skipped=skipped))
         return
 
     # Derive project folder name from the Vectorworks filename (no extension)
@@ -198,18 +195,43 @@ def export_selected_circuits():
             writer.writerow({k: row.get(k, '') for k in header})
 
     # Prune old exports for this project (datecode-based, not mtime-based)
-    deleted = prune_project_folder(project_folder, keep=MAX_EXPORTS_PER_PROJECT)
+    prune_project_folder(project_folder, keep=MAX_EXPORTS_PER_PROJECT)
 
-    # Build result message
-    msg = "Exported {} label row(s) for {} circuit(s) to:\n{}".format(
-        len(rows), len(rows) // 2, filepath)
-    if skipped:
-        msg += "\n({} non-circuit object(s) skipped)".format(skipped)
-    if deleted:
-        msg += "\n\nPruned {} old export(s) — kept {} most recent.".format(
-            len(deleted), MAX_EXPORTS_PER_PROJECT)
+    # No success dialog — the export completes silently and VectorLabel picks up
+    # the new CSV automatically. (Error conditions above still alert the user.)
 
-    vs.AlrtDialog(msg)
 
+# ── Menu commands ─────────────────────────────────────────────────────────────
+
+def export_selected_circuits():
+    """'Export Selected Circuits to VectorLabel' — only the current selection."""
+    handles = collect_handles("(SEL=TRUE)")
+    if not handles:
+        vs.AlrtDialog("No objects selected. Select one or more ConnectCAD circuits.")
+        return
+    if DIAGNOSTIC:
+        run_diagnostic(handles[0])
+        return
+    write_export(handles,
+                 "No ConnectCAD circuits found in selection.\n"
+                 "({skipped} non-circuit object(s) skipped)")
+
+
+def export_all_circuits():
+    """'Export All Circuits to VectorLabel' — every circuit on the active layer."""
+    layer_name = vs.GetLName(vs.ActLayer())
+    handles = collect_handles("(L='{}')".format(layer_name))
+    write_export(handles,
+                 "No ConnectCAD circuits found on the active layer ('{}').\n"
+                 "({{skipped}} non-circuit object(s) skipped)".format(layer_name))
+
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+# This one file backs TWO Vectorworks menu commands. When pasting it into the
+# Plug-in Manager, leave exactly ONE of the calls below active per command:
+#
+#   Command "Export Selected Circuits to VectorLabel"  →  export_selected_circuits()
+#   Command "Export All Circuits to VectorLabel"        →  export_all_circuits()
 
 export_selected_circuits()
+# export_all_circuits()

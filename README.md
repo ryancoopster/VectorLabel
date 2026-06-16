@@ -52,14 +52,22 @@ If you're on Intel, change it to:
 
 ## Vectorworks plugin
 
-Install `VectorworksPlugin/export_circuits.py` as a Vectorworks command plug-in:
+`VectorworksPlugin/export_circuits.py` backs **two** menu commands. Install each
+as its own command plug-in:
 
 1. Vectorworks → Tools → Plug-ins → Plug-in Manager → New Command
 2. Language: Python, paste the contents of `export_circuits.py`
-3. Add to your workspace toolbar
+3. At the bottom of the script, leave exactly one entry-point call active:
+   - **Export Selected Circuits to VectorLabel** → `export_selected_circuits()`
+   - **Export All Circuits to VectorLabel** → `export_all_circuits()`
+4. Add both commands to your workspace toolbar/menu.
 
-Select circuits in ConnectCAD, run the command. The CSV lands in  
-`~/Documents/VectorLabel/Exports/<VWFileName>/` and VectorLabel opens the print window automatically.
+- *Selected* exports the current selection.
+- *All* exports every ConnectCAD circuit on the **active design layer**.
+
+The CSV lands in `~/Documents/VectorLabel/Exports/<VWFileName>/` and VectorLabel
+opens the print window automatically. The export runs silently (no confirmation
+dialog); only error conditions alert.
 
 ## Brady USB PID
 
