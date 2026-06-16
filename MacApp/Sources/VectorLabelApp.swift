@@ -511,6 +511,7 @@ extension AppDelegate: WKNavigationDelegate {
             injectDesignerRecords(result.records, filename: result.url.lastPathComponent)
         }
         // Inject the templates-folder list so the designer's Open dialog can list them.
+        TemplateStore.shared.reload()
         injectDesignerTemplates()
         injectColumnConfig()
         injectDesignerPrefs()
@@ -617,6 +618,7 @@ extension AppDelegate: WKScriptMessageHandler {
             injectDesignerTemplates()   // refresh the Open list with the new file
 
         case "listTemplates":
+            TemplateStore.shared.reload()   // pick up renamed/added/removed files
             injectDesignerTemplates()
 
         case "browseTemplate":

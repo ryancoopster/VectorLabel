@@ -95,10 +95,14 @@ final class TemplateStore: ObservableObject {
             guard let data = try? Data(contentsOf: url),
                   var tpl = try? decoder.decode(VLTemplate.self, from: data)
             else { continue }
-            // Use filename (without extension) as display name fallback
-            if tpl.name.isEmpty {
-                tpl.name = url.deletingPathExtension().lastPathComponent
+            // The filename is the display name (so renaming a file on disk
+            // updates the name everywhere). Strip ".vlt.json" / ".json".
+            var fname = url.lastPathComponent
+            for ext in [".vlt.json", ".json"] where fname.lowercased().hasSuffix(ext) {
+                fname = String(fname.dropLast(ext.count)); break
             }
+            if !fname.isEmpty { tpl.name = fname }
+            else if tpl.name.isEmpty { tpl.name = url.deletingPathExtension().lastPathComponent }
             // De-duplicate ids: legacy "Save As" copies could share an id, which
             // breaks identifying templates. Give any collision a fresh id and
             // rewrite the file so the data is permanently clean.

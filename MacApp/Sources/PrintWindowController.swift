@@ -117,6 +117,9 @@ final class PrintWindowController: NSObject {
     // MARK: – Window setup
 
     private func openWindowIfNeeded() {
+        // Refresh templates from disk on every launch so renamed/added/removed
+        // template files show up.
+        TemplateStore.shared.reload()
         if let win = window {
             NSApp.activate(ignoringOtherApps: true)
             win.makeKeyAndOrderFront(nil)
