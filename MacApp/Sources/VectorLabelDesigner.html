@@ -125,13 +125,9 @@ let S={
   spec:BL[1],selId:null,recIdx:0,wrap:true,showFields:false,zoom:1.0,
   snapGrid:true,snapObjects:true,gridSize:0.05,
   tplName:'Untitled Template',modal:null,
-  objs:[
-    {id:mid(),t:"tx",x:.02,y:.03,w:.44,h:.28,f:'=IF(Connector<>"",Connector,"")',al:"left",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100},
-    {id:mid(),t:"tx",x:.62,y:.03,w:.36,h:.28,f:'=IF(Rack<>"",Rack,"")',al:"right",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100},
-    {id:mid(),t:"tx",x:.02,y:.08,w:.96,h:.34,f:'=IF(Number<>"",Number&IF(Cable<>""," - "&Cable,""),IF(Cable<>"",Cable,""))',al:"center",valign:"middle",fs:19,bold:true,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100},
-    {id:mid(),t:"ln",x:0,y:.44,w:1,h:0,lw:1},
-    {id:mid(),t:"tx",x:.02,y:.47,w:.96,h:.24,f:'=IF(Other_Device<>"","@ "&Other_Device&IF(Other_Socket<>""," : "&Other_Socket,""),"")',al:"center",valign:"middle",fs:12,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100}
-  ]
+  // Start blank — the standalone designer opens the Open dialog on launch so the
+  // user picks a template rather than landing on a default one.
+  objs:[]
 };
 function gobj(id){return S.objs.find(o=>o.id===id);}
 function uobj(id,p){S.objs=S.objs.map(o=>o.id===id?Object.assign({},o,p):o);}
@@ -1209,6 +1205,11 @@ function parseCSV(text){
 }
 
 async function loadDesignerCSV(){
+  // Native app: open a Finder panel pointed at the Exports folder via Swift.
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"browseDataSource"});
+    return;
+  }
   if(window.showOpenFilePicker){
     try{
       const [fh]=await window.showOpenFilePicker({

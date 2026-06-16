@@ -314,6 +314,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
     }
 
+    /// Finder panel (at the Exports folder) to pick a CSV data source for the
+    /// designer preview; loads it and injects the records.
+    private func browseForDataSource() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.directoryURL = AppSettings.shared.exportsFolderURL
+        panel.message = "Choose a CSV export to preview in the designer"
+        panel.level = .modalPanel
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            MainActor.assumeIsolated {
+                guard let self = self, let wv = self.designerWebView,
+                      let records = WireExportParser.parse(fileURL: url)
+                else { return }
+                guard let data = try? JSONEncoder().encode(records),
+                      let json = String(data: data, encoding: .utf8) else { return }
+                let fn = url.lastPathComponent
+                let fnJSON = "\"" + fn.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
+                wv.evaluateJavaScript("if(typeof initDesignerRecords==='function')initDesignerRecords(\(json),\(fnJSON));", completionHandler: nil)
+            }
+        }
+    }
+
     private func injectBrowsedTemplate(from url: URL) {
         guard let wv = designerWebView,
               let data = try? Data(contentsOf: url),
@@ -383,6 +408,8 @@ extension AppDelegate: WKNavigationDelegate {
         // Inject the templates-folder list so the designer's Open dialog can list them.
         injectDesignerTemplates()
         injectColumnConfig()
+        // Open the template picker on launch instead of landing on a default template.
+        webView.evaluateJavaScript("if(typeof openTemplate==='function')openTemplate();", completionHandler: nil)
     }
 }
 
@@ -437,6 +464,9 @@ extension AppDelegate: WKScriptMessageHandler {
 
         case "browseTemplate":
             browseForTemplate()
+
+        case "browseDataSource":
+            browseForDataSource()
 
         case "setColumnConfig":
             AppSettings.shared.applyColumnConfigPayload(body["payload"])
