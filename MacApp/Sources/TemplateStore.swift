@@ -27,8 +27,13 @@ struct TemplateObject: Codable, Identifiable, Hashable {
     var tracking: Double?
     var stretch: Double?    // horizontal scale %, default 100
 
-    // Line / rectangle
+    // Line / rectangle / shapes
     var lw: Double?         // border/line weight in px
+
+    // Arrow (t == "ar")
+    var arrowStart: Bool?   // arrowhead at the start (x)
+    var arrowEnd: Bool?     // arrowhead at the end (x + w)
+    var arrowSize: Double?  // arrowhead length in designer px
 
     // Rotation in degrees, clockwise, about the object's center. nil/0 = none.
     var rot: Double?

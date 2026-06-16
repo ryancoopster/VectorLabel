@@ -184,6 +184,16 @@ function renderLabel(tpl,rec,scale=1){
     }
     if(o.t==="ln")return`<div style="position:absolute;left:${x}px;top:${y}px;width:${(o.w||1)*sc}px;height:${Math.max(1,o.lw||1)}px;background:#000;${rc}"></div>`;
     if(o.t==="rc")return`<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border:${o.lw||1}px solid #000;background:transparent;${rc}"></div>`;
+    if(o.t==="ci"||o.t==="ov")return`<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border:${o.lw||1}px solid #000;background:transparent;border-radius:50%;${rc}"></div>`;
+    if(o.t==="ar"){
+      const aw=(o.w||1)*sc, th=Math.max(1,o.lw||2), as=Math.max(4,o.arrowSize||12), hw=as*0.6, vh=Math.max(th/2,hw)+2;
+      const x1=o.arrowStart?as:0, x2=aw-(o.arrowEnd?as:0);
+      let svg=`<svg width="${aw}" height="${2*vh}" style="position:absolute;left:0;top:0;overflow:visible"><line x1="${x1}" y1="${vh}" x2="${Math.max(x1,x2)}" y2="${vh}" stroke="#000" stroke-width="${th}"/>`;
+      if(o.arrowStart) svg+=`<polygon points="0,${vh} ${as},${vh-hw} ${as},${vh+hw}" fill="#000"/>`;
+      if(o.arrowEnd)   svg+=`<polygon points="${aw},${vh} ${aw-as},${vh-hw} ${aw-as},${vh+hw}" fill="#000"/>`;
+      svg+=`</svg>`;
+      return`<div style="position:absolute;left:${x}px;top:${y-vh}px;width:${aw}px;height:${2*vh}px;${rc}">${svg}</div>`;
+    }
     return"";
   }).join("");
   return`<div style="width:${pw}px;height:${ph}px;background:#fff;border:1.5px solid rgba(255,255,255,0.15);border-radius:2px;position:relative;overflow:hidden;flex-shrink:0">${objs}</div>`;

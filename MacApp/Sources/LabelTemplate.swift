@@ -89,6 +89,8 @@ enum LabelRenderer {
             case "tx": drawText(obj, record: record, in: ctx, dpi: dpi)
             case "ln": drawLine(obj, in: ctx, dpi: dpi)
             case "rc": drawRect(obj, in: ctx, dpi: dpi)
+            case "ci", "ov": drawEllipse(obj, in: ctx, dpi: dpi)
+            case "ar": drawArrow(obj, in: ctx, dpi: dpi)
             default: break
             }
             if rotated { ctx.restoreGState() }
@@ -249,6 +251,57 @@ enum LabelRenderer {
         ctx.setStrokeColor(gray: 0.0, alpha: 1.0)
         ctx.setLineWidth(CGFloat(lw))
         ctx.stroke(r)
+    }
+
+    /// Circle ("ci") and oval ("ov") — both stroke an ellipse in the object's
+    /// box (a circle is just an oval with equal width/height).
+    private static func drawEllipse(_ obj: TemplateObject, in ctx: CGContext, dpi: Int) {
+        let r  = rect(for: obj, dpi: dpi)
+        let lw = max(1.0, (obj.lw ?? 1.0) * Double(dpi) / designerDPI)
+        ctx.setStrokeColor(gray: 0.0, alpha: 1.0)
+        ctx.setLineWidth(CGFloat(lw))
+        ctx.strokeEllipse(in: r)
+    }
+
+    /// Arrow ("ar") — a horizontal shaft along the object's centerline (obj.y),
+    /// with filled triangular heads at either/both ends. Thickness and head
+    /// size are designer px scaled to the print DPI, matching the HTML render.
+    private static func drawArrow(_ obj: TemplateObject, in ctx: CGContext, dpi: Int) {
+        let s   = Double(dpi)
+        let scale = s / designerDPI
+        let xL  = obj.x * s
+        let xR  = (obj.x + obj.w) * s
+        let yc  = obj.y * s
+        let th  = max(1.0, (obj.lw ?? 2.0) * scale)
+        let head = max(4.0, (obj.arrowSize ?? 12.0) * scale)
+        let hw  = head * 0.6
+        let startHead = obj.arrowStart ?? false
+        let endHead   = obj.arrowEnd ?? true
+
+        ctx.setStrokeColor(gray: 0.0, alpha: 1.0)
+        ctx.setFillColor(gray: 0.0, alpha: 1.0)
+
+        // Shaft (inset where a head sits so the line doesn't poke through it).
+        let x1 = xL + (startHead ? head : 0)
+        let x2 = xR - (endHead ? head : 0)
+        if x2 > x1 {
+            ctx.setLineWidth(CGFloat(th))
+            ctx.move(to: CGPoint(x: x1, y: yc))
+            ctx.addLine(to: CGPoint(x: x2, y: yc))
+            ctx.strokePath()
+        }
+        if endHead {
+            ctx.move(to: CGPoint(x: xR, y: yc))
+            ctx.addLine(to: CGPoint(x: xR - head, y: yc - hw))
+            ctx.addLine(to: CGPoint(x: xR - head, y: yc + hw))
+            ctx.closePath(); ctx.fillPath()
+        }
+        if startHead {
+            ctx.move(to: CGPoint(x: xL, y: yc))
+            ctx.addLine(to: CGPoint(x: xL + head, y: yc - hw))
+            ctx.addLine(to: CGPoint(x: xL + head, y: yc + hw))
+            ctx.closePath(); ctx.fillPath()
+        }
     }
 
     // MARK: – Calibration grid

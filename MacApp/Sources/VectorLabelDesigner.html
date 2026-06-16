@@ -433,6 +433,26 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
       const rb=sel&&!readOnly?`<div onmousedown="startResize(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:#6C8EF5;border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";
       return `<div data-obj="${o.id}" ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border:${o.lw||1}px solid #000;background:transparent;cursor:${readOnly?"default":"move"};${rotCss}${ss}">${rotH}${rb}</div>`;
     }
+    if(o.t==="ci"||o.t==="ov"){
+      const rb=sel&&!readOnly?`<div onmousedown="startResize(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:#6C8EF5;border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";
+      return `<div data-obj="${o.id}" ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border:${o.lw||1}px solid #000;background:transparent;border-radius:50%;cursor:${readOnly?"default":"move"};${rotCss}${ss}">${rotH}${rb}</div>`;
+    }
+    if(o.t==="ar"){
+      const aw=(o.w||1)*sc;
+      const th=Math.max(1,o.lw||2);
+      const as=Math.max(4,o.arrowSize||12);   // arrowhead length along shaft
+      const hw=as*0.6;                          // arrowhead half-width
+      const vh=Math.max(th/2,hw)+2;             // half visual height
+      const x1=o.arrowStart?as:0, x2=aw-(o.arrowEnd?as:0);
+      let svg=`<svg width="${aw}" height="${2*vh}" style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none">`;
+      svg+=`<line x1="${x1}" y1="${vh}" x2="${Math.max(x1,x2)}" y2="${vh}" stroke="#000" stroke-width="${th}"/>`;
+      if(o.arrowStart) svg+=`<polygon points="0,${vh} ${as},${vh-hw} ${as},${vh+hw}" fill="#000"/>`;
+      if(o.arrowEnd)   svg+=`<polygon points="${aw},${vh} ${aw-as},${vh-hw} ${aw-as},${vh+hw}" fill="#000"/>`;
+      svg+=`</svg>`;
+      const lh=sel&&!readOnly?`<div onmousedown="startLineResize(event,'${o.id}','l')" title="Drag to stretch" style="position:absolute;left:-5px;top:50%;transform:translateY(-50%);width:9px;height:9px;background:#6C8EF5;border:1px solid #fff;border-radius:50%;cursor:ew-resize;z-index:10"></div>`:"";
+      const rh=sel&&!readOnly?`<div onmousedown="startLineResize(event,'${o.id}','r')" title="Drag to stretch" style="position:absolute;right:-5px;top:50%;transform:translateY(-50%);width:9px;height:9px;background:#6C8EF5;border:1px solid #fff;border-radius:50%;cursor:ew-resize;z-index:10"></div>`:"";
+      return `<div data-obj="${o.id}" ${drag} style="position:absolute;left:${x}px;top:${y-vh}px;width:${aw}px;height:${2*vh}px;cursor:${readOnly?"default":"move"};${rotCss}${ss}">${svg}${lh}${rh}${rotH}</div>`;
+    }
     return"";
   }).join("");
 
@@ -607,6 +627,46 @@ function buildProps(){
       ${ni("Height","h",.01,o.h)}
     </div>`;
   }
+  if(o.t==="ar"){
+    return `<div style="display:flex;flex-direction:column;gap:0">
+      ${posButtons(o)}
+      <div class="sec">Arrow</div>
+      <div style="margin-bottom:6px"><label class="lbl">Thickness (px)</label><input type="number" class="inp" value="${o.lw||2}" min="1" max="20" onchange="uobj('${o.id}',{lw:parseInt(this.value)});R()"></div>
+      <div style="margin-bottom:6px"><label class="lbl">Arrowhead size (px)</label><input type="number" class="inp" value="${o.arrowSize||12}" min="4" max="60" onchange="uobj('${o.id}',{arrowSize:parseFloat(this.value)});R()"></div>
+      <div style="margin-bottom:8px">
+        <label class="lbl">Heads</label>
+        <div style="display:flex;gap:3px">
+          <button class="fmt-btn${o.arrowStart?" on":""}" title="Arrowhead at start" onclick="uobj('${o.id}',{arrowStart:!${!!o.arrowStart}});R()">◄ Start</button>
+          <button class="fmt-btn${o.arrowEnd?" on":""}" title="Arrowhead at end" onclick="uobj('${o.id}',{arrowEnd:!${!!o.arrowEnd}});R()">End ►</button>
+        </div>
+      </div>
+      ${ni("X","x",.01,o.x)}
+      ${ni("Y","y",.005,o.y)}
+      ${ni("Length","w",.01,o.w)}
+    </div>`;
+  }
+  if(o.t==="ci"){
+    return `<div style="display:flex;flex-direction:column;gap:0">
+      ${posButtons(o)}
+      <div class="sec">Circle</div>
+      <div style="margin-bottom:6px"><label class="lbl">Border (px)</label><input type="number" class="inp" value="${o.lw||1}" min="1" max="10" onchange="uobj('${o.id}',{lw:parseInt(this.value)});R()"></div>
+      <div style="margin-bottom:6px"><label class="lbl">Diameter (in)</label><input type="number" class="inp" step="0.01" value="${(+o.w||0).toFixed(3)}" onchange="uobj('${o.id}',{w:parseFloat(this.value),h:parseFloat(this.value)});R()"></div>
+      <div style="margin-bottom:6px"><label class="lbl">Radius (in)</label><input type="number" class="inp" step="0.005" value="${((+o.w||0)/2).toFixed(3)}" onchange="uobj('${o.id}',{w:parseFloat(this.value)*2,h:parseFloat(this.value)*2});R()"></div>
+      ${ni("X","x",.01,o.x)}
+      ${ni("Y","y",.005,o.y)}
+    </div>`;
+  }
+  if(o.t==="ov"){
+    return `<div style="display:flex;flex-direction:column;gap:0">
+      ${posButtons(o)}
+      <div class="sec">Oval</div>
+      <div style="margin-bottom:6px"><label class="lbl">Border (px)</label><input type="number" class="inp" value="${o.lw||1}" min="1" max="10" onchange="uobj('${o.id}',{lw:parseInt(this.value)});R()"></div>
+      ${ni("Width (X)","w",.01,o.w)}
+      ${ni("Height (Y)","h",.01,o.h)}
+      ${ni("X","x",.01,o.x)}
+      ${ni("Y","y",.005,o.y)}
+    </div>`;
+  }
   return"";
 }
 
@@ -696,13 +756,18 @@ function R(){
           <button class="tbtn" style="flex:1;width:auto" onclick="addObj('ln')"><span style="font-size:14px;font-weight:700">╌</span>Line</button>
           <button class="tbtn" style="flex:1;width:auto" onclick="addObj('rc')"><span style="font-size:14px;font-weight:700">▭</span>Rect</button>
         </div>
+        <div style="display:flex;gap:5px">
+          <button class="tbtn" style="flex:1;width:auto" onclick="addObj('ar')"><span style="font-size:14px;font-weight:700">→</span>Arrow</button>
+          <button class="tbtn" style="flex:1;width:auto" onclick="addObj('ci')"><span style="font-size:14px;font-weight:700">◯</span>Circle</button>
+          <button class="tbtn" style="flex:1;width:auto" onclick="addObj('ov')"><span style="font-size:13px;font-weight:700">⬭</span>Oval</button>
+        </div>
         <div style="height:1px;background:rgba(255,255,255,0.08);margin:6px 0"></div>
         <span style="color:#44445a;font-size:9px;text-transform:uppercase;letter-spacing:1px">Objects (${S.objs.length})</span>
         <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:2px;margin:2px -2px 0">
           ${S.objs.length===0?`<div style="color:#44445a;font-size:10px;padding:6px 4px">No objects yet</div>`
             :S.objs.map(o=>{
               const sel=o.id===S.selId;
-              const icon=o.t==='tx'?'T':o.t==='ln'?'╌':'▭';
+              const icon=o.t==='tx'?'T':o.t==='ln'?'╌':o.t==='ar'?'→':o.t==='ci'?'◯':o.t==='ov'?'⬭':'▭';
               const lbl=objListLabel(o);
               return`<div onclick="selectObj('${o.id}')" title="${lbl.replace(/"/g,'&quot;')}"
                 style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;cursor:pointer;font-size:11px;white-space:nowrap;overflow:hidden;
@@ -1000,7 +1065,9 @@ function startResize(e,id){
     const dh=(e.clientY-sy)/(SC*S.zoom);
     const nw=snapToGrid(Math.max(.05,ow+dw));
     const nh=snapToGrid(Math.max(.02,oh+dh));
-    uobj(id,{w:nw,h:nh});R();
+    if(o.t==="ci"){ uobj(id,{w:nw,h:nw}); }   // circle stays square
+    else { uobj(id,{w:nw,h:nh}); }
+    R();
   }
   function mu(){window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",mu);}
   window.addEventListener("mousemove",mv);window.addEventListener("mouseup",mu);
@@ -1020,7 +1087,7 @@ function objListLabel(o){
     const f=(o.f||'').replace(/^=/,'').trim();
     return f && f!=='""' ? f : 'Text';
   }
-  return o.t==='ln'?'Line':'Rectangle';
+  return o.t==='ln'?'Line':o.t==='ar'?'Arrow':o.t==='ci'?'Circle':o.t==='ov'?'Oval':'Rectangle';
 }
 
 // Select an object from the object list (mirrors clicking it on the canvas).
@@ -1038,6 +1105,9 @@ function addObj(type){
   if(type==="tx")S.objs.push({...base,t:"tx",w:.5,h:.2,f:'=""',al:"left",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100});
   if(type==="ln")S.objs.push({...base,t:"ln",y:.25,w:1,h:0,lw:1});
   if(type==="rc")S.objs.push({...base,t:"rc",w:.4,h:.2,lw:1});
+  if(type==="ar")S.objs.push({...base,t:"ar",y:.25,w:1,h:0,lw:2,arrowStart:false,arrowEnd:true,arrowSize:12});
+  if(type==="ci")S.objs.push({...base,t:"ci",w:.4,h:.4,lw:1});
+  if(type==="ov")S.objs.push({...base,t:"ov",w:.5,h:.3,lw:1});
   S.selId=id;S._ef=undefined;R();
 }
 
