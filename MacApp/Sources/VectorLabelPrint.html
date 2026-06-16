@@ -260,16 +260,36 @@ function startEdColResize(e,col){
   window.addEventListener('mousemove',mv);window.addEventListener('mouseup',mu);
 }
 
-// Column order for record tables: friendly columns first, then every other
-// CSV column in data order.
+// Column order for record tables: the user's saved arrangement first (shared
+// with the designer via Swift), then friendly columns, then anything else.
 function recordColumns(records){
-  const preferred=['_Side','Number','Cable','Signal','Device_Name','Socket_Name'];
-  const cols=[];
-  preferred.forEach(k=>{ if(records.some(r=>k in r)) cols.push(k); });
-  records.forEach(r=>Object.keys(r).forEach(k=>{ if(!cols.includes(k)) cols.push(k); }));
-  return cols;
+  const present=[];
+  records.forEach(r=>Object.keys(r).forEach(k=>{ if(!present.includes(k)) present.push(k); }));
+  const out=(window._columnOrder||[]).filter(k=>present.includes(k));
+  ['_Side','Number','Cable','Signal','Device_Name','Socket_Name'].forEach(k=>{ if(present.includes(k)&&!out.includes(k)) out.push(k); });
+  present.forEach(k=>{ if(!out.includes(k)) out.push(k); });
+  return out;
 }
 function colLabel(k){ return k==='_Side'?'Side':k.replace(/_/g,' '); }
+
+// Drag-to-reorder columns; the new order is shared + persisted via Swift.
+function applyColumnOrder(order){ window._columnOrder=Array.isArray(order)?order:[]; R(); }
+let _vlDragCol=null;
+function colDragStart(e,c){ _vlDragCol=c; if(e.dataTransfer)e.dataTransfer.effectAllowed='move'; }
+function colDrop(e,target){
+  e.preventDefault();
+  const drag=_vlDragCol; _vlDragCol=null;
+  if(!drag||drag===target)return;
+  const records=window._editorRecords||(typeof P!=='undefined'&&P.records&&P.records.length?P.records:RX);
+  let cols=recordColumns(records);
+  const from=cols.indexOf(drag), to=cols.indexOf(target);
+  if(from<0||to<0)return;
+  cols.splice(to,0,cols.splice(from,1)[0]);
+  window._columnOrder=cols;
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"setColumnOrder",payload:cols});
+  R();
+}
 
 // Builds the record table shown in the live editor (uses S.recIdx + RX/_editorRecords)
 function buildEditorRecordTable(){
@@ -278,7 +298,7 @@ function buildEditorRecordTable(){
   const cols=recordColumns(records);
 
   const hdr=`<div style="display:flex;width:max-content;min-width:100%;background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.1);position:sticky;top:0;z-index:2">
-    ${cols.map(c=>`<div style="flex:0 0 auto;min-width:96px;padding:5px 8px;font-size:10px;color:#44445a;font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden">${colLabel(c)}</div>`).join('')}
+    ${cols.map(c=>`<div draggable="true" ondragstart="colDragStart(event,'${c}')" ondragover="event.preventDefault()" ondrop="colDrop(event,'${c}')" title="Drag to reorder" style="flex:0 0 auto;min-width:96px;padding:5px 8px;font-size:10px;color:#44445a;font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;cursor:grab">${colLabel(c)}</div>`).join('')}
   </div>`;
 
   const rows=records.map((r,i)=>{
@@ -877,9 +897,8 @@ function R(){
         </div>
         <!-- Grid headers -->
         ${(()=>{
-          const shownKeys=new Set(['_Side','Number','Cable','Signal','Device_Name','Socket_Name']);
-          const extraCols=P.records.length?recordColumns(P.records).filter(k=>!shownKeys.has(k)):[];
-          const gridT="var(--col-cb) var(--col-pair) var(--col-num) var(--col-side) var(--col-number) var(--col-cable) var(--col-signal) var(--col-device) var(--col-socket)"+extraCols.map(()=>" 110px").join("");
+          const cols=P.records.length?recordColumns(P.records):[];
+          const gridT="var(--col-cb) var(--col-pair) var(--col-num)"+cols.map(()=>" 110px").join("");
           const header=`<div class="rec-row" style="grid-template-columns:${gridT};position:sticky;top:0;z-index:3;background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.1)">
             <div class="rec-cell" style="display:flex;align-items:center;justify-content:center">
               <div class="cb ${P.selected.size===P.records.length?"chk":P.selected.size>0?"partial":""}" onclick="toggleAll()">
@@ -888,14 +907,11 @@ function R(){
             </div>
             <div class="rec-hdr-cell" title="Toggle pair (Source + Destination)" style="text-align:center;font-size:9px">⇅</div>
             <div class="rec-hdr-cell">#</div>
-            ${['side','number','cable','signal','device','socket'].map(col=>`
-              <div class="rec-hdr-cell">${{side:'Side',number:'Number',cable:'Cable',signal:'Signal',device:'Device',socket:'Socket'}[col]}<div class="col-resizer" onmousedown="startColResize(event,'${col}')"></div></div>`).join('')}
-            ${extraCols.map(c=>`<div class="rec-hdr-cell">${colLabel(c)}</div>`).join('')}
+            ${cols.map(c=>`<div class="rec-hdr-cell" draggable="true" ondragstart="colDragStart(event,'${c}')" ondragover="event.preventDefault()" ondrop="colDrop(event,'${c}')" title="Drag to reorder" style="cursor:grab">${colLabel(c)}</div>`).join('')}
           </div>`;
           const rows=P.records.map((r,i)=>{
             const isSel=P.selected.has(i);
             const isPrev=P.previewIdx===i;
-            const side=r._Side==="Source"?"src":"dst";
             const ps2=pairChkState(i);
             return`<div class="rec-row${isSel?" selected":""}${isPrev?" active-preview":""}" style="grid-template-columns:${gridT}" onclick="P.previewIdx=${i};P.lastClickIdx=null;R()">
               <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();if(event.shiftKey&&P.lastClickIdx!==null){const lo=Math.min(P.lastClickIdx,${i}),hi=Math.max(P.lastClickIdx,${i});for(let j=lo;j<=hi;j++)P.selected.add(j);P.printRange='selected';R();}else{P.lastClickIdx=${i};toggleSel(${i});}">
@@ -907,13 +923,11 @@ function R(){
                 </div>
               </div>
               <div class="rec-cell" style="color:#44445a;font-size:10px">${i+1}</div>
-              <div class="rec-cell"><span class="tag ${side}">${r._Side}</span></div>
-              <div class="rec-cell" style="color:${r.Number?"#e8e8f0":"#44445a"};font-weight:${r.Number?600:400}">${r.Number||"—"}</div>
-              <div class="rec-cell" style="color:#8888a8">${r.Cable||"—"}</div>
-              <div class="rec-cell" style="color:#8888a8">${r.Signal||"—"}</div>
-              <div class="rec-cell" style="color:#8888a8">${r.Device_Name||"—"}</div>
-              <div class="rec-cell" style="color:#8888a8">${r.Socket_Name||"—"}</div>
-              ${extraCols.map(c=>{const v=r[c];const val=(v===undefined||v==='')?"—":String(v);return`<div class="rec-cell" style="color:#8888a8" title="${val.replace(/"/g,'&quot;')}">${val}</div>`;}).join('')}
+              ${cols.map(c=>{
+                if(c==='_Side'){const side=r._Side==="Source"?"src":"dst";return`<div class="rec-cell"><span class="tag ${side}">${r._Side||"—"}</span></div>`;}
+                const v=r[c];const has=v!==undefined&&v!=='';const val=has?String(v):"—";
+                return`<div class="rec-cell" style="color:${has?'#e8e8f0':'#44445a'};font-weight:${(c==='Number'&&has)?600:400}" title="${val.replace(/"/g,'&quot;')}">${val}</div>`;
+              }).join('')}
             </div>`;
           }).join("");
           return`<div style="overflow:auto;flex:1"><div style="min-width:max-content">${header}${rows}</div></div>`;
@@ -1926,6 +1940,9 @@ function initPrintWindow(opts){
 
   // Loaded cassette info (printerID -> SmartCell), for the supply display.
   if(opts.cassettes) window._cassettes=opts.cassettes;
+
+  // Shared record-column order (persisted, shared with the designer).
+  if(opts.columnOrder) window._columnOrder=opts.columnOrder;
 
   // Pre-select the persisted default template, if set and present. The
   // "Make default" checkbox always starts unchecked on open (the default

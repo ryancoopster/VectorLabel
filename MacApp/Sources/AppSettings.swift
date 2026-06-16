@@ -66,6 +66,13 @@ final class AppSettings: ObservableObject {
         didSet { UserDefaults.standard.set(defaultTemplateID, forKey: "defaultTemplateID") }
     }
 
+    /// User-arranged record-table column order (CSV keys). Shared between the
+    /// print window and the template designer, persisted across launches.
+    /// Empty = natural order.
+    @Published var recordColumnOrder: [String] {
+        didSet { UserDefaults.standard.set(recordColumnOrder, forKey: "recordColumnOrder") }
+    }
+
     // MARK: – App behaviour
 
     /// Whether to also show VectorLabel in the Dock (menu-bar-only by default).
@@ -103,6 +110,7 @@ final class AppSettings: ObservableObject {
         defaultPrintRange = defaults.string(forKey: "defaultPrintRange") ?? "all"
         recentPrintsCount = defaults.object(forKey: "recentPrintsCount") as? Int ?? 5
         defaultTemplateID = defaults.string(forKey: "defaultTemplateID") ?? ""
+        recordColumnOrder = (defaults.array(forKey: "recordColumnOrder") as? [String]) ?? []
         showInDock        = defaults.object(forKey: "showInDock") as? Bool ?? false
 
         // Sync ExportSettings singleton
@@ -121,6 +129,7 @@ final class AppSettings: ObservableObject {
         defaultPrintRange    = "all"
         recentPrintsCount    = 5
         defaultTemplateID    = ""
+        recordColumnOrder    = []
         showInDock           = false
     }
 }

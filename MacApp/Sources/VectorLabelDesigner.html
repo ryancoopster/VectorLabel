@@ -169,16 +169,35 @@ function startEdColResize(e,col){
   window.addEventListener('mousemove',mv);window.addEventListener('mouseup',mu);
 }
 
-// Column order for the record table: a few friendly ones first, then every
-// other CSV column in the order it appears in the data.
+// Column order for the record table: the user's saved arrangement first (shared
+// with the print window via Swift), then friendly columns, then anything else.
 function recordColumns(records){
-  const preferred=['_Side','Number','Cable','Signal','Device_Name','Socket_Name'];
-  const cols=[];
-  preferred.forEach(k=>{ if(records.some(r=>k in r)) cols.push(k); });
-  records.forEach(r=>Object.keys(r).forEach(k=>{ if(!cols.includes(k)) cols.push(k); }));
-  return cols;
+  const present=[];
+  records.forEach(r=>Object.keys(r).forEach(k=>{ if(!present.includes(k)) present.push(k); }));
+  const out=(window._columnOrder||[]).filter(k=>present.includes(k));
+  ['_Side','Number','Cable','Signal','Device_Name','Socket_Name'].forEach(k=>{ if(present.includes(k)&&!out.includes(k)) out.push(k); });
+  present.forEach(k=>{ if(!out.includes(k)) out.push(k); });
+  return out;
 }
 function colLabel(k){ return k==='_Side'?'Side':k.replace(/_/g,' '); }
+
+// Drag-to-reorder columns; the new order is shared + persisted via Swift.
+function applyColumnOrder(order){ window._columnOrder=Array.isArray(order)?order:[]; R(); }
+let _vlDragCol=null;
+function colDragStart(e,c){ _vlDragCol=c; if(e.dataTransfer)e.dataTransfer.effectAllowed='move'; }
+function colDrop(e,target){
+  e.preventDefault();
+  const drag=_vlDragCol; _vlDragCol=null;
+  if(!drag||drag===target)return;
+  let cols=recordColumns(window._editorRecords||RX);
+  const from=cols.indexOf(drag), to=cols.indexOf(target);
+  if(from<0||to<0)return;
+  cols.splice(to,0,cols.splice(from,1)[0]);
+  window._columnOrder=cols;
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"setColumnOrder",payload:cols});
+  R();
+}
 
 function buildEditorRecordTable(){
   const records=window._editorRecords||RX;
@@ -186,7 +205,7 @@ function buildEditorRecordTable(){
   const cols=recordColumns(records);
 
   const hdr=`<div style="display:flex;background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.1);position:sticky;top:0;z-index:2;width:max-content;min-width:100%">
-    ${cols.map(c=>`<div style="flex:0 0 auto;min-width:96px;padding:5px 8px;font-size:10px;color:#44445a;font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden">${colLabel(c)}</div>`).join('')}
+    ${cols.map(c=>`<div draggable="true" ondragstart="colDragStart(event,'${c}')" ondragover="event.preventDefault()" ondrop="colDrop(event,'${c}')" title="Drag to reorder" style="flex:0 0 auto;min-width:96px;padding:5px 8px;font-size:10px;color:#44445a;font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;cursor:grab">${colLabel(c)}</div>`).join('')}
   </div>`;
 
   const rows=records.map((r,i)=>{

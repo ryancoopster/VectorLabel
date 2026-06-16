@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import WebKit
 import UniformTypeIdentifiers
+import Combine
 
 // MARK: – App entry point
 
@@ -32,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var preferencesCloseObserver: NSObjectProtocol?
 
     private var statusItem: NSStatusItem?
+    private var cancellables: Set<AnyCancellable> = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // WKWebView requires a bundle identifier for its sandboxed WebContent process.
@@ -46,6 +48,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // After a print starts, the print window closes itself and asks us to
         // pop open the menu so the user can watch printer/queue status.
         printWindowController.onPrintStarted = { [weak self] in self?.showMenuPopover() }
+
+        // Keep the designer's column order in sync with the shared setting.
+        AppSettings.shared.$recordColumnOrder
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.injectColumnOrder() }
+            .store(in: &cancellables)
 
         // Set up the NSStatusItem — reliable for LSUIElement apps, no activation issues
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -279,6 +287,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         )
     }
 
+    /// Push the shared record-column order into the designer.
+    private func injectColumnOrder() {
+        guard let wv = designerWebView,
+              let data = try? JSONSerialization.data(withJSONObject: AppSettings.shared.recordColumnOrder),
+              let json = String(data: data, encoding: .utf8)
+        else { return }
+        wv.evaluateJavaScript(
+            "if(typeof applyColumnOrder==='function')applyColumnOrder(\(json));",
+            completionHandler: nil
+        )
+    }
+
     /// Show a Finder open panel so the user can load a template from any folder,
     /// then inject the chosen template into the designer.
     private func browseForTemplate() {
@@ -363,6 +383,7 @@ extension AppDelegate: WKNavigationDelegate {
         }
         // Inject the templates-folder list so the designer's Open dialog can list them.
         injectDesignerTemplates()
+        injectColumnOrder()
     }
 }
 
@@ -417,6 +438,11 @@ extension AppDelegate: WKScriptMessageHandler {
 
         case "browseTemplate":
             browseForTemplate()
+
+        case "setColumnOrder":
+            if let order = body["payload"] as? [String] {
+                AppSettings.shared.recordColumnOrder = order
+            }
 
         default:
             break
