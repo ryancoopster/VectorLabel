@@ -150,6 +150,11 @@ final class PrintWindowController: NSObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.pushTemplates() }
 
+        // Push the light/dark theme live whenever it changes.
+        AppSettings.shared.$appearance.dropFirst().receive(on: RunLoop.main)
+            .sink { [weak self] mode in self?.evalJS("if(typeof setTheme==='function')setTheme('\(mode)')") }
+            .store(in: &columnObservers)
+
         // Keep the column config in sync with the designer / persisted setting.
         AppSettings.shared.$recordColumnOrder.dropFirst().receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.pushColumnConfig() }.store(in: &columnObservers)
@@ -304,6 +309,7 @@ final class PrintWindowController: NSObject {
               reprint: \(reprintJSON)
             });
           }
+          if (typeof setTheme === 'function') setTheme('\(AppSettings.shared.appearance)');
         })();
         """
         wv.evaluateJavaScript(js, completionHandler: nil)

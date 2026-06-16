@@ -112,6 +112,11 @@ struct MenuBarView: View {
             }
             .keyboardShortcut("e", modifiers: .command)
 
+            MenuActionRow(icon: settings.isLight ? "moon.fill" : "sun.max.fill",
+                          title: settings.isLight ? "Dark Mode" : "Light Mode", shortcut: "") {
+                settings.appearance = settings.isLight ? "dark" : "light"
+            }
+
             MenuActionRow(icon: "gearshape", title: "Preferences…", shortcut: "⌘,") {
                 appDelegate.openPreferences()
             }

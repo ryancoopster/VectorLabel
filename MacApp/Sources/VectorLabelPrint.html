@@ -5,26 +5,28 @@
 <title>VectorLabel — Print</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;overflow:hidden;background:#13131a;color:#e8e8f0;font-family:system-ui,sans-serif;font-size:13px}
+:root{--bg2:#13131a;--canvas:#0d0d14;--surface:#1a1a28;--surface2:#252538;--surface3:#2a2a42;--surface4:#333350;--text:#e8e8f0;--text-soft:#cfcfe0;--text2:#8888a8;--text3:#44445a;--accent:#6C8EF5;--accent2:#4a6cd4;--accent-soft:#aab4e8;--green:#5cc896;--warn:#f5c96c;--red:#f56c6c;--bd1:rgba(255,255,255,0.05);--bd2:rgba(255,255,255,0.08);--bd3:rgba(255,255,255,0.1);--bd4:rgba(255,255,255,0.14);--bd5:rgba(255,255,255,0.2)}
+html[data-theme="light"]{--bg2:#e6e8ee;--canvas:#c9ccd4;--surface:#ffffff;--surface2:#eceef3;--surface3:#e1e4ec;--surface4:#d2d6e0;--text:#1b1c24;--text-soft:#2c2d36;--text2:#5d6070;--text3:#9499a8;--accent:#4a6cd4;--accent2:#3a5ec4;--accent-soft:#3550b0;--green:#1f9d63;--warn:#b5790a;--red:#d63b3b;--bd1:rgba(0,0,0,0.06);--bd2:rgba(0,0,0,0.10);--bd3:rgba(0,0,0,0.13);--bd4:rgba(0,0,0,0.17);--bd5:rgba(0,0,0,0.24)}
+html,body{height:100%;overflow:hidden;background:var(--bg2);color:var(--text);font-family:system-ui,sans-serif;font-size:13px}
 input,select,button{font-family:system-ui,sans-serif;font-size:12px}
-.inp{background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#e8e8f0;border-radius:4px;padding:4px 8px;outline:none;width:100%}
-.inp:focus{border-color:#6C8EF5}
-.btn{background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#8888a8;border-radius:4px;padding:5px 12px;cursor:pointer;font-size:12px;white-space:nowrap}
-.btn:hover{background:#333350}
-.btn.primary{background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600}
-.btn.primary:hover{background:#5a7ce4}
-.btn.danger{background:rgba(245,108,108,0.15);border-color:rgba(245,108,108,0.3);color:#f56c6c}
-.btn.on{background:#6C8EF5;border-color:#6C8EF5;color:#fff}
+.inp{background:var(--surface3);border:1px solid var(--bd4);color:var(--text);border-radius:4px;padding:4px 8px;outline:none;width:100%}
+.inp:focus{border-color:var(--accent)}
+.btn{background:var(--surface3);border:1px solid var(--bd4);color:var(--text2);border-radius:4px;padding:5px 12px;cursor:pointer;font-size:12px;white-space:nowrap}
+.btn:hover{background:var(--surface4)}
+.btn.primary{background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600}
+.btn.primary:hover{background:var(--accent2)}
+.btn.danger{background:rgba(245,108,108,0.15);border-color:rgba(245,108,108,0.3);color:var(--red)}
+.btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
 .tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600}
-.tag.src{background:rgba(108,142,245,0.2);color:#6C8EF5}
-.tag.dst{background:rgba(108,200,150,0.2);color:#5cc896}
-label.lbl{font-size:10px;color:#8888a8;display:block;margin-bottom:3px}
-.divider{border:none;border-top:1px solid rgba(255,255,255,0.07);margin:12px 0}
+.tag.src{background:rgba(108,142,245,0.2);color:var(--accent)}
+.tag.dst{background:rgba(108,200,150,0.2);color:var(--green)}
+label.lbl{font-size:10px;color:var(--text2);display:block;margin-bottom:3px}
+.divider{border:none;border-top:1px solid var(--bd2);margin:12px 0}
 .modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:100}
-.modal{background:#1a1a28;border:1px solid rgba(255,255,255,0.13);border-radius:8px;padding:24px;box-shadow:0 8px 40px rgba(0,0,0,0.6)}
+.modal{background:var(--surface);border:1px solid var(--bd4);border-radius:8px;padding:24px;box-shadow:0 8px 40px rgba(0,0,0,0.6)}
 .modal-title{font-size:15px;font-weight:600;margin-bottom:16px}
-.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.07)}
-.rec-row{display:grid;grid-template-columns:var(--col-cb) var(--col-pair) var(--col-num) var(--col-side) var(--col-number) var(--col-cable) var(--col-signal) var(--col-device) var(--col-socket);align-items:center;gap:0;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;min-height:36px}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--bd2)}
+.rec-row{display:grid;grid-template-columns:var(--col-cb) var(--col-pair) var(--col-num) var(--col-side) var(--col-number) var(--col-cable) var(--col-signal) var(--col-device) var(--col-socket);align-items:center;gap:0;border-bottom:1px solid var(--bd1);cursor:pointer;min-height:36px}
 .rec-row:hover{background:rgba(108,142,245,0.06)}
 /* Off-screen data rows skip layout/paint — keeps 1500+ record lists smooth
    while preserving wrapping. intrinsic-size estimates an off-screen row so the
@@ -33,54 +35,54 @@ label.lbl{font-size:10px;color:#8888a8;display:block;margin-bottom:3px}
 .rec-row.selected{background:rgba(108,142,245,0.12)}
 .rec-row.active-preview{background:rgba(108,142,245,0.2)}
 .rec-cell{padding:6px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rec-hdr{font-size:10px;color:#44445a;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
-.tpl-card{background:#252538;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:12px 14px;cursor:pointer;display:flex;align-items:center;gap:12px;margin-bottom:8px;transition:border-color .15s}
-.tpl-card:hover{border-color:#6C8EF5;background:#2d2d48}
-.tpl-card.active{border-color:#6C8EF5;background:#2a2a42}
-.cb{width:14px;height:14px;border:1.5px solid rgba(255,255,255,0.2);border-radius:3px;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;background:#13131a}
-.cb.chk{background:#6C8EF5;border-color:#6C8EF5}
-.cb.partial{background:#2a2a42;border-color:#6C8EF5}
+.rec-hdr{font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.tpl-card{background:var(--surface2);border:1px solid var(--bd3);border-radius:6px;padding:12px 14px;cursor:pointer;display:flex;align-items:center;gap:12px;margin-bottom:8px;transition:border-color .15s}
+.tpl-card:hover{border-color:var(--accent);background:var(--surface3)}
+.tpl-card.active{border-color:var(--accent);background:var(--surface3)}
+.cb{width:14px;height:14px;border:1.5px solid var(--bd5);border-radius:3px;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;background:var(--bg2)}
+.cb.chk{background:var(--accent);border-color:var(--accent)}
+.cb.partial{background:var(--surface3);border-color:var(--accent)}
 .check-tick{color:#fff;font-size:9px;line-height:1}
-.print-info{background:#252538;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:12px 14px}
+.print-info{background:var(--surface2);border:1px solid var(--bd3);border-radius:6px;padding:12px 14px}
 .col-resizer{position:absolute;right:-3px;top:0;bottom:0;width:6px;cursor:col-resize;z-index:5;display:flex;align-items:center;justify-content:center}
-.col-resizer:hover::after,.col-resizer.dragging::after{content:'';position:absolute;width:2px;top:4px;bottom:4px;background:#6C8EF5;border-radius:1px}
-.rec-hdr-cell{position:relative;padding:6px 8px;font-size:10px;color:#44445a;font-weight:600;text-transform:uppercase;letter-spacing:.5px;overflow:hidden;white-space:nowrap;user-select:none}
-.ed-rec-row{display:grid;grid-template-columns:var(--ed-col-field) var(--ed-col-key) var(--ed-col-value);align-items:center;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;min-height:32px}
+.col-resizer:hover::after,.col-resizer.dragging::after{content:'';position:absolute;width:2px;top:4px;bottom:4px;background:var(--accent);border-radius:1px}
+.rec-hdr-cell{position:relative;padding:6px 8px;font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;overflow:hidden;white-space:nowrap;user-select:none}
+.ed-rec-row{display:grid;grid-template-columns:var(--ed-col-field) var(--ed-col-key) var(--ed-col-value);align-items:center;border-bottom:1px solid var(--bd1);cursor:pointer;min-height:32px}
 .ed-rec-row:hover{background:rgba(108,142,245,0.06)}
 .ed-rec-row.ed-selrow{background:rgba(108,142,245,0.18)}
 .ed-rec-cell{padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ed-rec-hdr{position:relative;padding:5px 8px;font-size:10px;color:#44445a;font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;user-select:none}
+.ed-rec-hdr{position:relative;padding:5px 8px;font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;user-select:none}
 
 
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;overflow:hidden;background:#13131a;color:#e8e8f0;font-family:system-ui,sans-serif;font-size:13px}
+html,body{height:100%;overflow:hidden;background:var(--bg2);color:var(--text);font-family:system-ui,sans-serif;font-size:13px}
 input,select,button,textarea{font-family:system-ui,sans-serif;font-size:12px}
-.inp{background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#e8e8f0;border-radius:4px;padding:4px 8px;outline:none;width:100%}
-.inp:focus{border-color:#6C8EF5}
-.btn{background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#8888a8;border-radius:4px;padding:4px 9px;cursor:pointer;font-size:11px;white-space:nowrap}
-.btn:hover{background:#333350}
-.btn.on{background:#6C8EF5;border-color:#6C8EF5;color:#fff}
-.tbtn{display:flex;flex-direction:column;align-items:center;gap:2px;background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#8888a8;border-radius:5px;padding:6px 0;cursor:pointer;font-size:10px;width:56px}
-.tbtn:hover{background:#333350}
-.fbtn{background:#1a1a28;border:1px solid rgba(255,255,255,0.07);color:#8888a8;border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer}
-.fbtn:hover{background:#2a2a42;color:#e8e8f0}
-.recrow{cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.05)}
+.inp{background:var(--surface3);border:1px solid var(--bd4);color:var(--text);border-radius:4px;padding:4px 8px;outline:none;width:100%}
+.inp:focus{border-color:var(--accent)}
+.btn{background:var(--surface3);border:1px solid var(--bd4);color:var(--text2);border-radius:4px;padding:4px 9px;cursor:pointer;font-size:11px;white-space:nowrap}
+.btn:hover{background:var(--surface4)}
+.btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.tbtn{display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--surface3);border:1px solid var(--bd4);color:var(--text2);border-radius:5px;padding:6px 0;cursor:pointer;font-size:10px;width:56px}
+.tbtn:hover{background:var(--surface4)}
+.fbtn{background:var(--surface);border:1px solid var(--bd2);color:var(--text2);border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer}
+.fbtn:hover{background:var(--surface3);color:var(--text)}
+.recrow{cursor:pointer;border-bottom:1px solid var(--bd1)}
 .recrow:hover td{background:rgba(108,142,245,0.06)}
 .recrow.selrow td{background:rgba(108,142,245,0.14)}
-label.lbl{font-size:10px;color:#8888a8;display:block;margin-bottom:3px}
-.sec{color:#8888a8;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;margin-top:2px}
-.fmt-btn{background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#8888a8;border-radius:3px;padding:3px 7px;cursor:pointer;font-size:12px;font-weight:700;min-width:26px}
-.fmt-btn:hover{background:#333350}
-.fmt-btn.on{background:#6C8EF5;border-color:#6C8EF5;color:#fff}
-.divider{border:none;border-top:1px solid rgba(255,255,255,0.07);margin:10px 0}
+label.lbl{font-size:10px;color:var(--text2);display:block;margin-bottom:3px}
+.sec{color:var(--text2);font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;margin-top:2px}
+.fmt-btn{background:var(--surface3);border:1px solid var(--bd4);color:var(--text2);border-radius:3px;padding:3px 7px;cursor:pointer;font-size:12px;font-weight:700;min-width:26px}
+.fmt-btn:hover{background:var(--surface4)}
+.fmt-btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.divider{border:none;border-top:1px solid var(--bd2);margin:10px 0}
 .modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.65);display:flex;align-items:center;justify-content:center;z-index:1000}
-.modal{background:#1a1a28;border:1px solid rgba(255,255,255,0.13);border-radius:8px;padding:24px;min-width:420px;max-width:560px;box-shadow:0 8px 40px rgba(0,0,0,0.6)}
-.modal-title{font-size:15px;font-weight:600;color:#e8e8f0;margin-bottom:16px;letter-spacing:-.2px}
+.modal{background:var(--surface);border:1px solid var(--bd4);border-radius:8px;padding:24px;min-width:420px;max-width:560px;box-shadow:0 8px 40px rgba(0,0,0,0.6)}
+.modal-title{font-size:15px;font-weight:600;color:var(--text);margin-bottom:16px;letter-spacing:-.2px}
 .modal-row{margin-bottom:14px}
-.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;border-top:1px solid rgba(255,255,255,0.07);padding-top:16px}
-.tpl-card{background:#252538;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:12px 14px;cursor:pointer;display:flex;align-items:center;gap:12px;margin-bottom:8px}
-.tpl-card:hover{background:#2d2d48;border-color:#6C8EF5}
-.tpl-card.active{border-color:#6C8EF5;background:#2a2a42}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;border-top:1px solid var(--bd2);padding-top:16px}
+.tpl-card{background:var(--surface2);border:1px solid var(--bd3);border-radius:6px;padding:12px 14px;cursor:pointer;display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.tpl-card:hover{background:var(--surface3);border-color:var(--accent)}
+.tpl-card.active{border-color:var(--accent);background:var(--surface3)}
 .tpl-preview{width:60px;height:20px;background:#fff;border:1px solid #ccc;border-radius:2px;flex-shrink:0;position:relative;overflow:hidden}
 </style>
 </head>
@@ -186,7 +188,7 @@ function renderLabel(tpl,rec,scale=1){
       const td=o.underline?"underline":"none";
       const ws=o.wrapText?"normal":"nowrap";
       const sx=(o.stretch||100)/100;
-      const col=e?"#f56c6c":"#000";
+      const col=e?"var(--red)":"#000";
       const txt=(e?`⚠`:v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
       return `<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${Math.max(h,8)}px;${rc}overflow:hidden;display:flex;align-items:${va};padding:0 1px;box-sizing:border-box">
         <div style="width:100%;font-family:'${o.font||"Helvetica Neue"}',Arial,sans-serif;font-size:${fz}px;font-weight:${fw};font-style:${fs};text-decoration:${td};color:${col};white-space:${ws};overflow:hidden;text-overflow:ellipsis;line-height:1.15;text-align:${o.al||"left"};transform:scaleX(${sx});transform-origin:left center">${txt}</div>
@@ -207,7 +209,7 @@ function renderLabel(tpl,rec,scale=1){
     }
     return"";
   }).join("");
-  return`<div style="width:${pw}px;height:${ph}px;background:#fff;border:1.5px solid rgba(255,255,255,0.15);border-radius:2px;position:relative;overflow:hidden;flex-shrink:0">${objs}</div>`;
+  return`<div style="width:${pw}px;height:${ph}px;background:#fff;border:1.5px solid var(--bd4);border-radius:2px;position:relative;overflow:hidden;flex-shrink:0">${objs}</div>`;
 }
 
 // ── Sample data ───────────────────────────────────────────────────────────────
@@ -308,7 +310,7 @@ function colDragStart(e,c){
     if(tile&&tile.cloneNode){
       const cs=getComputedStyle(tile);
       const g=tile.cloneNode(true);
-      g.style.cssText='position:fixed;top:-2000px;left:-2000px;box-sizing:border-box;width:'+tile.offsetWidth+'px;height:'+tile.offsetHeight+'px;background:#2a2a42;border:1px solid #6C8EF5;border-radius:4px;color:#e8e8f0;opacity:0.97;display:flex;align-items:center;overflow:hidden;padding:'+cs.padding+';font:'+cs.font;
+      g.style.cssText='position:fixed;top:-2000px;left:-2000px;box-sizing:border-box;width:'+tile.offsetWidth+'px;height:'+tile.offsetHeight+'px;background:var(--surface3);border:1px solid var(--accent);border-radius:4px;color:var(--text);opacity:0.97;display:flex;align-items:center;overflow:hidden;padding:'+cs.padding+';font:'+cs.font;
       document.body.appendChild(g); _vlGhost=g;
       try{e.dataTransfer.setDragImage(g,16,Math.max(8,tile.offsetHeight/2));}catch(_){}
     }
@@ -319,7 +321,7 @@ function colDragOver(e,el){
   e.preventDefault();
   if(e.dataTransfer)e.dataTransfer.dropEffect='move';
   if(_vlOverEl&&_vlOverEl!==el)_vlOverEl.style.boxShadow='';
-  _vlOverEl=el; if(el)el.style.boxShadow='inset 3px 0 0 #6C8EF5';
+  _vlOverEl=el; if(el)el.style.boxShadow='inset 3px 0 0 var(--accent)';
 }
 function colClearDrag(){
   if(_vlGhost){_vlGhost.remove();_vlGhost=null;}
@@ -350,13 +352,13 @@ function toggleColumn(c){ (window._hiddenColumns||[]).includes(c)?showColumn(c):
 function colHeaderContextMenu(e,c){ e.preventDefault(); hideColumn(c); }
 
 function colHeaderCell(c){
-  return `<div data-colhdr draggable="true" ondragstart="colDragStart(event,'${c}')" ondragover="colDragOver(event,this)" ondragend="colDragEnd(event)" ondrop="colDrop(event,'${c}')" oncontextmenu="colHeaderContextMenu(event,'${c}')" title="Drag to reorder · right-click to hide" style="position:relative;padding:5px 8px;font-size:10px;color:#44445a;font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;cursor:grab;box-sizing:border-box">${esc(colLabel(c))}<div onmousedown="colResizeStart(event,'${c}')" style="position:absolute;top:0;right:0;width:6px;height:100%;cursor:col-resize"></div></div>`;
+  return `<div data-colhdr draggable="true" ondragstart="colDragStart(event,'${c}')" ondragover="colDragOver(event,this)" ondragend="colDragEnd(event)" ondrop="colDrop(event,'${c}')" oncontextmenu="colHeaderContextMenu(event,'${c}')" title="Drag to reorder · right-click to hide" style="position:relative;padding:5px 8px;font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;cursor:grab;box-sizing:border-box">${esc(colLabel(c))}<div onmousedown="colResizeStart(event,'${c}')" style="position:absolute;top:0;right:0;width:6px;height:100%;cursor:col-resize"></div></div>`;
 }
 function colDataCell(c,r){
   const v=r[c]; const has=v!==undefined&&v!=='';
   const val=has?String(v):'—';
   if(c==='_Side'){const side=v==='Source'?'src':'dst';return`<div class="rec-cell" style="white-space:normal;display:flex;align-items:center"><span class="tag ${side}">${esc(val)}</span></div>`;}
-  return`<div class="rec-cell" style="white-space:normal;overflow-wrap:anywhere;word-break:break-word;color:${has?'#e8e8f0':'#44445a'};${(c==='Number'&&has)?'font-weight:600;':''}">${esc(val)}</div>`;
+  return`<div class="rec-cell" style="white-space:normal;overflow-wrap:anywhere;word-break:break-word;color:${has?'var(--text)':'var(--text3)'};${(c==='Number'&&has)?'font-weight:600;':''}">${esc(val)}</div>`;
 }
 
 function toggleColumnsMenu(){ window._colMenuOpen=!window._colMenuOpen; R(); }
@@ -364,11 +366,11 @@ function buildColumnsMenu(){
   if(!window._colMenuOpen)return '';
   const cols=recordColumns(currentRecords());
   const hidden=new Set(window._hiddenColumns||[]);
-  return `<div onclick="event.stopPropagation()" style="position:absolute;right:16px;top:26px;z-index:30;background:#1e1e2e;border:1px solid rgba(255,255,255,0.15);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.5);padding:5px;max-height:300px;overflow-y:auto;min-width:200px">
-    <div style="font-size:9px;color:#44445a;text-transform:uppercase;letter-spacing:1px;padding:3px 6px 5px">Columns</div>
+  return `<div onclick="event.stopPropagation()" style="position:absolute;right:16px;top:26px;z-index:30;background:var(--surface);border:1px solid var(--bd4);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.5);padding:5px;max-height:300px;overflow-y:auto;min-width:200px">
+    <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;padding:3px 6px 5px">Columns</div>
     ${cols.map(c=>`<div draggable="true" ondragstart="colDragStart(event,'${c}')" ondragover="colDragOver(event,this)" ondragend="colDragEnd(event)" ondrop="colDrop(event,'${c}')" style="display:flex;align-items:center;gap:7px;padding:3px 6px;border-radius:4px">
-      <span title="Drag to reorder" style="cursor:grab;color:#6b6f7d;font-size:12px;user-select:none">⋮⋮</span>
-      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;font-size:12px;color:#e8e8f0">
+      <span title="Drag to reorder" style="cursor:grab;color:var(--text2);font-size:12px;user-select:none">⋮⋮</span>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;font-size:12px;color:var(--text)">
         <input type="checkbox" ${hidden.has(c)?'':'checked'} onchange="toggleColumn('${c}')"> ${esc(colLabel(c))}
       </label>
     </div>`).join('')}
@@ -717,14 +719,14 @@ function renderFilterGroup(g,gi,multi){
         <select class="inp" style="width:120px;flex-shrink:0" onchange="fdSet(${gi},${ri},'op',this.value)">${opOpts(r.op)}</select>
         ${valTypeToggle}
         ${valCell}
-        <button onclick="fdRemoveRule(${gi},${ri})" title="Remove this condition" ${g.rules.length<=1?'disabled':''} style="flex-shrink:0;background:rgba(245,108,108,0.12);border:1px solid rgba(245,108,108,0.3);color:#f56c6c;border-radius:5px;padding:3px 9px;cursor:pointer;font-size:13px">×</button>
+        <button onclick="fdRemoveRule(${gi},${ri})" title="Remove this condition" ${g.rules.length<=1?'disabled':''} style="flex-shrink:0;background:rgba(245,108,108,0.12);border:1px solid rgba(245,108,108,0.3);color:var(--red);border-radius:5px;padding:3px 9px;cursor:pointer;font-size:13px">×</button>
       </div>
     </div>`;
   }).join('');
   return `<div style="border:1px solid rgba(108,142,245,0.25);border-radius:7px;padding:10px 12px;background:rgba(108,142,245,0.04)">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-      <span style="color:#6C8EF5;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Group ${gi+1}</span>
-      ${multi?`<button onclick="fdRemoveGroup(${gi})" title="Remove this group" style="background:rgba(245,108,108,0.12);border:1px solid rgba(245,108,108,0.3);color:#f56c6c;border-radius:5px;padding:2px 8px;cursor:pointer;font-size:11px">Remove group</button>`:''}
+      <span style="color:var(--accent);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Group ${gi+1}</span>
+      ${multi?`<button onclick="fdRemoveGroup(${gi})" title="Remove this group" style="background:rgba(245,108,108,0.12);border:1px solid rgba(245,108,108,0.3);color:var(--red);border-radius:5px;padding:2px 8px;cursor:pointer;font-size:11px">Remove group</button>`:''}
     </div>
     ${rowsHtml}
     <button class="btn" onclick="fdAddRule(${gi})" title="Add a condition to this group" style="margin-top:4px;font-size:11px">+ Add condition</button>
@@ -736,9 +738,9 @@ function renderFilterModal(){
   const multi=d.groups.length>1;
   const groupsHtml=d.groups.map((g,gi)=>{
     const between = gi>0 ? `<div style="display:flex;align-items:center;gap:8px;margin:8px 0">
-        <div style="flex:1;height:1px;background:rgba(255,255,255,0.08)"></div>
+        <div style="flex:1;height:1px;background:var(--bd2)"></div>
         ${connToggle(d.groupConnectors[gi-1]||'or',`fdSetGroupConn(${gi-1},`)}
-        <div style="flex:1;height:1px;background:rgba(255,255,255,0.08)"></div>
+        <div style="flex:1;height:1px;background:var(--bd2)"></div>
       </div>` : '';
     return between+renderFilterGroup(g,gi,multi);
   }).join('');
@@ -749,15 +751,15 @@ function renderFilterModal(){
     <div class="modal-title">Filter records</div>
     <div style="max-height:380px;overflow-y:auto;padding-right:2px;display:flex;flex-direction:column;gap:2px">${groupsHtml}</div>
     <button class="btn" onclick="fdAddGroup()" title="Add another group of conditions" style="margin-top:8px;font-size:12px">+ Add group</button>
-    <label style="display:flex;align-items:center;gap:8px;margin-top:16px;cursor:pointer;color:#cfcfe0;font-size:12px">
+    <label style="display:flex;align-items:center;gap:8px;margin-top:16px;cursor:pointer;color:var(--text-soft);font-size:12px">
       <input type="checkbox" ${d.showBothSides?'checked':''} onchange="fdSetBoth(this.checked)">
       Show Source and Destination when only Source or Destination matches
     </label>
     <div class="modal-footer" style="justify-content:space-between">
-      <div>${P.filter?`<button class="btn" onclick="clearFilter()" style="color:#f5c96c;border-color:rgba(245,201,108,0.4)">Clear filter</button>`:''}</div>
+      <div>${P.filter?`<button class="btn" onclick="clearFilter()" style="color:var(--warn);border-color:rgba(245,201,108,0.4)">Clear filter</button>`:''}</div>
       <div style="display:flex;gap:8px">
         <button class="btn" onclick="closeFilterModal()">Cancel</button>
-        <button class="btn" onclick="applyFilterDraft()" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600">Apply filter</button>
+        <button class="btn" onclick="applyFilterDraft()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Apply filter</button>
       </div>
     </div>
   </div>`;
@@ -773,34 +775,34 @@ function buildPreviewPanel(){
   const total=vis.length;
   const prevIdx=vpos>0?vis[vpos-1]:P.previewIdx;
   const nextIdx=vpos>=0&&vpos<total-1?vis[vpos+1]:P.previewIdx;
-  if(!t||!rec)return`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#44445a;font-size:12px">No template selected</div>`;
+  if(!t||!rec)return`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:12px">No template selected</div>`;
   const spec=BL.find(l=>l.n===t.specN)||BL[1];
   const scale=0.9;
   return`<div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:20px">
     <div style="display:flex;align-items:center;gap:6px;width:100%;justify-content:center">
       <button onclick="P.previewIdx=${prevIdx};R()" title="Previous label" class="btn" style="padding:3px 10px;font-size:15px;line-height:1" ${vpos<=0?"disabled":""}>‹</button>
-      <span style="color:#8888a8;font-size:11px;min-width:60px;text-align:center">${vpos+1} / ${total}</span>
+      <span style="color:var(--text2);font-size:11px;min-width:60px;text-align:center">${vpos+1} / ${total}</span>
       <button onclick="P.previewIdx=${nextIdx};R()" title="Next label" class="btn" style="padding:3px 10px;font-size:15px;line-height:1" ${vpos>=total-1?"disabled":""}>›</button>
     </div>
     ${renderLabel(t,rec,scale)}
     <div style="text-align:center">
-      <div style="color:#e8e8f0;font-size:12px;font-weight:600">${rec.Number||"—"} ${rec.Cable||""}</div>
-      <div style="color:#8888a8;font-size:11px;margin-top:2px">${rec._Side} label</div>
+      <div style="color:var(--text);font-size:12px;font-weight:600">${rec.Number||"—"} ${rec.Cable||""}</div>
+      <div style="color:var(--text2);font-size:11px;margin-top:2px">${rec._Side} label</div>
     </div>
     <div class="print-info" style="width:100%;max-width:260px">
       <label class="lbl">Required supply</label>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-        <div style="color:#e8e8f0;font-size:12px;font-weight:600;font-family:monospace">${requiredSupplyDisplay(t.specN)}</div>
-        ${cassetteMatched()?`<span title="Loaded cassette matches the required supply" style="color:#5cc896;font-size:22px;line-height:1;font-weight:800">✓</span>`
-          :cassetteMismatch()?`<span title="Loaded ${loadedCassette().partNumber} doesn't match — the label may print misaligned or cropped" style="color:#f56c6c;font-size:13px;line-height:1;white-space:nowrap">⚠ mismatch</span>`:""}
+        <div style="color:var(--text);font-size:12px;font-weight:600;font-family:monospace">${requiredSupplyDisplay(t.specN)}</div>
+        ${cassetteMatched()?`<span title="Loaded cassette matches the required supply" style="color:var(--green);font-size:22px;line-height:1;font-weight:800">✓</span>`
+          :cassetteMismatch()?`<span title="Loaded ${loadedCassette().partNumber} doesn't match — the label may print misaligned or cropped" style="color:var(--red);font-size:13px;line-height:1;white-space:nowrap">⚠ mismatch</span>`:""}
       </div>
       <div style="display:flex;justify-content:space-between;gap:8px;margin-top:7px;font-size:11px">
-        <span style="color:#8888a8">Label size</span>
-        <span style="color:#e8e8f0;font-family:monospace">${fmtIn(spec.tw)} × ${fmtIn(spec.th)}</span>
+        <span style="color:var(--text2)">Label size</span>
+        <span style="color:var(--text);font-family:monospace">${fmtIn(spec.tw)} × ${fmtIn(spec.th)}</span>
       </div>
       <div style="display:flex;justify-content:space-between;gap:8px;margin-top:2px;font-size:11px">
-        <span style="color:#8888a8">Printable area</span>
-        <span style="color:#e8e8f0;font-family:monospace">${fmtIn(spec.pw)} × ${fmtIn(spec.ph)}</span>
+        <span style="color:var(--text2)">Printable area</span>
+        <span style="color:var(--text);font-family:monospace">${fmtIn(spec.pw)} × ${fmtIn(spec.ph)}</span>
       </div>
     </div>
   </div>`;
@@ -813,13 +815,13 @@ function buildRecordTable(){
     {f:"Signal",c:"Signal"},{f:"Device",c:"Device_Name"},{f:"Socket",c:"Socket_Name"}
   ];
   const allChk=P.selected.size===P.records.length?"chk":P.selected.size>0?"partial":"";
-  const hdr=`<div class="rec-row" style="background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.1);position:sticky;top:0;z-index:2">
+  const hdr=`<div class="rec-row" style="background:var(--surface);border-bottom:1px solid var(--bd3);position:sticky;top:0;z-index:2">
     <div class="rec-cell" style="display:flex;align-items:center;justify-content:center">
       <div class="cb ${allChk}" onclick="toggleAll()" title="Select all">
         <span class="check-tick">${allChk==="chk"?"✓":allChk==="partial"?"−":""}</span>
       </div>
     </div>
-    <div class="rec-cell rec-hdr" title="Toggle pair" style="text-align:center;color:#44445a;font-size:9px">⇅</div>
+    <div class="rec-cell rec-hdr" title="Toggle pair" style="text-align:center;color:var(--text3);font-size:9px">⇅</div>
     <div class="rec-cell rec-hdr">#</div>
     ${cols.map(c=>`<div class="rec-cell rec-hdr">${c.f}</div>`).join("")}
   </div>`;
@@ -832,13 +834,13 @@ function buildRecordTable(){
       <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();toggleSel(${i})">
         <div class="cb ${isSel?"chk":""}"><span class="check-tick">${isSel?"✓":""}</span></div>
       </div>
-      <div class="rec-cell" style="color:#44445a;font-size:10px">${i+1}</div>
+      <div class="rec-cell" style="color:var(--text3);font-size:10px">${i+1}</div>
       <div class="rec-cell"><span class="tag ${side}">${r._Side}</span></div>
-      <div class="rec-cell" style="color:${r.Number?"#e8e8f0":"#44445a"};font-weight:${r.Number?600:400}">${r.Number||"—"}</div>
-      <div class="rec-cell" style="color:#8888a8">${r.Cable||"—"}</div>
-      <div class="rec-cell" style="color:#8888a8">${r.Signal||"—"}</div>
-      <div class="rec-cell" style="color:#8888a8">${(r.Device_Name||"—").substring(0,18)}</div>
-      <div class="rec-cell" style="color:#8888a8">${(r.Socket_Name||"—").substring(0,14)}</div>
+      <div class="rec-cell" style="color:${r.Number?"var(--text)":"var(--text3)"};font-weight:${r.Number?600:400}">${r.Number||"—"}</div>
+      <div class="rec-cell" style="color:var(--text2)">${r.Cable||"—"}</div>
+      <div class="rec-cell" style="color:var(--text2)">${r.Signal||"—"}</div>
+      <div class="rec-cell" style="color:var(--text2)">${(r.Device_Name||"—").substring(0,18)}</div>
+      <div class="rec-cell" style="color:var(--text2)">${(r.Socket_Name||"—").substring(0,14)}</div>
     </div>`;
   }).join("");
 
@@ -850,25 +852,25 @@ function buildRecordTable(){
 // ── Template selector ─────────────────────────────────────────────────────────
 function buildTemplateBar(){
   const t=tpl();
-  return`<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 16px;background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.07);flex-shrink:0">
+  return`<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 16px;background:var(--surface);border-bottom:1px solid var(--bd2);flex-shrink:0">
     <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;padding-top:3px">
-      <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px;white-space:nowrap">Template</span>
-      ${t?`<label title="Pre-select this template every time the print window opens" style="display:flex;align-items:center;gap:5px;cursor:pointer;color:#8888a8;font-size:10px;white-space:nowrap">
+      <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px;white-space:nowrap">Template</span>
+      ${t?`<label title="Pre-select this template every time the print window opens" style="display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--text2);font-size:10px;white-space:nowrap">
         <input type="checkbox" ${P._makeDefaultChecked?"checked":""} onchange="toggleDefaultTemplate(this.checked)" style="cursor:pointer;margin:0">
         Make default
       </label>`:""}
     </div>
     <div style="display:flex;gap:6px;flex:1;overflow-x:auto;padding-bottom:2px">
       ${P.templates.map((tl,i)=>`
-        <div style="display:flex;align-items:center;gap:0;background:${P.activeTpl===i?"#2a2a42":"#252538"};border:1px solid ${P.activeTpl===i?"#6C8EF5":"rgba(255,255,255,0.1)"};border-radius:5px;overflow:hidden;flex-shrink:0;white-space:nowrap">
+        <div style="display:flex;align-items:center;gap:0;background:${P.activeTpl===i?"var(--surface3)":"var(--surface2)"};border:1px solid ${P.activeTpl===i?"var(--accent)":"var(--bd3)"};border-radius:5px;overflow:hidden;flex-shrink:0;white-space:nowrap">
           <div onclick="P.activeTpl=${i};P._makeDefaultChecked=false;R()" style="display:flex;align-items:center;gap:8px;padding:5px 10px;cursor:pointer">
             ${renderLabel(tl,P.records[0]||{},0.25)}
             <div>
-              <div style="color:#e8e8f0;font-size:12px;font-weight:${P.activeTpl===i?600:400}">${tl.name}</div>
-              <div style="color:#44445a;font-size:10px;margin-top:1px">${tl.specN}</div>
+              <div style="color:var(--text);font-size:12px;font-weight:${P.activeTpl===i?600:400}">${tl.name}</div>
+              <div style="color:var(--text3);font-size:10px;margin-top:1px">${tl.specN}</div>
             </div>
           </div>
-          ${P.activeTpl===i?`<button onclick="openEditor()" style="background:rgba(108,142,245,0.15);border:none;border-left:1px solid rgba(108,142,245,0.3);color:#6C8EF5;padding:0 10px;height:100%;cursor:pointer;font-size:11px;font-weight:600">Edit</button>`:""}
+          ${P.activeTpl===i?`<button onclick="openEditor()" style="background:rgba(108,142,245,0.15);border:none;border-left:1px solid rgba(108,142,245,0.3);color:var(--accent);padding:0 10px;height:100%;cursor:pointer;font-size:11px;font-weight:600">Edit</button>`:""}
         </div>`).join("")}
       <button class="btn" onclick="loadTemplateFile()" style="flex-shrink:0;padding:5px 10px;font-size:11px">+ Load template…</button>
     </div>
@@ -949,34 +951,34 @@ function buildPrintBar(){
   const pCount=printCount();
   const canPrint=t&&pCount>0&&pr.status==="ready";
 
-  return`<div style="background:#1e1e2e;border-top:1px solid rgba(255,255,255,0.1);padding:10px 16px;display:flex;align-items:center;gap:14px;flex-shrink:0;flex-wrap:wrap">
+  return`<div style="background:var(--surface);border-top:1px solid var(--bd3);padding:10px 16px;display:flex;align-items:center;gap:14px;flex-shrink:0;flex-wrap:wrap">
 
     <!-- Selection controls -->
     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-      <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-right:2px">Labels</span>
+      <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-right:2px">Labels</span>
       <button class="btn" onclick="toggleAll()" style="padding:3px 8px;font-size:11px">${nSel===total?"Deselect all":"Select all"}</button>
-      <div style="width:1px;height:14px;background:rgba(255,255,255,0.08)"></div>
-      <button class="btn" onclick="selectSide('Source')" style="padding:3px 8px;font-size:11px;color:#6C8EF5;border-color:rgba(108,142,245,0.3)">Sources</button>
-      <button class="btn" onclick="selectSide('Destination')" style="padding:3px 8px;font-size:11px;color:#5cc896;border-color:rgba(92,200,150,0.3)">Destinations</button>
-      <span style="color:#8888a8;font-size:12px">${nSel} of ${total}</span>
+      <div style="width:1px;height:14px;background:var(--bd2)"></div>
+      <button class="btn" onclick="selectSide('Source')" style="padding:3px 8px;font-size:11px;color:var(--accent);border-color:rgba(108,142,245,0.3)">Sources</button>
+      <button class="btn" onclick="selectSide('Destination')" style="padding:3px 8px;font-size:11px;color:var(--green);border-color:rgba(92,200,150,0.3)">Destinations</button>
+      <span style="color:var(--text2);font-size:12px">${nSel} of ${total}</span>
     </div>
 
     <!-- Divider -->
-    <div style="width:1px;height:20px;background:rgba(255,255,255,0.08)"></div>
+    <div style="width:1px;height:20px;background:var(--bd2)"></div>
 
     <!-- Range selector inline -->
     <div style="display:flex;align-items:center;gap:6px">
-      <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px">Print</span>
+      <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Print</span>
       ${["selected","all","range"].map(v=>`
-        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;padding:3px 8px;border-radius:4px;border:1px solid ${P.printRange===v?"#6C8EF5":"rgba(255,255,255,0.1)"};background:${P.printRange===v?"rgba(108,142,245,0.12)":"transparent"}">
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;padding:3px 8px;border-radius:4px;border:1px solid ${P.printRange===v?"var(--accent)":"var(--bd3)"};background:${P.printRange===v?"rgba(108,142,245,0.12)":"transparent"}">
           <input type="radio" name="prange" value="${v}" ${P.printRange===v?"checked":""} onchange="P.printRange='${v}';R()" style="display:none">
-          <span style="color:${P.printRange===v?"#e8e8f0":"#8888a8"};font-size:11px">${v==="selected"?"Selected ("+nSel+")":v==="all"?"All ("+total+")":"Range"}</span>
+          <span style="color:${P.printRange===v?"var(--text)":"var(--text2)"};font-size:11px">${v==="selected"?"Selected ("+nSel+")":v==="all"?"All ("+total+")":"Range"}</span>
         </label>`).join("")}
       ${P.printRange==="range"?`
         <input type="number" class="inp" min="1" max="${total}" value="${P.rangeFrom}" style="width:54px;padding:3px 6px;font-size:11px" onchange="P.rangeFrom=Math.max(1,Math.min(parseInt(this.value)||1,${total}));R()">
-        <span style="color:#44445a">–</span>
+        <span style="color:var(--text3)">–</span>
         <input type="number" class="inp" min="1" max="${total}" value="${P.rangeTo}" style="width:54px;padding:3px 6px;font-size:11px" onchange="P.rangeTo=Math.max(1,Math.min(parseInt(this.value)||${total},${total}));R()">
-        <span style="color:#44445a;font-size:11px">(${Math.max(0,P.rangeTo-P.rangeFrom+1)})</span>`:""}
+        <span style="color:var(--text3);font-size:11px">(${Math.max(0,P.rangeTo-P.rangeFrom+1)})</span>`:""}
     </div>
 
     <div style="flex:1"></div>
@@ -990,15 +992,15 @@ function buildPrintBar(){
             ? `<option value="">No printers connected</option>`
             : (window._swiftPrinters||PRINTERS).map(p=>`<option value="${p.id}" ${P.activePrinter===p.id?"selected":""}>${p.name}${p.serial?" — "+p.serial:""}</option>`).join("")}
         </select>
-        <div style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:${pr.status==="ready"?"#5cc896":pr.status==="busy"?"#f5c96c":"#f56c6c"};pointer-events:none"></div>
-        <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:#8888a8;font-size:9px;pointer-events:none">▼</div>
+        <div style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:${pr.status==="ready"?"var(--green)":pr.status==="busy"?"var(--warn)":"var(--red)"};pointer-events:none"></div>
+        <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:9px;pointer-events:none">▼</div>
       </div>
-      <div style="font-size:11px;${pr.status==="ready"?"color:#5cc896":pr.status==="busy"?"color:#f5c96c":"color:#f56c6c"}">
+      <div style="font-size:11px;${pr.status==="ready"?"color:var(--green)":pr.status==="busy"?"color:var(--warn)":"color:var(--red)"}">
         ${pr.status==="ready"?"Ready":pr.status==="busy"?"Busy":"Offline"}
       </div>
       ${(()=>{const c=loadedCassette();
         if(!c||!c.partNumber)return `<button class="btn" onclick="detectCassette()" style="padding:3px 8px;font-size:10px">Detect supply</button>`;
-        return `<div onclick="detectCassette()" title="${c.partNumber} — click to re-detect" style="cursor:pointer;font-size:11px;color:#8888a8;white-space:nowrap">${c.partNumber}</div>`;
+        return `<div onclick="detectCassette()" title="${c.partNumber} — click to re-detect" style="cursor:pointer;font-size:11px;color:var(--text2);white-space:nowrap">${c.partNumber}</div>`;
       })()}
     </div>
 
@@ -1108,7 +1110,7 @@ function buildPrintingModal(){
       <div class="modal" style="width:380px;text-align:center">
         <div style="font-size:40px;margin-bottom:12px">✓</div>
         <div class="modal-title" style="justify-content:center">Print complete</div>
-        <div style="color:#8888a8;font-size:13px;margin-bottom:20px">${printCount()} label${printCount()!==1?"s":""} sent to ${printer().name}</div>
+        <div style="color:var(--text2);font-size:13px;margin-bottom:20px">${printCount()} label${printCount()!==1?"s":""} sent to ${printer().name}</div>
         <button class="btn primary" onclick="P.modal=null;P._printProgress=null;R()" style="width:100%;padding:9px">Done</button>
       </div>
     </div>`;
@@ -1118,11 +1120,11 @@ function buildPrintingModal(){
   return`<div class="modal-overlay" id="print-progress">
     <div class="modal" style="width:380px">
       <div class="modal-title">Printing…</div>
-      <div style="color:#8888a8;font-size:13px;margin-bottom:16px" class="prog-txt">Preparing ${n} labels…</div>
-      <div style="background:#252538;border-radius:4px;overflow:hidden;height:6px;margin-bottom:8px">
-        <div class="prog-bar" style="height:100%;background:#6C8EF5;border-radius:4px;transition:width .1s;width:${pct}%"></div>
+      <div style="color:var(--text2);font-size:13px;margin-bottom:16px" class="prog-txt">Preparing ${n} labels…</div>
+      <div style="background:var(--surface2);border-radius:4px;overflow:hidden;height:6px;margin-bottom:8px">
+        <div class="prog-bar" style="height:100%;background:var(--accent);border-radius:4px;transition:width .1s;width:${pct}%"></div>
       </div>
-      <div style="color:#44445a;font-size:11px;text-align:right">${pct}%</div>
+      <div style="color:var(--text3);font-size:11px;text-align:right">${pct}%</div>
     </div>
   </div>`;
 }
@@ -1234,7 +1236,7 @@ function R(){
   // Hold a neutral loading screen until Swift has injected the real records,
   // so no sample/previous data flashes before the correct file appears.
   if(!P._ready){
-    document.getElementById("app").innerHTML=`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#44445a;font-size:13px">Loading…</div>`;
+    document.getElementById("app").innerHTML=`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:13px">Loading…</div>`;
     return;
   }
   const t=tpl();
@@ -1246,14 +1248,14 @@ function R(){
   const _prevScroll=(document.getElementById("recScroll")||{}).scrollTop||0;
   document.getElementById("app").innerHTML=`
     <!-- Top bar -->
-    <div style="background:#1e1e2e;border-bottom:1px solid rgba(255,255,255,0.07);padding:0 16px;display:flex;align-items:center;gap:12px;height:44px;flex-shrink:0">
-      <span style="color:#6C8EF5;font-weight:700;font-size:15px;letter-spacing:-.3px">VectorLabel</span>
-      <span style="color:#44445a;font-size:11px">Print</span>
-      <div style="width:1px;height:20px;background:rgba(255,255,255,0.08)"></div>
-      <span style="color:#8888a8;font-size:11px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${P.sourceFile}">${P.sourceFile}</span>
+    <div style="background:var(--surface);border-bottom:1px solid var(--bd2);padding:0 16px;display:flex;align-items:center;gap:12px;height:44px;flex-shrink:0">
+      <span style="color:var(--accent);font-weight:700;font-size:15px;letter-spacing:-.3px">VectorLabel</span>
+      <span style="color:var(--text3);font-size:11px">Print</span>
+      <div style="width:1px;height:20px;background:var(--bd2)"></div>
+      <span style="color:var(--text2);font-size:11px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${P.sourceFile}">${P.sourceFile}</span>
       <div style="flex:1"></div>
       <button class="btn" onclick="loadCSV()" style="font-size:11px">Load CSV…</button>
-      <button class="btn" onclick="cancelAndClose()" style="color:#f56c6c;border-color:rgba(245,108,108,0.3);font-size:11px">✕ Cancel</button>
+      <button class="btn" onclick="cancelAndClose()" style="color:var(--red);border-color:rgba(245,108,108,0.3);font-size:11px">✕ Cancel</button>
     </div>
 
     <!-- Template bar -->
@@ -1265,22 +1267,22 @@ function R(){
       <!-- Record table -->
       <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0">
         <!-- Table header info -->
-        <div style="position:relative;padding:7px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0;border-bottom:1px solid rgba(255,255,255,0.05)">
-          <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px">Labels</span>
+        <div style="position:relative;padding:7px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0;border-bottom:1px solid var(--bd1)">
+          <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Labels</span>
           ${filterActive()
-            ? `<span style="color:#8888a8;font-size:11px">${visibleIndices().length} of ${P.records.length} shown</span>`
-            : `<span style="color:#8888a8;font-size:11px">${P.records.length} total · click row to preview · checkbox to select</span>`}
+            ? `<span style="color:var(--text2);font-size:11px">${visibleIndices().length} of ${P.records.length} shown</span>`
+            : `<span style="color:var(--text2);font-size:11px">${P.records.length} total · click row to preview · checkbox to select</span>`}
           <div style="flex:1"></div>
           <button class="btn${filterActive()?' on':''}" onclick="event.stopPropagation();openFilterModal()" style="padding:2px 8px;font-size:11px" title="Filter which records are shown and printed">⧩ Filter</button>
-          ${filterActive()?`<button class="btn" onclick="event.stopPropagation();clearFilter()" style="padding:2px 8px;font-size:11px;color:#f5c96c;border-color:rgba(245,201,108,0.4)">Clear filter</button>`:""}
+          ${filterActive()?`<button class="btn" onclick="event.stopPropagation();clearFilter()" style="padding:2px 8px;font-size:11px;color:var(--warn);border-color:rgba(245,201,108,0.4)">Clear filter</button>`:""}
           <button class="btn${window._colMenuOpen?' on':''}" onclick="event.stopPropagation();toggleColumnsMenu()" style="padding:2px 8px;font-size:11px">Columns ▾</button>
           ${buildColumnsMenu()}
         </div>
         <!-- Active-filter summary, shown directly above the records -->
-        ${filterActive()?`<div style="padding:5px 16px;background:rgba(108,142,245,0.08);border-bottom:1px solid rgba(108,142,245,0.18);font-size:11px;color:#aab4e8;display:flex;align-items:center;gap:6px;flex-shrink:0">
-          <span style="color:#6C8EF5;font-weight:600;flex-shrink:0">Filter:</span>
+        ${filterActive()?`<div style="padding:5px 16px;background:rgba(108,142,245,0.08);border-bottom:1px solid rgba(108,142,245,0.18);font-size:11px;color:var(--accent-soft);display:flex;align-items:center;gap:6px;flex-shrink:0">
+          <span style="color:var(--accent);font-weight:600;flex-shrink:0">Filter:</span>
           <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(filterSummary())}">${esc(filterSummary())}</span>
-          ${P.filter.showBothSides?`<span style="color:#6a6a82;flex-shrink:0">· incl. matching pairs</span>`:""}
+          ${P.filter.showBothSides?`<span style="color:var(--text2);flex-shrink:0">· incl. matching pairs</span>`:""}
         </div>`:""}
         <!-- Grid headers -->
         ${(()=>{
@@ -1289,7 +1291,7 @@ function R(){
           const vis=visibleIndices();
           const allSel=vis.length>0&&vis.every(i=>P.selected.has(i));
           const someSel=vis.some(i=>P.selected.has(i));
-          const header=`<div class="rec-row" style="grid-template-columns:${gridT};position:sticky;top:0;z-index:3;background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.1)">
+          const header=`<div class="rec-row" style="grid-template-columns:${gridT};position:sticky;top:0;z-index:3;background:var(--surface);border-bottom:1px solid var(--bd3)">
             <div class="rec-cell" style="display:flex;align-items:center;justify-content:center">
               <div class="cb ${allSel?"chk":someSel?"partial":""}" onclick="toggleAll()">
                 <span class="check-tick">${allSel?"✓":someSel?"−":""}</span>
@@ -1300,7 +1302,7 @@ function R(){
             ${cols.map(colHeaderCell).join('')}
           </div>`;
           if(vis.length===0){
-            return`<div id="recScroll" style="overflow:auto;flex:1"><div style="min-width:max-content">${header}<div style="padding:30px 16px;text-align:center;color:#8888a8;font-size:12px">No records match the current filter.</div></div></div>`;
+            return`<div id="recScroll" style="overflow:auto;flex:1"><div style="min-width:max-content">${header}<div style="padding:30px 16px;text-align:center;color:var(--text2);font-size:12px">No records match the current filter.</div></div></div>`;
           }
           const rows=vis.map((i,vpos)=>{
             const r=P.records[i];
@@ -1312,11 +1314,11 @@ function R(){
                 <div class="cb ${isSel?"chk":""}"><span class="check-tick">${isSel?"✓":""}</span></div>
               </div>
               <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();if(event.shiftKey&&P.lastClickIdx!==null){const lo=Math.min(P.lastClickIdx,${i}),hi=Math.max(P.lastClickIdx,${i});for(let j=lo;j<=hi;j++)P.selected.add(j);P.printRange='selected';R();}else{P.lastClickIdx=${i};togglePair(${i});}" title="Toggle Source + Destination pair — Shift+click to range select">
-                <div style="width:18px;height:14px;border:1.5px solid ${ps2?'rgba(108,142,245,0.6)':'rgba(255,255,255,0.1)'};border-radius:3px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:${ps2==='chk'?'rgba(108,142,245,0.2)':ps2==='partial'?'rgba(108,142,245,0.08)':'transparent'}">
-                  <span style="color:${ps2?'#6C8EF5':'rgba(255,255,255,0.15)'};font-size:8px;line-height:1">⇅</span>
+                <div style="width:18px;height:14px;border:1.5px solid ${ps2?'rgba(108,142,245,0.6)':'var(--bd3)'};border-radius:3px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:${ps2==='chk'?'rgba(108,142,245,0.2)':ps2==='partial'?'rgba(108,142,245,0.08)':'transparent'}">
+                  <span style="color:${ps2?'var(--accent)':'var(--bd4)'};font-size:8px;line-height:1">⇅</span>
                 </div>
               </div>
-              <div class="rec-cell" style="display:flex;align-items:center;color:#44445a;font-size:10px">${vpos+1}</div>
+              <div class="rec-cell" style="display:flex;align-items:center;color:var(--text3);font-size:10px">${vpos+1}</div>
               ${cols.map(c=>colDataCell(c,r)).join('')}
             </div>`;
           }).join("");
@@ -1325,7 +1327,7 @@ function R(){
       </div>
 
       <!-- Right: preview panel -->
-      <div style="width:280px;background:#1a1a28;border-left:1px solid rgba(255,255,255,0.07);overflow-y:auto;flex-shrink:0">
+      <div style="width:280px;background:var(--surface);border-left:1px solid var(--bd2);overflow-y:auto;flex-shrink:0">
         ${buildPreviewPanel()}
       </div>
     </div>
@@ -1384,7 +1386,7 @@ function showToast(msg){
   let t=document.getElementById("vl-toast");
   if(!t){t=document.createElement("div");t.id="vl-toast";
     Object.assign(t.style,{position:"fixed",bottom:"24px",left:"50%",transform:"translateX(-50%)",
-      background:"#2a2a42",border:"1px solid rgba(108,142,245,0.4)",color:"#e8e8f0",
+      background:"var(--surface3)",border:"1px solid rgba(108,142,245,0.4)",color:"var(--text)",
       borderRadius:"6px",padding:"8px 18px",fontSize:"12px",zIndex:"2000",
       boxShadow:"0 4px 20px rgba(0,0,0,0.5)",transition:"opacity 0.3s",pointerEvents:"none"});
     document.body.appendChild(t);}
@@ -1519,6 +1521,7 @@ P._ready = !(window.webkit && window.webkit.messageHandlers && window.webkit.mes
 R();
 // Notify Swift that the page has rendered and is ready for initPrintWindow()
 window.addEventListener("load",notifyReady);
+function setTheme(m){document.documentElement.dataset.theme=(m==="light"?"light":"");}
 </script>
 </body>
 </html>

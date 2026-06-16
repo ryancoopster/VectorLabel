@@ -365,6 +365,22 @@ struct PreferencesView: View {
         VStack(alignment: .leading, spacing: 0) {
 PrefSection(title: "App Behaviour") {
                 PrefRow(
+                    label: "Appearance",
+                    caption: "Switch the menu, Preferences, print, and designer windows between dark and light."
+                ) {
+                    Picker("", selection: Binding(
+                        get: { settings.appearance },
+                        set: { settings.appearance = $0 }
+                    )) {
+                        Text("Dark").tag("dark")
+                        Text("Light").tag("light")
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 140)
+                }
+                PrefDivider()
+                PrefRow(
                     label: "Show VectorLabel in Dock",
                     caption: "By default VectorLabel runs as a menu-bar-only app. Enable this to also show an icon in the Dock."
                 ) {

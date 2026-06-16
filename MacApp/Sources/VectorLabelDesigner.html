@@ -5,38 +5,40 @@
 <title>VectorLabel Template Designer</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;overflow:hidden;background:#13131a;color:#e8e8f0;font-family:system-ui,sans-serif;font-size:13px}
+:root{--bg2:#13131a;--canvas:#0d0d14;--surface:#1a1a28;--surface2:#252538;--surface3:#2a2a42;--surface4:#333350;--text:#e8e8f0;--text-soft:#cfcfe0;--text2:#8888a8;--text3:#44445a;--accent:#6C8EF5;--accent2:#4a6cd4;--accent-soft:#aab4e8;--green:#5cc896;--warn:#f5c96c;--red:#f56c6c;--bd1:rgba(255,255,255,0.05);--bd2:rgba(255,255,255,0.08);--bd3:rgba(255,255,255,0.1);--bd4:rgba(255,255,255,0.14);--bd5:rgba(255,255,255,0.2)}
+html[data-theme="light"]{--bg2:#e6e8ee;--canvas:#c9ccd4;--surface:#ffffff;--surface2:#eceef3;--surface3:#e1e4ec;--surface4:#d2d6e0;--text:#1b1c24;--text-soft:#2c2d36;--text2:#5d6070;--text3:#9499a8;--accent:#4a6cd4;--accent2:#3a5ec4;--accent-soft:#3550b0;--green:#1f9d63;--warn:#b5790a;--red:#d63b3b;--bd1:rgba(0,0,0,0.06);--bd2:rgba(0,0,0,0.10);--bd3:rgba(0,0,0,0.13);--bd4:rgba(0,0,0,0.17);--bd5:rgba(0,0,0,0.24)}
+html,body{height:100%;overflow:hidden;background:var(--bg2);color:var(--text);font-family:system-ui,sans-serif;font-size:13px}
 input,select,button,textarea{font-family:system-ui,sans-serif;font-size:12px}
-.inp{background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#e8e8f0;border-radius:4px;padding:4px 8px;outline:none;width:100%}
-.inp:focus{border-color:#6C8EF5}
-.btn{background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#8888a8;border-radius:4px;padding:4px 9px;cursor:pointer;font-size:11px;white-space:nowrap}
-.btn:hover{background:#333350}
-.btn.on{background:#6C8EF5;border-color:#6C8EF5;color:#fff}
-.tbtn{display:flex;flex-direction:column;align-items:center;gap:2px;background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#8888a8;border-radius:5px;padding:6px 0;cursor:pointer;font-size:10px;width:56px}
-.tbtn:hover{background:#333350}
-.fbtn{background:#1a1a28;border:1px solid rgba(255,255,255,0.07);color:#8888a8;border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer}
-.fbtn:hover{background:#2a2a42;color:#e8e8f0}
-.recrow{cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.05)}
+.inp{background:var(--surface3);border:1px solid var(--bd4);color:var(--text);border-radius:4px;padding:4px 8px;outline:none;width:100%}
+.inp:focus{border-color:var(--accent)}
+.btn{background:var(--surface3);border:1px solid var(--bd4);color:var(--text2);border-radius:4px;padding:4px 9px;cursor:pointer;font-size:11px;white-space:nowrap}
+.btn:hover{background:var(--surface4)}
+.btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.tbtn{display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--surface3);border:1px solid var(--bd4);color:var(--text2);border-radius:5px;padding:6px 0;cursor:pointer;font-size:10px;width:56px}
+.tbtn:hover{background:var(--surface4)}
+.fbtn{background:var(--surface);border:1px solid var(--bd2);color:var(--text2);border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer}
+.fbtn:hover{background:var(--surface3);color:var(--text)}
+.recrow{cursor:pointer;border-bottom:1px solid var(--bd1)}
 .recrow:hover td{background:rgba(108,142,245,0.06)}
 .recrow.selrow td{background:rgba(108,142,245,0.14)}
-label.lbl{font-size:10px;color:#8888a8;display:block;margin-bottom:3px}
-.sec{color:#8888a8;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;margin-top:2px}
-.fmt-btn{background:#2a2a42;border:1px solid rgba(255,255,255,0.13);color:#8888a8;border-radius:3px;padding:3px 7px;cursor:pointer;font-size:12px;font-weight:700;min-width:26px}
-.fmt-btn:hover{background:#333350}
-.fmt-btn.on{background:#6C8EF5;border-color:#6C8EF5;color:#fff}
-.divider{border:none;border-top:1px solid rgba(255,255,255,0.07);margin:10px 0}
+label.lbl{font-size:10px;color:var(--text2);display:block;margin-bottom:3px}
+.sec{color:var(--text2);font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;margin-top:2px}
+.fmt-btn{background:var(--surface3);border:1px solid var(--bd4);color:var(--text2);border-radius:3px;padding:3px 7px;cursor:pointer;font-size:12px;font-weight:700;min-width:26px}
+.fmt-btn:hover{background:var(--surface4)}
+.fmt-btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.divider{border:none;border-top:1px solid var(--bd2);margin:10px 0}
 .modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.65);display:flex;align-items:center;justify-content:center;z-index:1000}
-.modal{background:#1a1a28;border:1px solid rgba(255,255,255,0.13);border-radius:8px;padding:24px;min-width:420px;max-width:560px;box-shadow:0 8px 40px rgba(0,0,0,0.6)}
-.modal-title{font-size:15px;font-weight:600;color:#e8e8f0;margin-bottom:16px;letter-spacing:-.2px}
+.modal{background:var(--surface);border:1px solid var(--bd4);border-radius:8px;padding:24px;min-width:420px;max-width:560px;box-shadow:0 8px 40px rgba(0,0,0,0.6)}
+.modal-title{font-size:15px;font-weight:600;color:var(--text);margin-bottom:16px;letter-spacing:-.2px}
 .modal-row{margin-bottom:14px}
-.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;border-top:1px solid rgba(255,255,255,0.07);padding-top:16px}
-.tpl-card{background:#252538;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:12px 14px;cursor:pointer;display:flex;align-items:center;gap:12px;margin-bottom:8px}
-.tpl-card:hover{background:#2d2d48;border-color:#6C8EF5}
-.tpl-card.active{border-color:#6C8EF5;background:#2a2a42}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;border-top:1px solid var(--bd2);padding-top:16px}
+.tpl-card{background:var(--surface2);border:1px solid var(--bd3);border-radius:6px;padding:12px 14px;cursor:pointer;display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.tpl-card:hover{background:var(--surface3);border-color:var(--accent)}
+.tpl-card.active{border-color:var(--accent);background:var(--surface3)}
 .tpl-preview{width:60px;height:20px;background:#fff;border:1px solid #ccc;border-radius:2px;flex-shrink:0;position:relative;overflow:hidden}
 .tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600}
-.tag.src{background:rgba(108,142,245,0.2);color:#6C8EF5}
-.tag.dst{background:rgba(108,200,150,0.2);color:#5cc896}
+.tag.src{background:rgba(108,142,245,0.2);color:var(--accent)}
+.tag.dst{background:rgba(108,200,150,0.2);color:var(--green)}
 </style>
 </head>
 <body>
@@ -235,7 +237,7 @@ function colDragStart(e,c){
     if(tile&&tile.cloneNode){
       const cs=getComputedStyle(tile);
       const g=tile.cloneNode(true);
-      g.style.cssText='position:fixed;top:-2000px;left:-2000px;box-sizing:border-box;width:'+tile.offsetWidth+'px;height:'+tile.offsetHeight+'px;background:#2a2a42;border:1px solid #6C8EF5;border-radius:4px;color:#e8e8f0;opacity:0.97;display:flex;align-items:center;overflow:hidden;padding:'+cs.padding+';font:'+cs.font;
+      g.style.cssText='position:fixed;top:-2000px;left:-2000px;box-sizing:border-box;width:'+tile.offsetWidth+'px;height:'+tile.offsetHeight+'px;background:var(--surface3);border:1px solid var(--accent);border-radius:4px;color:var(--text);opacity:0.97;display:flex;align-items:center;overflow:hidden;padding:'+cs.padding+';font:'+cs.font;
       document.body.appendChild(g); _vlGhost=g;
       try{e.dataTransfer.setDragImage(g,16,Math.max(8,tile.offsetHeight/2));}catch(_){}
     }
@@ -246,7 +248,7 @@ function colDragOver(e,el){
   e.preventDefault();
   if(e.dataTransfer)e.dataTransfer.dropEffect='move';
   if(_vlOverEl&&_vlOverEl!==el)_vlOverEl.style.boxShadow='';
-  _vlOverEl=el; if(el)el.style.boxShadow='inset 3px 0 0 #6C8EF5';
+  _vlOverEl=el; if(el)el.style.boxShadow='inset 3px 0 0 var(--accent)';
 }
 function colClearDrag(){
   if(_vlGhost){_vlGhost.remove();_vlGhost=null;}
@@ -282,7 +284,7 @@ function colHeaderContextMenu(e,c){ e.preventDefault(); hideColumn(c); }
 
 // One header cell: drag to reorder, right-edge to resize, right-click to hide.
 function colHeaderCell(c){
-  return `<div data-colhdr draggable="true" ondragstart="colDragStart(event,'${c}')" ondragover="colDragOver(event,this)" ondragend="colDragEnd(event)" ondrop="colDrop(event,'${c}')" oncontextmenu="colHeaderContextMenu(event,'${c}')" title="Drag to reorder · right-click to hide" style="position:relative;padding:5px 8px;font-size:10px;color:#44445a;font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;cursor:grab;box-sizing:border-box">${esc(colLabel(c))}<div onmousedown="colResizeStart(event,'${c}')" style="position:absolute;top:0;right:0;width:6px;height:100%;cursor:col-resize"></div></div>`;
+  return `<div data-colhdr draggable="true" ondragstart="colDragStart(event,'${c}')" ondragover="colDragOver(event,this)" ondragend="colDragEnd(event)" ondrop="colDrop(event,'${c}')" oncontextmenu="colHeaderContextMenu(event,'${c}')" title="Drag to reorder · right-click to hide" style="position:relative;padding:5px 8px;font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;cursor:grab;box-sizing:border-box">${esc(colLabel(c))}<div onmousedown="colResizeStart(event,'${c}')" style="position:absolute;top:0;right:0;width:6px;height:100%;cursor:col-resize"></div></div>`;
 }
 
 // Columns dropdown: checkboxes to show/hide + grab handle to reorder.
@@ -291,11 +293,11 @@ function buildColumnsMenu(){
   if(!window._colMenuOpen)return '';
   const cols=recordColumns(currentRecords());
   const hidden=new Set(window._hiddenColumns||[]);
-  return `<div onclick="event.stopPropagation()" style="position:absolute;right:8px;top:26px;z-index:30;background:#1e1e2e;border:1px solid rgba(255,255,255,0.15);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.5);padding:5px;max-height:280px;overflow-y:auto;min-width:190px">
-    <div style="font-size:9px;color:#44445a;text-transform:uppercase;letter-spacing:1px;padding:3px 6px 5px">Columns</div>
+  return `<div onclick="event.stopPropagation()" style="position:absolute;right:8px;top:26px;z-index:30;background:var(--surface);border:1px solid var(--bd4);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.5);padding:5px;max-height:280px;overflow-y:auto;min-width:190px">
+    <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;padding:3px 6px 5px">Columns</div>
     ${cols.map(c=>`<div draggable="true" ondragstart="colDragStart(event,'${c}')" ondragover="colDragOver(event,this)" ondragend="colDragEnd(event)" ondrop="colDrop(event,'${c}')" style="display:flex;align-items:center;gap:7px;padding:3px 6px;border-radius:4px">
-      <span title="Drag to reorder" style="cursor:grab;color:#6b6f7d;font-size:12px;user-select:none">⋮⋮</span>
-      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;font-size:12px;color:#e8e8f0">
+      <span title="Drag to reorder" style="cursor:grab;color:var(--text2);font-size:12px;user-select:none">⋮⋮</span>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;font-size:12px;color:var(--text)">
         <input type="checkbox" ${hidden.has(c)?'':'checked'} onchange="toggleColumn('${c}')"> ${esc(colLabel(c))}
       </label>
     </div>`).join('')}
@@ -307,24 +309,24 @@ function colDataCell(c,r){
   const v=r[c]; const has=v!==undefined&&v!=='';
   const val=has?String(v):'—';
   if(c==='_Side'){const side=v==='Source'?'src':'dst';return`<div style="padding:5px 8px;font-size:11px;display:flex;align-items:center"><span class="tag ${side}">${esc(val)}</span></div>`;}
-  return`<div style="padding:5px 8px;font-size:11px;white-space:normal;overflow-wrap:anywhere;word-break:break-word;color:${has?'#e8e8f0':'#44445a'};${(c==='Number'&&has)?'font-weight:600;':''}">${esc(val)}</div>`;
+  return`<div style="padding:5px 8px;font-size:11px;white-space:normal;overflow-wrap:anywhere;word-break:break-word;color:${has?'var(--text)':'var(--text3)'};${(c==='Number'&&has)?'font-weight:600;':''}">${esc(val)}</div>`;
 }
 
 function buildEditorRecordTable(){
   const records=window._editorRecords||RX;
-  if(!records.length)return`<div style="padding:12px;color:#44445a;font-size:11px">No records loaded</div>`;
+  if(!records.length)return`<div style="padding:12px;color:var(--text3);font-size:11px">No records loaded</div>`;
   const cols=visibleColumns(records);
-  if(!cols.length)return`<div style="padding:12px;color:#44445a;font-size:11px">All columns hidden — use the Columns menu to show some.</div>`;
+  if(!cols.length)return`<div style="padding:12px;color:var(--text3);font-size:11px">All columns hidden — use the Columns menu to show some.</div>`;
   const gt=colGridTemplate(cols);
 
-  const hdr=`<div style="display:grid;grid-template-columns:${gt};width:max-content;min-width:100%;background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.1);position:sticky;top:0;z-index:2">
+  const hdr=`<div style="display:grid;grid-template-columns:${gt};width:max-content;min-width:100%;background:var(--surface);border-bottom:1px solid var(--bd3);position:sticky;top:0;z-index:2">
     ${cols.map(colHeaderCell).join('')}
   </div>`;
 
   const rows=records.map((r,i)=>{
     const isActive=S.recIdx===i;
     return`<div onclick="S.recIdx=${i};R()"
-      style="display:grid;grid-template-columns:${gt};width:max-content;min-width:100%;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;align-items:stretch;
+      style="display:grid;grid-template-columns:${gt};width:max-content;min-width:100%;border-bottom:1px solid var(--bd1);cursor:pointer;align-items:stretch;
              background:${isActive?'rgba(108,142,245,0.18)':'transparent'}">
       ${cols.map(c=>colDataCell(c,r)).join('')}
     </div>`;
@@ -403,18 +405,18 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
 
   // Clear wrap zone shown directly under the printable area (not in the bleed).
   const wrapZone=wrap&&(cw>0||ch>0)?`
-    <div style="position:absolute;left:${B}px;top:${B+ph}px;width:${pw}px;height:${ch>0?ch:ph}px;background:rgba(140,140,180,0.12);border:1px dashed #44445a;display:flex;align-items:center;justify-content:center;pointer-events:none">
-      <span style="color:#8888a8;font-size:9px;white-space:nowrap">clear wrap zone</span>
+    <div style="position:absolute;left:${B}px;top:${B+ph}px;width:${pw}px;height:${ch>0?ch:ph}px;background:rgba(140,140,180,0.12);border:1px dashed var(--text3);display:flex;align-items:center;justify-content:center;pointer-events:none">
+      <span style="color:var(--text2);font-size:9px;white-space:nowrap">clear wrap zone</span>
     </div>`:"";
 
   const objsHtml=objs.map(o=>{
     const x=o.x*SC+B,y=o.y*SC+B,w=(o.w||1)*SC,h=(o.h||0)*SC;
     const sel=o.id===selId;
-    const ss=sel?"outline:1.5px solid #6C8EF5;outline-offset:1px;":"";
+    const ss=sel?"outline:1.5px solid var(--accent);outline-offset:1px;":"";
     const drag=readOnly?"":`onmousedown="startDrag(event,'${o.id}')"`;
     const rotDeg=o.rot||0;
     const rotCss=rotDeg?`transform:rotate(${rotDeg}deg);transform-origin:center center;`:"";
-    const rotH=sel&&!readOnly?`<div style="position:absolute;left:50%;top:-22px;width:1px;height:22px;background:#6C8EF5;transform:translateX(-50%);z-index:10;pointer-events:none"></div><div onmousedown="startRotate(event,'${o.id}')" title="Drag to rotate" style="position:absolute;left:50%;top:-26px;transform:translateX(-50%);width:11px;height:11px;background:#6C8EF5;border:1px solid #fff;border-radius:50%;cursor:grab;z-index:11"></div>`:"";
+    const rotH=sel&&!readOnly?`<div style="position:absolute;left:50%;top:-22px;width:1px;height:22px;background:var(--accent);transform:translateX(-50%);z-index:10;pointer-events:none"></div><div onmousedown="startRotate(event,'${o.id}')" title="Drag to rotate" style="position:absolute;left:50%;top:-26px;transform:translateX(-50%);width:11px;height:11px;background:var(--accent);border:1px solid #fff;border-radius:50%;cursor:grab;z-index:11"></div>`:"";
 
     if(o.t==="tx"){
       const {v,e}=textValue(o,rec);
@@ -427,10 +429,10 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
       const whiteSpace=o.wrapText?"normal":"nowrap";
       const letterSpacing=o.tracking?`${o.tracking}px`:"normal";
       const scaleX=(o.stretch||100)/100;
-      const txtColor=e?"#f56c6c":"#000";
+      const txtColor=e?"var(--red)":"#000";
       const textAlign=o.al||"left";
       const dispVal=e?`⚠ ${e.substring(0,40)}`:v.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-      const rb=sel&&!readOnly?`<div onmousedown="startResize(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:#6C8EF5;border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";
+      const rb=sel&&!readOnly?`<div onmousedown="startResize(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:var(--accent);border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";
       const dropAttr=readOnly?"":`ondragover="event.preventDefault()" ondrop="onColDropToText(event,'${o.id}')"`;
       const isStatic=txMode(o)==="static";
       const editing=!readOnly&&isStatic&&S.editingId===o.id;
@@ -442,16 +444,16 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
         ${rotH}${rb}</div>`;
     }
     if(o.t==="ln"){
-      const lh=sel&&!readOnly?`<div onmousedown="startLineResize(event,'${o.id}','l')" title="Drag to stretch" style="position:absolute;left:-5px;top:50%;transform:translateY(-50%);width:9px;height:9px;background:#6C8EF5;border:1px solid #fff;border-radius:50%;cursor:ew-resize;z-index:10"></div>`:"";
-      const rh=sel&&!readOnly?`<div onmousedown="startLineResize(event,'${o.id}','r')" title="Drag to stretch" style="position:absolute;right:-5px;top:50%;transform:translateY(-50%);width:9px;height:9px;background:#6C8EF5;border:1px solid #fff;border-radius:50%;cursor:ew-resize;z-index:10"></div>`:"";
+      const lh=sel&&!readOnly?`<div onmousedown="startLineResize(event,'${o.id}','l')" title="Drag to stretch" style="position:absolute;left:-5px;top:50%;transform:translateY(-50%);width:9px;height:9px;background:var(--accent);border:1px solid #fff;border-radius:50%;cursor:ew-resize;z-index:10"></div>`:"";
+      const rh=sel&&!readOnly?`<div onmousedown="startLineResize(event,'${o.id}','r')" title="Drag to stretch" style="position:absolute;right:-5px;top:50%;transform:translateY(-50%);width:9px;height:9px;background:var(--accent);border:1px solid #fff;border-radius:50%;cursor:ew-resize;z-index:10"></div>`:"";
       return `<div data-obj="${o.id}" ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${(o.w||1)*sc}px;height:${Math.max(1,o.lw||1)}px;background:#000;cursor:${readOnly?"default":"move"};${rotCss}${ss}">${lh}${rh}${rotH}</div>`;
     }
     if(o.t==="rc"){
-      const rb=sel&&!readOnly?`<div onmousedown="startResize(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:#6C8EF5;border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";
+      const rb=sel&&!readOnly?`<div onmousedown="startResize(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:var(--accent);border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";
       return `<div data-obj="${o.id}" ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border:${o.lw||1}px solid #000;background:transparent;cursor:${readOnly?"default":"move"};${rotCss}${ss}">${rotH}${rb}</div>`;
     }
     if(o.t==="ci"||o.t==="ov"){
-      const rb=sel&&!readOnly?`<div onmousedown="startResize(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:#6C8EF5;border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";
+      const rb=sel&&!readOnly?`<div onmousedown="startResize(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:var(--accent);border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";
       return `<div data-obj="${o.id}" ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border:${o.lw||1}px solid #000;background:transparent;border-radius:50%;cursor:${readOnly?"default":"move"};${rotCss}${ss}">${rotH}${rb}</div>`;
     }
     if(o.t==="ar"){
@@ -466,13 +468,13 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
       if(o.arrowStart) svg+=`<polygon points="0,${vh} ${as},${vh-hw} ${as},${vh+hw}" fill="#000"/>`;
       if(o.arrowEnd)   svg+=`<polygon points="${aw},${vh} ${aw-as},${vh-hw} ${aw-as},${vh+hw}" fill="#000"/>`;
       svg+=`</svg>`;
-      const lh=sel&&!readOnly?`<div onmousedown="startLineResize(event,'${o.id}','l')" title="Drag to stretch" style="position:absolute;left:-5px;top:50%;transform:translateY(-50%);width:9px;height:9px;background:#6C8EF5;border:1px solid #fff;border-radius:50%;cursor:ew-resize;z-index:10"></div>`:"";
-      const rh=sel&&!readOnly?`<div onmousedown="startLineResize(event,'${o.id}','r')" title="Drag to stretch" style="position:absolute;right:-5px;top:50%;transform:translateY(-50%);width:9px;height:9px;background:#6C8EF5;border:1px solid #fff;border-radius:50%;cursor:ew-resize;z-index:10"></div>`:"";
+      const lh=sel&&!readOnly?`<div onmousedown="startLineResize(event,'${o.id}','l')" title="Drag to stretch" style="position:absolute;left:-5px;top:50%;transform:translateY(-50%);width:9px;height:9px;background:var(--accent);border:1px solid #fff;border-radius:50%;cursor:ew-resize;z-index:10"></div>`:"";
+      const rh=sel&&!readOnly?`<div onmousedown="startLineResize(event,'${o.id}','r')" title="Drag to stretch" style="position:absolute;right:-5px;top:50%;transform:translateY(-50%);width:9px;height:9px;background:var(--accent);border:1px solid #fff;border-radius:50%;cursor:ew-resize;z-index:10"></div>`:"";
       return `<div data-obj="${o.id}" ${drag} style="position:absolute;left:${x}px;top:${y-vh}px;width:${aw}px;height:${2*vh}px;cursor:${readOnly?"default":"move"};${rotCss}${ss}">${svg}${lh}${rh}${rotH}</div>`;
     }
     if(o.t==="im"||o.t==="sy"){
       const fit=o.t==="sy"?"contain":"fill";
-      const rb=sel&&!readOnly?`<div onmousedown="startResize(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:#6C8EF5;border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";
+      const rb=sel&&!readOnly?`<div onmousedown="startResize(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:var(--accent);border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";
       return `<div data-obj="${o.id}" ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;cursor:${readOnly?"default":"move"};${rotCss}${ss}"><img src="${o.src||''}" style="width:100%;height:100%;object-fit:${fit};pointer-events:none;display:block">${rotH}${rb}</div>`;
     }
     return"";
@@ -507,7 +509,7 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
   return `<div style="display:flex;flex-direction:column;align-items:flex-start;flex-shrink:0">
     <div onmousedown="${readOnly?'':`if(event.target===this)deselect()`}" style="width:${bw}px;height:${bh}px;background:transparent;position:relative;overflow:hidden;flex-shrink:0">
       <!-- Printable area (only this prints) -->
-      <div style="position:absolute;left:${B}px;top:${B}px;width:${pw}px;height:${ph}px;background:#fff;box-shadow:0 0 0 1.5px #6C8EF5;pointer-events:none"></div>
+      <div style="position:absolute;left:${B}px;top:${B}px;width:${pw}px;height:${ph}px;background:#fff;box-shadow:0 0 0 1.5px var(--accent);pointer-events:none"></div>
       ${wrapZone}
       ${gridSvg}${snapSvg}${objsHtml}
     </div>
@@ -554,7 +556,7 @@ function posButtons(o){
         <button class="fmt-btn" title="Rotate 90° left" onclick="rotateObj('${o.id}',-90)">⟲</button>
         <button class="fmt-btn" title="Rotate 90° right" onclick="rotateObj('${o.id}',90)">⟳</button>
         <input type="number" class="inp" style="width:60px" step="1" value="${Math.round(o.rot||0)}" onchange="uobj('${o.id}',{rot:(((parseFloat(this.value)||0)%360)+360)%360});R()">
-        <span style="color:#8888a8;font-size:11px">°</span>
+        <span style="color:var(--text2);font-size:11px">°</span>
       </div>
     </div>
     <hr class="divider">`;
@@ -570,7 +572,7 @@ function rotateObj(id,delta){
 // ── Properties panel ──────────────────────────────────────────────────────────
 function buildProps(){
   const o=S.selId?gobj(S.selId):null;
-  if(!o)return`<div style="color:#44445a;font-size:11px;text-align:center;margin-top:40px;line-height:1.8">Click an object on<br>the canvas to edit it</div>`;
+  if(!o)return`<div style="color:var(--text3);font-size:11px;text-align:center;margin-top:40px;line-height:1.8">Click an object on<br>the canvas to edit it</div>`;
 
   function ni(lbl,key,step,val,extra){
     return `<div style="margin-bottom:6px"><label class="lbl">${lbl}</label><input type="number" class="inp" step="${step}" value="${(+val||0).toFixed(3)}" onchange="uobj('${o.id}',{${key}:parseFloat(this.value)});R()" ${extra||""}></div>`;
@@ -586,13 +588,13 @@ function buildProps(){
     const srcEditor =
       tmode==="static"
         ? `<textarea class="inp" rows="2" style="resize:vertical;font-family:inherit" placeholder="Type label text…" oninput="setStaticText('${o.id}',this.value)" onblur="R()">${(o.text||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</textarea>
-           <div style="color:#44445a;font-size:10px;margin-top:5px;line-height:1.4">…or double-click the text box on the canvas to type directly.</div>`
+           <div style="color:var(--text3);font-size:10px;margin-top:5px;line-height:1.4">…or double-click the text box on the canvas to type directly.</div>`
       : tmode==="field"
         ? `<select class="inp" onchange="uobj('${o.id}',{field:this.value});R()">
              <option value="">— choose column —</option>
              ${FD.map(f=>`<option value="${f.c}"${o.field===f.c?" selected":""}>${f.f}</option>`).join("")}
            </select>
-           <div style="color:#44445a;font-size:10px;margin-top:5px;line-height:1.4">…or drag a column header from the Records panel onto the text box.</div>`
+           <div style="color:var(--text3);font-size:10px;margin-top:5px;line-height:1.4">…or drag a column header from the Records panel onto the text box.</div>`
       : `<input id="fxbar" class="inp" value="${(o.f||"").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}" style="font-family:monospace;font-size:12px" oninput="S._ef=this.value" onblur="commitF()" onkeydown="if(event.key==='Enter')commitF()" placeholder='=IF(Number&lt;&gt;&quot;&quot;,Number,&quot;&quot;)'>
          <div style="display:flex;gap:5px;margin-top:5px">
            <button class="btn${S.showFields?" on":""}" onclick="S.showFields=!S.showFields;R()" style="font-size:11px">Fields ▾</button>
@@ -732,7 +734,7 @@ function buildProps(){
     return `<div style="display:flex;flex-direction:column;gap:0">
       ${posButtons(o)}
       <div class="sec">Symbol</div>
-      <div style="margin-bottom:8px;color:#8888a8;font-size:11px">${(SYMBOLS[o.sym]||{}).label||o.sym||''}</div>
+      <div style="margin-bottom:8px;color:var(--text2);font-size:11px">${(SYMBOLS[o.sym]||{}).label||o.sym||''}</div>
       <button class="btn" onclick="symPicker('${o.id}')" style="margin-bottom:8px;font-size:11px">Choose symbol…</button>
       <div style="margin-bottom:6px"><label class="lbl">Size (in)</label><input type="number" class="inp" step="0.01" value="${(+o.w||0).toFixed(3)}" onchange="uobj('${o.id}',{w:parseFloat(this.value),h:parseFloat(this.value)});R()"></div>
       ${ni("X","x",.01,o.x)}
@@ -746,13 +748,13 @@ function buildProps(){
 function buildRecordTable(){
   const cols=FD.slice(0,9);
   const rows=RX.map((r,i)=>`<tr class="recrow${S.recIdx===i?" selrow":""}" onclick="S.recIdx=${i};R()">
-    ${cols.map(f=>`<td style="color:${r[f.c]?"#e8e8f0":"#44445a"}">${(r[f.c]||"—").substring(0,22)}</td>`).join("")}
+    ${cols.map(f=>`<td style="color:${r[f.c]?"var(--text)":"var(--text3)"}">${(r[f.c]||"—").substring(0,22)}</td>`).join("")}
   </tr>`).join("");
-  const heads=cols.map(f=>`<th style="padding:5px 8px;text-align:left;border-bottom:1px solid rgba(255,255,255,0.07);background:#1a1a28;white-space:nowrap;position:sticky;top:0">
-    <div style="color:#e8e8f0;font-size:11px;font-weight:600">${f.f}</div>
-    <div style="color:#44445a;font-size:10px">${f.c}</div>
+  const heads=cols.map(f=>`<th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--bd2);background:var(--surface);white-space:nowrap;position:sticky;top:0">
+    <div style="color:var(--text);font-size:11px;font-weight:600">${f.f}</div>
+    <div style="color:var(--text3);font-size:10px">${f.c}</div>
   </th>`).join("");
-  return `<div style="overflow-x:auto;border-top:1px solid rgba(255,255,255,0.07)">
+  return `<div style="overflow-x:auto;border-top:1px solid var(--bd2)">
     <table style="width:100%;border-collapse:collapse;font-size:11px">
       <thead><tr>${heads}</tr></thead>
       <tbody>${rows}</tbody>
@@ -792,24 +794,24 @@ function R(){
 
   document.getElementById("app").innerHTML=`
     <!-- Top bar -->
-    <div style="background:#1e1e2e;border-bottom:1px solid rgba(255,255,255,0.07);padding:0 14px;display:flex;align-items:center;gap:10px;height:44px;flex-shrink:0">
-      <span style="color:#6C8EF5;font-weight:700;font-size:15px;letter-spacing:-.3px">VectorLabel</span>
-      <span style="color:#44445a;font-size:11px">Template Designer</span>
+    <div style="background:var(--surface);border-bottom:1px solid var(--bd2);padding:0 14px;display:flex;align-items:center;gap:10px;height:44px;flex-shrink:0">
+      <span style="color:var(--accent);font-weight:700;font-size:15px;letter-spacing:-.3px">VectorLabel</span>
+      <span style="color:var(--text3);font-size:11px">Template Designer</span>
       <div style="flex:1"></div>
       <select class="inp" style="width:auto" onchange="S.spec=BL.find(l=>l.n===this.value);R()">
         ${BL.map(l=>`<option value="${l.n}"${S.spec.n===l.n?" selected":""}>${l.lb}</option>`).join("")}
       </select>
       <button class="btn${S.wrap?" on":""}" onclick="S.wrap=!S.wrap;R()">${S.wrap?"Hide wrap":"Show wrap"}</button>
-      <div style="display:flex;align-items:center;gap:4px;background:#2a2a42;border:1px solid rgba(255,255,255,0.13);border-radius:4px;padding:2px 6px">
-        <button onclick="S.zoom=Math.max(0.25,S.zoom-0.25);R()" title="Zoom out" style="background:none;border:none;color:#8888a8;cursor:pointer;font-size:16px;padding:0 2px;line-height:1">−</button>
-        <span style="color:#e8e8f0;font-size:11px;min-width:36px;text-align:center">${Math.round(S.zoom*100)}%</span>
-        <button onclick="S.zoom=Math.min(4,S.zoom+0.25);R()" title="Zoom in" style="background:none;border:none;color:#8888a8;cursor:pointer;font-size:16px;padding:0 2px;line-height:1">+</button>
+      <div style="display:flex;align-items:center;gap:4px;background:var(--surface3);border:1px solid var(--bd4);border-radius:4px;padding:2px 6px">
+        <button onclick="S.zoom=Math.max(0.25,S.zoom-0.25);R()" title="Zoom out" style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:16px;padding:0 2px;line-height:1">−</button>
+        <span style="color:var(--text);font-size:11px;min-width:36px;text-align:center">${Math.round(S.zoom*100)}%</span>
+        <button onclick="S.zoom=Math.min(4,S.zoom+0.25);R()" title="Zoom in" style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:16px;padding:0 2px;line-height:1">+</button>
       </div>
       <button onclick="S.zoom=1;R()" class="btn" style="padding:4px 7px;font-size:10px">Reset</button>
       <div style="display:flex;align-items:center;gap:6px;margin-left:4px">
-        <span style="color:#8888a8;font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${S.tplName}">${S.tplName}</span>
+        <span style="color:var(--text2);font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${S.tplName}">${S.tplName}</span>
       </div>
-      <div style="width:1px;height:20px;background:rgba(255,255,255,0.08)"></div>
+      <div style="width:1px;height:20px;background:var(--bd2)"></div>
       <button class="btn" onclick="loadDesignerCSV()" style="padding:4px 9px;font-size:11px" title="${S._csvName||'No CSV loaded'}">
         ${S._csvName?'📄 '+S._csvName.replace(/_export_\d{8}_\d{6}\.csv$/i,'').replace(/_/g,' ').slice(-24):'Load CSV…'}
       </button>
@@ -817,12 +819,12 @@ function R(){
     </div>
 
     <!-- Second toolbar: snap/grid controls -->
-    <div style="background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.07);padding:0 14px;display:flex;align-items:center;gap:10px;height:34px;flex-shrink:0">
-      <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px">Snap</span>
+    <div style="background:var(--surface);border-bottom:1px solid var(--bd2);padding:0 14px;display:flex;align-items:center;gap:10px;height:34px;flex-shrink:0">
+      <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Snap</span>
       <button class="btn${S.snapGrid?" on":""}" onclick="S.snapGrid=!S.snapGrid;saveDesignerPrefs();R()">⊞ Grid</button>
       <button class="btn${S.snapObjects?" on":""}" onclick="S.snapObjects=!S.snapObjects;saveDesignerPrefs();R()">⊡ Objects</button>
       <div style="display:flex;align-items:center;gap:5px">
-        <span style="color:#44445a;font-size:10px">Grid size</span>
+        <span style="color:var(--text3);font-size:10px">Grid size</span>
         <select class="inp" style="width:148px" onchange="S.gridSize=parseFloat(this.value);saveDesignerPrefs();R()">
           ${[0.01,0.025,0.05,0.1,0.125,0.25].map(v=>`<option value="${v}"${S.gridSize===v?" selected":""}>${Math.round(v*1000)/10}mm / ${v.toFixed(3)}"</option>`).join("")}
         </select>
@@ -833,8 +835,8 @@ function R(){
     <div style="display:flex;flex:1;overflow:hidden">
 
       <!-- Left: add objects + object list -->
-      <div style="width:148px;background:#1a1a28;border-right:1px solid rgba(255,255,255,0.07);padding:10px 8px;display:flex;flex-direction:column;gap:5px;flex-shrink:0;overflow:hidden">
-        <span style="color:#44445a;font-size:9px;margin-bottom:3px;text-transform:uppercase;letter-spacing:1px">Add</span>
+      <div style="width:148px;background:var(--surface);border-right:1px solid var(--bd2);padding:10px 8px;display:flex;flex-direction:column;gap:5px;flex-shrink:0;overflow:hidden">
+        <span style="color:var(--text3);font-size:9px;margin-bottom:3px;text-transform:uppercase;letter-spacing:1px">Add</span>
         <div style="display:flex;gap:5px">
           <button class="tbtn" style="flex:1;width:auto" onclick="addObj('tx')"><span style="font-size:14px;font-weight:700">T</span>Text</button>
           <button class="tbtn" style="flex:1;width:auto" onclick="addObj('ln')"><span style="font-size:14px;font-weight:700">╌</span>Line</button>
@@ -850,41 +852,41 @@ function R(){
           <button class="tbtn" style="flex:1;width:auto" onclick="symPicker()"><span style="font-size:14px;font-weight:700">△</span>Symbol</button>
         </div>
         <input type="file" id="imgFilePicker" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml" style="display:none" onchange="onImagePicked(event)">
-        <div style="height:1px;background:rgba(255,255,255,0.08);margin:6px 0"></div>
-        <span style="color:#44445a;font-size:9px;text-transform:uppercase;letter-spacing:1px">Objects (${S.objs.length})</span>
+        <div style="height:1px;background:var(--bd2);margin:6px 0"></div>
+        <span style="color:var(--text3);font-size:9px;text-transform:uppercase;letter-spacing:1px">Objects (${S.objs.length})</span>
         <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:2px;margin:2px -2px 0">
-          ${S.objs.length===0?`<div style="color:#44445a;font-size:10px;padding:6px 4px">No objects yet</div>`
+          ${S.objs.length===0?`<div style="color:var(--text3);font-size:10px;padding:6px 4px">No objects yet</div>`
             :S.objs.map(o=>{
               const sel=o.id===S.selId;
               const icon=o.t==='tx'?'T':o.t==='ln'?'╌':o.t==='ar'?'→':o.t==='ci'?'◯':o.t==='ov'?'⬭':o.t==='im'?'▦':o.t==='sy'?'△':'▭';
               const lbl=objListLabel(o);
               return`<div onclick="selectObj('${o.id}')" title="${lbl.replace(/"/g,'&quot;')}"
                 style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;cursor:pointer;font-size:11px;white-space:nowrap;overflow:hidden;
-                       background:${sel?'rgba(108,142,245,0.18)':'transparent'};border:1px solid ${sel?'rgba(108,142,245,0.4)':'transparent'};color:${sel?'#e8e8f0':'#8888a8'}">
-                <span style="width:13px;text-align:center;color:#6C8EF5;flex-shrink:0">${icon}</span>
+                       background:${sel?'rgba(108,142,245,0.18)':'transparent'};border:1px solid ${sel?'rgba(108,142,245,0.4)':'transparent'};color:${sel?'var(--text)':'var(--text2)'}">
+                <span style="width:13px;text-align:center;color:var(--accent);flex-shrink:0">${icon}</span>
                 <span style="overflow:hidden;text-overflow:ellipsis">${lbl}</span>
               </div>`;
             }).join('')}
         </div>
-        ${S.selId?`<button class="btn" onclick="delObj()" style="background:rgba(245,108,108,0.15);border-color:rgba(245,108,108,0.3);color:#f56c6c;padding:5px 0;font-size:10px;flex-shrink:0">Delete selected</button>`:""}
+        ${S.selId?`<button class="btn" onclick="delObj()" style="background:rgba(245,108,108,0.15);border-color:rgba(245,108,108,0.3);color:var(--red);padding:5px 0;font-size:10px;flex-shrink:0">Delete selected</button>`:""}
       </div>
 
       <!-- Center: canvas + records -->
       <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0">
         <!-- Canvas area -->
-        <div style="flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;background:#0d0d14;padding:28px">
+        <div style="flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;background:var(--canvas);padding:28px">
           <div id="canvas-host" style="transform:scale(${S.zoom});transform-origin:center center;flex-shrink:0">
             ${buildCanvas(S.spec,S.objs,S.selId,rec,S.wrap,false)}
           </div>
         </div>
         <!-- Resize handle -->
-        <div id="rec-resizer" style="height:5px;cursor:row-resize;background:rgba(108,142,245,0.0);border-top:1px solid rgba(255,255,255,0.1);flex-shrink:0" onmouseenter="this.style.background='rgba(108,142,245,0.25)'" onmouseleave="this.style.background='rgba(108,142,245,0)'" onmousedown="startRecResize(event)"></div>
+        <div id="rec-resizer" style="height:5px;cursor:row-resize;background:rgba(108,142,245,0.0);border-top:1px solid var(--bd3);flex-shrink:0" onmouseenter="this.style.background='rgba(108,142,245,0.25)'" onmouseleave="this.style.background='rgba(108,142,245,0)'" onmousedown="startRecResize(event)"></div>
         <!-- Record selector -->
-        <div id="rec-panel" style="height:${S.recH||160}px;overflow:auto;background:#13131a;flex-shrink:0">
-          <div style="position:relative;padding:5px 10px 4px;display:flex;align-items:center;gap:6px;border-top:1px solid rgba(255,255,255,0.07);flex-shrink:0">
-            <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px">Records</span>
+        <div id="rec-panel" style="height:${S.recH||160}px;overflow:auto;background:var(--bg2);flex-shrink:0">
+          <div style="position:relative;padding:5px 10px 4px;display:flex;align-items:center;gap:6px;border-top:1px solid var(--bd2);flex-shrink:0">
+            <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Records</span>
             <div style="flex:1"></div>
-            <span style="color:#44445a;font-size:10px">${S.recIdx+1} / ${(RX).length}</span>
+            <span style="color:var(--text3);font-size:10px">${S.recIdx+1} / ${(RX).length}</span>
             <button onclick="S.recIdx=Math.max(0,S.recIdx-1);R()" title="Previous record" class="btn" style="padding:2px 7px;font-size:13px;line-height:1" ${S.recIdx===0?"disabled":""}>‹</button>
             <button onclick="S.recIdx=Math.min((RX).length-1,S.recIdx+1);R()" title="Next record" class="btn" style="padding:2px 7px;font-size:13px;line-height:1" ${S.recIdx===(RX).length-1?"disabled":""}>›</button>
             <button class="btn${window._colMenuOpen?' on':''}" onclick="event.stopPropagation();toggleColumnsMenu()" style="padding:2px 8px;font-size:11px">Columns ▾</button>
@@ -895,7 +897,7 @@ function R(){
       </div>
 
       <!-- Right: properties -->
-      <div style="width:220px;background:#1a1a28;border-left:1px solid rgba(255,255,255,0.07);padding:12px;overflow-y:auto;flex-shrink:0">
+      <div style="width:220px;background:var(--surface);border-left:1px solid var(--bd2);padding:12px;overflow-y:auto;flex-shrink:0">
         ${buildProps()}
       </div>
     </div>
@@ -920,16 +922,16 @@ function R(){
   if(tb){
     if(window._printEdit){
       tb.innerHTML=`
-        <button class="btn" onclick="edPrintCancel()" style="padding:4px 10px;color:#f56c6c;border-color:rgba(245,108,108,0.3)">✕ Cancel & Return</button>
+        <button class="btn" onclick="edPrintCancel()" style="padding:4px 10px;color:var(--red);border-color:rgba(245,108,108,0.3)">✕ Cancel & Return</button>
         <button class="btn" onclick="edPrintSaveAs()" style="padding:4px 10px">Save As & Return</button>
-        <button class="btn" onclick="edPrintSave()" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600;padding:5px 14px">Save & Return</button>
+        <button class="btn" onclick="edPrintSave()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600;padding:5px 14px">Save & Return</button>
       `;
     }else{
       tb.innerHTML=`
         <button class="btn" onclick="showModal('new')" style="padding:4px 10px">New</button>
         <button class="btn" onclick="openTemplate()" style="padding:4px 10px">Open…</button>
         <button class="btn" onclick="saveAsTemplate()" style="padding:4px 10px">Save as…</button>
-        <button class="btn" onclick="saveTemplate()" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600;padding:5px 14px">Save</button>
+        <button class="btn" onclick="saveTemplate()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600;padding:5px 14px">Save</button>
       `;
     }
   }
@@ -961,19 +963,19 @@ function renderModal(){
         </div>
         <div class="modal-row">
           <label class="lbl">Label size</label>
-          <div style="background:#2a2a42;border:1px solid rgba(255,255,255,0.1);border-radius:4px;padding:8px 12px;color:#e8e8f0;font-size:12px">${S.spec.lb}</div>
+          <div style="background:var(--surface3);border:1px solid var(--bd3);border-radius:4px;padding:8px 12px;color:var(--text);font-size:12px">${S.spec.lb}</div>
         </div>
         <div class="modal-row">
           <label class="lbl">Objects</label>
-          <div style="color:#8888a8;font-size:12px">${S.objs.length} object${S.objs.length!==1?"s":""} on canvas</div>
+          <div style="color:var(--text2);font-size:12px">${S.objs.length} object${S.objs.length!==1?"s":""} on canvas</div>
         </div>
-        <div style="background:#252538;border-radius:4px;padding:10px 12px;font-size:11px;color:#8888a8;line-height:1.6;margin-top:4px">
-          Saves to <span style="color:#6C8EF5;font-family:monospace">~/Documents/VectorLabel/Templates/</span><br>
+        <div style="background:var(--surface2);border-radius:4px;padding:10px 12px;font-size:11px;color:var(--text2);line-height:1.6;margin-top:4px">
+          Saves to <span style="color:var(--accent);font-family:monospace">~/Documents/VectorLabel/Templates/</span><br>
           The browser will ask you to choose a save location — navigate to that folder.
         </div>
         <div class="modal-footer">
           <button class="btn" onclick="closeModal()">Cancel</button>
-          <button class="btn" onclick="saveTemplate()" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600">Save Template</button>
+          <button class="btn" onclick="saveTemplate()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Save Template</button>
         </div>
       </div>`;
   }
@@ -982,7 +984,7 @@ function renderModal(){
     overlay.innerHTML=`
       <div class="modal">
         <div class="modal-title">New Template</div>
-        <p style="color:#8888a8;font-size:13px;line-height:1.6;margin-bottom:16px">
+        <p style="color:var(--text2);font-size:13px;line-height:1.6;margin-bottom:16px">
           Start a new blank template. Any unsaved changes to the current template will be lost.
         </p>
         <div class="modal-row">
@@ -997,7 +999,7 @@ function renderModal(){
         </div>
         <div class="modal-footer">
           <button class="btn" onclick="closeModal()">Cancel</button>
-          <button class="btn" onclick="newTemplate()" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600">Create</button>
+          <button class="btn" onclick="newTemplate()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Create</button>
         </div>
       </div>`;
   }
@@ -1007,17 +1009,17 @@ function renderModal(){
     overlay.innerHTML=`
       <div class="modal" style="min-width:500px">
         <div class="modal-title">Open Template</div>
-        ${cards.length===0?`<div style="color:#44445a;text-align:center;padding:24px 0;font-size:13px">No templates loaded yet.<br>Use the file picker below to open a saved template.</div>`
+        ${cards.length===0?`<div style="color:var(--text3);text-align:center;padding:24px 0;font-size:13px">No templates loaded yet.<br>Use the file picker below to open a saved template.</div>`
           :cards.map((t,i)=>`
             <div class="tpl-card${S._openSel===i?" active":""}" style="display:flex;align-items:center;gap:10px" onclick="S._openSel=${i};renderModal()">
               <div class="tpl-preview"></div>
               <div style="flex:1;min-width:0">
-                <div style="color:#e8e8f0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.name}</div>
-                <div style="color:#8888a8;font-size:11px;margin-top:2px">${t.specN} · ${t.objs.length} object${t.objs.length!==1?"s":""}</div>
+                <div style="color:var(--text);font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.name}</div>
+                <div style="color:var(--text2);font-size:11px;margin-top:2px">${t.specN} · ${t.objs.length} object${t.objs.length!==1?"s":""}</div>
                 ${(()=>{const L=BL.find(l=>l.n===t.specN);const fin=v=>(v===Math.round(v)?v:(+v.toFixed(2)))+'"';
-                  return L?`<div style="color:#6a6a82;font-size:10px;margin-top:2px">${fin(L.tw)}×${fin(L.th)} supply · ${fin(L.pw)}×${fin(L.ph)} printable</div>`:'';})()}
+                  return L?`<div style="color:var(--text2);font-size:10px;margin-top:2px">${fin(L.tw)}×${fin(L.th)} supply · ${fin(L.pw)}×${fin(L.ph)} printable</div>`:'';})()}
               </div>
-              <button onclick="event.stopPropagation();deleteTemplateCard(${i})" title="Delete this template" style="flex-shrink:0;background:rgba(245,108,108,0.12);border:1px solid rgba(245,108,108,0.3);color:#f56c6c;border-radius:5px;padding:4px 9px;cursor:pointer;font-size:13px">🗑</button>
+              <button onclick="event.stopPropagation();deleteTemplateCard(${i})" title="Delete this template" style="flex-shrink:0;background:rgba(245,108,108,0.12);border:1px solid rgba(245,108,108,0.3);color:var(--red);border-radius:5px;padding:4px 9px;cursor:pointer;font-size:13px">🗑</button>
             </div>`).join("")}
         <div class="modal-footer" style="justify-content:space-between">
           <div style="display:flex;gap:8px">
@@ -1026,7 +1028,7 @@ function renderModal(){
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn" onclick="closeModal()">Cancel</button>
-            <button class="btn" onclick="loadSelectedTemplate()" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600" ${!(cards.length&&S._openSel!==undefined)?"disabled":""}>Open</button>
+            <button class="btn" onclick="loadSelectedTemplate()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600" ${!(cards.length&&S._openSel!==undefined)?"disabled":""}>Open</button>
           </div>
         </div>
       </div>`;
@@ -1096,7 +1098,7 @@ function fxRefresh(){
   const recs=fxRecords(), rec=recs[_fxState.recIdx]||{};
   const {v,e}=evalF(_fxState.f,rec);
   const pv=document.getElementById('fxPreview');
-  if(pv){ pv.textContent=e?('⚠ '+e):(v===''?'(empty)':v); pv.style.color=e?'#f56c6c':'#e8e8f0'; }
+  if(pv){ pv.textContent=e?('⚠ '+e):(v===''?'(empty)':v); pv.style.color=e?'var(--red)':'var(--text)'; }
   const nav=document.getElementById('fxNav'); if(nav)nav.textContent=(_fxState.recIdx+1)+' / '+recs.length;
   const ctx=document.getElementById('fxCtx');
   if(ctx){ const bits=['Number','Cable','Connector'].map(k=>rec[k]?k+': '+rec[k]:'').filter(Boolean); ctx.textContent=bits.join('  ·  '); }
@@ -1110,20 +1112,20 @@ function renderFormulaModal(){
     <div class="modal-title">Formula editor</div>
     <textarea id="fxText" class="inp" rows="4" style="font-family:monospace;font-size:13px;width:100%;resize:vertical" oninput="_fxState.f=this.value;fxRefresh()" placeholder='=IF(Number&lt;&gt;&quot;&quot;,Number,&quot;&quot;)'>${esc(_fxState.f)}</textarea>
     <div style="display:flex;flex-wrap:wrap;gap:4px;margin:8px 0;max-height:96px;overflow-y:auto">${FD.map(f=>`<button class="fbtn" onclick="fxInsert('${f.f}')">${f.f}</button>`).join('')}</div>
-    <div style="background:#13131a;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:10px 12px;margin-bottom:6px">
+    <div style="background:var(--bg2);border:1px solid var(--bd3);border-radius:6px;padding:10px 12px;margin-bottom:6px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px">Live preview</span>
+        <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Live preview</span>
         <div style="flex:1"></div>
         <button class="btn" onclick="fxStep(-1)" title="Previous record" style="padding:2px 8px;font-size:12px">‹</button>
-        <span id="fxNav" style="color:#8888a8;font-size:11px;min-width:54px;text-align:center"></span>
+        <span id="fxNav" style="color:var(--text2);font-size:11px;min-width:54px;text-align:center"></span>
         <button class="btn" onclick="fxStep(1)" title="Next record" style="padding:2px 8px;font-size:12px">›</button>
       </div>
-      <div id="fxPreview" style="font-size:15px;color:#e8e8f0;min-height:20px;word-break:break-word"></div>
-      <div id="fxCtx" style="color:#44445a;font-size:10px;margin-top:6px"></div>
+      <div id="fxPreview" style="font-size:15px;color:var(--text);min-height:20px;word-break:break-word"></div>
+      <div id="fxCtx" style="color:var(--text3);font-size:10px;margin-top:6px"></div>
     </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeFormulaModal()">Cancel</button>
-      <button class="btn" onclick="fxApply()" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600">Apply</button>
+      <button class="btn" onclick="fxApply()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Apply</button>
     </div>
   </div>`;
   fxRefresh();
@@ -1406,7 +1408,7 @@ function imgSlider(lbl,key,val,min,max){
   return `<div style="margin-bottom:10px;display:flex;align-items:center;gap:10px">
     <label class="lbl" style="width:80px;margin:0">${lbl}</label>
     <input type="range" min="${min}" max="${max}" value="${val}" oninput="imgSet('${key}',this.value)" style="flex:1">
-    <span id="imgval_${key}" style="width:38px;text-align:right;color:#8888a8;font-size:11px;font-family:monospace">${Math.round(val)}</span>
+    <span id="imgval_${key}" style="width:38px;text-align:right;color:var(--text2);font-size:11px;font-family:monospace">${Math.round(val)}</span>
   </div>`;
 }
 
@@ -1426,7 +1428,7 @@ function renderImageModal(){
     ${imgSlider('Threshold','t',st.t,0,255)}
     <div class="modal-footer">
       <button class="btn" onclick="closeImageModal()">Cancel</button>
-      <button class="btn" onclick="applyImg()" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600">${st.editId?'Apply':'Add to label'}</button>
+      <button class="btn" onclick="applyImg()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">${st.editId?'Apply':'Add to label'}</button>
     </div>
   </div>`;
   drawImgPreview();
@@ -1760,7 +1762,7 @@ function showToast(msg){
   let t=document.getElementById("vl-toast");
   if(!t){t=document.createElement("div");t.id="vl-toast";
     Object.assign(t.style,{position:"fixed",bottom:"24px",left:"50%",transform:"translateX(-50%)",
-      background:"#2a2a42",border:"1px solid rgba(108,142,245,0.4)",color:"#e8e8f0",
+      background:"var(--surface3)",border:"1px solid rgba(108,142,245,0.4)",color:"var(--text)",
       borderRadius:"6px",padding:"8px 18px",fontSize:"12px",zIndex:"2000",
       boxShadow:"0 4px 20px rgba(0,0,0,0.5)",transition:"opacity 0.3s",pointerEvents:"none"});
     document.body.appendChild(t);}
@@ -1838,6 +1840,7 @@ function initDesignerRecords(records, filename){
 }
 
 R();
+function setTheme(m){document.documentElement.dataset.theme=(m==="light"?"light":"");}
 </script>
 </body>
 </html>

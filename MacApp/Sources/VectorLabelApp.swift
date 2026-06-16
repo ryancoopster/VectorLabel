@@ -44,6 +44,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         if Bundle.main.bundleIdentifier == nil || Bundle.main.bundleIdentifier!.isEmpty {
             UserDefaults.standard.set("com.sai.vectorlabel", forKey: "CFBundleIdentifier")
         }
+        // Apply the saved light/dark appearance to the whole app at launch.
+        AppSettings.shared.applyNativeAppearance()
         printWindowController = PrintWindowController()
         // After a print starts, the print window closes itself and asks us to
         // pop open the menu so the user can watch printer/queue status.
@@ -60,6 +62,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             .sink { [weak self] _ in self?.injectColumnConfig() }.store(in: &cancellables)
         AppSettings.shared.$recordColumnWidths.dropFirst().receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.injectColumnConfig() }.store(in: &cancellables)
+
+        // Push the light/dark theme to the designer webview when it changes.
+        AppSettings.shared.$appearance.dropFirst().receive(on: RunLoop.main)
+            .sink { [weak self] mode in
+                self?.designerWebView?.evaluateJavaScript("if(typeof setTheme==='function')setTheme('\(mode)')", completionHandler: nil)
+            }.store(in: &cancellables)
 
         // Set up the NSStatusItem — reliable for LSUIElement apps, no activation issues
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -489,6 +497,8 @@ extension AppDelegate: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         // Only handle the designer webview
         guard webView === designerWebView else { return }
+        // Apply the current light/dark theme.
+        webView.evaluateJavaScript("if(typeof setTheme==='function')setTheme('\(AppSettings.shared.appearance)')", completionHandler: nil)
         // Inject the most recent CSV with ≥10 records
         if let result = findMostRecentCSV(minRecords: 10) {
             injectDesignerRecords(result.records, filename: result.url.lastPathComponent)

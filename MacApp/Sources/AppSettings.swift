@@ -119,6 +119,24 @@ final class AppSettings: ObservableObject {
 
     // MARK: – App behaviour
 
+    /// UI appearance: "dark" (default) or "light". Applies to the menu, the
+    /// Preferences window, and both web UIs (print + designer) simultaneously.
+    @Published var appearance: String {
+        didSet {
+            UserDefaults.standard.set(appearance, forKey: "appearance")
+            applyNativeAppearance()
+        }
+    }
+    var isLight: Bool { appearance == "light" }
+
+    /// Match the native macOS appearance (so SwiftUI controls, text fields,
+    /// scrollbars, and the menu/preferences chrome render in the chosen mode).
+    func applyNativeAppearance() {
+        DispatchQueue.main.async {
+            NSApp.appearance = NSAppearance(named: self.isLight ? .aqua : .darkAqua)
+        }
+    }
+
     /// Whether to also show VectorLabel in the Dock (menu-bar-only by default).
     @Published var showInDock: Bool {
         didSet {
@@ -194,6 +212,7 @@ final class AppSettings: ObservableObject {
         } else {
             printerCalibration = [:]
         }
+        appearance        = defaults.string(forKey: "appearance") ?? "dark"
         showInDock        = defaults.object(forKey: "showInDock") as? Bool ?? false
 
         // Sync ExportSettings singleton
@@ -217,6 +236,7 @@ final class AppSettings: ObservableObject {
         designerSnapGrid     = true
         designerSnapObjects  = true
         designerGridSize     = 0.05
+        appearance           = "dark"
         showInDock           = false
     }
 }
