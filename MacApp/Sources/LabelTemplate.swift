@@ -91,6 +91,7 @@ enum LabelRenderer {
             case "rc": drawRect(obj, in: ctx, dpi: dpi)
             case "ci", "ov": drawEllipse(obj, in: ctx, dpi: dpi)
             case "ar": drawArrow(obj, in: ctx, dpi: dpi)
+            case "im": drawImage(obj, in: ctx, dpi: dpi)
             default: break
             }
             if rotated { ctx.restoreGState() }
@@ -261,6 +262,26 @@ enum LabelRenderer {
         ctx.setStrokeColor(gray: 0.0, alpha: 1.0)
         ctx.setLineWidth(CGFloat(lw))
         ctx.strokeEllipse(in: r)
+    }
+
+    /// Image ("im") — the embedded monochrome PNG (data URL in obj.src), drawn
+    /// into the object's box. The image is already black/white with alpha, so
+    /// the final 1-bit threshold leaves it crisp and transparent areas read as
+    /// white (no ink).
+    private static func drawImage(_ obj: TemplateObject, in ctx: CGContext, dpi: Int) {
+        guard let src = obj.src,
+              let comma = src.firstIndex(of: ","),
+              let data = Data(base64Encoded: String(src[src.index(after: comma)...])),
+              let cg = NSBitmapImageRep(data: data)?.cgImage
+        else { return }
+        let r = rect(for: obj, dpi: dpi)
+        ctx.saveGState()
+        // CG draws images bottom-up; flip locally so it lands upright in our
+        // already-flipped (top-left origin) context.
+        ctx.translateBy(x: r.minX, y: r.minY + r.height)
+        ctx.scaleBy(x: 1, y: -1)
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: r.width, height: r.height))
+        ctx.restoreGState()
     }
 
     /// Arrow ("ar") — a horizontal shaft along the object's centerline (obj.y),

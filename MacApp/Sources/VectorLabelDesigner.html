@@ -453,6 +453,10 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
       const rh=sel&&!readOnly?`<div onmousedown="startLineResize(event,'${o.id}','r')" title="Drag to stretch" style="position:absolute;right:-5px;top:50%;transform:translateY(-50%);width:9px;height:9px;background:#6C8EF5;border:1px solid #fff;border-radius:50%;cursor:ew-resize;z-index:10"></div>`:"";
       return `<div data-obj="${o.id}" ${drag} style="position:absolute;left:${x}px;top:${y-vh}px;width:${aw}px;height:${2*vh}px;cursor:${readOnly?"default":"move"};${rotCss}${ss}">${svg}${lh}${rh}${rotH}</div>`;
     }
+    if(o.t==="im"){
+      const rb=sel&&!readOnly?`<div onmousedown="startResize(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:#6C8EF5;border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";
+      return `<div data-obj="${o.id}" ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;cursor:${readOnly?"default":"move"};${rotCss}${ss}"><img src="${o.src||''}" style="width:100%;height:100%;object-fit:fill;pointer-events:none;display:block">${rotH}${rb}</div>`;
+    }
     return"";
   }).join("");
 
@@ -667,6 +671,18 @@ function buildProps(){
       ${ni("Y","y",.005,o.y)}
     </div>`;
   }
+  if(o.t==="im"){
+    return `<div style="display:flex;flex-direction:column;gap:0">
+      ${posButtons(o)}
+      <div class="sec">Image</div>
+      <button class="btn" onclick="reprocessImage('${o.id}')" style="margin-bottom:6px;font-size:11px">Adjust monochrome…</button>
+      <button class="btn" onclick="pickImage()" style="margin-bottom:8px;font-size:11px">Replace image…</button>
+      ${ni("Width","w",.01,o.w)}
+      ${ni("Height","h",.01,o.h)}
+      ${ni("X","x",.01,o.x)}
+      ${ni("Y","y",.005,o.y)}
+    </div>`;
+  }
   return"";
 }
 
@@ -689,6 +705,15 @@ function buildRecordTable(){
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
+// Coalesce rapid re-renders (e.g. drag/resize mousemove on a high-refresh
+// trackpad fires faster than the display) into at most one R() per frame.
+let _rafPending=false;
+function scheduleR(){
+  if(_rafPending)return;
+  _rafPending=true;
+  requestAnimationFrame(function(){ _rafPending=false; R(); });
+}
+
 function R(){
   const rec=(window._editorRecords||RX)[S.recIdx];
   const selObj=S.selId?gobj(S.selId):null;
@@ -761,13 +786,17 @@ function R(){
           <button class="tbtn" style="flex:1;width:auto" onclick="addObj('ci')"><span style="font-size:14px;font-weight:700">◯</span>Circle</button>
           <button class="tbtn" style="flex:1;width:auto" onclick="addObj('ov')"><span style="font-size:13px;font-weight:700">⬭</span>Oval</button>
         </div>
+        <div style="display:flex;gap:5px">
+          <button class="tbtn" style="flex:1;width:auto" onclick="pickImage()"><span style="font-size:13px;font-weight:700">🖼</span>Image</button>
+        </div>
+        <input type="file" id="imgFilePicker" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml" style="display:none" onchange="onImagePicked(event)">
         <div style="height:1px;background:rgba(255,255,255,0.08);margin:6px 0"></div>
         <span style="color:#44445a;font-size:9px;text-transform:uppercase;letter-spacing:1px">Objects (${S.objs.length})</span>
         <div style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:2px;margin:2px -2px 0">
           ${S.objs.length===0?`<div style="color:#44445a;font-size:10px;padding:6px 4px">No objects yet</div>`
             :S.objs.map(o=>{
               const sel=o.id===S.selId;
-              const icon=o.t==='tx'?'T':o.t==='ln'?'╌':o.t==='ar'?'→':o.t==='ci'?'◯':o.t==='ov'?'⬭':'▭';
+              const icon=o.t==='tx'?'T':o.t==='ln'?'╌':o.t==='ar'?'→':o.t==='ci'?'◯':o.t==='ov'?'⬭':o.t==='im'?'🖼':'▭';
               const lbl=objListLabel(o);
               return`<div onclick="selectObj('${o.id}')" title="${lbl.replace(/"/g,'&quot;')}"
                 style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;cursor:pointer;font-size:11px;white-space:nowrap;overflow:hidden;
@@ -1004,7 +1033,7 @@ function startDrag(e,id){
     const rawY=oy+(e.clientY-sy)/(SC*S.zoom);
     const o2=gobj(id);
     const snapped=applySnap(rawX,rawY,o2?o2.w:0.1,o2?o2.h:0.1,id);
-    uobj(id,snapped);R();
+    uobj(id,snapped);scheduleR();
   }
   function mu(){S._snapLines=[];window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",mu);R();}
   window.addEventListener("mousemove",mv);window.addEventListener("mouseup",mu);
@@ -1028,7 +1057,7 @@ function startLineResize(e,id,end){
       nx=Math.max(-BLEED_IN,Math.min(nx,ox+ow-.02));
       uobj(id,{x:nx,w:(ox+ow)-nx});
     }
-    R();
+    scheduleR();
   }
   function mu(){window.removeEventListener('mousemove',mv);window.removeEventListener('mouseup',mu);}
   window.addEventListener('mousemove',mv);window.addEventListener('mouseup',mu);
@@ -1049,7 +1078,7 @@ function startRotate(e,id){
     let deg=Math.atan2(ev.clientY-cy,ev.clientX-cx)*180/Math.PI+90;
     deg=((deg%360)+360)%360;
     if(ev.shiftKey) deg=Math.round(deg/15)*15;
-    uobj(id,{rot:Math.round(deg)%360});R();
+    uobj(id,{rot:Math.round(deg)%360});scheduleR();
   }
   function mu(){window.removeEventListener('mousemove',mv);window.removeEventListener('mouseup',mu);}
   window.addEventListener('mousemove',mv);window.addEventListener('mouseup',mu);
@@ -1067,7 +1096,7 @@ function startResize(e,id){
     const nh=snapToGrid(Math.max(.02,oh+dh));
     if(o.t==="ci"){ uobj(id,{w:nw,h:nw}); }   // circle stays square
     else { uobj(id,{w:nw,h:nh}); }
-    R();
+    scheduleR();
   }
   function mu(){window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",mu);}
   window.addEventListener("mousemove",mv);window.addEventListener("mouseup",mu);
@@ -1087,7 +1116,7 @@ function objListLabel(o){
     const f=(o.f||'').replace(/^=/,'').trim();
     return f && f!=='""' ? f : 'Text';
   }
-  return o.t==='ln'?'Line':o.t==='ar'?'Arrow':o.t==='ci'?'Circle':o.t==='ov'?'Oval':'Rectangle';
+  return o.t==='ln'?'Line':o.t==='ar'?'Arrow':o.t==='ci'?'Circle':o.t==='ov'?'Oval':o.t==='im'?'Image':'Rectangle';
 }
 
 // Select an object from the object list (mirrors clicking it on the canvas).
@@ -1109,6 +1138,107 @@ function addObj(type){
   if(type==="ci")S.objs.push({...base,t:"ci",w:.4,h:.4,lw:1});
   if(type==="ov")S.objs.push({...base,t:"ov",w:.5,h:.3,lw:1});
   S.selId=id;S._ef=undefined;R();
+}
+
+// ── Image objects (pick → monochrome convert → embed) ──────────────────────────
+// The processed (monochrome, alpha-preserving) PNG is stored as a data URL in
+// `src`; the original + slider params are kept too so it can be re-adjusted.
+let _imgState=null; // {origURL, img, b, c, t, editId}
+
+function pickImage(){ const inp=document.getElementById('imgFilePicker'); if(inp){ inp.value=''; inp.click(); } }
+
+function onImagePicked(ev){
+  const file=ev.target.files&&ev.target.files[0]; if(!file)return;
+  const fr=new FileReader();
+  fr.onload=function(){ loadImageForEdit(fr.result, null); };
+  fr.readAsDataURL(file);
+}
+
+function loadImageForEdit(origURL, editId){
+  const img=new Image();
+  img.onload=function(){
+    _imgState={origURL:origURL, img:img, b:0, c:0, t:128, editId:editId};
+    if(editId){ const o=gobj(editId); if(o){ _imgState.b=o.imgB||0; _imgState.c=o.imgC||0; _imgState.t=(o.imgT!=null?o.imgT:128); } }
+    renderImageModal();
+  };
+  img.onerror=function(){ if(typeof showToast==='function')showToast('Could not load that image'); };
+  img.src=origURL;
+}
+
+function reprocessImage(id){ const o=gobj(id); if(o)loadImageForEdit(o.imgOrig||o.src, id); }
+
+// Render the source image into `canvas` applying brightness/contrast and a
+// black/white threshold, preserving transparency. Caps the long side at 600px.
+function processToCanvas(canvas){
+  const st=_imgState, img=st.img, max=600;
+  let w=img.naturalWidth||img.width||1, h=img.naturalHeight||img.height||1;
+  const scale=Math.min(1, max/Math.max(w,h));
+  w=Math.max(1,Math.round(w*scale)); h=Math.max(1,Math.round(h*scale));
+  canvas.width=w; canvas.height=h;
+  const cx=canvas.getContext('2d');
+  cx.clearRect(0,0,w,h); cx.drawImage(img,0,0,w,h);
+  const id=cx.getImageData(0,0,w,h), d=id.data;
+  const c=st.c, cf=(259*(c+255))/(255*(259-c));
+  for(let i=0;i<d.length;i+=4){
+    if(d[i+3]<8){ d[i+3]=0; continue; }      // transparent stays transparent
+    let lum=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+    lum+=st.b;                                // brightness
+    lum=cf*(lum-128)+128;                     // contrast
+    const v=lum<st.t?0:255;                   // threshold → black / white
+    d[i]=d[i+1]=d[i+2]=v;
+  }
+  cx.putImageData(id,0,0);
+}
+
+function drawImgPreview(){ const cv=document.getElementById('imgPreview'); if(cv&&_imgState)processToCanvas(cv); }
+function imgSet(prop,val){ if(!_imgState)return; _imgState[prop]=parseFloat(val); drawImgPreview(); const el=document.getElementById('imgval_'+prop); if(el)el.textContent=Math.round(_imgState[prop]); }
+function closeImageModal(){ _imgState=null; const m=document.getElementById('img-modal'); if(m)m.remove(); }
+
+function applyImg(){
+  const st=_imgState; if(!st)return;
+  const cv=document.createElement('canvas'); processToCanvas(cv);
+  const procURL=cv.toDataURL('image/png');
+  snapshot();
+  if(st.editId){
+    uobj(st.editId,{src:procURL,imgOrig:st.origURL,imgB:st.b,imgC:st.c,imgT:st.t});
+  }else{
+    const id=mid();
+    const ar=(st.img.naturalHeight||1)/(st.img.naturalWidth||1);
+    const w=1.0, h=+(Math.max(.05,w*ar)).toFixed(3);
+    S.objs.push({id,x:.1,y:.1,t:"im",w:w,h:h,src:procURL,imgOrig:st.origURL,imgB:st.b,imgC:st.c,imgT:st.t});
+    S.selId=id; S._ef=undefined;
+  }
+  closeImageModal(); R();
+}
+
+function imgSlider(lbl,key,val,min,max){
+  return `<div style="margin-bottom:10px;display:flex;align-items:center;gap:10px">
+    <label class="lbl" style="width:80px;margin:0">${lbl}</label>
+    <input type="range" min="${min}" max="${max}" value="${val}" oninput="imgSet('${key}',this.value)" style="flex:1">
+    <span id="imgval_${key}" style="width:38px;text-align:right;color:#8888a8;font-size:11px;font-family:monospace">${Math.round(val)}</span>
+  </div>`;
+}
+
+function renderImageModal(){
+  const st=_imgState; if(!st)return;
+  let m=document.getElementById('img-modal');
+  if(!m){ m=document.createElement('div'); m.id='img-modal'; m.className='modal-overlay'; m.onclick=e=>{if(e.target===m)closeImageModal();}; document.body.appendChild(m); }
+  m.innerHTML=`<div class="modal" style="min-width:480px;max-width:560px">
+    <div class="modal-title">${st.editId?'Adjust image':'Add image — convert to monochrome'}</div>
+    <div style="display:flex;justify-content:center;margin-bottom:14px">
+      <div style="background-image:linear-gradient(45deg,#2a2a3a 25%,transparent 25%),linear-gradient(-45deg,#2a2a3a 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#2a2a3a 75%),linear-gradient(-45deg,transparent 75%,#2a2a3a 75%);background-size:16px 16px;background-position:0 0,0 8px,8px -8px,-8px 0;background-color:#1f1f2e;padding:6px;border-radius:6px;max-width:100%">
+        <canvas id="imgPreview" style="max-width:420px;max-height:240px;display:block"></canvas>
+      </div>
+    </div>
+    ${imgSlider('Brightness','b',st.b,-128,128)}
+    ${imgSlider('Contrast','c',st.c,-128,128)}
+    ${imgSlider('Threshold','t',st.t,0,255)}
+    <div class="modal-footer">
+      <button class="btn" onclick="closeImageModal()">Cancel</button>
+      <button class="btn" onclick="applyImg()" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600">${st.editId?'Apply':'Add to label'}</button>
+    </div>
+  </div>`;
+  drawImgPreview();
 }
 
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
