@@ -255,27 +255,48 @@ enum BradyUSB {
         #endif
     }
 
-    /// Parse the 108-byte SmartCell response (all integers little-endian, §8).
+    /// Parse a SmartCell response (all integers little-endian, §8).
+    ///
+    /// IMPORTANT: the documented layout assumes a 6-byte ribbon-code field at
+    /// 0x10, but the ribbon code is actually a variable-length NUL-terminated
+    /// string. A longer code (e.g. "R10010-WT", 4 bytes longer than "R4310")
+    /// pushes every later field forward by the same amount and grows the total
+    /// length (108 → 112). So we DON'T read the data/dimension fields at fixed
+    /// offsets — we locate them relative to the end of the ribbon string. The
+    /// 12 bytes between the ribbon-code NUL and the field block (a 4-byte ROM
+    /// marker + 4-byte unit serial + 4 zero bytes) are constant across samples.
     static func parseSmartCell(_ data: [UInt8]) -> SmartCellInfo? {
-        guard data.count >= 108 else { return nil }
-        func u16(_ off: Int) -> Int { Int(data[off]) | (Int(data[off + 1]) << 8) }
-        func ascii(_ off: Int, _ maxLen: Int) -> String {
-            var end = off
-            while end < off + maxLen, end < data.count, data[end] != 0 { end += 1 }
-            return String(bytes: data[off..<end], encoding: .ascii) ?? ""
+        guard data.count >= 0x16 else { return nil }
+        func u16(_ off: Int) -> Int {
+            (off >= 0 && off + 1 < data.count) ? Int(data[off]) | (Int(data[off + 1]) << 8) : 0
         }
+        /// NUL-terminated ASCII starting at `start`; returns the string and the
+        /// index of its terminator (or the scan limit).
+        func cstr(_ start: Int, _ maxLen: Int) -> (String, Int) {
+            var end = start
+            while end < data.count, end < start + maxLen, data[end] != 0 { end += 1 }
+            return (String(bytes: data[start..<end], encoding: .ascii) ?? "", end)
+        }
+
+        let (partNumber, _)        = cstr(0x06, 10)   // fixed 10-byte field
+        let (ribbonCode, ribbonNul) = cstr(0x10, 32)  // variable length
+
+        // Field block begins 13 bytes past the ribbon-code terminator.
+        let fb = ribbonNul + 13
+        guard fb + 0x20 + 1 < data.count else { return nil }
+
         return SmartCellInfo(
-            partNumber:         ascii(0x06, 10),
-            ribbonCode:         ascii(0x10, 6),
-            labelWidthMils:     u16(0x36),
-            labelHeightMils:    u16(0x38),
-            printableWidthMils: u16(0x3A),
-            linerWidthMils:     u16(0x2E),
-            isDieCut:           u16(0x32) == 1,
-            partsAcross:        u16(0x42),
-            horizontalGapMils:  u16(0x22),
-            verticalGapMils:    u16(0x24),
-            supplyRemainingPct: u16(0x26)
+            partNumber:         partNumber,
+            ribbonCode:         ribbonCode,
+            labelWidthMils:     u16(fb + 0x14),
+            labelHeightMils:    u16(fb + 0x16),
+            printableWidthMils: u16(fb + 0x18),
+            linerWidthMils:     u16(fb + 0x0C),
+            isDieCut:           u16(fb + 0x10) == 1,
+            partsAcross:        u16(fb + 0x20),
+            horizontalGapMils:  u16(fb + 0x00),
+            verticalGapMils:    u16(fb + 0x02),
+            supplyRemainingPct: u16(fb + 0x04)
         )
     }
 }
