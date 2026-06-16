@@ -1038,8 +1038,10 @@ function R(){
 function openEditor(){
   const t=P.templates[P.activeTpl];
   if(!t)return;
+  // Pass the list index (not id) — ids can be duplicated across templates, the
+  // index uniquely identifies which one the user is editing.
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
-    window.webkit.messageHandlers.vectorlabel.postMessage({action:"editTemplate",payload:{id:t.id,name:t.name}});
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"editTemplate",payload:{index:P.activeTpl,name:t.name}});
   }
 }
 

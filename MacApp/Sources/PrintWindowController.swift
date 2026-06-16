@@ -61,8 +61,9 @@ final class PrintWindowController: NSObject {
     var onPrintStarted: (() -> Void)?
 
     /// Called when the user taps Edit on a template — the caller opens the
-    /// Template Designer for that template id (the print window stays open).
-    var onEditTemplate: ((String) -> Void)?
+    /// Template Designer for that template (by list index; the print window
+    /// stays open). Index, not id, because ids can be duplicated.
+    var onEditTemplate: ((Int) -> Void)?
 
     // MARK: – Show / hide
 
@@ -359,10 +360,10 @@ extension PrintWindowController: WKScriptMessageHandler {
             AppSettings.shared.applyColumnConfigPayload(body["payload"])
 
         case "editTemplate":
-            if let id = (body["payload"] as? [String: Any])?["id"] as? String {
+            if let index = (body["payload"] as? [String: Any])?["index"] as? Int {
                 // Hide the print window while editing; returnFromEdit() reshows it.
                 window?.orderOut(nil)
-                onEditTemplate?(id)
+                onEditTemplate?(index)
             }
 
         case "setDefaultTemplate":

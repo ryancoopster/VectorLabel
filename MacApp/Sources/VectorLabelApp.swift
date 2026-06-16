@@ -49,8 +49,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // pop open the menu so the user can watch printer/queue status.
         printWindowController.onPrintStarted = { [weak self] in self?.showMenuPopover() }
         // Editing from the print window opens the single Template Designer.
-        printWindowController.onEditTemplate = { [weak self] id in
-            self?.openTemplateDesigner(editTemplateID: id)
+        printWindowController.onEditTemplate = { [weak self] index in
+            self?.openTemplateDesigner(editTemplateIndex: index)
         }
 
         // Keep the designer's column config in sync with the shared setting.
@@ -92,20 +92,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     // MARK: – Actions called by MenuBarView
 
-    // Template id to load for print-window editing on the next designer load.
-    private var pendingEditTemplateID: String?
+    // Template index to load for print-window editing on the next designer load.
+    private var pendingEditTemplateIndex: Int?
     // True while the designer is open to edit a template for the print window.
     private var designerForPrintEdit = false
 
-    func openTemplateDesigner(editTemplateID: String? = nil) {
-        pendingEditTemplateID = editTemplateID
-        designerForPrintEdit = (editTemplateID != nil)
+    func openTemplateDesigner(editTemplateIndex: Int? = nil) {
+        pendingEditTemplateIndex = editTemplateIndex
+        designerForPrintEdit = (editTemplateIndex != nil)
         if let win = designerWindow {
             NSApp.activate(ignoringOtherApps: true)
             win.makeKeyAndOrderFront(nil)
             win.makeFirstResponder(designerWebView)
-            if let id = editTemplateID {
-                applyPendingEdit(id)
+            if let idx = editTemplateIndex {
+                applyPendingEdit(idx)
             } else {
                 designerWebView?.evaluateJavaScript("window._printEdit=false; if(typeof R==='function')R(); if(typeof openTemplate==='function')openTemplate();", completionHandler: nil)
             }
@@ -312,12 +312,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         )
     }
 
-    /// Load a specific template into the designer for print-window editing.
-    private func applyPendingEdit(_ id: String) {
-        pendingEditTemplateID = nil
-        guard let wv = designerWebView,
-              let tpl = TemplateStore.shared.templates.first(where: { $0.id == id }),
-              let data = try? JSONEncoder().encode(tpl),
+    /// Load a specific template (by store index) into the designer for print
+    /// editing. Index, not id, because ids can be duplicated across templates.
+    private func applyPendingEdit(_ index: Int) {
+        pendingEditTemplateIndex = nil
+        let templates = TemplateStore.shared.templates
+        guard let wv = designerWebView, index >= 0, index < templates.count,
+              let data = try? JSONEncoder().encode(templates[index]),
               let json = String(data: data, encoding: .utf8)
         else { return }
         wv.evaluateJavaScript("if(typeof initPrintEdit==='function')initPrintEdit(\(json));",
@@ -443,9 +444,9 @@ extension AppDelegate: WKNavigationDelegate {
         // Inject the templates-folder list so the designer's Open dialog can list them.
         injectDesignerTemplates()
         injectColumnConfig()
-        if let id = pendingEditTemplateID {
+        if let idx = pendingEditTemplateIndex {
             // Editing for the print window: load that template, skip the picker.
-            applyPendingEdit(id)
+            applyPendingEdit(idx)
         } else {
             // Standalone mode: ensure the New/Open/Save toolbar (not the
             // print-edit Return buttons) and open the template picker.
