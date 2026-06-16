@@ -1005,8 +1005,11 @@ function renderFilterModal(){
   </div>`;
 }
 
-// Scale the side preview label to fill the (window-responsive) panel width.
-// Rendered at scale 1, then transform-scaled here so it tracks the panel size.
+// User-adjustable width of the preview sidebar (px), persisted across sessions.
+let PREVIEW_W=(function(){ try{ const v=parseInt(localStorage.getItem("vl-preview-width"),10); if(v>=240&&v<=2400)return v; }catch(_){}; return 320; })();
+
+// Scale the side preview label to fill the current sidebar width. Rendered at
+// scale 1, then transform-scaled here so it grows/shrinks with the sidebar.
 function fitPreviewLabel(){
   const wrap=document.getElementById("preview-label-wrap");
   const inner=document.getElementById("preview-label-inner");
@@ -1015,15 +1018,29 @@ function fitPreviewLabel(){
   const avail=wrap.clientWidth;
   if(!(avail>0)||!(lw>0))return;
   let s=avail/lw;
-  if(s>2.5)s=2.5; if(s<0.3)s=0.3;   // sensible bounds
+  if(s>6)s=6; if(s<0.3)s=0.3;   // sensible bounds
   inner.style.transform="scale("+s+")";
   wrap.style.height=(lh*s)+"px";    // transform doesn't reflow — reserve the space
 }
-let _rafFitPreview=false;
-window.addEventListener("resize",function(){
-  if(_rafFitPreview)return; _rafFitPreview=true;
-  requestAnimationFrame(function(){ _rafFitPreview=false; fitPreviewLabel(); });
-});
+
+// Drag the splitter on the sidebar's left edge to resize it; persist on release.
+function startPreviewResize(e){
+  e.preventDefault();
+  const startX=e.clientX, startW=PREVIEW_W;
+  const pane=document.getElementById("preview-pane");
+  function mv(ev){
+    const maxW=Math.max(280, window.innerWidth-360);
+    let w=Math.max(240, Math.min(startW+(startX-ev.clientX), maxW));   // drag left → wider
+    PREVIEW_W=w;
+    if(pane)pane.style.width=w+"px";
+    fitPreviewLabel();
+  }
+  function mu(){
+    window.removeEventListener("mousemove",mv); window.removeEventListener("mouseup",mu);
+    try{ localStorage.setItem("vl-preview-width", String(Math.round(PREVIEW_W))); }catch(_){}
+  }
+  window.addEventListener("mousemove",mv); window.addEventListener("mouseup",mu);
+}
 
 // ── Label preview panel ───────────────────────────────────────────────────────
 function buildPreviewPanel(){
@@ -1037,9 +1054,9 @@ function buildPreviewPanel(){
   const nextIdx=vpos>=0&&vpos<total-1?vis[vpos+1]:P.previewIdx;
   if(!t||!rec)return`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:12px">No template selected</div>`;
   const spec=BL.find(l=>l.n===t.specN)||BL[1];
-  // The label is rendered at scale 1 and fitted to the panel width by
-  // fitPreviewLabel() (called after render and on window resize), so it grows
-  // with the window instead of staying a fixed size.
+  // The label is rendered at scale 1 and fitted to the sidebar width by
+  // fitPreviewLabel() (after render and while dragging the resize splitter), so
+  // it grows/shrinks as the sidebar is resized.
   const lw=spec.pw*SC, lh=spec.ph*SC;
   return`<div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:20px">
     <div style="display:flex;align-items:center;gap:6px;width:100%;justify-content:center">
@@ -1462,7 +1479,7 @@ function buildExpandedPreviewModal(){
     </div>`;
   }).join("") : "";
   return `<div class="modal-overlay" id="vl-preview-modal" onclick="if(event.target===this)closeExpandedPreview()">
-    <div class="modal" style="width:90vw;max-width:1100px;height:88vh;display:flex;flex-direction:column;padding:0;overflow:hidden">
+    <div class="modal" style="width:96vw;max-width:none;height:95vh;display:flex;flex-direction:column;padding:0;overflow:hidden">
       <div class="modal-title" style="padding:16px 20px;margin:0;border-bottom:1px solid var(--bd3)">Print preview — ${vis.length} label${vis.length!==1?"s":""}</div>
       <div id="vl-preview-scroll" style="flex:1;overflow:auto;padding:18px;display:flex;flex-wrap:wrap;gap:14px;align-content:flex-start;justify-content:center">
         ${tiles||'<div style="color:var(--text3);font-size:13px;margin:auto">'+(t?"No labels match the current filter.":"No template selected.")+'</div>'}
@@ -1679,9 +1696,12 @@ function R(){
         })()}
       </div>
 
-      <!-- Right: preview panel (width scales with the window) -->
-      <div style="width:clamp(300px,36vw,820px);background:var(--surface);border-left:1px solid var(--bd2);overflow-y:auto;flex-shrink:0">
-        ${buildPreviewPanel()}
+      <!-- Right: preview panel (drag its left edge to resize; width persists) -->
+      <div id="preview-pane" style="width:${PREVIEW_W}px;flex-shrink:0;position:relative;background:var(--surface);border-left:1px solid var(--bd2)">
+        <div onmousedown="startPreviewResize(event)" title="Drag to resize the preview" style="position:absolute;left:-3px;top:0;bottom:0;width:8px;cursor:ew-resize;z-index:6"></div>
+        <div style="position:absolute;inset:0;overflow-y:auto">
+          ${buildPreviewPanel()}
+        </div>
       </div>
     </div>
 
