@@ -770,6 +770,22 @@ function scheduleR(){
   requestAnimationFrame(function(){ _rafPending=false; R(); });
 }
 
+// Rebuild ONLY the label canvas (objects + snap guides), not the whole window
+// (record table / properties / toolbar). Used during resize/rotate gestures so
+// they stay light; falls back to a full R() if the canvas host isn't present.
+function renderCanvasOnly(){
+  const host=document.getElementById("canvas-host");
+  if(!host){ R(); return; }
+  const rec=(window._editorRecords||RX)[S.recIdx];
+  host.innerHTML=buildCanvas(S.spec,S.objs,S.selId,rec,S.wrap,false);
+}
+let _rafCanvas=false;
+function scheduleCanvas(){
+  if(_rafCanvas)return;
+  _rafCanvas=true;
+  requestAnimationFrame(function(){ _rafCanvas=false; renderCanvasOnly(); });
+}
+
 function R(){
   const rec=(window._editorRecords||RX)[S.recIdx];
   const selObj=S.selId?gobj(S.selId):null;
@@ -857,7 +873,7 @@ function R(){
       <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0">
         <!-- Canvas area -->
         <div style="flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;background:#0d0d14;padding:28px">
-          <div style="transform:scale(${S.zoom});transform-origin:center center;flex-shrink:0">
+          <div id="canvas-host" style="transform:scale(${S.zoom});transform-origin:center center;flex-shrink:0">
             ${buildCanvas(S.spec,S.objs,S.selId,rec,S.wrap,false)}
           </div>
         </div>
@@ -1164,6 +1180,17 @@ function uobjWithHistory(id,p){
 
 // Wrap startDrag to snapshot on mousedown (before move)
 const _origStartDrag=startDrag;
+// Move just the dragged element's left/top from the model — avoids a full R()
+// (which rebuilds the whole designer, re-decoding images etc.) on every frame.
+function positionEl(id){
+  const o=gobj(id); if(!o)return;
+  const el=document.querySelector('[data-obj="'+id+'"]'); if(!el)return;
+  const B=BLEED_IN*SC, x=o.x*SC+B, y=o.y*SC+B;
+  el.style.left=x+"px";
+  if(o.t==="ar"){ const th=Math.max(1,o.lw||2),as=Math.max(4,o.arrowSize||12),hw=as*0.6,vh=Math.max(th/2,hw)+2; el.style.top=(y-vh)+"px"; }
+  else { el.style.top=y+"px"; }
+}
+
 function startDrag(e,id){
   e.stopPropagation();
   const o=gobj(id);if(!o)return;
@@ -1176,7 +1203,8 @@ function startDrag(e,id){
     const rawY=oy+(e.clientY-sy)/(SC*S.zoom);
     const o2=gobj(id);
     const snapped=applySnap(rawX,rawY,o2?o2.w:0.1,o2?o2.h:0.1,id);
-    uobj(id,snapped);scheduleR();
+    uobj(id,snapped);
+    positionEl(id);   // live move without rebuilding the DOM
   }
   function mu(){S._snapLines=[];window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",mu);R();}
   window.addEventListener("mousemove",mv);window.addEventListener("mouseup",mu);
@@ -1200,7 +1228,7 @@ function startLineResize(e,id,end){
       nx=Math.max(-BLEED_IN,Math.min(nx,ox+ow-.02));
       uobj(id,{x:nx,w:(ox+ow)-nx});
     }
-    scheduleR();
+    scheduleCanvas();
   }
   function mu(){window.removeEventListener('mousemove',mv);window.removeEventListener('mouseup',mu);}
   window.addEventListener('mousemove',mv);window.addEventListener('mouseup',mu);
@@ -1221,7 +1249,7 @@ function startRotate(e,id){
     let deg=Math.atan2(ev.clientY-cy,ev.clientX-cx)*180/Math.PI+90;
     deg=((deg%360)+360)%360;
     if(ev.shiftKey) deg=Math.round(deg/15)*15;
-    uobj(id,{rot:Math.round(deg)%360});scheduleR();
+    uobj(id,{rot:Math.round(deg)%360});scheduleCanvas();
   }
   function mu(){window.removeEventListener('mousemove',mv);window.removeEventListener('mouseup',mu);}
   window.addEventListener('mousemove',mv);window.addEventListener('mouseup',mu);
@@ -1241,7 +1269,7 @@ function startResize(e,id){
     if(o.t==="ci"||o.t==="sy"){ uobj(id,{w:nw,h:nw}); }              // circle/symbol stay square
     else if(o.t==="im" && o.lockAspect!==false){ uobj(id,{w:nw,h:+(nw*ratio).toFixed(4)}); } // locked image keeps ratio
     else { uobj(id,{w:nw,h:nh}); }
-    scheduleR();
+    scheduleCanvas();
   }
   function mu(){window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",mu);}
   window.addEventListener("mousemove",mv);window.addEventListener("mouseup",mu);
