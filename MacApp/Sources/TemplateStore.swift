@@ -15,6 +15,9 @@ struct TemplateObject: Codable, Identifiable, Hashable {
     var h: Double = 0.2
 
     // Text properties (t == "tx")
+    var mode: String?       // "static" | "field" | "formula" (nil → inferred)
+    var text: String?       // static-mode literal text
+    var field: String?      // field-mode column key, e.g. "Connector"
     var f: String?          // formula, e.g. "=IF(Number<>\"\",Number,\"\")"
     var font: String?
     var fs: Double?         // font size in points (relative to SC=185 canvas)

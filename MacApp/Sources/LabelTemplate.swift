@@ -127,8 +127,16 @@ enum LabelRenderer {
     private static let designerDPI = 185.0
 
     private static func drawText(_ obj: TemplateObject, record: WireRecord, in ctx: CGContext, dpi: Int) {
-        let formula = obj.f ?? ""
-        let text = FormulaEngine.evaluate(formula, fields: record.fields)
+        // Resolve the displayed string from the text mode. Legacy objects have
+        // only `f`, so a nil mode with a formula → formula.
+        let mode = obj.mode ?? (obj.field != nil ? "field"
+                                : (obj.text != nil && (obj.f?.isEmpty ?? true) ? "static" : "formula"))
+        let text: String
+        switch mode {
+        case "static": text = obj.text ?? ""
+        case "field":  text = obj.field.flatMap { record.fields[$0] } ?? ""
+        default:       text = FormulaEngine.evaluate(obj.f ?? "", fields: record.fields)
+        }
         guard !text.isEmpty else { return }
 
         let r = rect(for: obj, dpi: dpi)

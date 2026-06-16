@@ -148,6 +148,16 @@ function evalF(formula,rec){
   catch(err){return{v:"",e:err.message};}
 }
 
+// Text source mode + resolved value (mirrors the designer). Legacy objects with
+// only `f` are formula-mode.
+function txMode(o){ return o.mode || (o.field?"field":((o.text!==undefined&&!o.f)?"static":"formula")); }
+function textValue(o,rec){
+  const m=txMode(o);
+  if(m==="static") return {v:(o.text!=null?o.text:""),e:null};
+  if(m==="field"){ if(!o.field)return{v:"",e:null}; const v=rec?rec[o.field]:undefined; return {v:(v==null?"":String(v)),e:null}; }
+  return rec?evalF(o.f,rec):{v:"",e:null};
+}
+
 // ── Label preview renderer ────────────────────────────────────────────────────
 const BL=[
   {n:"BM-31-427",tw:1,th:1.5,pw:1,ph:.5,lb:'BM-31-427 — 1"×1.5"'},
@@ -167,7 +177,7 @@ function renderLabel(tpl,rec,scale=1){
     const x=o.x*sc,y=o.y*sc,w=(o.w||1)*sc,h=(o.h||0)*sc;
     const rc=o.rot?`transform:rotate(${o.rot}deg);transform-origin:center center;`:"";
     if(o.t==="tx"){
-      const {v,e}=rec?evalF(o.f,rec):{v:"",e:null};
+      const {v,e}=textValue(o,rec);
       const fz=Math.max(5,(o.fs||14)*(sc/100));
       const jc=o.al==="center"?"center":o.al==="right"?"flex-end":"flex-start";
       const va=o.valign==="top"?"flex-start":o.valign==="bottom"?"flex-end":"center";

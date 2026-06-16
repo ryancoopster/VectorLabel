@@ -119,6 +119,17 @@ function evalF(formula,rec){
   catch(err){return{v:"",e:err.message};}
 }
 
+// Text source mode for a tx object. Legacy objects (only `f`) → formula.
+function txMode(o){ return o.mode || (o.field?"field":((o.text!==undefined&&!o.f)?"static":"formula")); }
+
+// The string a text object displays for a given record, honoring its mode.
+function textValue(o,rec){
+  const m=txMode(o);
+  if(m==="static") return {v:(o.text!=null?o.text:""),e:null};
+  if(m==="field"){ if(!o.field)return{v:"",e:null}; const v=rec?rec[o.field]:undefined; return {v:(v==null?"":String(v)),e:null}; }
+  return rec?evalF(o.f,rec):{v:(o.f||"").replace(/^=/,""),e:null};
+}
+
 // ── State ─────────────────────────────────────────────────────────────────────
 let nid=1;const mid=()=>`o${nid++}`;
 let S={
@@ -406,7 +417,7 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
     const rotH=sel&&!readOnly?`<div style="position:absolute;left:50%;top:-22px;width:1px;height:22px;background:#6C8EF5;transform:translateX(-50%);z-index:10;pointer-events:none"></div><div onmousedown="startRotate(event,'${o.id}')" title="Drag to rotate" style="position:absolute;left:50%;top:-26px;transform:translateX(-50%);width:11px;height:11px;background:#6C8EF5;border:1px solid #fff;border-radius:50%;cursor:grab;z-index:11"></div>`:"";
 
     if(o.t==="tx"){
-      const {v,e}=rec?evalF(o.f,rec):{v:(o.f||"").replace(/^=/,""),e:null};
+      const {v,e}=textValue(o,rec);
       const va=o.valign==="top"?"flex-start":o.valign==="bottom"?"flex-end":"center";
       const fz=Math.max(7,(o.fs||14)*(sc/100));
       const fontStyle=o.italic?"italic":"normal";
@@ -420,7 +431,8 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
       const textAlign=o.al||"left";
       const dispVal=e?`⚠ ${e.substring(0,40)}`:v.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
       const rb=sel&&!readOnly?`<div onmousedown="startResize(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:#6C8EF5;border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";
-      return `<div data-obj="${o.id}" ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${Math.max(h,12)}px;${rotCss}${ss}border-radius:2px;cursor:${readOnly?"default":"move"};display:flex;align-items:${va};padding:0 2px;box-sizing:border-box">
+      const dropAttr=readOnly?"":`ondragover="event.preventDefault()" ondrop="onColDropToText(event,'${o.id}')"`;
+      return `<div data-obj="${o.id}" ${drag} ${dropAttr} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${Math.max(h,12)}px;${rotCss}${ss}border-radius:2px;cursor:${readOnly?"default":"move"};display:flex;align-items:${va};padding:0 2px;box-sizing:border-box">
         <div style="width:100%;font-family:'${o.font||"Helvetica Neue"}',Arial,sans-serif;font-size:${fz}px;font-weight:${fontWeight};font-style:${fontStyle};text-decoration:${textDecoration};color:${txtColor};white-space:${whiteSpace};word-break:${wordBreak};overflow:hidden;text-overflow:${o.wrapText?"clip":"ellipsis"};line-height:1.15;letter-spacing:${letterSpacing};text-align:${textAlign};transform:scaleX(${scaleX});transform-origin:left center;pointer-events:none">${dispVal}</div>
         ${rotH}${rb}</div>`;
     }
@@ -563,8 +575,27 @@ function buildProps(){
     const alBtns=["left","center","right","justify"].map(a=>`<button class="fmt-btn${o.al===a?" on":""}" onclick="uobj('${o.id}',{al:'${a}'});R()" title="${a}">${a==="left"?"⬅":a==="center"?"☰":a==="right"?"➡":"⬌"}</button>`).join("");
     const vaBtns=["top","middle","bottom"].map(a=>`<button class="fmt-btn${(o.valign||"middle")===a?" on":""}" onclick="uobj('${o.id}',{valign:'${a}'});R()" title="${a}">${a==="top"?"⬆":a==="middle"?"↕":"⬇"}</button>`).join("");
     const fontOpts=FONTS.map(f=>`<option value="${f}"${o.font===f?" selected":""}>${f}</option>`).join("");
+    const tmode=txMode(o);
+    const modeBtns=[["static","Static"],["field","Field"],["formula","Formula"]].map(([m,lbl])=>
+      `<button class="fmt-btn${tmode===m?" on":""}" style="flex:1" onclick="setTextMode('${o.id}','${m}')">${lbl}</button>`).join("");
+    const srcEditor =
+      tmode==="static"
+        ? `<textarea class="inp" rows="2" style="resize:vertical;font-family:inherit" placeholder="Type label text…" oninput="uobj('${o.id}',{text:this.value});R()">${(o.text||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</textarea>`
+      : tmode==="field"
+        ? `<select class="inp" onchange="uobj('${o.id}',{field:this.value});R()">
+             <option value="">— choose column —</option>
+             ${FD.map(f=>`<option value="${f.c}"${o.field===f.c?" selected":""}>${f.f}</option>`).join("")}
+           </select>
+           <div style="color:#44445a;font-size:10px;margin-top:5px;line-height:1.4">…or drag a column header from the Records panel onto the text box.</div>`
+      : `<input id="fxbar" class="inp" value="${(o.f||"").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}" style="font-family:monospace;font-size:12px" oninput="S._ef=this.value" onblur="commitF()" onkeydown="if(event.key==='Enter')commitF()" placeholder='=IF(Number&lt;&gt;&quot;&quot;,Number,&quot;&quot;)'>
+         <button class="btn${S.showFields?" on":""}" onclick="S.showFields=!S.showFields;R()" style="margin-top:5px;font-size:11px">Fields ▾</button>
+         ${S.showFields?`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;max-height:120px;overflow-y:auto">${FD.map(f=>`<button class="fbtn" onclick="insertField('${f.f}')">${f.f}</button>`).join("")}</div>`:""}`;
     return `<div style="display:flex;flex-direction:column;gap:0">
       ${posButtons(o)}
+      <div class="sec">Text source</div>
+      <div style="display:flex;gap:3px;margin-bottom:8px">${modeBtns}</div>
+      <div style="margin-bottom:8px">${srcEditor}</div>
+      <hr class="divider">
       <div class="sec">Text formatting</div>
       <div style="margin-bottom:8px">
         <label class="lbl">Font</label>
@@ -734,19 +765,6 @@ function R(){
   const rec=(window._editorRecords||RX)[S.recIdx];
   const selObj=S.selId?gobj(S.selId):null;
 
-  const fbar=selObj&&selObj.t==="tx"?`
-    <div style="background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.07);padding:5px 12px;display:flex;align-items:center;gap:8px;flex-shrink:0">
-      <span style="color:#44445a;font-style:italic;font-size:14px">ƒx</span>
-      <input id="fxbar" class="inp" value="${(selObj.f||"").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}" style="flex:1;font-family:monospace;font-size:12px"
-        oninput="S._ef=this.value" onblur="commitF()" onkeydown="if(event.key==='Enter')commitF()"
-        placeholder='=IF(Number&lt;&gt;"",Number&amp;" - "&amp;Cable,Cable)'>
-      <button class="btn${S.showFields?" on":""}" onclick="S.showFields=!S.showFields;R()">Fields ▾</button>
-    </div>
-    ${S.showFields?`<div style="background:#252538;border-bottom:1px solid rgba(255,255,255,0.07);padding:6px 12px;display:flex;flex-wrap:wrap;gap:4px;max-height:80px;overflow-y:auto;flex-shrink:0">
-      ${FD.map(f=>`<button class="fbtn" onclick="insertField('${f.f}')">${f.f}</button>`).join("")}
-    </div>`:""}
-  `:"";
-
   document.getElementById("app").innerHTML=`
     <!-- Top bar -->
     <div style="background:#1e1e2e;border-bottom:1px solid rgba(255,255,255,0.07);padding:0 14px;display:flex;align-items:center;gap:10px;height:44px;flex-shrink:0">
@@ -826,9 +844,8 @@ function R(){
         ${S.selId?`<button class="btn" onclick="delObj()" style="background:rgba(245,108,108,0.15);border-color:rgba(245,108,108,0.3);color:#f56c6c;padding:5px 0;font-size:10px;flex-shrink:0">Delete selected</button>`:""}
       </div>
 
-      <!-- Center: canvas + formula bar + records -->
+      <!-- Center: canvas + records -->
       <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0">
-        ${fbar}
         <!-- Canvas area -->
         <div style="flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;background:#0d0d14;padding:28px">
           <div style="transform:scale(${S.zoom});transform-origin:center center;flex-shrink:0">
@@ -968,7 +985,10 @@ function renderModal(){
               <button onclick="event.stopPropagation();deleteTemplateCard(${i})" title="Delete this template" style="flex-shrink:0;background:rgba(245,108,108,0.12);border:1px solid rgba(245,108,108,0.3);color:#f56c6c;border-radius:5px;padding:4px 9px;cursor:pointer;font-size:13px">🗑</button>
             </div>`).join("")}
         <div class="modal-footer" style="justify-content:space-between">
-          <button class="btn" onclick="pickTemplateFile()">Browse file…</button>
+          <div style="display:flex;gap:8px">
+            <button class="btn" onclick="showModal('new')">New…</button>
+            <button class="btn" onclick="pickTemplateFile()">Browse file…</button>
+          </div>
           <div style="display:flex;gap:8px">
             <button class="btn" onclick="closeModal()">Cancel</button>
             <button class="btn" onclick="loadSelectedTemplate()" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600" ${!(cards.length&&S._openSel!==undefined)?"disabled":""}>Open</button>
@@ -987,6 +1007,26 @@ function renderModal(){
 function deselect(){S.selId=null;S.showFields=false;S._ef=undefined;R();}
 
 function commitF(){if(S.selId&&S._ef!==undefined){uobj(S.selId,{f:S._ef});S._ef=undefined;R();}}
+
+// Switch a text object's source mode, seeding a sensible default for the new mode.
+function setTextMode(id,m){
+  const o=gobj(id); if(!o)return;
+  snapshot();
+  const patch={mode:m};
+  if(m==="formula" && (o.f===undefined||o.f==="")) patch.f='=""';
+  if(m==="static" && o.text===undefined) patch.text="";
+  uobj(id,patch); S._ef=(m==="formula"?(o.f||patch.f):undefined); S.showFields=false; R();
+}
+
+// Drop a record-column header onto a text box → field mode bound to that column.
+function onColDropToText(e,id){
+  e.preventDefault();
+  const key=(e.dataTransfer&&(e.dataTransfer.getData("text/plain")))||_vlDragCol;
+  if(typeof colClearDrag==="function")colClearDrag();
+  if(!key)return;
+  snapshot();
+  uobj(id,{mode:"field",field:key}); S.selId=id; S._ef=undefined; R();
+}
 function insertField(name){
   const fx=document.getElementById("fxbar");
   if(fx&&S.selId){const nv=(fx.value||"")+name;fx.value=nv;S._ef=nv;}
@@ -1150,7 +1190,7 @@ function addObj(type){
   snapshot();
   const id=mid();
   const base={id,x:.05,y:.05};
-  if(type==="tx")S.objs.push({...base,t:"tx",w:.5,h:.2,f:'=""',al:"left",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100});
+  if(type==="tx")S.objs.push({...base,t:"tx",w:.5,h:.2,mode:"static",text:"Text",al:"left",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100});
   if(type==="ln")S.objs.push({...base,t:"ln",y:.25,w:1,h:0,lw:1});
   if(type==="rc")S.objs.push({...base,t:"rc",w:.4,h:.2,lw:1});
   if(type==="ar")S.objs.push({...base,t:"ar",y:.25,w:1,h:0,lw:2,arrowStart:false,arrowEnd:true,arrowSize:12});
