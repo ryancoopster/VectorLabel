@@ -376,6 +376,22 @@ extension PrintWindowController: WKScriptMessageHandler {
                 PrinterManager.shared.refreshCassette(for: printerID, force: true)
             }
 
+        case "editRecord":
+            // Live in-place edit of a record field from the print window, so the
+            // printed output (rendered from this copy) reflects it. Session-only —
+            // not written back to the source CSV.
+            if let p = body["payload"] as? [String: Any],
+               let index = p["index"] as? Int,
+               let field = p["field"] as? String,
+               let value = p["value"] as? String,
+               index >= 0, index < records.count {
+                var f = records[index].fields
+                f[field] = value
+                records[index] = WireRecord(side: f["_Side"] ?? records[index].side,
+                                            wireID: f["Number"] ?? records[index].wireID,
+                                            fields: f)
+            }
+
         case "setColumnConfig":
             AppSettings.shared.applyColumnConfigPayload(body["payload"])
 

@@ -35,6 +35,9 @@ label.lbl{font-size:10px;color:var(--text2);display:block;margin-bottom:3px}
 .rec-row.selected{background:rgba(108,142,245,0.12)}
 .rec-row.active-preview{background:rgba(108,142,245,0.2)}
 .rec-cell{padding:6px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cell-edit{position:absolute;top:50%;right:3px;transform:translateY(-50%);opacity:0;border:1px solid var(--bd3);background:var(--surface);color:var(--text2);border-radius:3px;font-size:9px;line-height:1;padding:2px 4px;cursor:pointer;z-index:5}
+.rec-row:hover .cell-edit{opacity:.85}
+.cell-edit:hover{opacity:1;color:var(--accent);border-color:var(--accent)}
 .rec-hdr{font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
 .tpl-card{background:var(--surface2);border:1px solid var(--bd3);border-radius:6px;padding:12px 14px;cursor:pointer;display:flex;align-items:center;gap:12px;margin-bottom:8px;transition:border-color .15s}
 .tpl-card:hover{border-color:var(--accent);background:var(--surface3)}
@@ -368,11 +371,42 @@ function colHeaderContextMenu(e,c){ e.preventDefault(); hideColumn(c); }
 function colHeaderCell(c){
   return `<div data-colhdr draggable="true" ondragstart="colDragStart(event,'${c}')" ondragover="colDragOver(event,this)" ondragend="colDragEnd(event)" ondrop="colDrop(event,'${c}')" oncontextmenu="colHeaderContextMenu(event,'${c}')" title="Drag to reorder · right-click to hide" style="position:relative;padding:5px 8px;font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;cursor:grab;box-sizing:border-box">${esc(colLabel(c))}<div onmousedown="colResizeStart(event,'${c}')" style="position:absolute;top:0;right:0;width:6px;height:100%;cursor:col-resize"></div></div>`;
 }
-function colDataCell(c,r){
+function colDataCell(c,r,i){
+  // Inline editor for this cell.
+  if(P.editCell && P.editCell.i===i && P.editCell.c===c){
+    const ev=esc(P.editVal!=null?P.editVal:'').replace(/"/g,'&quot;');
+    return`<div class="rec-cell" onclick="event.stopPropagation()" style="overflow:visible;position:relative;z-index:20;display:flex;align-items:center;gap:3px;background:var(--surface);box-shadow:0 0 0 2px var(--accent);border-radius:3px">
+      <input id="cell-edit-input" value="${ev}" oninput="P.editVal=this.value" onkeydown="if(event.key==='Enter'){event.preventDefault();saveCellEdit()}else if(event.key==='Escape'){event.preventDefault();cancelCellEdit()}" style="flex:1;min-width:80px;width:120px;padding:2px 5px;font-size:11px;border:1px solid var(--bd3);border-radius:3px;background:var(--bg);color:var(--text)">
+      <button class="btn" onclick="event.stopPropagation();saveCellEdit()" title="Save (Enter)" style="padding:1px 7px;font-size:12px;color:var(--green)">✓</button>
+      <button class="btn" onclick="event.stopPropagation();cancelCellEdit()" title="Cancel (Esc)" style="padding:1px 7px;font-size:12px;color:var(--red)">✕</button>
+    </div>`;
+  }
   const v=r[c]; const has=v!==undefined&&v!=='';
   const val=has?String(v):'—';
-  if(c==='_Side'){const side=v==='Source'?'src':'dst';return`<div class="rec-cell" style="white-space:normal;display:flex;align-items:center"><span class="tag ${side}">${esc(val)}</span></div>`;}
-  return`<div class="rec-cell" style="white-space:normal;overflow-wrap:anywhere;word-break:break-word;color:${has?'var(--text)':'var(--text3)'};${(c==='Number'&&has)?'font-weight:600;':''}">${esc(val)}</div>`;
+  const editBtn=(i!=null)?`<button class="cell-edit" tabindex="-1" title="Edit cell" onclick="event.stopPropagation();startCellEdit(${i},'${c}')">✎</button>`:'';
+  if(c==='_Side'){const side=v==='Source'?'src':'dst';return`<div class="rec-cell" style="white-space:normal;display:flex;align-items:center;position:relative"><span class="tag ${side}">${esc(val)}</span>${editBtn}</div>`;}
+  return`<div class="rec-cell" style="white-space:normal;overflow-wrap:anywhere;word-break:break-word;position:relative;color:${has?'var(--text)':'var(--text3)'};${(c==='Number'&&has)?'font-weight:600;':''}">${esc(val)}${editBtn}</div>`;
+}
+
+// ── Inline cell editing ─────────────────────────────────────────────────────────
+function startCellEdit(i,c){
+  P.editCell={i:i,c:c};
+  P.editVal=String(P.records[i] && P.records[i][c]!=null ? P.records[i][c] : '');
+  R();
+  const el=document.getElementById('cell-edit-input');
+  if(el){ el.focus(); el.select(); }
+}
+function cancelCellEdit(){ P.editCell=null; P.editVal=undefined; R(); }
+function saveCellEdit(){
+  if(P.editCell){
+    const i=P.editCell.i, c=P.editCell.c, val=(P.editVal!=null?P.editVal:'');
+    if(P.records[i]) P.records[i][c]=val;
+    // Push the edit to Swift so the printed output (rendered from Swift's record
+    // copy) reflects it too.
+    if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
+      window.webkit.messageHandlers.vectorlabel.postMessage({action:"editRecord",payload:{index:i,field:c,value:val}});
+  }
+  P.editCell=null; P.editVal=undefined; R();
 }
 
 function toggleColumnsMenu(){ window._colMenuOpen=!window._colMenuOpen; R(); }
@@ -405,6 +439,8 @@ let P={
   selected: new Set(SAMPLE_CSV.map((_,i)=>i)),
   previewIdx: 0,
   search: "",         // quick search across all fields
+  editCell: null,     // {i,c} of the cell being inline-edited
+  editVal: undefined, // in-progress edit value
   lastClickIdx: null, // for shift-click range selection
   modal: null,
   printRange: "all",
@@ -1799,7 +1835,7 @@ function R(){
                 </div>
               </div>
               <div class="rec-cell" style="display:flex;align-items:center;color:var(--text3);font-size:10px">${vpos+1}</div>
-              ${cols.map(c=>colDataCell(c,r)).join('')}
+              ${cols.map(c=>colDataCell(c,r,i)).join('')}
             </div>`;
           }).join("");
           return`<div id="recScroll" style="overflow:auto;flex:1"><div style="min-width:max-content">${header}${rows}</div></div>`;
