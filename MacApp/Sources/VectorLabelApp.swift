@@ -548,6 +548,11 @@ extension NSWindow {
                              height: min(defaultContentSize.height, visible.height))
         contentMinSize = defSize
 
+        // Opt out of macOS automatic window-state/tiling restoration, which was
+        // reopening this window in a filled/tiled state and overriding our frame.
+        isRestorable = false
+        UserDefaults.standard.removeObject(forKey: "NSWindow Frame " + autosaveName)  // stale AppKit autosave
+
         let key = "vlframe_" + autosaveName
         var restored = false
         if let s = UserDefaults.standard.string(forKey: key) {
@@ -563,6 +568,14 @@ extension NSWindow {
         f.origin.x = max(visible.minX, min(f.origin.x, visible.maxX - f.size.width))
         f.origin.y = max(visible.minY, min(f.origin.y, visible.maxY - f.size.height))
         setFrame(f, display: false)
+
+        // Re-assert the frame after the window is shown, in case AppKit/macOS
+        // tiling snaps it on order-front.
+        let target = f
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            if !NSEqualRects(self.frame, target) { self.setFrame(target, display: true) }
+        }
 
         // Persist the frame on resize/move; clean the observers up on close.
         objc_setAssociatedObject(self, &kVLFrameKey, key, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
