@@ -1613,6 +1613,53 @@ function parseCSV(text){
   }).filter(r=>Object.values(r).some(v=>v));
 }
 
+// ── Record row rendering ────────────────────────────────────────────────────────
+// One record row. `suppress` is a Set of column keys to render blank (used when a
+// value is shown combined in a pair band); `inPair` drops the bottom border so the
+// pair box's own borders provide the separation.
+function recRowInner(i,dnum,cols,gridT,suppress,inPair){
+  const r=P.records[i];
+  const isSel=P.selected.has(i);
+  const isPrev=P.previewIdx===i;
+  const ps2=pairChkState(i);
+  const bb=inPair?";border-bottom:0":"";
+  const cells=cols.map(c=>(suppress&&suppress.has(c))?'<div class="rec-cell"></div>':colDataCell(c,r)).join('');
+  return`<div class="rec-row recv${isSel?" selected":""}${isPrev?" active-preview":""}" style="grid-template-columns:${gridT};align-items:stretch${bb}" onclick="P.previewIdx=${i};P.lastClickIdx=null;R()">
+    <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();if(event.shiftKey&&P.lastClickIdx!==null){const lo=Math.min(P.lastClickIdx,${i}),hi=Math.max(P.lastClickIdx,${i});for(let j=lo;j<=hi;j++)P.selected.add(j);P.printRange='selected';R();}else{P.lastClickIdx=${i};toggleSel(${i});}">
+      <div class="cb ${isSel?"chk":""}"><span class="check-tick">${isSel?"✓":""}</span></div>
+    </div>
+    <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();if(event.shiftKey&&P.lastClickIdx!==null){const lo=Math.min(P.lastClickIdx,${i}),hi=Math.max(P.lastClickIdx,${i});for(let j=lo;j<=hi;j++)P.selected.add(j);P.printRange='selected';R();}else{P.lastClickIdx=${i};togglePair(${i});}" title="Toggle Source + Destination pair — Shift+click to range select">
+      <div style="width:18px;height:14px;border:1.5px solid ${ps2?'rgba(108,142,245,0.6)':'var(--bd3)'};border-radius:3px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:${ps2==='chk'?'rgba(108,142,245,0.2)':ps2==='partial'?'rgba(108,142,245,0.08)':'transparent'}">
+        <span style="color:${ps2?'var(--accent)':'var(--bd4)'};font-size:8px;line-height:1">⇅</span>
+      </div>
+    </div>
+    <div class="rec-cell" style="display:flex;align-items:center;color:var(--text3);font-size:10px">${dnum}</div>
+    ${cells}
+  </div>`;
+}
+
+// A Source+Destination pair wrapped in a thick border. Number/Cable/Signal that
+// match across the two rows are shown once in a combined band between them (and
+// blanked in the rows). The thick border is drawn with an inset box-shadow so it
+// doesn't shift the grid columns out of line with the header.
+function recPairBox(i,dnumS,j,dnumD,cols,gridT){
+  const rS=P.records[i], rD=P.records[j];
+  const combos=[]; const suppress=new Set();
+  [["Number","Number"],["Cable","Cable"],["Signal","Signal"]].forEach(([key,label])=>{
+    const a=rS[key], b=rD[key];
+    if(a!=null&&a!==''&&a===b){
+      suppress.add(key);
+      combos.push(`<span style="display:inline-flex;align-items:baseline;gap:5px"><span style="color:var(--text3);text-transform:uppercase;font-size:8px;letter-spacing:.6px">${esc(label)}</span><span style="color:var(--text);font-weight:600;font-size:11px">${esc(String(a))}</span></span>`);
+    }
+  });
+  const band=combos.length?`<div style="padding:4px 10px;background:rgba(108,142,245,0.07);border-top:1px solid var(--bd1);border-bottom:1px solid var(--bd1);display:flex;align-items:center;gap:18px;justify-content:center;flex-wrap:wrap">${combos.join('')}</div>`:'';
+  return`<div style="box-shadow:inset 0 0 0 2px var(--bd4);border-radius:6px;margin:6px 0;overflow:hidden">
+    ${recRowInner(i,dnumS,cols,gridT,suppress,combos.length>0)}
+    ${band}
+    ${recRowInner(j,dnumD,cols,gridT,suppress,true)}
+  </div>`;
+}
+
 // ── Main render ───────────────────────────────────────────────────────────────
 // Wheel acceleration for the record list. Normal and small scrolls stay fully
 // native (smooth); only sustained, continuous scrolling on a genuinely large
@@ -1723,24 +1770,17 @@ function R(){
           if(vis.length===0){
             return`<div id="recScroll" style="overflow:auto;flex:1"><div style="min-width:max-content">${header}<div style="padding:30px 16px;text-align:center;color:var(--text2);font-size:12px">No records match the current filter.</div></div></div>`;
           }
-          const rows=vis.map((i,vpos)=>{
-            const r=P.records[i];
-            const isSel=P.selected.has(i);
-            const isPrev=P.previewIdx===i;
-            const ps2=pairChkState(i);
-            return`<div class="rec-row recv${isSel?" selected":""}${isPrev?" active-preview":""}" style="grid-template-columns:${gridT};align-items:stretch" onclick="P.previewIdx=${i};P.lastClickIdx=null;R()">
-              <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();if(event.shiftKey&&P.lastClickIdx!==null){const lo=Math.min(P.lastClickIdx,${i}),hi=Math.max(P.lastClickIdx,${i});for(let j=lo;j<=hi;j++)P.selected.add(j);P.printRange='selected';R();}else{P.lastClickIdx=${i};toggleSel(${i});}">
-                <div class="cb ${isSel?"chk":""}"><span class="check-tick">${isSel?"✓":""}</span></div>
-              </div>
-              <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();if(event.shiftKey&&P.lastClickIdx!==null){const lo=Math.min(P.lastClickIdx,${i}),hi=Math.max(P.lastClickIdx,${i});for(let j=lo;j<=hi;j++)P.selected.add(j);P.printRange='selected';R();}else{P.lastClickIdx=${i};togglePair(${i});}" title="Toggle Source + Destination pair — Shift+click to range select">
-                <div style="width:18px;height:14px;border:1.5px solid ${ps2?'rgba(108,142,245,0.6)':'var(--bd3)'};border-radius:3px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:${ps2==='chk'?'rgba(108,142,245,0.2)':ps2==='partial'?'rgba(108,142,245,0.08)':'transparent'}">
-                  <span style="color:${ps2?'var(--accent)':'var(--bd4)'};font-size:8px;line-height:1">⇅</span>
-                </div>
-              </div>
-              <div class="rec-cell" style="display:flex;align-items:center;color:var(--text3);font-size:10px">${vpos+1}</div>
-              ${cols.map(c=>colDataCell(c,r)).join('')}
-            </div>`;
-          }).join("");
+          let rows="";
+          for(let vpos=0; vpos<vis.length; vpos++){
+            const i=vis[vpos], r=P.records[i], j=pairIdx(i);
+            // Adjacent Source→Destination pair → group in a thick-bordered box.
+            if(r._Side==="Source" && j!=null && vis[vpos+1]===j){
+              rows+=recPairBox(i, vpos+1, j, vpos+2, cols, gridT);
+              vpos++;   // consume the partner
+            } else {
+              rows+=recRowInner(i, vpos+1, cols, gridT, null, false);
+            }
+          }
           return`<div id="recScroll" style="overflow:auto;flex:1"><div style="min-width:max-content">${header}${rows}</div></div>`;
         })()}
       </div>
