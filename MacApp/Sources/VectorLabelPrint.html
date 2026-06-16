@@ -459,6 +459,43 @@ function togglePair(i){
   R();
 }
 
+// Row print-enable checkbox click. Shift+click extends from the last clicked row
+// across every VISIBLE row in between (not raw record indices, which break under
+// sort/filter), applying the anchor row's resulting on/off state to the range.
+function rowCheckClick(i,e){
+  if(e.shiftKey && P.lastClickIdx!=null && P.lastClickIdx!==i){
+    const vis=visibleIndices();
+    const aPos=vis.indexOf(P.lastClickIdx), bPos=vis.indexOf(i);
+    if(aPos>=0 && bPos>=0){
+      const target=P.selected.has(P.lastClickIdx);   // match the anchor's state
+      const lo=Math.min(aPos,bPos), hi=Math.max(aPos,bPos);
+      for(let p=lo;p<=hi;p++){ const idx=vis[p]; if(target)P.selected.add(idx); else P.selected.delete(idx); }
+      P.printRange="selected"; P.lastClickIdx=i; R(); return;
+    }
+  }
+  if(P.selected.has(i))P.selected.delete(i); else P.selected.add(i);
+  P.printRange="selected"; P.lastClickIdx=i; R();
+}
+
+// Pair toggle click. Shift+click extends across visible pairs in between, applying
+// the anchor pair's resulting state.
+function pairCheckClick(i,e){
+  if(e.shiftKey && P.lastClickIdx!=null && P.lastClickIdx!==i){
+    const vis=visibleIndices();
+    const aPos=vis.indexOf(P.lastClickIdx), bPos=vis.indexOf(i);
+    if(aPos>=0 && bPos>=0){
+      const target=P.selected.has(P.lastClickIdx);
+      const lo=Math.min(aPos,bPos), hi=Math.max(aPos,bPos);
+      for(let p=lo;p<=hi;p++){ const idx=vis[p], jj=pairIdx(idx);
+        if(target){ P.selected.add(idx); if(jj!=null)P.selected.add(jj); }
+        else { P.selected.delete(idx); if(jj!=null)P.selected.delete(jj); }
+      }
+      P.printRange="selected"; P.lastClickIdx=i; R(); return;
+    }
+  }
+  togglePair(i); P.lastClickIdx=i;
+}
+
 // Pair checkbox state: 'chk' both selected, 'partial' one selected, '' neither
 function pairChkState(i){
   const j=pairIdx(i);
@@ -1490,11 +1527,19 @@ function previewZoomLive(v){
 function previewZoomCommit(v){ previewZoomLive(v); try{ localStorage.setItem("vl-preview-zoom",String(PREVIEW_ZOOM)); }catch(_){}; }
 function previewZoomStep(d){ previewZoomCommit(PREVIEW_ZOOM+d); R(); }
 
+// When on, the enlarged preview shows only labels enabled for printing.
+let PREVIEW_ENABLED_ONLY=false;
+function togglePreviewEnabledOnly(){ PREVIEW_ENABLED_ONLY=!PREVIEW_ENABLED_ONLY; R(); }
+
 function buildExpandedPreviewModal(){
   const t=tpl();
   const vis=visibleIndices();
+  const enabledCount=vis.filter(i=>P.selected.has(i)).length;
   const scale=0.55;
+  // Keep each label's number tied to its position in the full visible list, even
+  // when disabled tiles are hidden.
   const tiles = (t&&vis.length) ? vis.map((i,vpos)=>{
+    if(PREVIEW_ENABLED_ONLY && !P.selected.has(i)) return "";
     const rec=P.records[i];
     const isPrev=P.previewIdx===i;
     const isSel=P.selected.has(i);
@@ -1516,8 +1561,10 @@ function buildExpandedPreviewModal(){
   return `<div class="modal-overlay" id="vl-preview-modal" onclick="if(event.target===this)closeExpandedPreview()">
     <div class="modal" style="width:96vw;max-width:none;height:95vh;display:flex;flex-direction:column;padding:0;overflow:hidden">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 20px;border-bottom:1px solid var(--bd3)">
-        <div class="modal-title" style="margin:0;padding:0">Print preview — ${vis.length} label${vis.length!==1?"s":""}</div>
+        <div class="modal-title" style="margin:0;padding:0">Print preview — ${PREVIEW_ENABLED_ONLY?`${enabledCount} enabled label${enabledCount!==1?"s":""}`:`${vis.length} label${vis.length!==1?"s":""}`}</div>
         <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn${PREVIEW_ENABLED_ONLY?' on':''}" onclick="togglePreviewEnabledOnly()" title="Show only the labels enabled for printing" style="padding:3px 10px;font-size:11px">${PREVIEW_ENABLED_ONLY?"Showing enabled only":"Show enabled only"}</button>
+          <div style="width:1px;height:20px;background:var(--bd3)"></div>
           <span style="font-size:11px;color:var(--text2)">Zoom</span>
           <button class="btn" onclick="previewZoomStep(-0.2)" title="Zoom out" style="padding:2px 9px;font-size:14px;line-height:1">−</button>
           <input type="range" min="0.4" max="3" step="0.1" value="${PREVIEW_ZOOM}" oninput="previewZoomLive(this.value)" onchange="previewZoomCommit(this.value)" style="width:140px">
@@ -1527,7 +1574,7 @@ function buildExpandedPreviewModal(){
         </div>
       </div>
       <div id="vl-preview-scroll" style="flex:1;overflow:auto;padding:18px;display:flex;flex-wrap:wrap;gap:14px;align-content:flex-start;justify-content:center;zoom:${PREVIEW_ZOOM}">
-        ${tiles||'<div style="color:var(--text3);font-size:13px;margin:auto">'+(t?"No labels match the current filter.":"No template selected.")+'</div>'}
+        ${tiles||'<div style="color:var(--text3);font-size:13px;margin:auto">'+(!t?"No template selected.":PREVIEW_ENABLED_ONLY?"No labels are enabled for printing.":"No labels match the current filter.")+'</div>'}
       </div>
       <div style="padding:14px 20px;border-top:1px solid var(--bd3);display:flex;justify-content:flex-end">
         <button class="btn primary" onclick="closeExpandedPreview()" style="padding:8px 22px">Close preview</button>
@@ -1729,10 +1776,10 @@ function R(){
             const isPrev=P.previewIdx===i;
             const ps2=pairChkState(i);
             return`<div class="rec-row recv${isSel?" selected":""}${isPrev?" active-preview":""}" style="grid-template-columns:${gridT};align-items:stretch" onclick="P.previewIdx=${i};P.lastClickIdx=null;R()">
-              <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();if(event.shiftKey&&P.lastClickIdx!==null){const lo=Math.min(P.lastClickIdx,${i}),hi=Math.max(P.lastClickIdx,${i});for(let j=lo;j<=hi;j++)P.selected.add(j);P.printRange='selected';R();}else{P.lastClickIdx=${i};toggleSel(${i});}">
+              <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();rowCheckClick(${i},event)" title="Print this label — Shift+click to range select">
                 <div class="cb ${isSel?"chk":""}"><span class="check-tick">${isSel?"✓":""}</span></div>
               </div>
-              <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();if(event.shiftKey&&P.lastClickIdx!==null){const lo=Math.min(P.lastClickIdx,${i}),hi=Math.max(P.lastClickIdx,${i});for(let j=lo;j<=hi;j++)P.selected.add(j);P.printRange='selected';R();}else{P.lastClickIdx=${i};togglePair(${i});}" title="Toggle Source + Destination pair — Shift+click to range select">
+              <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();pairCheckClick(${i},event)" title="Toggle Source + Destination pair — Shift+click to range select">
                 <div style="width:18px;height:14px;border:1.5px solid ${ps2?'rgba(108,142,245,0.6)':'var(--bd3)'};border-radius:3px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:${ps2==='chk'?'rgba(108,142,245,0.2)':ps2==='partial'?'rgba(108,142,245,0.08)':'transparent'}">
                   <span style="color:${ps2?'var(--accent)':'var(--bd4)'};font-size:8px;line-height:1">⇅</span>
                 </div>
