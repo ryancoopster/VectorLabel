@@ -38,6 +38,10 @@ final class PrintWindowController: NSObject {
     // view when it changes (e.g. the user reorders columns in the designer).
     private var columnObservers: Set<AnyCancellable> = []
 
+    // Re-injects templates whenever the store changes, so the open print window
+    // reflects edits made anywhere (standalone designer or edit-return).
+    private var templatesObserver: AnyCancellable?
+
     // Recent-print record for the job submitted this session, so its status can
     // be updated (printing → complete / cancelled-mid-print). nil until Print is
     // clicked; while nil, a ✕ Cancel records a "cancelled before printing" entry.
@@ -102,6 +106,7 @@ final class PrintWindowController: NSObject {
         printerObserver = nil
         cassetteObserver = nil
         columnObservers.removeAll()
+        templatesObserver = nil
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "vectorlabel")
         window?.close()
         window = nil
@@ -138,6 +143,11 @@ final class PrintWindowController: NSObject {
         cassetteObserver = PrinterManager.shared.$cassettes
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.pushCassettes() }
+
+        // Refresh templates whenever the store changes (any save anywhere).
+        templatesObserver = TemplateStore.shared.$templates.dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.pushTemplates() }
 
         // Keep the column config in sync with the designer / persisted setting.
         AppSettings.shared.$recordColumnOrder.dropFirst().receive(on: RunLoop.main)
@@ -181,13 +191,17 @@ final class PrintWindowController: NSObject {
     /// Called when the designer finishes editing for the print window: refocus
     /// the print window and refresh its template list (selection/task preserved).
     func returnFromEdit() {
-        print("[returnFromEdit] window=\(window != nil) webView=\(webView != nil) templates=\(TemplateStore.shared.templates.count)")
         guard window != nil else { return }
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+        pushTemplates()
+    }
+
+    /// Re-inject the current template list into the print window.
+    private func pushTemplates() {
         guard let data = try? JSONEncoder().encode(TemplateStore.shared.templates),
               let json = String(data: data, encoding: .utf8) else { return }
-        evalJS("if(typeof refreshTemplates==='function'){refreshTemplates(\(json));console.log('refreshTemplates called');}else{console.log('refreshTemplates MISSING');}")
+        evalJS("if(typeof refreshTemplates==='function')refreshTemplates(\(json));")
     }
 
     // MARK: – Template persistence
@@ -503,6 +517,7 @@ extension PrintWindowController: NSWindowDelegate {
         printerObserver = nil
         cassetteObserver = nil
         columnObservers.removeAll()
+        templatesObserver = nil
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "vectorlabel")
         webView = nil
         window = nil
