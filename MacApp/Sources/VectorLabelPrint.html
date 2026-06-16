@@ -1210,6 +1210,12 @@ function onRecWheel(e){
 
 function R(){
   if(P.view==="editor"){return;} // editor managed by initDesigner
+  // Hold a neutral loading screen until Swift has injected the real records,
+  // so no sample/previous data flashes before the correct file appears.
+  if(!P._ready){
+    document.getElementById("app").innerHTML=`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#44445a;font-size:13px">Loading…</div>`;
+    return;
+  }
   const t=tpl();
   // Keep the preview pointed at a visible row when a filter is active.
   if(P.records.length){ const vis=visibleIndices(); if(vis.length&&!vis.includes(P.previewIdx))P.previewIdx=vis[0]; }
@@ -1394,6 +1400,9 @@ function initPrintWindow(opts){
     P.activeTpl=0;
   }
 
+  // Real data has arrived from Swift — safe to render now.
+  P._ready=true;
+
   // Loaded cassette info (printerID -> SmartCell), for the supply display.
   if(opts.cassettes) window._cassettes=opts.cassettes;
 
@@ -1481,6 +1490,11 @@ function notifyReady(){
   }
 }
 
+// In the macOS app, don't render until Swift injects the real data via
+// initPrintWindow() — otherwise the default SAMPLE_CSV (or prior file) flashes
+// for a moment. In the standalone browser demo there's no Swift, so render the
+// sample immediately.
+P._ready = !(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.vectorlabel);
 R();
 // Notify Swift that the page has rendered and is ready for initPrintWindow()
 window.addEventListener("load",notifyReady);
