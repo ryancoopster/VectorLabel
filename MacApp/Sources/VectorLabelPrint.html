@@ -1005,6 +1005,26 @@ function renderFilterModal(){
   </div>`;
 }
 
+// Scale the side preview label to fill the (window-responsive) panel width.
+// Rendered at scale 1, then transform-scaled here so it tracks the panel size.
+function fitPreviewLabel(){
+  const wrap=document.getElementById("preview-label-wrap");
+  const inner=document.getElementById("preview-label-inner");
+  if(!wrap||!inner)return;
+  const lw=parseFloat(wrap.dataset.lw)||1, lh=parseFloat(wrap.dataset.lh)||1;
+  const avail=wrap.clientWidth;
+  if(!(avail>0)||!(lw>0))return;
+  let s=avail/lw;
+  if(s>2.5)s=2.5; if(s<0.3)s=0.3;   // sensible bounds
+  inner.style.transform="scale("+s+")";
+  wrap.style.height=(lh*s)+"px";    // transform doesn't reflow — reserve the space
+}
+let _rafFitPreview=false;
+window.addEventListener("resize",function(){
+  if(_rafFitPreview)return; _rafFitPreview=true;
+  requestAnimationFrame(function(){ _rafFitPreview=false; fitPreviewLabel(); });
+});
+
 // ── Label preview panel ───────────────────────────────────────────────────────
 function buildPreviewPanel(){
   const t=tpl();
@@ -1017,7 +1037,10 @@ function buildPreviewPanel(){
   const nextIdx=vpos>=0&&vpos<total-1?vis[vpos+1]:P.previewIdx;
   if(!t||!rec)return`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:12px">No template selected</div>`;
   const spec=BL.find(l=>l.n===t.specN)||BL[1];
-  const scale=0.9;
+  // The label is rendered at scale 1 and fitted to the panel width by
+  // fitPreviewLabel() (called after render and on window resize), so it grows
+  // with the window instead of staying a fixed size.
+  const lw=spec.pw*SC, lh=spec.ph*SC;
   return`<div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:20px">
     <div style="display:flex;align-items:center;gap:6px;width:100%;justify-content:center">
       <button onclick="P.previewIdx=${prevIdx};R()" title="Previous label" class="btn" style="padding:3px 10px;font-size:15px;line-height:1" ${vpos<=0?"disabled":""}>‹</button>
@@ -1025,7 +1048,9 @@ function buildPreviewPanel(){
       <button onclick="P.previewIdx=${nextIdx};R()" title="Next label" class="btn" style="padding:3px 10px;font-size:15px;line-height:1" ${vpos>=total-1?"disabled":""}>›</button>
       <button onclick="openExpandedPreview()" title="Expanded preview — show all labels" class="btn" style="padding:3px 9px;font-size:14px;line-height:1">⊞</button>
     </div>
-    ${renderLabel(t,rec,scale)}
+    <div id="preview-label-wrap" data-lw="${lw}" data-lh="${lh}" style="width:100%;display:flex;justify-content:center;overflow:hidden">
+      <div id="preview-label-inner" style="transform-origin:top center">${renderLabel(t,rec,1)}</div>
+    </div>
     <div style="text-align:center">
       <div style="color:var(--text);font-size:12px;font-weight:600">${rec.Number||"—"} ${rec.Cable||""}</div>
       <div style="color:var(--text2);font-size:11px;margin-top:2px">${rec._Side} label</div>
@@ -1654,8 +1679,8 @@ function R(){
         })()}
       </div>
 
-      <!-- Right: preview panel -->
-      <div style="width:280px;background:var(--surface);border-left:1px solid var(--bd2);overflow-y:auto;flex-shrink:0">
+      <!-- Right: preview panel (width scales with the window) -->
+      <div style="width:clamp(300px,36vw,820px);background:var(--surface);border-left:1px solid var(--bd2);overflow-y:auto;flex-shrink:0">
         ${buildPreviewPanel()}
       </div>
     </div>
@@ -1675,6 +1700,7 @@ function R(){
   if(_recEl) _recEl.scrollTop=_prevScroll;
   const _pvEl=document.getElementById("vl-preview-scroll");
   if(_pvEl) _pvEl.scrollTop=_prevPreviewScroll;
+  fitPreviewLabel();
   if(!window._recWheelBound){
     document.getElementById("app").addEventListener("wheel", onRecWheel, {passive:false});
     window._recWheelBound=true;
