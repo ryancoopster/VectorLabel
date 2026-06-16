@@ -254,10 +254,11 @@ enum LabelRenderer {
     // MARK: – Calibration grid
 
     /// Render a calibration target for the given label: a 1px grid at 1/8"
-    /// spacing across the printable area, a border at the printable bounds,
-    /// heavier lines every 1", and a solid 1/8" square marking the origin
-    /// corner (so feed direction / mirroring is obvious). The per-printer
-    /// `offset` is applied so reprinting after a tweak shows the shift.
+    /// spacing, a border inset 1/16" from each printable edge (so there's an
+    /// even margin all round to judge centering), heavier lines every 1", and
+    /// a solid 1/8" square marking the origin corner (so feed direction /
+    /// mirroring is obvious). The per-printer `offset` is applied so reprinting
+    /// after a tweak shows the shift.
     static func renderCalibrationGrid(size: BradyLabelSize,
                                       offset: (dx: Double, dy: Double) = (0, 0))
         -> (pixels: [UInt8], width: Int, height: Int)? {
@@ -281,24 +282,29 @@ enum LabelRenderer {
         ctx.translateBy(x: CGFloat(offset.dx), y: CGFloat(offset.dy))
         ctx.setFillColor(gray: 0.0, alpha: 1.0)
 
-        let step = dpi / 8.0          // 1/8" grid
-        func vline(_ x: Double, _ w: Double) { ctx.fill(CGRect(x: x, y: 0, width: w, height: Double(ph))) }
-        func hline(_ y: Double, _ h: Double) { ctx.fill(CGRect(x: 0, y: y, width: Double(pw), height: h)) }
+        let step  = dpi / 8.0          // 1/8" grid
+        let inset = dpi / 16.0         // 1/16" margin inside each printable edge
+        let x0 = inset, y0 = inset
+        let x1 = Double(pw) - inset, y1 = Double(ph) - inset
+        // Lines are clipped to the inset rectangle [x0,x1] × [y0,y1].
+        func vline(_ x: Double, _ w: Double) { ctx.fill(CGRect(x: x, y: y0, width: w, height: y1 - y0)) }
+        func hline(_ y: Double, _ h: Double) { ctx.fill(CGRect(x: x0, y: y, width: x1 - x0, height: h)) }
 
-        // 1/8" grid (1px), with every 8th line (= 1") drawn at 3px.
+        // 1/8" grid (1px), with every 8th line (= 1") drawn at 3px, starting
+        // from the inset origin.
         var i = 0
-        var x = 0.0
-        while x <= Double(pw) + 0.5 { vline(x.rounded(), (i % 8 == 0) ? 3 : 1); x += step; i += 1 }
+        var x = x0
+        while x <= x1 + 0.5 { vline(x.rounded(), (i % 8 == 0) ? 3 : 1); x += step; i += 1 }
         i = 0
-        var y = 0.0
-        while y <= Double(ph) + 0.5 { hline(y.rounded(), (i % 8 == 0) ? 3 : 1); y += step; i += 1 }
+        var y = y0
+        while y <= y1 + 0.5 { hline(y.rounded(), (i % 8 == 0) ? 3 : 1); y += step; i += 1 }
 
-        // Border at the exact printable bounds.
-        vline(0, 3); vline(Double(pw) - 3, 3)
-        hline(0, 3); hline(Double(ph) - 3, 3)
+        // Border inset 1/16" from the printable bounds.
+        vline(x0, 3); vline(x1 - 3, 3)
+        hline(y0, 3); hline(y1 - 3, 3)
 
-        // Solid 1/8" square at the origin corner.
-        ctx.fill(CGRect(x: 0, y: 0, width: step, height: step))
+        // Solid 1/8" square at the inset origin corner.
+        ctx.fill(CGRect(x: x0, y: y0, width: step, height: step))
 
         guard let data = ctx.data else { return nil }
         let raw = data.bindMemory(to: UInt8.self, capacity: pw * ph)
