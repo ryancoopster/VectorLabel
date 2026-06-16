@@ -1257,14 +1257,35 @@ function printCount(){ return printIndices().length; }
 // Whether the Print button (and ⌘Return shortcut) is enabled right now.
 function canPrintNow(){ const t=tpl(),pr=printer(); return !!(t&&printCount()>0&&pr.status==="ready"); }
 
-// ⌘Return (or Ctrl+Return) prints, mirroring the Print button — but only when
-// no modal/dialog is open and printing is currently allowed.
+// Move the previewed/highlighted record up or down through the visible (filtered)
+// rows, then scroll it into view. Used by the up/down arrow keys.
+function previewStep(delta){
+  const vis=visibleIndices();
+  if(!vis.length)return;
+  const pos=vis.indexOf(P.previewIdx);
+  P.previewIdx = pos<0 ? vis[0] : vis[Math.min(vis.length-1,Math.max(0,pos+delta))];
+  P.lastClickIdx=null;
+  R();
+  const el=document.querySelector("#recScroll .rec-row.active-preview");
+  if(el&&el.scrollIntoView) el.scrollIntoView({block:"nearest"});
+}
+
+// Global shortcuts for the print window.
 window.addEventListener("keydown",function(e){
+  const ae=document.activeElement, tag=ae&&ae.tagName;
+  const inInput = tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT"||(ae&&ae.isContentEditable);
+  const modalOpen = P.modal||document.querySelector(".modal-overlay")||document.getElementById("vl-filter-modal");
+  // ⌘Return (or Ctrl+Return) prints, mirroring the Print button.
   if((e.metaKey||e.ctrlKey)&&(e.key==="Enter"||e.key==="Return")){
-    if(P.modal||document.querySelector(".modal-overlay")||document.getElementById("vl-filter-modal"))return;
-    if(!canPrintNow())return;
+    if(modalOpen||!canPrintNow())return;
     e.preventDefault();
     doPrint();
+    return;
+  }
+  // Up/Down arrows advance the previewed record through the records list.
+  if((e.key==="ArrowDown"||e.key==="ArrowUp")&&!inInput&&!modalOpen&&!e.metaKey&&!e.ctrlKey&&!e.altKey){
+    e.preventDefault();
+    previewStep(e.key==="ArrowDown"?1:-1);
   }
 });
 
