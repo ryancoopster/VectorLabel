@@ -836,7 +836,7 @@ function renderFilterModal(){
   if(!m){ m=document.createElement('div'); m.id='vl-filter-modal'; m.className='modal-overlay'; m.onclick=e=>{if(e.target===m)closeFilterModal();}; document.body.appendChild(m); }
   m.innerHTML=`<div class="modal" style="min-width:600px;max-width:720px">
     <div class="modal-title">Filter &amp; sort</div>
-    <div style="max-height:440px;overflow-y:auto;padding-right:2px">
+    <div style="max-height:calc(100vh - 180px);overflow-y:auto;padding-right:2px">
       <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Filter</div>
       <div style="display:flex;flex-direction:column;gap:2px">${groupsHtml}</div>
       <button class="btn" onclick="fdAddGroup()" title="Add another group of conditions" style="margin-top:8px;font-size:12px">+ Add group</button>
@@ -852,8 +852,10 @@ function renderFilterModal(){
     </div>
     <div class="modal-footer" style="justify-content:space-between">
       <div style="display:flex;gap:8px">
-        ${P.filter?`<button class="btn" onclick="clearFilter()" style="color:var(--warn);border-color:rgba(245,201,108,0.4)">Clear filter</button>`:''}
-        ${P.sort?`<button class="btn" onclick="clearSort()" style="color:var(--warn);border-color:rgba(245,201,108,0.4)">Clear sort</button>`:''}
+        ${(P.filter||P.sort)?`
+          <button class="btn" ${P.filter?'':'disabled'} onclick="clearFilter()" style="color:var(--warn);border-color:rgba(245,201,108,0.4)${P.filter?'':';opacity:0.4;cursor:default'}">Clear filter</button>
+          <button class="btn" ${P.sort?'':'disabled'} onclick="clearSort()" style="color:var(--warn);border-color:rgba(245,201,108,0.4)${P.sort?'':';opacity:0.4;cursor:default'}">Clear sort</button>
+        `:''}
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn" onclick="closeFilterModal()">Cancel</button>
@@ -1372,8 +1374,10 @@ function R(){
             : `<span style="color:var(--text2);font-size:11px">${P.records.length} total · click row to preview · checkbox to select</span>`}
           <div style="flex:1"></div>
           <button class="btn${(filterActive()||sortActive())?' on':''}" onclick="event.stopPropagation();openFilterModal()" style="padding:2px 8px;font-size:11px" title="Filter & sort which records are shown and printed">⧩ Filter &amp; sort</button>
-          ${filterActive()?`<button class="btn" onclick="event.stopPropagation();clearFilter()" style="padding:2px 8px;font-size:11px;color:var(--warn);border-color:rgba(245,201,108,0.4)">Clear filter</button>`:""}
-          ${sortActive()?`<button class="btn" onclick="event.stopPropagation();clearSort()" style="padding:2px 8px;font-size:11px;color:var(--warn);border-color:rgba(245,201,108,0.4)">Clear sort</button>`:""}
+          ${(filterActive()||sortActive())?`
+            <button class="btn" ${filterActive()?'':'disabled'} onclick="event.stopPropagation();clearFilter()" style="padding:2px 8px;font-size:11px;color:var(--warn);border-color:rgba(245,201,108,0.4)${filterActive()?'':';opacity:0.4;cursor:default'}">Clear filter</button>
+            <button class="btn" ${sortActive()?'':'disabled'} onclick="event.stopPropagation();clearSort()" style="padding:2px 8px;font-size:11px;color:var(--warn);border-color:rgba(245,201,108,0.4)${sortActive()?'':';opacity:0.4;cursor:default'}">Clear sort</button>
+          `:""}
           <button class="btn${window._colMenuOpen?' on':''}" onclick="event.stopPropagation();toggleColumnsMenu()" style="padding:2px 8px;font-size:11px">Columns ▾</button>
           ${buildColumnsMenu()}
         </div>
