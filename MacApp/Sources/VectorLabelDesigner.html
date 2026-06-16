@@ -729,8 +729,8 @@ function R(){
       tb.innerHTML=`
         <button class="btn" onclick="showModal('new')" style="padding:4px 10px">New</button>
         <button class="btn" onclick="openTemplate()" style="padding:4px 10px">Open…</button>
-        <button class="btn" onclick="showModal('save')" style="padding:4px 10px">Save as…</button>
-        <button class="btn" onclick="showModal('save')" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600;padding:5px 14px">Save…</button>
+        <button class="btn" onclick="saveAsTemplate()" style="padding:4px 10px">Save as…</button>
+        <button class="btn" onclick="saveTemplate()" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600;padding:5px 14px">Save</button>
       `;
     }
   }
@@ -1044,6 +1044,9 @@ function edPrintSaveAs(){
   window._printReturnAfterSave=true;
   showModal('save');
 }
+
+// Save As (standalone): open the dialog to enter a new name → saves as a new template.
+function saveAsTemplate(){ S._loadedId=null; showModal('save'); }
 
 async function saveTemplate(){
   const nameEl=document.getElementById("tpl-name-inp");

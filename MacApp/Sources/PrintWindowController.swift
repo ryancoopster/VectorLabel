@@ -181,12 +181,13 @@ final class PrintWindowController: NSObject {
     /// Called when the designer finishes editing for the print window: refocus
     /// the print window and refresh its template list (selection/task preserved).
     func returnFromEdit() {
+        print("[returnFromEdit] window=\(window != nil) webView=\(webView != nil) templates=\(TemplateStore.shared.templates.count)")
         guard window != nil else { return }
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
         guard let data = try? JSONEncoder().encode(TemplateStore.shared.templates),
               let json = String(data: data, encoding: .utf8) else { return }
-        evalJS("if(typeof refreshTemplates==='function')refreshTemplates(\(json));")
+        evalJS("if(typeof refreshTemplates==='function'){refreshTemplates(\(json));console.log('refreshTemplates called');}else{console.log('refreshTemplates MISSING');}")
     }
 
     // MARK: – Template persistence

@@ -516,7 +516,10 @@ extension AppDelegate: WKScriptMessageHandler {
             // Save first (if requested) so the print window refreshes with the
             // updated template, then close the designer and return.
             if let p = body["payload"] as? [String: Any], (p["save"] as? Bool) == true {
-                TemplateStore.shared.save(fromPayload: p["template"])
+                let ok = TemplateStore.shared.save(fromPayload: p["template"])
+                print("[editReturn] save ok=\(ok), templates=\(TemplateStore.shared.templates.map { "\($0.name)#\($0.objs.count)" })")
+            } else {
+                print("[editReturn] no save (cancel)")
             }
             designerForPrintEdit = false   // handled here; don't double-return on close
             printWindowController.returnFromEdit()
