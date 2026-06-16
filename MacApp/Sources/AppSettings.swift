@@ -81,6 +81,12 @@ final class AppSettings: ObservableObject {
         }
     }
 
+    /// Saved filter/sort presets for the print window, stored as a JSON array
+    /// string ([{id,name,filter,sort}]). Persisted; injected into the print UI.
+    @Published var filterSortPresetsJSON: String {
+        didSet { UserDefaults.standard.set(filterSortPresetsJSON, forKey: "filterSortPresetsJSON") }
+    }
+
     // MARK: – Template designer preferences (persisted)
 
     @Published var designerSnapGrid: Bool {
@@ -212,6 +218,7 @@ final class AppSettings: ObservableObject {
         } else {
             printerCalibration = [:]
         }
+        filterSortPresetsJSON = defaults.string(forKey: "filterSortPresetsJSON") ?? "[]"
         appearance        = defaults.string(forKey: "appearance") ?? "dark"
         showInDock        = defaults.object(forKey: "showInDock") as? Bool ?? false
 
@@ -236,6 +243,7 @@ final class AppSettings: ObservableObject {
         designerSnapGrid     = true
         designerSnapObjects  = true
         designerGridSize     = 0.05
+        filterSortPresetsJSON = "[]"
         appearance           = "dark"
         showInDock           = false
     }

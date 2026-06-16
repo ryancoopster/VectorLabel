@@ -646,24 +646,25 @@ function visibleIndices(){
   return idx;
 }
 
-function sortSummary(){
-  if(!sortActive())return "";
-  const parts=P.sort.rules.filter(r=>r.field).map(r=>colLabel(r.field)+(r.dir==="desc"?" ↓":" ↑"));
-  const modeTxt=P.sort.pairMode==="source"?" · pairs follow source"
-              :P.sort.pairMode==="dest"?" · pairs follow destination"
+function sortSummaryOf(s){
+  if(!s||!(s.rules||[]).some(r=>r.field))return "";
+  const parts=s.rules.filter(r=>r.field).map(r=>colLabel(r.field)+(r.dir==="desc"?" ↓":" ↑"));
+  const modeTxt=s.pairMode==="source"?" · pairs follow source"
+              :s.pairMode==="dest"?" · pairs follow destination"
               :" · pairs may split";
   return parts.join(", ")+modeTxt;
 }
+function sortSummary(){ return sortSummaryOf(P.sort); }
 
-// Human-readable summary of the active filter for the table header.
+// Human-readable summary of a filter for the header / tooltips.
 function ruleSummary(r){
   const opl=(FILTER_OPS.find(o=>o.op===r.op)||{}).label||r.op;
   const val=opNeedsValue(r.op)?(r.valueType==="field"?("["+colLabel(r.value)+"]"):('"'+r.value+'"')):"";
   return colLabel(r.field)+" "+opl+(val?" "+val:"");
 }
-function filterSummary(){
-  if(!filterActive())return "";
-  const groups=filterGroups(P.filter).filter(groupReady);
+function filterSummaryOf(f){
+  const groups=filterGroups(f).filter(groupReady);
+  if(!groups.length)return "";
   const groupStrs=groups.map(g=>{
     const rules=g.rules.filter(ruleReady);
     const parts=rules.map((r,k)=>(k>0?((g.connectors[k-1]||"and").toUpperCase()+" "):"")+ruleSummary(r));
@@ -672,9 +673,77 @@ function filterSummary(){
   });
   let out=groupStrs[0]||"";
   for(let k=1;k<groupStrs.length;k++){
-    out+=" "+((P.filter.groupConnectors&&P.filter.groupConnectors[k-1])||"or").toUpperCase()+" "+groupStrs[k];
+    out+=" "+((f.groupConnectors&&f.groupConnectors[k-1])||"or").toUpperCase()+" "+groupStrs[k];
   }
-  return out;
+  return out + (f.showBothSides?" · incl. pairs":"");
+}
+function filterSummary(){ return filterActive()?filterSummaryOf(P.filter):""; }
+
+// ── Filter/sort presets ────────────────────────────────────────────────────────
+function presetGenId(){ return 'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function savePresets(){
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"setFilterSortPresets",payload:window._presets||[]});
+}
+function presetSummary(p){
+  const f=filterSummaryOf(p.filter), s=sortSummaryOf(p.sort);
+  const out=[]; if(f)out.push("Filter: "+f); if(s)out.push("Sort: "+s);
+  return out.length?out.join("\n"):"(no filter or sort)";
+}
+function presetMatchesActive(p){
+  return JSON.stringify(p.filter||null)===JSON.stringify(P.filter||null)
+      && JSON.stringify(p.sort||null)===JSON.stringify(P.sort||null);
+}
+function applyPreset(id){
+  const p=(window._presets||[]).find(x=>x.id===id); if(!p)return;
+  P.filter=p.filter?JSON.parse(JSON.stringify(p.filter)):null;
+  P.sort=p.sort?JSON.parse(JSON.stringify(p.sort)):null;
+  const vis=visibleIndices(); if(vis.length&&!vis.includes(P.previewIdx))P.previewIdx=vis[0];
+  R();
+}
+function deletePreset(id){ window._presets=(window._presets||[]).filter(x=>x.id!==id); savePresets(); R(); }
+function renamePreset(id){
+  const p=(window._presets||[]).find(x=>x.id===id); if(!p)return;
+  vlPrompt("Rename preset",p.name,n=>{ if(n){ p.name=n; savePresets(); R(); } });
+}
+function editPreset(id){ openFilterModal(id); }
+
+// Small right-click menu for a preset tile.
+function closePresetMenu(){ const m=document.getElementById('vl-preset-menu'); if(m)m.remove(); }
+function presetMenu(e,id){
+  e.preventDefault(); e.stopPropagation(); closePresetMenu();
+  const menu=document.createElement('div'); menu.id='vl-preset-menu';
+  menu.style.cssText='position:fixed;z-index:2500;background:var(--surface);border:1px solid var(--bd4);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.5);padding:4px;min-width:160px;left:'+e.clientX+'px;top:'+e.clientY+'px';
+  function item(label,fn,danger){
+    const d=document.createElement('div'); d.textContent=label;
+    d.style.cssText='padding:6px 10px;border-radius:4px;cursor:pointer;font-size:12px;color:'+(danger?'var(--red)':'var(--text)');
+    d.onmouseenter=()=>d.style.background='var(--bd2)'; d.onmouseleave=()=>d.style.background='';
+    d.onmousedown=ev=>{ev.stopPropagation();}; d.onclick=()=>{ closePresetMenu(); fn(); };
+    menu.appendChild(d);
+  }
+  item("Apply (activate)",()=>applyPreset(id));
+  item("Edit…",()=>editPreset(id));
+  item("Rename…",()=>renamePreset(id));
+  item("Delete",()=>deletePreset(id),true);
+  document.body.appendChild(menu);
+  setTimeout(()=>document.addEventListener('mousedown',closePresetMenu,{once:true}),0);
+}
+
+// Reusable text-input overlay (WKWebView blocks window.prompt without a delegate).
+function vlPrompt(title,def,cb){
+  const o=document.createElement('div'); o.className='modal-overlay'; o.style.zIndex='2600';
+  o.onclick=e=>{ if(e.target===o){ o.remove(); cb(null); } };
+  o.innerHTML=`<div class="modal" style="min-width:340px">
+    <div class="modal-title">${esc(title)}</div>
+    <input id="vlpi" class="inp" value="${(def||'').replace(/"/g,'&quot;')}">
+    <div class="modal-footer"><button class="btn" id="vlpc">Cancel</button><button class="btn" id="vlpo" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Save</button></div>
+  </div>`;
+  document.body.appendChild(o);
+  const inp=o.querySelector('#vlpi'); inp.focus(); inp.select();
+  function done(v){ o.remove(); cb(v); }
+  o.querySelector('#vlpo').onclick=()=>done(inp.value.trim()||null);
+  o.querySelector('#vlpc').onclick=()=>done(null);
+  inp.onkeydown=e=>{ if(e.key==='Enter')done(inp.value.trim()||null); if(e.key==='Escape')done(null); };
 }
 
 // ── Filter dialog ─────────────────────────────────────────────────────────────
@@ -687,10 +756,15 @@ function newFilterRule(){
   return {field:cols[0]||"",op:"contains",valueType:"text",value:""};
 }
 function newFilterGroup(){ return {rules:[newFilterRule()],connectors:[]}; }
-function openFilterModal(){
-  if(P.filter){
-    const d=JSON.parse(JSON.stringify(P.filter));
-    // Migrate legacy flat shape → groups.
+// Open the dialog seeded from the active filter/sort, or — when presetId is
+// given — from that preset (edit mode: Apply becomes "Save preset" and the
+// active filter/sort is left untouched).
+function openFilterModal(presetId){
+  P._editingPresetId = presetId || null;
+  let baseFilter=P.filter, baseSort=P.sort;
+  if(presetId){ const p=(window._presets||[]).find(x=>x.id===presetId); baseFilter=p?p.filter:null; baseSort=p?p.sort:null; }
+  if(baseFilter){
+    const d=JSON.parse(JSON.stringify(baseFilter));
     if(!Array.isArray(d.groups)) d.groups=[{rules:d.rules||[newFilterRule()],connectors:d.connectors||[]}];
     if(!Array.isArray(d.groupConnectors)) d.groupConnectors=[];
     delete d.rules; delete d.connectors;
@@ -699,13 +773,33 @@ function openFilterModal(){
     P._filterDraft={groups:[newFilterGroup()],groupConnectors:[],showBothSides:false};
   }
   P._filterDraft.groups.forEach(g=>{ if(!g.rules||!g.rules.length)g.rules=[newFilterRule()]; if(!Array.isArray(g.connectors))g.connectors=[]; });
-  P._sortDraft = P.sort ? JSON.parse(JSON.stringify(P.sort))
-                        : {rules:[{field:"",dir:"asc"}], pairMode:"break"};
+  P._sortDraft = baseSort ? JSON.parse(JSON.stringify(baseSort))
+                          : {rules:[{field:"",dir:"asc"}], pairMode:"break"};
   if(!P._sortDraft.rules.length)P._sortDraft.rules.push({field:"",dir:"asc"});
   if(!P._sortDraft.pairMode)P._sortDraft.pairMode="break";
   renderFilterModal();
 }
-function closeFilterModal(){ P._filterDraft=null; P._sortDraft=null; const m=document.getElementById('vl-filter-modal'); if(m)m.remove(); }
+function closeFilterModal(){ P._filterDraft=null; P._sortDraft=null; P._editingPresetId=null; const m=document.getElementById('vl-filter-modal'); if(m)m.remove(); }
+// Convert the open drafts to applied filter/sort objects (null when empty).
+function draftToFilter(){ const d=P._filterDraft; return (d.groups||[]).some(groupReady)?{groups:d.groups,groupConnectors:d.groupConnectors,showBothSides:!!d.showBothSides}:null; }
+function draftToSort(){ const s=P._sortDraft; return (s.rules||[]).some(r=>r.field)?{rules:s.rules.filter(r=>r.field),pairMode:s.pairMode||"break"}:null; }
+function saveCurrentAsPreset(){
+  const f=draftToFilter(), s=draftToSort();
+  if(!f&&!s){ showToast("Add a filter or sort first"); return; }
+  vlPrompt("Name this preset","",name=>{
+    if(!name)return;
+    window._presets=window._presets||[];
+    window._presets.push({id:presetGenId(),name:name,filter:f,sort:s});
+    savePresets();
+    showToast("Preset saved: "+name);
+    renderFilterModal();
+  });
+}
+function savePresetEdits(){
+  const p=(window._presets||[]).find(x=>x.id===P._editingPresetId); if(!p)return;
+  p.filter=draftToFilter(); p.sort=draftToSort();
+  savePresets(); closeFilterModal(); R();
+}
 // Sort-draft mutators
 function sdAddRule(){ P._sortDraft.rules.push({field:"",dir:"asc"}); renderFilterModal(); }
 function sdRemoveRule(i){ P._sortDraft.rules.splice(i,1); if(!P._sortDraft.rules.length)P._sortDraft.rules.push({field:"",dir:"asc"}); renderFilterModal(); }
@@ -745,12 +839,8 @@ function fdSetConn(gi,ci,val){ P._filterDraft.groups[gi].connectors[ci]=val; ren
 function fdSetGroupConn(gci,val){ P._filterDraft.groupConnectors[gci]=val; renderFilterModal(); }
 function fdSetBoth(v){ P._filterDraft.showBothSides=v; }
 function applyFilterDraft(){
-  const d=P._filterDraft;
-  const hasReady=(d.groups||[]).some(groupReady);
-  P.filter = hasReady ? {groups:d.groups, groupConnectors:d.groupConnectors, showBothSides:!!d.showBothSides} : null;
-  const s=P._sortDraft;
-  const hasSort=(s.rules||[]).some(r=>r.field);
-  P.sort = hasSort ? {rules:s.rules.filter(r=>r.field), pairMode:s.pairMode||"break"} : null;
+  P.filter = draftToFilter();
+  P.sort = draftToSort();
   closeFilterModal();
   const vis=visibleIndices(); if(vis.length&&!vis.includes(P.previewIdx))P.previewIdx=vis[0];
   R();
@@ -811,6 +901,8 @@ function renderFilterModal(){
   }).join('');
 
   const sd=P._sortDraft, cols=recordColumns(currentRecords());
+  const editing=!!P._editingPresetId;
+  const editName=editing?(((window._presets||[]).find(x=>x.id===P._editingPresetId)||{}).name||""):"";
   const pairModes=[
     ['break','Sort sources & destinations (breaks pairs)'],
     ['source','Sort by source — destinations stay with sources'],
@@ -835,7 +927,7 @@ function renderFilterModal(){
   let m=document.getElementById('vl-filter-modal');
   if(!m){ m=document.createElement('div'); m.id='vl-filter-modal'; m.className='modal-overlay'; m.onclick=e=>{if(e.target===m)closeFilterModal();}; document.body.appendChild(m); }
   m.innerHTML=`<div class="modal" style="min-width:600px;max-width:720px">
-    <div class="modal-title">Filter &amp; sort</div>
+    <div class="modal-title">${editing?("Edit preset — "+esc(editName)):"Filter &amp; sort"}</div>
     <div style="max-height:calc(100vh - 180px);overflow-y:auto;padding-right:2px">
       <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Filter</div>
       <div style="display:flex;flex-direction:column;gap:2px">${groupsHtml}</div>
@@ -852,14 +944,17 @@ function renderFilterModal(){
     </div>
     <div class="modal-footer" style="justify-content:space-between">
       <div style="display:flex;gap:8px">
-        ${(P.filter||P.sort)?`
+        ${editing?'':`<button class="btn" onclick="saveCurrentAsPreset()" title="Save this filter + sort as a reusable preset">Save as preset…</button>`}
+        ${(!editing&&(P.filter||P.sort))?`
           <button class="btn" ${P.filter?'':'disabled'} onclick="clearFilter()" style="color:var(--warn);border-color:rgba(245,201,108,0.4)${P.filter?'':';opacity:0.4;cursor:default'}">Clear filter</button>
           <button class="btn" ${P.sort?'':'disabled'} onclick="clearSort()" style="color:var(--warn);border-color:rgba(245,201,108,0.4)${P.sort?'':';opacity:0.4;cursor:default'}">Clear sort</button>
         `:''}
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn" onclick="closeFilterModal()">Cancel</button>
-        <button class="btn" onclick="applyFilterDraft()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Apply</button>
+        ${editing
+          ? `<button class="btn" onclick="savePresetEdits()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Save preset</button>`
+          : `<button class="btn" onclick="applyFilterDraft()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Apply</button>`}
       </div>
     </div>
   </div>`;
@@ -1378,12 +1473,15 @@ function R(){
             <button class="btn" ${filterActive()?'':'disabled'} onclick="event.stopPropagation();clearFilter()" style="padding:2px 8px;font-size:11px;color:var(--warn);border-color:rgba(245,201,108,0.4)${filterActive()?'':';opacity:0.4;cursor:default'}">Clear filter</button>
             <button class="btn" ${sortActive()?'':'disabled'} onclick="event.stopPropagation();clearSort()" style="padding:2px 8px;font-size:11px;color:var(--warn);border-color:rgba(245,201,108,0.4)${sortActive()?'':';opacity:0.4;cursor:default'}">Clear sort</button>
           `:""}
+          ${(window._presets&&window._presets.length)?`<div style="display:flex;gap:5px;align-items:center;max-width:340px;overflow-x:auto">
+            ${window._presets.map(p=>`<button class="btn${presetMatchesActive(p)?' on':''}" onclick="event.stopPropagation();applyPreset('${p.id}')" oncontextmenu="presetMenu(event,'${p.id}')" title="${esc(presetSummary(p))}&#10;(right-click to edit/rename/delete)" style="padding:2px 8px;font-size:11px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0">${esc(p.name)}</button>`).join('')}
+          </div>`:''}
           <button class="btn${window._colMenuOpen?' on':''}" onclick="event.stopPropagation();toggleColumnsMenu()" style="padding:2px 8px;font-size:11px">Columns ▾</button>
           ${buildColumnsMenu()}
         </div>
         <!-- Active filter/sort summary, shown directly above the records -->
         ${(filterActive()||sortActive())?`<div style="padding:5px 16px;background:rgba(108,142,245,0.08);border-bottom:1px solid rgba(108,142,245,0.18);font-size:11px;color:var(--accent-soft);display:flex;align-items:center;gap:10px;flex-shrink:0;overflow:hidden">
-          ${filterActive()?`<span style="display:flex;align-items:center;gap:5px;min-width:0;overflow:hidden"><span style="color:var(--accent);font-weight:600;flex-shrink:0">Filter:</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(filterSummary())+(P.filter.showBothSides?' (incl. matching pairs)':'')}">${esc(filterSummary())}${P.filter.showBothSides?' · incl. pairs':''}</span></span>`:""}
+          ${filterActive()?`<span style="display:flex;align-items:center;gap:5px;min-width:0;overflow:hidden"><span style="color:var(--accent);font-weight:600;flex-shrink:0">Filter:</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(filterSummary())}">${esc(filterSummary())}</span></span>`:""}
           ${sortActive()?`<span style="display:flex;align-items:center;gap:5px;min-width:0;overflow:hidden"><span style="color:var(--accent);font-weight:600;flex-shrink:0">Sort:</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(sortSummary())}">${esc(sortSummary())}</span></span>`:""}
         </div>`:""}
         <!-- Grid headers -->
@@ -1524,6 +1622,10 @@ function initPrintWindow(opts){
     }));
     P.activeTpl=0;
   }
+
+  // Saved filter/sort presets (persisted in AppSettings).
+  if(Array.isArray(opts.filterSortPresets)) window._presets=opts.filterSortPresets;
+  if(!window._presets) window._presets=[];
 
   // Real data has arrived from Swift — safe to render now.
   P._ready=true;

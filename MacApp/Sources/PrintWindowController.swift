@@ -312,6 +312,7 @@ final class PrintWindowController: NSObject {
               defaultTemplateID: \(AppSettings.shared.defaultTemplateID.jsonQuoted),
               cassettes: \(cassettesJSONString()),
               columnConfig: \(AppSettings.shared.columnConfigJSON()),
+              filterSortPresets: \(AppSettings.shared.filterSortPresetsJSON),
               reprint: \(reprintJSON)
             });
           }
@@ -374,6 +375,13 @@ extension PrintWindowController: WKScriptMessageHandler {
 
         case "setColumnConfig":
             AppSettings.shared.applyColumnConfigPayload(body["payload"])
+
+        case "setFilterSortPresets":
+            if let arr = body["payload"] as? [Any],
+               let data = try? JSONSerialization.data(withJSONObject: arr),
+               let json = String(data: data, encoding: .utf8) {
+                AppSettings.shared.filterSortPresetsJSON = json
+            }
 
         case "editTemplate":
             if let index = (body["payload"] as? [String: Any])?["index"] as? Int {
