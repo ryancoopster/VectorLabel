@@ -1294,6 +1294,35 @@ function delObj(){
   R();
 }
 
+// ── Duplicate / copy / paste ────────────────────────────────────────────────
+let _objClipboard=null;
+const PASTE_OFFSET=0.1;   // inches
+
+function _selectNew(c){ S.objs.push(c); S.selId=c.id; S._ef=(c.t==='tx'?c.f:undefined); S.editingId=null; R(); }
+
+// Cmd+D — duplicate in place (same position, new id).
+function duplicateObj(){
+  if(!S.selId)return;
+  const o=gobj(S.selId); if(!o)return;
+  snapshot();
+  const c=JSON.parse(JSON.stringify(o)); c.id=mid();
+  _selectNew(c);
+}
+function copyObj(){
+  if(!S.selId)return;
+  const o=gobj(S.selId); if(o){ _objClipboard=JSON.parse(JSON.stringify(o)); if(typeof showToast==='function')showToast('Copied'); }
+}
+// Cmd+V — paste offset from the original; repeated pastes cascade.
+function pasteObj(){
+  if(!_objClipboard)return;
+  snapshot();
+  const c=JSON.parse(JSON.stringify(_objClipboard)); c.id=mid();
+  c.x=Math.max(-BLEED_IN,(c.x||0)+PASTE_OFFSET);
+  c.y=Math.max(-BLEED_IN,(c.y||0)+PASTE_OFFSET);
+  _objClipboard.x=c.x; _objClipboard.y=c.y;   // cascade next paste
+  _selectNew(c);
+}
+
 // Short label for an object in the object list.
 function objListLabel(o){
   if(o.t==='tx'){
@@ -1516,6 +1545,14 @@ document.addEventListener("keydown",function(e){
     e.preventDefault();
     delObj();
     return;
+  }
+
+  // Cmd/Ctrl+D — duplicate in place; Cmd/Ctrl+C/V — copy/paste object.
+  if((e.metaKey||e.ctrlKey)&&!inInput){
+    const k=e.key.toLowerCase();
+    if(k==="d"&&S.selId){ e.preventDefault(); duplicateObj(); return; }
+    if(k==="c"&&S.selId){ e.preventDefault(); copyObj(); return; }
+    if(k==="v"&&_objClipboard){ e.preventDefault(); pasteObj(); return; }
   }
 
   // Arrow keys — nudge selected object by 1px (0.5px with shift)
