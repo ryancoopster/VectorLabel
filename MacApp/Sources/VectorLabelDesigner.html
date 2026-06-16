@@ -591,6 +591,55 @@ function rotateObj(id,delta){
   R();
 }
 
+// ── Anchor point (which corner/edge/center the X/Y refer to and that stays
+// fixed when resizing) ─────────────────────────────────────────────────────────
+function objAnchor(o){ return o.anchor||'tl'; }
+function anchorFrac(a){
+  const fx = a[1]==='l'?0 : a[1]==='c'?0.5 : 1;   // horizontal: l/c/r
+  const fy = a[0]==='t'?0 : a[0]==='m'?0.5 : 1;   // vertical:   t/m/b
+  return [fx,fy];
+}
+function setAnchor(id,a){ const o=gobj(id); if(!o)return; uobj(id,{anchor:a}); R(); }
+// Set the anchor point's X or Y → reposition the top-left accordingly.
+function setAnchorPos(id,axis,val){
+  const o=gobj(id); if(!o||isNaN(val))return;
+  const [fx,fy]=anchorFrac(objAnchor(o)); snapshot();
+  if(axis==='x') uobj(id,{x:val-fx*(o.w||0)}); else uobj(id,{y:val-fy*(o.h||0)});
+  R();
+}
+// Resize keeping the anchor point fixed (square types resize both; aspect-locked
+// images keep ratio).
+function setSizeAnchored(id,dim,val){
+  const o=gobj(id); if(!o||isNaN(val)||val<=0)return;
+  const [fx,fy]=anchorFrac(objAnchor(o)); snapshot();
+  let nw=o.w, nh=o.h;
+  if(dim==='w'){ nw=val; if(o.t==='ci'||o.t==='sy')nh=val; else if(o.t==='im'&&o.lockAspect!==false)nh=+(nw*((o.h/o.w)||1)).toFixed(4); }
+  else { nh=val; if(o.t==='ci'||o.t==='sy')nw=val; else if(o.t==='im'&&o.lockAspect!==false)nw=+(nh/(((o.h/o.w))||1)).toFixed(4); }
+  uobj(id,{x:o.x+fx*((o.w||0)-nw), y:o.y+fy*((o.h||0)-nh), w:nw, h:nh});
+  R();
+}
+function anchorGrid(o){
+  const cur=objAnchor(o);
+  const codes=['tl','tc','tr','ml','mc','mr','bl','bc','br'];
+  const dots=codes.map(c=>`<div onclick="setAnchor('${o.id}','${c}')" title="Anchor: ${c}" style="width:11px;height:11px;border-radius:50%;border:1.5px solid ${cur===c?'var(--accent)':'var(--text2)'};background:${cur===c?'var(--accent)':'transparent'};cursor:pointer"></div>`).join('');
+  return `<div title="Anchor point — X/Y refer to this point, and it stays fixed when you resize" style="display:grid;grid-template-columns:repeat(3,11px);gap:6px;flex-shrink:0">${dots}</div>`;
+}
+// Position & size block with the anchor selector. Pass showWH:false for objects
+// without an editable height (handled separately).
+function posSizeBlock(o,showWH){
+  const [fx,fy]=anchorFrac(objAnchor(o));
+  const ax=((o.x||0)+fx*(o.w||0)).toFixed(3), ay=((o.y||0)+fy*(o.h||0)).toFixed(3);
+  const xy=`<div style="flex:1;display:flex;flex-direction:column;gap:6px">
+      <div><label class="lbl">X</label><input type="number" class="inp" step="0.01" value="${ax}" onchange="setAnchorPos('${o.id}','x',parseFloat(this.value))"></div>
+      <div><label class="lbl">Y</label><input type="number" class="inp" step="0.005" value="${ay}" onchange="setAnchorPos('${o.id}','y',parseFloat(this.value))"></div>
+    </div>`;
+  const wh=showWH?`<div style="display:flex;gap:8px">
+      <div style="flex:1"><label class="lbl">Width</label><input type="number" class="inp" step="0.01" value="${(+o.w||0).toFixed(3)}" onchange="setSizeAnchored('${o.id}','w',parseFloat(this.value))"></div>
+      <div style="flex:1"><label class="lbl">Height</label><input type="number" class="inp" step="0.01" value="${(+o.h||0).toFixed(3)}" onchange="setSizeAnchored('${o.id}','h',parseFloat(this.value))"></div>
+    </div>`:'';
+  return `<div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:8px">${anchorGrid(o)}${xy}</div>${wh}`;
+}
+
 // ── Properties panel ──────────────────────────────────────────────────────────
 function buildProps(){
   const o=S.selId?gobj(S.selId):null;
@@ -669,10 +718,7 @@ function buildProps(){
       </div>
       <hr class="divider">
       <div class="sec">Position & size</div>
-      ${ni("X","x",.01,o.x)}
-      ${ni("Y","y",.005,o.y)}
-      ${ni("Width","w",.01,o.w)}
-      ${ni("Height","h",.01,o.h)}
+      ${posSizeBlock(o,true)}
     </div>`;
   }
   if(o.t==="ln"){
@@ -690,10 +736,7 @@ function buildProps(){
       ${posButtons(o)}
       <div class="sec">Rectangle</div>
       <div style="margin-bottom:6px"><label class="lbl">Border (px)</label><input type="number" class="inp" value="${o.lw||1}" min="1" max="10" onchange="uobj('${o.id}',{lw:parseInt(this.value)});R()"></div>
-      ${ni("X","x",.01,o.x)}
-      ${ni("Y","y",.005,o.y)}
-      ${ni("Width","w",.01,o.w)}
-      ${ni("Height","h",.01,o.h)}
+      ${posSizeBlock(o,true)}
     </div>`;
   }
   if(o.t==="ar"){
@@ -719,10 +762,9 @@ function buildProps(){
       ${posButtons(o)}
       <div class="sec">Circle</div>
       <div style="margin-bottom:6px"><label class="lbl">Border (px)</label><input type="number" class="inp" value="${o.lw||1}" min="1" max="10" onchange="uobj('${o.id}',{lw:parseInt(this.value)});R()"></div>
-      <div style="margin-bottom:6px"><label class="lbl">Diameter (in)</label><input type="number" class="inp" step="0.01" value="${(+o.w||0).toFixed(3)}" onchange="uobj('${o.id}',{w:parseFloat(this.value),h:parseFloat(this.value)});R()"></div>
-      <div style="margin-bottom:6px"><label class="lbl">Radius (in)</label><input type="number" class="inp" step="0.005" value="${((+o.w||0)/2).toFixed(3)}" onchange="uobj('${o.id}',{w:parseFloat(this.value)*2,h:parseFloat(this.value)*2});R()"></div>
-      ${ni("X","x",.01,o.x)}
-      ${ni("Y","y",.005,o.y)}
+      <div style="margin-bottom:6px"><label class="lbl">Diameter (in)</label><input type="number" class="inp" step="0.01" value="${(+o.w||0).toFixed(3)}" onchange="setSizeAnchored('${o.id}','w',parseFloat(this.value))"></div>
+      <div style="margin-bottom:6px"><label class="lbl">Radius (in)</label><input type="number" class="inp" step="0.005" value="${((+o.w||0)/2).toFixed(3)}" onchange="setSizeAnchored('${o.id}','w',parseFloat(this.value)*2)"></div>
+      ${posSizeBlock(o,false)}
     </div>`;
   }
   if(o.t==="ov"){
@@ -730,10 +772,7 @@ function buildProps(){
       ${posButtons(o)}
       <div class="sec">Oval</div>
       <div style="margin-bottom:6px"><label class="lbl">Border (px)</label><input type="number" class="inp" value="${o.lw||1}" min="1" max="10" onchange="uobj('${o.id}',{lw:parseInt(this.value)});R()"></div>
-      ${ni("Width (X)","w",.01,o.w)}
-      ${ni("Height (Y)","h",.01,o.h)}
-      ${ni("X","x",.01,o.x)}
-      ${ni("Y","y",.005,o.y)}
+      ${posSizeBlock(o,true)}
     </div>`;
   }
   if(o.t==="im"){
@@ -746,10 +785,7 @@ function buildProps(){
       <div style="margin-bottom:8px"><label class="lbl" style="display:flex;align-items:center;gap:6px;cursor:pointer">
         <input type="checkbox" ${locked?"checked":""} onchange="uobj('${o.id}',{lockAspect:this.checked});R()"> Lock aspect ratio
       </label></div>
-      <div style="margin-bottom:6px"><label class="lbl">Width</label><input type="number" class="inp" step="0.01" value="${(+o.w||0).toFixed(3)}" onchange="imgSetDim('${o.id}','w',parseFloat(this.value))"></div>
-      <div style="margin-bottom:6px"><label class="lbl">Height</label><input type="number" class="inp" step="0.01" value="${(+o.h||0).toFixed(3)}" onchange="imgSetDim('${o.id}','h',parseFloat(this.value))"></div>
-      ${ni("X","x",.01,o.x)}
-      ${ni("Y","y",.005,o.y)}
+      ${posSizeBlock(o,true)}
     </div>`;
   }
   if(o.t==="sy"){
@@ -758,9 +794,8 @@ function buildProps(){
       <div class="sec">Symbol</div>
       <div style="margin-bottom:8px;color:var(--text2);font-size:11px">${(SYMBOLS[o.sym]||{}).label||o.sym||''}</div>
       <button class="btn" onclick="symPicker('${o.id}')" style="margin-bottom:8px;font-size:11px">Choose symbol…</button>
-      <div style="margin-bottom:6px"><label class="lbl">Size (in)</label><input type="number" class="inp" step="0.01" value="${(+o.w||0).toFixed(3)}" onchange="uobj('${o.id}',{w:parseFloat(this.value),h:parseFloat(this.value)});R()"></div>
-      ${ni("X","x",.01,o.x)}
-      ${ni("Y","y",.005,o.y)}
+      <div style="margin-bottom:6px"><label class="lbl">Size (in)</label><input type="number" class="inp" step="0.01" value="${(+o.w||0).toFixed(3)}" onchange="setSizeAnchored('${o.id}','w',parseFloat(this.value))"></div>
+      ${posSizeBlock(o,false)}
     </div>`;
   }
   return"";

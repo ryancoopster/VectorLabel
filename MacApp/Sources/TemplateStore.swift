@@ -47,6 +47,10 @@ struct TemplateObject: Codable, Identifiable, Hashable {
 
     // Rotation in degrees, clockwise, about the object's center. nil/0 = none.
     var rot: Double?
+
+    // Designer-only editing aid: which point (tl/tc/tr/ml/mc/mr/bl/bc/br) the
+    // X/Y refer to and which stays fixed when resizing. Ignored by the renderer.
+    var anchor: String?
 }
 
 /// A saved VectorLabel template, matching .vlt.json exactly.
