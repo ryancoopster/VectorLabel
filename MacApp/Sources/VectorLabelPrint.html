@@ -1250,6 +1250,8 @@ function buildPrintPayloadBody(indices){
     printRange: P.printRange,
     rangeFrom: P.rangeFrom,
     rangeTo: P.rangeTo,
+    filter: P.filter,
+    sort: P.sort,
   };
 }
 
@@ -1685,7 +1687,9 @@ function initPrintWindow(opts){
   // Source file name for display
   if(opts.sourceFile) P.sourceFile=opts.sourceFile;
 
-  // Reprint: restore previous selection settings
+  // Reprint: restore the previous selection AND filter/sort state. A fresh
+  // export (no reprint) always starts with filter & sort cleared, even if the
+  // print window was already open from a prior export.
   if(opts.reprint){
     const rp=opts.reprint;
     if(rp.printRange) P.printRange=rp.printRange;
@@ -1700,6 +1704,11 @@ function initPrintWindow(opts){
       const idx=P.templates.findIndex(t=>t.name===rp.templateName);
       if(idx>=0) P.activeTpl=idx;
     }
+    try{ P.filter = rp.filterJSON ? JSON.parse(rp.filterJSON) : null; }catch(_){ P.filter=null; }
+    try{ P.sort   = rp.sortJSON   ? JSON.parse(rp.sortJSON)   : null; }catch(_){ P.sort=null; }
+  }else{
+    // New export → clear any leftover filter/sort.
+    P.filter=null; P.sort=null;
   }
 
   R();

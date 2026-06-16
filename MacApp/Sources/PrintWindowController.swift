@@ -500,6 +500,14 @@ extension PrintWindowController: WKScriptMessageHandler {
             printRange = .selected
         }
 
+        // Capture the active filter/sort (objects) as JSON so reprint restores them.
+        func jsonString(_ v: Any?) -> String? {
+            guard let v = v, !(v is NSNull),
+                  let data = try? JSONSerialization.data(withJSONObject: v),
+                  let s = String(data: data, encoding: .utf8) else { return nil }
+            return s
+        }
+
         return RecentPrint(
             date: Date(),
             title: title,
@@ -511,7 +519,9 @@ extension PrintWindowController: WKScriptMessageHandler {
             selectedIndices: recordIndices,
             status: status,
             rangeFrom: payload["rangeFrom"] as? Int,
-            rangeTo: payload["rangeTo"] as? Int
+            rangeTo: payload["rangeTo"] as? Int,
+            filterJSON: jsonString(payload["filter"]),
+            sortJSON: jsonString(payload["sort"])
         )
     }
 

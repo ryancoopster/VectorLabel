@@ -39,9 +39,15 @@ struct RecentPrint: Codable, Identifiable, Hashable {
     var rangeFrom: Int?
     var rangeTo: Int?
 
+    // The filter/sort that were active for this job, stored as JSON so reprint
+    // can restore them (nil = none). Opaque here; parsed by the print web UI.
+    var filterJSON: String?
+    var sortJSON: String?
+
     enum CodingKeys: String, CodingKey {
         case id, date, title, sourceFileName, templateName, printerName
         case labelCount, printRange, selectedIndices, status, rangeFrom, rangeTo
+        case filterJSON, sortJSON
     }
 
     /// Absolute print date and time, e.g. "Jun 15, 2026 at 3:42 PM".
@@ -82,6 +88,8 @@ extension RecentPrint {
         status          = (try? c.decode(Status.self, forKey: .status)) ?? .complete
         rangeFrom       = try? c.decode(Int.self, forKey: .rangeFrom)
         rangeTo         = try? c.decode(Int.self, forKey: .rangeTo)
+        filterJSON      = try? c.decode(String.self, forKey: .filterJSON)
+        sortJSON        = try? c.decode(String.self, forKey: .sortJSON)
     }
 }
 
