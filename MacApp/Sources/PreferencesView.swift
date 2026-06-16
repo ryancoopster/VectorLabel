@@ -63,8 +63,9 @@ private struct PrefDivider: View {
 // MARK: – Main view
 
 struct PreferencesView: View {
-    @ObservedObject var settings     = AppSettings.shared
-    @ObservedObject var recentPrints = RecentPrintsStore.shared
+    @ObservedObject var settings        = AppSettings.shared
+    @ObservedObject var recentPrints    = RecentPrintsStore.shared
+    @ObservedObject var printerManager  = PrinterManager.shared
 
     @State private var selectedTab = 0
     @State private var showResetConfirm       = false
@@ -257,22 +258,40 @@ struct PreferencesView: View {
 
     // MARK: – Printers
 
+    /// Caption for a printer row, including the detected cassette if known.
+    private func printerCaption(_ printer: PrinterDevice, _ cassette: BradyUSB.SmartCellInfo?) -> String {
+        var s = "Serial: \(printer.serial)  ·  \(printer.status.displayName)"
+        if let c = cassette, !c.partNumber.isEmpty {
+            let dims = "\(c.labelWidthMils)×\(c.labelHeightMils) mil"
+            s += "  ·  Loaded: \(c.partNumber) (\(dims), \(c.supplyRemainingPct)% left)"
+        }
+        return s
+    }
+
     private var printersTab: some View {
         VStack(alignment: .leading, spacing: 0) {
             PrefSection(title: "Connected Printers") {
-                if PrinterManager.shared.printers.isEmpty {
+                if printerManager.printers.isEmpty {
                     PrefRow(label: "No Brady printers detected") {
                         Button("Scan Now") { Task { @MainActor in PrinterManager.shared.scanNow() } }
                             .buttonStyle(VLButtonStyle())
                     }
                 } else {
-                    ForEach(PrinterManager.shared.printers) { printer in
-                        PrefRow(label: printer.name, caption: "Serial: \(printer.serial)  ·  \(printer.status.displayName)") {
-                            Circle()
-                                .fill(printer.status == .ready ? Color.vlGreen : printer.status == .busy ? Color.yellow : Color.vlDim)
-                                .frame(width: 8, height: 8)
+                    ForEach(printerManager.printers) { printer in
+                        PrefRow(label: printer.name,
+                                caption: printerCaption(printer, printerManager.cassettes[printer.id])) {
+                            HStack(spacing: 8) {
+                                Button("Detect cassette") {
+                                    PrinterManager.shared.refreshCassette(for: printer.id, force: true)
+                                }
+                                .buttonStyle(VLButtonStyle())
+                                .disabled(printer.status != .ready)
+                                Circle()
+                                    .fill(printer.status == .ready ? Color.vlGreen : printer.status == .busy ? Color.yellow : Color.vlDim)
+                                    .frame(width: 8, height: 8)
+                            }
                         }
-                        if printer.id != PrinterManager.shared.printers.last?.id {
+                        if printer.id != printerManager.printers.last?.id {
                             PrefDivider()
                         }
                     }

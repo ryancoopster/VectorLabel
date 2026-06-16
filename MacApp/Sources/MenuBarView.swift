@@ -78,7 +78,7 @@ struct MenuBarView: View {
                 emptyState("No printers connected")
             } else {
                 ForEach(printerManager.printers) { printer in
-                    PrinterRow(printer: printer)
+                    PrinterRow(printer: printer, cassette: printerManager.cassettes[printer.id])
                 }
             }
         }
@@ -198,6 +198,7 @@ struct MenuActionRow: View {
 
 struct PrinterRow: View {
     let printer: PrinterDevice
+    var cassette: BradyUSB.SmartCellInfo? = nil
 
     var statusColor: Color {
         switch printer.status {
@@ -220,6 +221,11 @@ struct PrinterRow: View {
                 Text("\(printer.serial) · \(printer.status.displayName)")
                     .font(.system(size: 10))
                     .foregroundColor(.vlSecondary)
+                if let c = cassette, !c.partNumber.isEmpty {
+                    Text("\(c.partNumber) · \(c.supplyRemainingPct)% supply")
+                        .font(.system(size: 10))
+                        .foregroundColor(.vlAccent)
+                }
             }
 
             Spacer()

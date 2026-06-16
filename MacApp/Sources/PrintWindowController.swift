@@ -31,6 +31,9 @@ final class PrintWindowController: NSObject {
     // Without this, a window opened before the scan finishes shows no printers.
     private var printerObserver: AnyCancellable?
 
+    // Pushes detected cassette (SmartCell) info into the web view as it updates.
+    private var cassetteObserver: AnyCancellable?
+
     // Recent-print record for the job submitted this session, so its status can
     // be updated (printing → complete / cancelled-mid-print). nil until Print is
     // clicked; while nil, a ✕ Cancel records a "cancelled before printing" entry.
@@ -64,6 +67,7 @@ final class PrintWindowController: NSObject {
     func close() {
         jobObservers.removeAll()
         printerObserver = nil
+        cassetteObserver = nil
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "vectorlabel")
         window?.close()
         window = nil
@@ -95,6 +99,11 @@ final class PrintWindowController: NSObject {
         printerObserver = PrinterManager.shared.$printers
             .receive(on: RunLoop.main)
             .sink { [weak self] printers in self?.pushPrinters(printers) }
+
+        // Push detected cassette info as it changes (auto-detect or manual).
+        cassetteObserver = PrinterManager.shared.$cassettes
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.pushCassettes() }
 
         // Prefer live repo file during development so git pull is reflected immediately
         let htmlURL = Self.findHTMLFile("VectorLabelPrint")
@@ -149,6 +158,30 @@ final class PrintWindowController: NSObject {
         evalJS("if(typeof updatePrinters==='function')updatePrinters(\(json));")
     }
 
+    /// Detected cassette info keyed by printer id, as a JSON object string.
+    private func cassettesJSONString() -> String {
+        var dict: [String: [String: Any]] = [:]
+        for (id, c) in PrinterManager.shared.cassettes {
+            dict[id] = [
+                "partNumber": c.partNumber,
+                "labelWidthMils": c.labelWidthMils,
+                "labelHeightMils": c.labelHeightMils,
+                "isDieCut": c.isDieCut,
+                "supplyRemainingPct": c.supplyRemainingPct,
+                "pixelWidth": c.pixelWidth,
+                "pixelHeight": c.pixelHeight,
+            ]
+        }
+        if let data = try? JSONSerialization.data(withJSONObject: dict),
+           let json = String(data: data, encoding: .utf8) { return json }
+        return "{}"
+    }
+
+    /// Push the current detected cassettes into the web view.
+    private func pushCassettes() {
+        evalJS("if(typeof updateCassettes==='function')updateCassettes(\(cassettesJSONString()));")
+    }
+
     private func sendInitialState() {
         guard let wv = webView else { return }
 
@@ -187,6 +220,7 @@ final class PrintWindowController: NSObject {
               printers: \(printerJSON),
               sourceFile: \(sourceFile.jsonQuoted),
               defaultTemplateID: \(AppSettings.shared.defaultTemplateID.jsonQuoted),
+              cassettes: \(cassettesJSONString()),
               reprint: \(reprintJSON)
             });
           }
@@ -239,6 +273,12 @@ extension PrintWindowController: WKScriptMessageHandler {
 
         case "saveTemplate":
             saveTemplate(from: body["payload"])
+
+        case "detectCassette":
+            let printerID = (body["payload"] as? [String: Any])?["printerID"] as? String ?? ""
+            if !printerID.isEmpty {
+                PrinterManager.shared.refreshCassette(for: printerID, force: true)
+            }
 
         case "setDefaultTemplate":
             // payload {id, name} to set, or null to clear. Persists in AppSettings.
@@ -393,6 +433,7 @@ extension PrintWindowController: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         jobObservers.removeAll()
         printerObserver = nil
+        cassetteObserver = nil
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "vectorlabel")
         webView = nil
         window = nil

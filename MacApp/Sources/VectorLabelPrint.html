@@ -508,10 +508,19 @@ function buildTemplateBar(){
       <input type="checkbox" ${P._makeDefaultChecked?"checked":""} onchange="toggleDefaultTemplate(this.checked)" style="cursor:pointer">
       Make default
     </label>`:""}
+    ${cassetteMismatch()?`<div title="The loaded cassette differs from the template's required supply — the label may print misaligned or cropped" style="flex-shrink:0;display:flex;align-items:center;gap:5px;color:#f56c6c;font-size:11px;font-weight:600;white-space:nowrap">⚠ Supply mismatch</div>`:""}
     ${t?`<div style="flex-shrink:0;text-align:right">
       <div style="color:#44445a;font-size:10px">Required supply</div>
       <div style="color:#6C8EF5;font-size:11px;font-weight:600;font-family:monospace">${t.specN}</div>
     </div>`:""}
+    <div style="flex-shrink:0;text-align:right">
+      <div style="color:#44445a;font-size:10px">Loaded supply</div>
+      ${(()=>{const c=loadedCassette();
+        if(!c||!c.partNumber)return `<button class="btn" onclick="detectCassette()" style="padding:2px 8px;font-size:10px;margin-top:1px">Detect</button>`;
+        const mm=cassetteMismatch();
+        return `<div title="${typeof c.supplyRemainingPct==='number'?c.supplyRemainingPct+'% remaining — click to re-detect':'click to re-detect'}" onclick="detectCassette()" style="cursor:pointer;color:${mm?'#f56c6c':'#5cc896'};font-size:11px;font-weight:600;font-family:monospace">${c.partNumber}${typeof c.supplyRemainingPct==='number'?' · '+c.supplyRemainingPct+'%':''}</div>`;
+      })()}
+    </div>
   </div>`;
 }
 
@@ -526,6 +535,32 @@ function toggleDefaultTemplate(checked){
       action:"setDefaultTemplate",
       payload: (checked&&t) ? {id:t.id,name:t.name} : null
     });
+  }
+}
+
+// ── Loaded cassette (SmartCell) detection ──────────────────────────────────────
+// window._cassettes maps printerID -> {partNumber, supplyRemainingPct, ...}.
+function loadedCassette(){ return (window._cassettes||{})[P.activePrinter]||null; }
+
+// Strip the model prefix so "BM-32-427" (catalog) matches "M6-32-427" (SmartCell).
+function supplyCore(pn){ return (pn||"").replace(/^[A-Za-z0-9]+-/,"").toUpperCase(); }
+
+function cassetteMismatch(){
+  const c=loadedCassette(), t=tpl();
+  if(!c||!t||!c.partNumber)return false;
+  return supplyCore(c.partNumber)!==supplyCore(t.specN);
+}
+
+// Called by Swift when detected cassette info changes (auto-detect or manual).
+function updateCassettes(map){
+  window._cassettes=map||{};
+  if(P.view!=="editor")R();
+}
+
+function detectCassette(){
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"detectCassette",payload:{printerID:P.activePrinter}});
+    showToast("Detecting cassette…");
   }
 }
 
@@ -1867,6 +1902,9 @@ function initPrintWindow(opts){
     }));
     P.activeTpl=0;
   }
+
+  // Loaded cassette info (printerID -> SmartCell), for the supply display.
+  if(opts.cassettes) window._cassettes=opts.cassettes;
 
   // Pre-select the persisted default template, if set and present. The
   // "Make default" checkbox always starts unchecked on open (the default
