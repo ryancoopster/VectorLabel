@@ -368,7 +368,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         guard let wv = designerWebView else { return }
         let s = AppSettings.shared
         wv.evaluateJavaScript(
-            "if(typeof initDesignerPrefs==='function')initDesignerPrefs({snapGrid:\(s.designerSnapGrid),snapObjects:\(s.designerSnapObjects),gridSize:\(s.designerGridSize)});",
+            "if(typeof initDesignerPrefs==='function')initDesignerPrefs({snapGrid:\(s.designerSnapGrid),snapObjects:\(s.designerSnapObjects),gridSize:\(s.designerGridSize),recH:\(s.designerRecordsHeight)});",
             completionHandler: nil
         )
     }
@@ -638,6 +638,7 @@ extension AppDelegate: WKScriptMessageHandler {
                 if let v = p["snapGrid"] as? Bool { AppSettings.shared.designerSnapGrid = v }
                 if let v = p["snapObjects"] as? Bool { AppSettings.shared.designerSnapObjects = v }
                 if let v = p["gridSize"] as? Double { AppSettings.shared.designerGridSize = v }
+                if let v = p["recH"] as? Double { AppSettings.shared.designerRecordsHeight = v }
             }
 
         case "editReturn":
