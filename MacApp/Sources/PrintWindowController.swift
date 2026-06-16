@@ -345,6 +345,8 @@ extension PrintWindowController: WKScriptMessageHandler {
 
         case "editTemplate":
             if let id = (body["payload"] as? [String: Any])?["id"] as? String {
+                // Hide the print window while editing; returnFromEdit() reshows it.
+                window?.orderOut(nil)
                 onEditTemplate?(id)
             }
 

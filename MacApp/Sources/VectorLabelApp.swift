@@ -94,14 +94,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     // Template id to load for print-window editing on the next designer load.
     private var pendingEditTemplateID: String?
+    // True while the designer is open to edit a template for the print window.
+    private var designerForPrintEdit = false
 
     func openTemplateDesigner(editTemplateID: String? = nil) {
         pendingEditTemplateID = editTemplateID
+        designerForPrintEdit = (editTemplateID != nil)
         if let win = designerWindow {
             NSApp.activate(ignoringOtherApps: true)
             win.makeKeyAndOrderFront(nil)
             win.makeFirstResponder(designerWebView)
-            if let id = editTemplateID { applyPendingEdit(id) }
+            if let id = editTemplateID {
+                applyPendingEdit(id)
+            } else {
+                designerWebView?.evaluateJavaScript("window._printEdit=false; if(typeof R==='function')R(); if(typeof openTemplate==='function')openTemplate();", completionHandler: nil)
+            }
             return
         }
 
@@ -163,6 +170,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                     self.designerCloseObserver = nil
                 }
                 TemplateStore.shared.reload()
+                // If the designer was closed (e.g. via its close button) while
+                // editing for the print window, bring the print window back.
+                if self.designerForPrintEdit {
+                    self.designerForPrintEdit = false
+                    self.printWindowController.returnFromEdit()
+                }
             }
         }
     }
@@ -434,8 +447,9 @@ extension AppDelegate: WKNavigationDelegate {
             // Editing for the print window: load that template, skip the picker.
             applyPendingEdit(id)
         } else {
-            // Open the template picker on launch instead of a default template.
-            webView.evaluateJavaScript("if(typeof openTemplate==='function')openTemplate();", completionHandler: nil)
+            // Standalone mode: ensure the New/Open/Save toolbar (not the
+            // print-edit Return buttons) and open the template picker.
+            webView.evaluateJavaScript("window._printEdit=false; if(typeof openTemplate==='function')openTemplate();", completionHandler: nil)
         }
     }
 }
@@ -499,9 +513,14 @@ extension AppDelegate: WKScriptMessageHandler {
             AppSettings.shared.applyColumnConfigPayload(body["payload"])
 
         case "editReturn":
-            // Done editing for the print window: close the designer and return.
-            designerWindow?.close()
+            // Save first (if requested) so the print window refreshes with the
+            // updated template, then close the designer and return.
+            if let p = body["payload"] as? [String: Any], (p["save"] as? Bool) == true {
+                TemplateStore.shared.save(fromPayload: p["template"])
+            }
+            designerForPrintEdit = false   // handled here; don't double-return on close
             printWindowController.returnFromEdit()
+            designerWindow?.close()
 
         default:
             break

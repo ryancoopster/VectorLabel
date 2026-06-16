@@ -1031,13 +1031,13 @@ function initPrintEdit(template){
   }
   R();
 }
-function edPrintCancel(){ _vlPost("editReturn",null); }
+function edPrintCancel(){ _vlPost("editReturn",{save:false}); }
 function edPrintSave(){
   const data=templateData();
   const payload={name:S.tplName,specN:data.specN,objs:data.objs};
   if(S._loadedId)payload.id=S._loadedId;
-  _vlPost("saveTemplate",payload);
-  _vlPost("editReturn",{name:S.tplName});
+  // Single message: Swift saves THEN refreshes the print window (ordered).
+  _vlPost("editReturn",{save:true,template:payload});
 }
 function edPrintSaveAs(){
   S._loadedId=null;               // save as a new template (fresh id/file)
@@ -1057,11 +1057,16 @@ async function saveTemplate(){
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
     const payload={name:S.tplName,specN:data.specN,objs:data.objs};
     if(S._loadedId)payload.id=S._loadedId;
+    // Save As & Return (print edit): one ordered message — save then return.
+    if(window._printEdit&&window._printReturnAfterSave){
+      window._printReturnAfterSave=false;
+      S.modal=null;
+      _vlPost("editReturn",{save:true,template:payload});
+      return;
+    }
     window.webkit.messageHandlers.vectorlabel.postMessage({action:"saveTemplate",payload});
     S.modal=null;
     showToast("Saved: "+S.tplName);
-    // When editing for the print window via the Save As modal, return afterward.
-    if(window._printReturnAfterSave){ window._printReturnAfterSave=false; _vlPost("editReturn",{name:S.tplName}); return; }
     R();
     return;
   }
