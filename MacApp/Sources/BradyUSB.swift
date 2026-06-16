@@ -198,47 +198,6 @@ enum BradyUSB {
         #endif
     }
 
-    /// Read the cassette's "labels remaining" counter (decrements by exactly one
-    /// per printed label). Returns -1 if unavailable. The response has
-    /// variable-length part-number / ribbon-code strings, so the counter is located
-    /// relative to the field block (fb), not at a fixed offset. Caller must hold the
-    /// device lock.
-    static func labelsRemaining(handle: OpaquePointer) -> Int {
-        #if canImport(CLibUSB)
-        var query: [UInt8] = [0x1B, 0x49, 0x00]
-        var readBuf = [UInt8](repeating: 0, count: 256)
-        for _ in 0 ..< 4 {
-            var sent: Int32 = 0
-            _ = query.withUnsafeMutableBufferPointer { buf in
-                libusb_bulk_transfer(handle, outEndpoint, buf.baseAddress, Int32(buf.count), &sent, 300)
-            }
-            var got: Int32 = 0
-            let rrc = readBuf.withUnsafeMutableBufferPointer { buf in
-                libusb_bulk_transfer(handle, inEndpoint, buf.baseAddress, Int32(buf.count), &got, 300)
-            }
-            if rrc == 0 && got >= 0x16 {
-                let data = Array(readBuf.prefix(Int(got)))
-                // Locate field block exactly like parseSmartCell (variable-length).
-                func nulFrom(_ start: Int, _ maxLen: Int) -> Int {
-                    var e = start
-                    while e < data.count, e < start + maxLen, data[e] != 0 { e += 1 }
-                    return e
-                }
-                let partNul = nulFrom(0x06, 16)
-                let ribbonNul = nulFrom(partNul + 1, 32)
-                let fb = ribbonNul + 13
-                let off = fb + 0x37   // labels-remaining counter (16-bit LE)
-                if off + 1 < data.count {
-                    return Int(data[off]) | (Int(data[off + 1]) << 8)
-                }
-            }
-            usleep(30_000)
-        }
-        return -1
-        #else
-        return -1
-        #endif
-    }
 
     // MARK: – SmartCell cassette detection (§8)
 

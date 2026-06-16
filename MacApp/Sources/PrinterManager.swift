@@ -175,39 +175,24 @@ final class PrinterManager: ObservableObject {
                 defer { BradyUSB.close(handle) }
 
                 // The printer buffers everything sent to it almost instantly (no USB
-                // backpressure) and gives no per-label status. If we dumped the whole
-                // job at once, Cancel couldn't stop anything — it would all already be
-                // in the printer. So instead PACE the sends to the real print rate:
-                // the bar advances honestly, the printer's buffer stays shallow, and
-                // Cancel between labels actually stops the remaining ones (anything
-                // already sent is in the printer and will still print).
-                let count = jobs.count
+                // backpressure) and exposes no usable per-label status — confirmed by
+                // probing: status queries return only constant media info, the
+                // "labels remaining" counter is unreliable/lumpy, and there's no
+                // unsolicited completion message. So we PACE the sends to the real
+                // print rate (calibrated from label length): the bar advances honestly
+                // one label at a time as each finishes printing, and — because we send
+                // one at a time and check between them — Cancel actually stops the
+                // remaining labels (anything already sent stays in the printer).
                 let perLabelMs = max(150, estLabelMs)
-                let initialRem = BradyUSB.labelsRemaining(handle: handle)   // -1 if unavailable
                 for (i, vglJob) in jobs.enumerated() {
                     if job.isCancelled { break }
                     try BradyUSB.sendJob(vglJob, handle: handle)
+                    // Wait roughly one label's print time, staying responsive to
+                    // cancellation, then count this label as printed.
+                    var waited = 0
+                    while waited < perLabelMs && !job.isCancelled { usleep(40_000); waited += 40 }
+                    if job.isCancelled { break }
                     await MainActor.run { job.completedLabels = i + 1 }
-                    if i < count - 1 {
-                        var waited = 0
-                        while waited < perLabelMs && !job.isCancelled { usleep(40_000); waited += 40 }
-                    }
-                }
-                // Let the last buffered label physically finish before marking done,
-                // confirmed by the real "labels remaining" counter. Bounded so a
-                // silent printer can't hang the job.
-                if !job.isCancelled {
-                    let startNs = DispatchTime.now().uptimeNanoseconds
-                    let capMs = perLabelMs * 3 + 4000
-                    while !job.isCancelled {
-                        if initialRem >= 0 {
-                            let rem = BradyUSB.labelsRemaining(handle: handle)
-                            if rem >= 0 && (initialRem - rem) >= count { break }
-                        }
-                        if Int((DispatchTime.now().uptimeNanoseconds &- startNs) / 1_000_000) >= capMs { break }
-                        usleep(150_000)
-                    }
-                    await MainActor.run { job.completedLabels = count }
                 }
             } catch {
                 print("[PrinterManager] Print failed: \(error)")
