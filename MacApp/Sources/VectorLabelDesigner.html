@@ -395,6 +395,27 @@ function applySnap(x,y,w,h,id){
   S._snapLines=[...rx.lines,...ry.lines];
   return{x:Math.max(-BLEED_IN,rx.v),y:Math.max(-BLEED_IN,ry.v)};
 }
+
+// Live-update the snap guide overlay during a drag (no full canvas rebuild).
+function renderSnapGuides(){
+  const layer=document.getElementById('snap-guide-layer'); if(!layer)return;
+  const sc=SC, B=BLEED_IN*sc, pw=S.spec.pw*sc, ph=S.spec.ph*sc, bw=pw+2*B, bh=ph+2*B;
+  const lines=(S._snapLines||[]).map(l=>{
+    if(l.axis==='x'){ const px=(l.pos*sc+B).toFixed(1);
+      return '<line x1="'+px+'" y1="0" x2="'+px+'" y2="'+bh+'" stroke="#FF4D6A" stroke-width="1.5" stroke-dasharray="4,3"/><circle cx="'+px+'" cy="'+(bh/2)+'" r="3.5" fill="#FF4D6A"/>'; }
+    const py=(l.pos*sc+B).toFixed(1);
+    return '<line x1="0" y1="'+py+'" x2="'+bw+'" y2="'+py+'" stroke="#FF4D6A" stroke-width="1.5" stroke-dasharray="4,3"/><circle cx="'+(bw/2)+'" cy="'+py+'" r="3.5" fill="#FF4D6A"/>';
+  }).join('');
+  layer.innerHTML=lines?'<svg style="position:absolute;top:0;left:0;width:'+bw+'px;height:'+bh+'px;pointer-events:none;z-index:5" width="'+bw+'" height="'+bh+'">'+lines+'</svg>':'';
+}
+
+// Resize handles on all four corners (drag any corner to resize, opposite
+// corner stays put).
+function resizeHandles(id){
+  const H=(c,pos,cur)=>`<div onmousedown="startResize(event,'${id}','${c}')" style="position:absolute;${pos};width:9px;height:9px;background:var(--accent);border:1px solid #fff;border-radius:2px;z-index:10;cursor:${cur}"></div>`;
+  return H('tl','left:-5px;top:-5px','nwse-resize')+H('tr','right:-5px;top:-5px','nesw-resize')
+        +H('bl','left:-5px;bottom:-5px','nesw-resize')+H('br','right:-5px;bottom:-5px','nwse-resize');
+}
 function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
   const sc=SC;
   const pw=spec.pw*sc,ph=spec.ph*sc;
@@ -433,7 +454,7 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
       const txtColor=e?"var(--red)":"#000";
       const textAlign=o.al||"left";
       const dispVal=e?`⚠ ${e.substring(0,40)}`:v.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-      const rb=sel&&!readOnly?`<div onmousedown="startResize(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:var(--accent);border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";
+      const rb=sel&&!readOnly?resizeHandles(o.id):"";
       const dropAttr=readOnly?"":`ondragover="event.preventDefault()" ondrop="onColDropToText(event,'${o.id}')"`;
       const isStatic=txMode(o)==="static";
       const editing=!readOnly&&isStatic&&S.editingId===o.id;
@@ -450,11 +471,11 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
       return `<div data-obj="${o.id}" ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${(o.w||1)*sc}px;height:${Math.max(1,o.lw||1)}px;background:#000;cursor:${readOnly?"default":"move"};${rotCss}${ss}">${lh}${rh}${rotH}</div>`;
     }
     if(o.t==="rc"){
-      const rb=sel&&!readOnly?`<div onmousedown="startResize(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:var(--accent);border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";
+      const rb=sel&&!readOnly?resizeHandles(o.id):"";
       return `<div data-obj="${o.id}" ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border:${o.lw||1}px solid #000;background:transparent;cursor:${readOnly?"default":"move"};${rotCss}${ss}">${rotH}${rb}</div>`;
     }
     if(o.t==="ci"||o.t==="ov"){
-      const rb=sel&&!readOnly?`<div onmousedown="startResize(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:var(--accent);border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";
+      const rb=sel&&!readOnly?resizeHandles(o.id):"";
       return `<div data-obj="${o.id}" ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border:${o.lw||1}px solid #000;background:transparent;border-radius:50%;cursor:${readOnly?"default":"move"};${rotCss}${ss}">${rotH}${rb}</div>`;
     }
     if(o.t==="ar"){
@@ -475,7 +496,7 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
     }
     if(o.t==="im"||o.t==="sy"){
       const fit=o.t==="sy"?"contain":"fill";
-      const rb=sel&&!readOnly?`<div onmousedown="startResize(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:var(--accent);border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";
+      const rb=sel&&!readOnly?resizeHandles(o.id):"";
       return `<div data-obj="${o.id}" ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;cursor:${readOnly?"default":"move"};${rotCss}${ss}"><img src="${o.src||''}" style="width:100%;height:100%;object-fit:${fit};pointer-events:none;display:block">${rotH}${rb}</div>`;
     }
     return"";
@@ -512,7 +533,7 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
       <!-- Printable area (only this prints) -->
       <div style="position:absolute;left:${B}px;top:${B}px;width:${pw}px;height:${ph}px;background:#fff;box-shadow:0 0 0 1.5px var(--accent);pointer-events:none"></div>
       ${wrapZone}
-      ${gridSvg}${snapSvg}${objsHtml}
+      ${gridSvg}<div id="snap-guide-layer">${snapSvg}</div>${objsHtml}
     </div>
   </div>`;
 }
@@ -960,7 +981,8 @@ function renderModal(){
         <div class="modal-title">Save Template</div>
         <div class="modal-row">
           <label class="lbl">Template name</label>
-          <input id="tpl-name-inp" class="inp" value="${S.tplName.replace(/"/g,'&quot;')}" style="font-size:14px;padding:6px 10px">
+          <input id="tpl-name-inp" class="inp" value="${S.tplName.replace(/"/g,'&quot;')}" style="font-size:14px;padding:6px 10px" oninput="validateTemplateName()">
+          <div id="tpl-name-err" style="display:none;color:var(--red);font-size:11px;margin-top:5px"></div>
         </div>
         <div class="modal-row">
           <label class="lbl">Label size</label>
@@ -976,7 +998,7 @@ function renderModal(){
         </div>
         <div class="modal-footer">
           <button class="btn" onclick="closeModal()">Cancel</button>
-          <button class="btn" onclick="saveTemplate()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Save Template</button>
+          <button class="btn" id="tpl-save-btn" onclick="saveTemplate()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Save Template</button>
         </div>
       </div>`;
   }
@@ -1039,6 +1061,7 @@ function renderModal(){
   // Auto-focus name input if present
   const ni=document.getElementById("tpl-name-inp")||document.getElementById("new-tpl-name");
   if(ni){ni.focus();ni.select();}
+  if(document.getElementById("tpl-name-inp"))validateTemplateName();
 }
 
 // ── Actions ───────────────────────────────────────────────────────────────────
@@ -1209,10 +1232,11 @@ function startDrag(e,id){
     const o2=gobj(id);
     const snapped=applySnap(rawX,rawY,o2?o2.w:0.1,o2?o2.h:0.1,id);
     uobj(id,snapped);
-    positionEl(id);   // live move without rebuilding the DOM
+    positionEl(id);       // live move without rebuilding the DOM
+    renderSnapGuides();   // show the alignment guides live
   }
   function mu(){
-    S._snapLines=[];
+    S._snapLines=[]; renderSnapGuides();
     window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",mu);
     // A click (no drag) on a static text box → edit it inline.
     if(!moved && o.t==="tx" && txMode(o)==="static"){ startTextEdit(id); return; }
@@ -1266,20 +1290,29 @@ function startRotate(e,id){
   window.addEventListener('mousemove',mv);window.addEventListener('mouseup',mu);
 }
 
-function startResize(e,id){
+// Resize from any corner; the opposite corner stays anchored. `corner` is
+// one of tl/tr/bl/br (defaults to br for back-compat).
+function startResize(e,id,corner){
   e.stopPropagation();
   const o=gobj(id);if(!o)return;
   snapshot();
-  const sx=e.clientX,sy=e.clientY,ow=o.w,oh=o.h;
+  corner=corner||'br';
+  const isLeft=(corner==='tl'||corner==='bl'), isTop=(corner==='tl'||corner==='tr');
+  const sx=e.clientX,sy=e.clientY,ox=o.x,oy=o.y,ow=o.w,oh=o.h;
+  const right=ox+ow, bottom=oy+oh;
   const ratio=(ow>0&&oh>0)?oh/ow:1;
+  const square=(o.t==="ci"||o.t==="sy");
+  const lockAR=(o.t==="im"&&o.lockAspect!==false);
   function mv(e){
-    const dw=(e.clientX-sx)/(SC*S.zoom);
-    const dh=(e.clientY-sy)/(SC*S.zoom);
-    const nw=snapToGrid(Math.max(.05,ow+dw));
-    const nh=snapToGrid(Math.max(.02,oh+dh));
-    if(o.t==="ci"||o.t==="sy"){ uobj(id,{w:nw,h:nw}); }              // circle/symbol stay square
-    else if(o.t==="im" && o.lockAspect!==false){ uobj(id,{w:nw,h:+(nw*ratio).toFixed(4)}); } // locked image keeps ratio
-    else { uobj(id,{w:nw,h:nh}); }
+    const dx=(e.clientX-sx)/(SC*S.zoom);
+    const dy=(e.clientY-sy)/(SC*S.zoom);
+    let nx=ox, ny=oy, nw=ow, nh=oh;
+    if(isLeft){ nx=snapToGrid(Math.min(ox+dx,right-0.05)); nw=right-nx; } else { nw=snapToGrid(Math.max(0.05,ow+dx)); }
+    if(isTop){  ny=snapToGrid(Math.min(oy+dy,bottom-0.02)); nh=bottom-ny; } else { nh=snapToGrid(Math.max(0.02,oh+dy)); }
+    nw=Math.max(0.05,nw); nh=Math.max(0.02,nh);
+    if(square){ const s=Math.max(nw,nh); nw=s; nh=s; if(isLeft)nx=right-s; if(isTop)ny=bottom-s; }
+    else if(lockAR){ nh=+(nw*ratio).toFixed(4); if(isTop)ny=bottom-nh; }
+    uobj(id,{x:Math.max(-BLEED_IN,nx),y:Math.max(-BLEED_IN,ny),w:nw,h:nh});
     scheduleCanvas();
   }
   function mu(){window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",mu);}
@@ -1633,8 +1666,31 @@ function deleteTemplateCard(i){
   }
 }
 
+// Filename validation: only letters, numbers, spaces, hyphens, underscores.
+function templateNameBadChars(name){
+  const bad=(name||"").replace(/[A-Za-z0-9 _\-]/g,"");
+  return Array.from(new Set(bad.split(""))).join("");
+}
+function validateTemplateName(){
+  const inp=document.getElementById("tpl-name-inp"); if(!inp)return false;
+  const bad=templateNameBadChars(inp.value);
+  const empty=!inp.value.trim();
+  const err=document.getElementById("tpl-name-err");
+  const btn=document.getElementById("tpl-save-btn");
+  inp.style.borderColor = bad.length ? "var(--red)" : "";
+  if(err){
+    if(bad.length){ err.style.display="block"; err.textContent='Not allowed: '+bad+'   Use only letters, numbers, spaces, hyphens (-) and underscores (_).'; }
+    else if(empty){ err.style.display="block"; err.textContent="Enter a template name."; }
+    else { err.style.display="none"; }
+  }
+  const ok = !empty && bad.length===0;
+  if(btn){ btn.disabled=!ok; btn.style.opacity=ok?"":"0.4"; btn.style.cursor=ok?"":"default"; }
+  return ok;
+}
+
 async function saveTemplate(){
   const nameEl=document.getElementById("tpl-name-inp");
+  if(nameEl && !validateTemplateName()) return;   // block invalid filenames
   if(nameEl)S.tplName=nameEl.value.trim()||"Untitled Template";
   const data=templateData();
   const json=JSON.stringify(data,null,2);
