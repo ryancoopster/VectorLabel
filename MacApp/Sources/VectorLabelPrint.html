@@ -260,42 +260,40 @@ function startEdColResize(e,col){
   window.addEventListener('mousemove',mv);window.addEventListener('mouseup',mu);
 }
 
+// Column order for record tables: friendly columns first, then every other
+// CSV column in data order.
+function recordColumns(records){
+  const preferred=['_Side','Number','Cable','Signal','Device_Name','Socket_Name'];
+  const cols=[];
+  preferred.forEach(k=>{ if(records.some(r=>k in r)) cols.push(k); });
+  records.forEach(r=>Object.keys(r).forEach(k=>{ if(!cols.includes(k)) cols.push(k); }));
+  return cols;
+}
+function colLabel(k){ return k==='_Side'?'Side':k.replace(/_/g,' '); }
+
 // Builds the record table shown in the live editor (uses S.recIdx + RX/_editorRecords)
 function buildEditorRecordTable(){
   const records=window._editorRecords||RX;
-  const hdrCols=[
-    {label:'Side',   col:'side'},
-    {label:'Number', col:'number'},
-    {label:'Cable',  col:'cable'},
-    {label:'Signal', col:'signal'},
-    {label:'Device', col:'device'},
-    {label:'Socket', col:'socket'},
-  ];
-  const hdr=`<div style="display:grid;grid-template-columns:var(--edr-side) var(--edr-number) var(--edr-cable) var(--edr-signal) var(--edr-device) var(--edr-socket);background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.1);position:sticky;top:0;z-index:2">
-    ${hdrCols.map(h=>`
-      <div style="position:relative;padding:5px 8px;font-size:10px;color:#44445a;font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;user-select:none">
-        ${h.label}
-        <div class="col-resizer" onmousedown="startEdColResize(event,'${h.col}')"></div>
-      </div>`).join('')}
+  if(!records.length)return`<div style="padding:12px;color:#44445a;font-size:11px">No records loaded</div>`;
+  const cols=recordColumns(records);
+
+  const hdr=`<div style="display:flex;width:max-content;min-width:100%;background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.1);position:sticky;top:0;z-index:2">
+    ${cols.map(c=>`<div style="flex:0 0 auto;min-width:96px;padding:5px 8px;font-size:10px;color:#44445a;font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden">${colLabel(c)}</div>`).join('')}
   </div>`;
 
   const rows=records.map((r,i)=>{
     const isActive=S.recIdx===i;
-    const side=r._Side==="Source"?"src":"dst";
     return`<div onclick="S.recIdx=${i};R()"
-      style="display:grid;grid-template-columns:var(--edr-side) var(--edr-number) var(--edr-cable) var(--edr-signal) var(--edr-device) var(--edr-socket);
-             border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;min-height:34px;align-items:center;
+      style="display:flex;width:max-content;min-width:100%;border-bottom:1px solid rgba(255,255,255,0.05);cursor:pointer;min-height:32px;align-items:center;
              background:${isActive?'rgba(108,142,245,0.18)':'transparent'}"
       onmouseover="if(!${isActive})this.style.background='rgba(108,142,245,0.06)'"
       onmouseout="if(!${isActive})this.style.background='transparent'">
-      <div style="padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
-        <span class="tag ${side}">${r._Side||"—"}</span>
-      </div>
-      <div style="padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${r.Number?"#e8e8f0":"#44445a"};font-weight:${r.Number?600:400}">${r.Number||"—"}</div>
-      <div style="padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8888a8">${r.Cable||"—"}</div>
-      <div style="padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8888a8">${r.Signal||"—"}</div>
-      <div style="padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8888a8">${r.Device_Name||"—"}</div>
-      <div style="padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#8888a8">${r.Socket_Name||"—"}</div>
+      ${cols.map(c=>{
+        const v=r[c]; const has=v!==undefined&&v!=='';
+        const val=has?String(v):'—';
+        if(c==='_Side'){const side=v==='Source'?'src':'dst';return`<div style="flex:0 0 auto;min-width:96px;padding:5px 8px;font-size:11px;white-space:nowrap;overflow:hidden"><span class="tag ${side}">${val}</span></div>`;}
+        return`<div title="${val.replace(/"/g,'&quot;')}" style="flex:0 0 auto;min-width:96px;padding:5px 8px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${has?'#e8e8f0':'#44445a'};font-weight:${(c==='Number'&&has)?600:400}">${val}</div>`;
+      }).join('')}
     </div>`;
   }).join('');
 
@@ -878,27 +876,28 @@ function R(){
           <span style="color:#8888a8;font-size:11px">${P.records.length} total · click row to preview · checkbox to select</span>
         </div>
         <!-- Grid headers -->
-        <div class="rec-row" style="background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.1);flex-shrink:0">
-          <div class="rec-cell" style="display:flex;align-items:center;justify-content:center">
-            <div class="cb ${P.selected.size===P.records.length?"chk":P.selected.size>0?"partial":""}" onclick="toggleAll()">
-              <span class="check-tick">${P.selected.size===P.records.length?"✓":P.selected.size>0?"−":""}</span>
+        ${(()=>{
+          const shownKeys=new Set(['_Side','Number','Cable','Signal','Device_Name','Socket_Name']);
+          const extraCols=P.records.length?recordColumns(P.records).filter(k=>!shownKeys.has(k)):[];
+          const gridT="var(--col-cb) var(--col-pair) var(--col-num) var(--col-side) var(--col-number) var(--col-cable) var(--col-signal) var(--col-device) var(--col-socket)"+extraCols.map(()=>" 110px").join("");
+          const header=`<div class="rec-row" style="grid-template-columns:${gridT};position:sticky;top:0;z-index:3;background:#1a1a28;border-bottom:1px solid rgba(255,255,255,0.1)">
+            <div class="rec-cell" style="display:flex;align-items:center;justify-content:center">
+              <div class="cb ${P.selected.size===P.records.length?"chk":P.selected.size>0?"partial":""}" onclick="toggleAll()">
+                <span class="check-tick">${P.selected.size===P.records.length?"✓":P.selected.size>0?"−":""}</span>
+              </div>
             </div>
-          </div>
-          <div class="rec-hdr-cell" title="Toggle pair (Source + Destination)" style="text-align:center;font-size:9px">⇅</div>
-          <div class="rec-hdr-cell">#</div>
-          ${['side','number','cable','signal','device','socket'].map(col=>`
-            <div class="rec-hdr-cell">
-              ${{side:'Side',number:'Number',cable:'Cable',signal:'Signal',device:'Device',socket:'Socket'}[col]}
-              <div class="col-resizer" onmousedown="startColResize(event,'${col}')"></div>
-            </div>`).join('')}
-        </div>
-        <div style="overflow-y:auto;flex:1">
-          ${P.records.map((r,i)=>{
+            <div class="rec-hdr-cell" title="Toggle pair (Source + Destination)" style="text-align:center;font-size:9px">⇅</div>
+            <div class="rec-hdr-cell">#</div>
+            ${['side','number','cable','signal','device','socket'].map(col=>`
+              <div class="rec-hdr-cell">${{side:'Side',number:'Number',cable:'Cable',signal:'Signal',device:'Device',socket:'Socket'}[col]}<div class="col-resizer" onmousedown="startColResize(event,'${col}')"></div></div>`).join('')}
+            ${extraCols.map(c=>`<div class="rec-hdr-cell">${colLabel(c)}</div>`).join('')}
+          </div>`;
+          const rows=P.records.map((r,i)=>{
             const isSel=P.selected.has(i);
             const isPrev=P.previewIdx===i;
             const side=r._Side==="Source"?"src":"dst";
             const ps2=pairChkState(i);
-            return`<div class="rec-row${isSel?" selected":""}${isPrev?" active-preview":""}" onclick="P.previewIdx=${i};P.lastClickIdx=null;R()">
+            return`<div class="rec-row${isSel?" selected":""}${isPrev?" active-preview":""}" style="grid-template-columns:${gridT}" onclick="P.previewIdx=${i};P.lastClickIdx=null;R()">
               <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();if(event.shiftKey&&P.lastClickIdx!==null){const lo=Math.min(P.lastClickIdx,${i}),hi=Math.max(P.lastClickIdx,${i});for(let j=lo;j<=hi;j++)P.selected.add(j);P.printRange='selected';R();}else{P.lastClickIdx=${i};toggleSel(${i});}">
                 <div class="cb ${isSel?"chk":""}"><span class="check-tick">${isSel?"✓":""}</span></div>
               </div>
@@ -914,9 +913,11 @@ function R(){
               <div class="rec-cell" style="color:#8888a8">${r.Signal||"—"}</div>
               <div class="rec-cell" style="color:#8888a8">${r.Device_Name||"—"}</div>
               <div class="rec-cell" style="color:#8888a8">${r.Socket_Name||"—"}</div>
+              ${extraCols.map(c=>{const v=r[c];const val=(v===undefined||v==='')?"—":String(v);return`<div class="rec-cell" style="color:#8888a8" title="${val.replace(/"/g,'&quot;')}">${val}</div>`;}).join('')}
             </div>`;
-          }).join("")}
-        </div>
+          }).join("");
+          return`<div style="overflow:auto;flex:1"><div style="min-width:max-content">${header}${rows}</div></div>`;
+        })()}
       </div>
 
       <!-- Right: preview panel -->
