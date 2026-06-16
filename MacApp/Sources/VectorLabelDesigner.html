@@ -432,8 +432,13 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
       const dispVal=e?`⚠ ${e.substring(0,40)}`:v.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
       const rb=sel&&!readOnly?`<div onmousedown="startResize(event,'${o.id}')" style="position:absolute;right:-4px;bottom:-4px;width:8px;height:8px;background:#6C8EF5;border-radius:1px;cursor:nwse-resize;z-index:10"></div>`:"";
       const dropAttr=readOnly?"":`ondragover="event.preventDefault()" ondrop="onColDropToText(event,'${o.id}')"`;
-      return `<div data-obj="${o.id}" ${drag} ${dropAttr} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${Math.max(h,12)}px;${rotCss}${ss}border-radius:2px;cursor:${readOnly?"default":"move"};display:flex;align-items:${va};padding:0 2px;box-sizing:border-box">
-        <div style="width:100%;font-family:'${o.font||"Helvetica Neue"}',Arial,sans-serif;font-size:${fz}px;font-weight:${fontWeight};font-style:${fontStyle};text-decoration:${textDecoration};color:${txtColor};white-space:${whiteSpace};word-break:${wordBreak};overflow:hidden;text-overflow:${o.wrapText?"clip":"ellipsis"};line-height:1.15;letter-spacing:${letterSpacing};text-align:${textAlign};transform:scaleX(${scaleX});transform-origin:left center;pointer-events:none">${dispVal}</div>
+      const isStatic=txMode(o)==="static";
+      const editing=!readOnly&&isStatic&&S.editingId===o.id;
+      const dbl=(!readOnly&&isStatic)?`ondblclick="startTextEdit('${o.id}')"`:"";
+      const editAttrs=editing?`contenteditable="true" onmousedown="event.stopPropagation()" oninput="setStaticText('${o.id}',this.innerText)" onblur="endTextEdit()" onkeydown="if(event.key==='Escape')this.blur()"`:"";
+      const pe=editing?"pointer-events:auto;outline:none;cursor:text;":"pointer-events:none;";
+      return `<div data-obj="${o.id}" ${drag} ${dropAttr} ${dbl} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${Math.max(h,12)}px;${rotCss}${ss}border-radius:2px;cursor:${readOnly?"default":"move"};display:flex;align-items:${va};padding:0 2px;box-sizing:border-box">
+        <div data-txt="${o.id}" ${editAttrs} style="width:100%;font-family:'${o.font||"Helvetica Neue"}',Arial,sans-serif;font-size:${fz}px;font-weight:${fontWeight};font-style:${fontStyle};text-decoration:${textDecoration};color:${txtColor};white-space:${whiteSpace};word-break:${wordBreak};overflow:hidden;text-overflow:${o.wrapText?"clip":"ellipsis"};line-height:1.15;letter-spacing:${letterSpacing};text-align:${textAlign};transform:scaleX(${scaleX});transform-origin:left center;${pe}">${dispVal}</div>
         ${rotH}${rb}</div>`;
     }
     if(o.t==="ln"){
@@ -580,7 +585,8 @@ function buildProps(){
       `<button class="fmt-btn${tmode===m?" on":""}" style="flex:1" onclick="setTextMode('${o.id}','${m}')">${lbl}</button>`).join("");
     const srcEditor =
       tmode==="static"
-        ? `<textarea class="inp" rows="2" style="resize:vertical;font-family:inherit" placeholder="Type label text…" oninput="uobj('${o.id}',{text:this.value});R()">${(o.text||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</textarea>`
+        ? `<textarea class="inp" rows="2" style="resize:vertical;font-family:inherit" placeholder="Type label text…" oninput="setStaticText('${o.id}',this.value)" onblur="R()">${(o.text||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</textarea>
+           <div style="color:#44445a;font-size:10px;margin-top:5px;line-height:1.4">…or double-click the text box on the canvas to type directly.</div>`
       : tmode==="field"
         ? `<select class="inp" onchange="uobj('${o.id}',{field:this.value});R()">
              <option value="">— choose column —</option>
@@ -588,7 +594,10 @@ function buildProps(){
            </select>
            <div style="color:#44445a;font-size:10px;margin-top:5px;line-height:1.4">…or drag a column header from the Records panel onto the text box.</div>`
       : `<input id="fxbar" class="inp" value="${(o.f||"").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}" style="font-family:monospace;font-size:12px" oninput="S._ef=this.value" onblur="commitF()" onkeydown="if(event.key==='Enter')commitF()" placeholder='=IF(Number&lt;&gt;&quot;&quot;,Number,&quot;&quot;)'>
-         <button class="btn${S.showFields?" on":""}" onclick="S.showFields=!S.showFields;R()" style="margin-top:5px;font-size:11px">Fields ▾</button>
+         <div style="display:flex;gap:5px;margin-top:5px">
+           <button class="btn${S.showFields?" on":""}" onclick="S.showFields=!S.showFields;R()" style="font-size:11px">Fields ▾</button>
+           <button class="btn" onclick="openFormulaEditor('${o.id}')" style="font-size:11px" title="Open the formula editor with a live preview">Editor ⤢</button>
+         </div>
          ${S.showFields?`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;max-height:120px;overflow-y:auto">${FD.map(f=>`<button class="fbtn" onclick="insertField('${f.f}')">${f.f}</button>`).join("")}</div>`:""}`;
     return `<div style="display:flex;flex-direction:column;gap:0">
       ${posButtons(o)}
@@ -879,6 +888,16 @@ function R(){
   const fx=document.getElementById("fxbar");
   if(fx&&S._ef!==undefined)fx.value=S._ef;
 
+  // Focus the inline-editing text box (and place the caret at the end).
+  if(S.editingId){
+    const te=document.querySelector('[data-txt="'+S.editingId+'"]');
+    if(te){
+      te.focus();
+      const r=document.createRange(); r.selectNodeContents(te); r.collapse(false);
+      const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    }
+  }
+
   // Toolbar: standalone shows New/Open/Save; when editing a template for the
   // print window, show Cancel/Save As/Save & Return buttons instead.
   const tb=document.getElementById("ed-toolbar-btns");
@@ -1004,7 +1023,7 @@ function renderModal(){
 }
 
 // ── Actions ───────────────────────────────────────────────────────────────────
-function deselect(){S.selId=null;S.showFields=false;S._ef=undefined;R();}
+function deselect(){S.selId=null;S.showFields=false;S._ef=undefined;S.editingId=null;R();}
 
 function commitF(){if(S.selId&&S._ef!==undefined){uobj(S.selId,{f:S._ef});S._ef=undefined;R();}}
 
@@ -1026,6 +1045,72 @@ function onColDropToText(e,id){
   if(!key)return;
   snapshot();
   uobj(id,{mode:"field",field:key}); S.selId=id; S._ef=undefined; R();
+}
+
+// Static-text editing. Updates the model live without a full re-render (which
+// would steal focus); also mirrors into the canvas element when edited from the
+// inspector (skipped for the element currently being typed into, to keep caret).
+function setStaticText(id,val){
+  const o=gobj(id); if(!o)return;
+  o.text=val;
+  const t=document.querySelector('[data-txt="'+id+'"]');
+  if(t && t!==document.activeElement) t.textContent=val;
+}
+function startTextEdit(id){ const o=gobj(id); if(!o||txMode(o)!=="static")return; snapshot(); S.selId=id; S.editingId=id; S._ef=undefined; R(); }
+function endTextEdit(){ S.editingId=null; R(); }
+
+// ── Formula editor popup (larger editor + live preview + record stepper) ────────
+let _fxState=null; // {id, f, recIdx}
+function fxRecords(){ return window._editorRecords||RX; }
+function openFormulaEditor(id){
+  const o=gobj(id); if(!o)return;
+  _fxState={id:id, f:(o.f||'=""'), recIdx:Math.max(0,Math.min(S.recIdx,fxRecords().length-1))};
+  renderFormulaModal();
+}
+function closeFormulaModal(){ _fxState=null; const m=document.getElementById('fx-modal'); if(m)m.remove(); }
+function fxStep(d){ const recs=fxRecords(); _fxState.recIdx=Math.max(0,Math.min(recs.length-1,_fxState.recIdx+d)); fxRefresh(); }
+function fxInsert(name){
+  const ta=document.getElementById('fxText'); if(!ta)return;
+  const s=ta.selectionStart??ta.value.length, e=ta.selectionEnd??ta.value.length;
+  ta.value=ta.value.slice(0,s)+name+ta.value.slice(e);
+  ta.selectionStart=ta.selectionEnd=s+name.length;
+  _fxState.f=ta.value; ta.focus(); fxRefresh();
+}
+function fxRefresh(){
+  const recs=fxRecords(), rec=recs[_fxState.recIdx]||{};
+  const {v,e}=evalF(_fxState.f,rec);
+  const pv=document.getElementById('fxPreview');
+  if(pv){ pv.textContent=e?('⚠ '+e):(v===''?'(empty)':v); pv.style.color=e?'#f56c6c':'#e8e8f0'; }
+  const nav=document.getElementById('fxNav'); if(nav)nav.textContent=(_fxState.recIdx+1)+' / '+recs.length;
+  const ctx=document.getElementById('fxCtx');
+  if(ctx){ const bits=['Number','Cable','Connector'].map(k=>rec[k]?k+': '+rec[k]:'').filter(Boolean); ctx.textContent=bits.join('  ·  '); }
+}
+function fxApply(){ const id=_fxState.id; snapshot(); uobj(id,{mode:'formula',f:_fxState.f}); S._ef=undefined; closeFormulaModal(); R(); }
+function renderFormulaModal(){
+  let m=document.getElementById('fx-modal');
+  if(!m){ m=document.createElement('div'); m.id='fx-modal'; m.className='modal-overlay'; m.onclick=e=>{if(e.target===m)closeFormulaModal();}; document.body.appendChild(m); }
+  const esc=s=>(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  m.innerHTML=`<div class="modal" style="min-width:560px;max-width:700px">
+    <div class="modal-title">Formula editor</div>
+    <textarea id="fxText" class="inp" rows="4" style="font-family:monospace;font-size:13px;width:100%;resize:vertical" oninput="_fxState.f=this.value;fxRefresh()" placeholder='=IF(Number&lt;&gt;&quot;&quot;,Number,&quot;&quot;)'>${esc(_fxState.f)}</textarea>
+    <div style="display:flex;flex-wrap:wrap;gap:4px;margin:8px 0;max-height:96px;overflow-y:auto">${FD.map(f=>`<button class="fbtn" onclick="fxInsert('${f.f}')">${f.f}</button>`).join('')}</div>
+    <div style="background:#13131a;border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:10px 12px;margin-bottom:6px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="color:#44445a;font-size:10px;text-transform:uppercase;letter-spacing:1px">Live preview</span>
+        <div style="flex:1"></div>
+        <button class="btn" onclick="fxStep(-1)" title="Previous record" style="padding:2px 8px;font-size:12px">‹</button>
+        <span id="fxNav" style="color:#8888a8;font-size:11px;min-width:54px;text-align:center"></span>
+        <button class="btn" onclick="fxStep(1)" title="Next record" style="padding:2px 8px;font-size:12px">›</button>
+      </div>
+      <div id="fxPreview" style="font-size:15px;color:#e8e8f0;min-height:20px;word-break:break-word"></div>
+      <div id="fxCtx" style="color:#44445a;font-size:10px;margin-top:6px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeFormulaModal()">Cancel</button>
+      <button class="btn" onclick="fxApply()" style="background:#4a6cd4;border-color:#4a6cd4;color:#fff;font-weight:600">Apply</button>
+    </div>
+  </div>`;
+  fxRefresh();
 }
 function insertField(name){
   const fx=document.getElementById("fxbar");
@@ -1082,6 +1167,7 @@ const _origStartDrag=startDrag;
 function startDrag(e,id){
   e.stopPropagation();
   const o=gobj(id);if(!o)return;
+  if(S.editingId&&S.editingId!==id)S.editingId=null;
   if(S.selId!==id){S.selId=id;S._ef=o.f;R();}
   snapshot();
   const sx=e.clientX,sy=e.clientY,ox=o.x,oy=o.y;
@@ -1172,6 +1258,9 @@ function delObj(){
 // Short label for an object in the object list.
 function objListLabel(o){
   if(o.t==='tx'){
+    const m=txMode(o);
+    if(m==='static') return (o.text||'').trim() || 'Text';
+    if(m==='field')  return o.field ? ('['+o.field+']') : 'Field';
     const f=(o.f||'').replace(/^=/,'').trim();
     return f && f!=='""' ? f : 'Text';
   }
@@ -1182,6 +1271,7 @@ function objListLabel(o){
 function selectObj(id){
   const o=gobj(id); if(!o)return;
   S.selId=id;
+  S.editingId=null;
   S._ef=o.t==='tx'?o.f:undefined;
   R();
 }
