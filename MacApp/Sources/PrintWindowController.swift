@@ -4,6 +4,7 @@ import SwiftUI
 import Combine
 import UserNotifications
 import VectorLabelCore
+import VectorLabelEngineKit
 
 /// Opens the print window (VectorLabelPrint.html in a WKWebView) when a new
 /// export is detected, and also when the user taps "Reprint" in the menu bar.

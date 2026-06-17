@@ -22,7 +22,7 @@ struct BradyUSBDevice: Identifiable, Hashable {
 ///
 /// VID 0x0E2E is confirmed for all Brady USB devices.
 /// M610 PID 0x010B and M611 PID 0x010C are both confirmed on hardware.
-enum BradyUSB {
+public enum BradyUSB {
 
     static let vendorID: UInt16 = 0x0E2E
     static let knownModels: [(pid: UInt16, model: String)] = [
@@ -250,22 +250,22 @@ enum BradyUSB {
     // MARK: – SmartCell cassette detection (§8)
 
     /// Decoded contents of a Brady cassette's SmartCell chip.
-    struct SmartCellInfo: Hashable {
-        let partNumber: String          // e.g. "M6-32-427"
-        let ribbonCode: String          // e.g. "R4310"
-        let labelWidthMils: Int         // thousandths of an inch
-        let labelHeightMils: Int
-        let printableWidthMils: Int
-        let linerWidthMils: Int
-        let isDieCut: Bool
-        let partsAcross: Int
-        let horizontalGapMils: Int
-        let verticalGapMils: Int
-        let supplyRemainingPct: Int
+    public struct SmartCellInfo: Hashable {
+        public let partNumber: String          // e.g. "M6-32-427"
+        public let ribbonCode: String          // e.g. "R4310"
+        public let labelWidthMils: Int         // thousandths of an inch
+        public let labelHeightMils: Int
+        public let printableWidthMils: Int
+        public let linerWidthMils: Int
+        public let isDieCut: Bool
+        public let partsAcross: Int
+        public let horizontalGapMils: Int
+        public let verticalGapMils: Int
+        public let supplyRemainingPct: Int
 
         /// Render pixel dimensions at 300 DPI (mils / 1000 * 300).
-        var pixelWidth: Int  { Int((Double(labelWidthMils) / 1000.0 * 300.0).rounded()) }
-        var pixelHeight: Int { Int((Double(labelHeightMils) / 1000.0 * 300.0).rounded()) }
+        public var pixelWidth: Int  { Int((Double(labelWidthMils) / 1000.0 * 300.0).rounded()) }
+        public var pixelHeight: Int { Int((Double(labelHeightMils) / 1000.0 * 300.0).rounded()) }
     }
 
     /// Query the loaded cassette's SmartCell on an already-claimed handle.

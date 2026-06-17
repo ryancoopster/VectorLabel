@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 import Combine
 import ObjectiveC
 import VectorLabelCore
+import VectorLabelEngineKit
 
 // MARK: – App entry point
 

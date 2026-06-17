@@ -6,57 +6,62 @@ import VectorLabelCore
 // MARK: – Models
 
 /// A Brady printer discovered on USB.
-struct PrinterDevice: Identifiable, Hashable {
-    let id: String          // "<vendorID>:<productID>:<serialNumber>"
-    let name: String        // "Brady M610" or "Brady M611"
-    let model: String       // "M610" | "M611"
-    let serial: String
-    var status: Status
+public struct PrinterDevice: Identifiable, Hashable {
+    public let id: String          // "<vendorID>:<productID>:<serialNumber>"
+    public let name: String        // "Brady M610" or "Brady M611"
+    public let model: String       // "M610" | "M611"
+    public let serial: String
+    public var status: Status
 
-    enum Status: String, Hashable {
+    public enum Status: String, Hashable {
         case ready, busy, offline
-        var displayName: String {
+        public var displayName: String {
             switch self { case .ready: "Ready"; case .busy: "Busy"; case .offline: "Offline" }
         }
+    }
+
+    public init(id: String, name: String, model: String, serial: String, status: Status) {
+        self.id = id; self.name = name; self.model = model
+        self.serial = serial; self.status = status
     }
 }
 
 /// One print job in the active queue.
-final class PrintJob: ObservableObject, Identifiable {
-    let id: UUID = UUID()
-    let title: String           // e.g. "Kodak Hall — N044–N046"
-    let labelCount: Int
-    let templateName: String
-    let printerID: String
+public final class PrintJob: ObservableObject, Identifiable {
+    public let id: UUID = UUID()
+    public let title: String           // e.g. "Kodak Hall — N044–N046"
+    public let labelCount: Int
+    public let templateName: String
+    public let printerID: String
 
-    @Published var completedLabels: Int = 0
-    @Published var isComplete: Bool = false
-    @Published var isPrinting: Bool = false   // false while queued, true once printing
+    @Published public var completedLabels: Int = 0
+    @Published public var isComplete: Bool = false
+    @Published public var isPrinting: Bool = false   // false while queued, true once printing
 
     // Read from the background print task and written from the main thread, so it
     // needs its own synchronization rather than relying on @Published/main-actor.
     private let cancelLock = NSLock()
     private var _isCancelled = false
-    var isCancelled: Bool {
+    public var isCancelled: Bool {
         cancelLock.lock(); defer { cancelLock.unlock() }
         return _isCancelled
     }
 
-    var progress: Double { labelCount > 0 ? Double(completedLabels) / Double(labelCount) : 0 }
+    public var progress: Double { labelCount > 0 ? Double(completedLabels) / Double(labelCount) : 0 }
 
-    init(title: String, labelCount: Int, templateName: String, printerID: String) {
+    public init(title: String, labelCount: Int, templateName: String, printerID: String) {
         self.title = title; self.labelCount = labelCount
         self.templateName = templateName; self.printerID = printerID
     }
 
-    func requestCancel() {
+    public func requestCancel() {
         cancelLock.lock(); _isCancelled = true; cancelLock.unlock()
     }
 
     // Set from the background print task on a send error, read on the main thread
     // when the job finishes — shares the cancel lock for thread safety.
     private var _didFail = false
-    var didFail: Bool {
+    public var didFail: Bool {
         cancelLock.lock(); defer { cancelLock.unlock() }
         return _didFail
     }
@@ -69,29 +74,29 @@ final class PrintJob: ObservableObject, Identifiable {
 
 /// Manages USB printer discovery, active jobs, and print dispatch.
 @MainActor
-final class PrinterManager: ObservableObject {
+public final class PrinterManager: ObservableObject {
 
-    static let shared = PrinterManager()
+    public static let shared = PrinterManager()
 
-    @Published var printers: [PrinterDevice] = []
-    @Published var activeJobs: [PrintJob] = []
+    @Published public var printers: [PrinterDevice] = []
+    @Published public var activeJobs: [PrintJob] = []
 
     private var scanTimer: Timer?
     private var scanInFlight = false   // prevents overlapping scans piling up if one runs long
 
     // MARK: – USB scan
 
-    func startScan() {
+    public func startScan() {
         performScan()
         scanTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.performScan() }
         }
     }
 
-    func stopScan() { scanTimer?.invalidate(); scanTimer = nil }
+    public func stopScan() { scanTimer?.invalidate(); scanTimer = nil }
 
     /// Public entry point for manual refresh (called from Preferences).
-    func scanNow() { performScan() }
+    public func scanNow() { performScan() }
 
     private func performScan() {
         // Skip if a scan is still running, so slow USB enumeration can't pile up
@@ -152,7 +157,7 @@ final class PrinterManager: ObservableObject {
     /// Submit a set of VGL jobs to the given printer.
     /// Returns the created `PrintJob` so callers can observe its progress.
     @discardableResult
-    func submit(
+    public func submit(
         jobs: [[UInt8]],
         title: String,
         templateName: String,
@@ -241,7 +246,7 @@ final class PrinterManager: ObservableObject {
 
     /// The label-size whose printable area the calibration grid is drawn for:
     /// the loaded cassette's supply if recognised, else a sensible default.
-    func calibrationSize(for printerID: String) -> BradyLabelSize {
+    public func calibrationSize(for printerID: String) -> BradyLabelSize {
         // Use the canonical BradyCatalog.core so the bulk-box↔cartridge equivalence
         // (e.g. BM-109-427 == M6-33-427) is applied here exactly as it is in the
         // renderer and supply matching; a local copy previously omitted it and made
@@ -255,7 +260,7 @@ final class PrinterManager: ObservableObject {
 
     /// Print a 1/8" calibration grid on the loaded label, applying the printer's
     /// current calibration offset so the user can iteratively dial it in.
-    func printCalibrationGrid(for printerID: String) {
+    public func printCalibrationGrid(for printerID: String) {
         let serial = printerID.split(separator: ":").dropFirst(2).joined(separator: ":")
         let offset = AppSettings.shared.calibrationOffset(forSerial: serial)
         let size = calibrationSize(for: printerID)
@@ -266,17 +271,17 @@ final class PrinterManager: ObservableObject {
     }
 
     /// Cancel a specific job.
-    func cancel(_ job: PrintJob) { job.requestCancel() }
+    public func cancel(_ job: PrintJob) { job.requestCancel() }
 
     /// Cancel every queued/printing job for a printer.
-    func cancelAll(for printerID: String) {
+    public func cancelAll(for printerID: String) {
         for job in activeJobs where job.printerID == printerID && !job.isComplete {
             job.requestCancel()
         }
     }
 
     /// Jobs currently queued or printing on a printer, in submit order.
-    func jobs(for printerID: String) -> [PrintJob] {
+    public func jobs(for printerID: String) -> [PrintJob] {
         activeJobs.filter { $0.printerID == printerID && !$0.isComplete }
     }
 
@@ -292,21 +297,21 @@ final class PrinterManager: ObservableObject {
 
     /// Most recent SmartCell read per printer ID, for auto-detecting the loaded
     /// supply instead of asking the user.
-    @Published var cassettes: [String: BradyUSB.SmartCellInfo] = [:]
+    @Published public var cassettes: [String: BradyUSB.SmartCellInfo] = [:]
     private var cassetteFetchedAt: [String: Date] = [:]
     private let cassetteTTL: TimeInterval = 60
 
     /// Reports the outcome of a user-initiated ("force") cassette detect back to
     /// the UI as `(printerID, ok, busy)`, so the page can show success/failure/busy
     /// instead of the "Detecting…" toast silently fading. Set by PrintWindowController.
-    var onForcedDetectResult: ((String, Bool, Bool) -> Void)?
+    public var onForcedDetectResult: ((String, Bool, Bool) -> Void)?
 
     /// Read the loaded cassette's SmartCell chip for a printer and cache it
     /// (60 s TTL). The query is slow (several seconds when cold — the channel
     /// needs priming) and needs exclusive device access, so it runs on a
     /// background task behind the shared device lock and publishes to `cassettes`.
     /// Skipped while a print is in progress so it never delays a job.
-    func refreshCassette(for printerID: String, force: Bool = false) {
+    public func refreshCassette(for printerID: String, force: Bool = false) {
         // Never delay a print. A background detect just bails; a user-initiated
         // (force) detect reports "busy" so the operator isn't left without feedback.
         if activeJobs.contains(where: { !$0.isComplete }) {

@@ -31,13 +31,19 @@ let package = Package(
                 .linkedFramework("CoreText"),
             ]
         ),
+        .target(
+            name: "VectorLabelEngineKit",
+            dependencies: ["VectorLabelCore", "CLibUSB"],
+            path: "MacApp/Sources/EngineKit"
+        ),
         .executableTarget(
             name: "VectorLabel",
-            dependencies: ["VectorLabelCore", "CLibUSB"],
+            dependencies: ["VectorLabelCore", "VectorLabelEngineKit"],
             path: "MacApp/Sources",
             exclude: [
                 "Core",
                 "CLibUSB",
+                "EngineKit",
                 "Info.plist",
             ],
             linkerSettings: [
