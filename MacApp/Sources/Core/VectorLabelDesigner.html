@@ -54,6 +54,10 @@ label.lbl{font-size:10px;color:var(--text2);display:block;margin-bottom:3px}
 .cb.chk{background:var(--accent);border-color:var(--accent)}
 .cb.partial{background:var(--surface3);border-color:var(--accent)}
 .check-tick{color:#fff;font-size:9px;line-height:1}
+/* Draggable column headers/chips must not start a text selection on mousedown, so
+   the native HTML5 drag (drag-to-map / reorder) wins wherever you grab them —
+   otherwise grabbing on the label text highlights it instead of starting a drag. */
+[draggable="true"]{-webkit-user-select:none;user-select:none}
 </style>
 </head>
 <body>
