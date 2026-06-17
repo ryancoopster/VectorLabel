@@ -110,11 +110,15 @@ final class PrinterManager: ObservableObject {
                 // Printers that were ready before this scan — used to auto-detect
                 // the cassette only on a fresh connect (or offline → ready).
                 let previouslyReady = Set(self.printers.filter { $0.status == .ready }.map { $0.id })
-                self.printers = updated
+                // Only publish when the value actually changed — an identical 5s scan
+                // would otherwise emit a no-op change that forces a full DOM rebuild
+                // of the print window every cycle (idle CPU/battery drain).
+                if updated != self.printers { self.printers = updated }
 
                 // Forget cassette info for printers that are gone.
                 let presentIDs = Set(updated.map { $0.id })
-                self.cassettes = self.cassettes.filter { presentIDs.contains($0.key) }
+                let keptCassettes = self.cassettes.filter { presentIDs.contains($0.key) }
+                if keptCassettes != self.cassettes { self.cassettes = keptCassettes }
                 self.cassetteFetchedAt = self.cassetteFetchedAt.filter { presentIDs.contains($0.key) }
 
                 // Auto-detect the loaded label on newly-connected printers.

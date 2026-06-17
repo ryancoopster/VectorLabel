@@ -7,6 +7,9 @@ shown in the menu-bar footer. Fix commits reference the code-review finding IDs
 
 ## [Unreleased]
 ### Fixed
+- **[H13]** Print window no longer rebuilt its entire DOM every 5s on idle — the
+  USB scan now publishes the printer/cassette lists only when they actually
+  change, eliminating the idle CPU/battery drain and scroll/focus disruption.
 - **[H11]** Calibration grid printed at the wrong size for BM-109-427 cassettes —
   `calibrationSize` used a local part-number normalizer that omitted the
   bulk-box↔cartridge equivalence; now uses the canonical `BradyCatalog.core`.
