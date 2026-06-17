@@ -2226,11 +2226,16 @@ function updateDesignerPrinters(printers){
   if(!window._dprinters.find(p=>p.id===S.activePrinter)){
     S.activePrinter=(window._dprinters.find(p=>p.status==="ready")||window._dprinters[0]||{}).id||null;
   }
-  if(isCustomMode())R();
+  // Only rebuild when the printer list / selection actually changed — the Engine
+  // republishes status on a timer and on every print-progress tick, and a full R()
+  // per publish was making the whole designer feel laggy.
+  const sig=JSON.stringify(window._dprinters)+"|"+(S.activePrinter||"");
+  if(isCustomMode() && sig!==window._dprintersSig){ window._dprintersSig=sig; R(); }
 }
 function updateDesignerCassettes(map){
   window._dcassettes=map||{};
-  if(isCustomMode())R();
+  const sig=JSON.stringify(window._dcassettes);
+  if(isCustomMode() && sig!==window._dcassettesSig){ window._dcassettesSig=sig; R(); }
 }
 function dPrinters(){ return window._dprinters||[]; }
 function dPrinter(){ return dPrinters().find(p=>p.id===S.activePrinter)||{id:null,name:"",status:"offline"}; }
@@ -2316,9 +2321,9 @@ function buildJobStatusControl(){
   const pct=Math.round(done/total*100);
   const lbl=(j.state==="queued")?"Queued":("Printing "+done+"/"+total);
   return`<div style="display:flex;align-items:center;gap:8px;padding:3px 10px;border:1px solid var(--accent);border-radius:5px;background:rgba(108,142,245,0.10)">
-    <span style="color:var(--accent);font-size:11px;font-weight:600;white-space:nowrap">${lbl}</span>
+    <span id="jobLbl" style="color:var(--accent);font-size:11px;font-weight:600;white-space:nowrap">${lbl}</span>
     <div style="width:90px;height:6px;background:var(--surface3);border-radius:3px;overflow:hidden">
-      <div style="width:${pct}%;height:100%;background:var(--accent);transition:width .2s"></div>
+      <div id="jobProg" style="width:${pct}%;height:100%;background:var(--accent);transition:width .2s"></div>
     </div>
     <button class="btn" onclick="cancelCustomPrint()" title="Cancel this print job" style="padding:3px 10px;font-size:11px;color:var(--red);border-color:var(--red)">Cancel</button>
   </div>`;
@@ -2506,7 +2511,20 @@ function updateDesignerJobStatus(jobs){
   const list=Array.isArray(jobs)?jobs:[];
   if(!S._activeJobId){ if(S._jobStatus){ S._jobStatus=null; R(); } return; }
   const job=list.find(j=>j&&j.id===S._activeJobId)||null;
-  if(job){ S._jobSeen=true; S._jobStatus=job; R(); return; }
+  if(job){
+    const had=!!S._jobStatus;
+    S._jobSeen=true; S._jobStatus=job;
+    // Patch the progress bar/label in place once the block exists, so a long job
+    // doesn't rebuild the whole designer on every label. Full R() only when the
+    // status block first appears.
+    const bar=document.getElementById("jobProg"), lbl=document.getElementById("jobLbl");
+    if(had && bar && lbl){
+      const total=Math.max(1,job.labelCount||1), done=Math.max(0,Math.min(total,job.completed||0));
+      bar.style.width=Math.round(done/total*100)+"%";
+      lbl.textContent=(job.state==="queued")?"Queued":("Printing "+done+"/"+total);
+    } else { R(); }
+    return;
+  }
   if(S._jobSeen){ S._activeJobId=null; S._jobStatus=null; S._jobSeen=false; R(); }
 }
 

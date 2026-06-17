@@ -205,24 +205,7 @@ public final class DesignerWindowController: NSObject {
         )
         win.title = (mode == .custom) ? "VectorLabel — Custom Designer"
                                       : "VectorLabel — Template Designer"
-        // Custom mode hosts the web view inside a drop container so a CSV/XLSX
-        // dragged from Finder onto the window opens it (#19). The web view's own
-        // dragged types are unregistered so OS file drags fall through to the
-        // container; template mode keeps the web view as the direct content view.
-        if mode == .custom {
-            let drop = DesignerDropView(frame: NSRect(x: 0, y: 0, width: 1200, height: 820))
-            wv.frame = drop.bounds
-            wv.autoresizingMask = [.width, .height]
-            drop.addSubview(wv)
-            wv.unregisterDraggedTypes()
-            drop.registerForDraggedTypes([.fileURL])
-            drop.onDragEnter = { [weak self] in self?.setDragOverlay(true) }
-            drop.onDragExit  = { [weak self] in self?.setDragOverlay(false) }
-            drop.onDropFiles = { [weak self] urls in self?.handleDroppedDataFiles(urls) ?? false }
-            win.contentView = drop
-        } else {
-            win.contentView = wv
-        }
+        win.contentView = wv
         win.hidesOnDeactivate = false
         win.isReleasedWhenClosed = false
         win.applyVLSizing(autosaveName: (mode == .custom) ? "VLCustomDesignerWindow" : "VLDesignerWindow",
@@ -958,26 +941,6 @@ public final class DesignerWindowController: NSObject {
         }
     }
 
-    // MARK: – Custom-mode file drag-and-drop (#19)
-
-    /// Toggle the in-page "Drop to open file" overlay shown while a CSV/XLSX is
-    /// dragged over the Custom Designer window.
-    private func setDragOverlay(_ show: Bool) {
-        webView?.evaluateJavaScript("if(typeof setDragOverlay==='function')setDragOverlay(\(show));",
-                                    completionHandler: nil)
-    }
-
-    /// Bind the first dropped CSV/XLSX as the data source. Returns true if accepted.
-    @discardableResult
-    private func handleDroppedDataFiles(_ urls: [URL]) -> Bool {
-        guard mode == .custom else { return false }
-        let supported = ["csv", "tsv", "xlsx"]
-        guard let url = urls.first(where: { supported.contains($0.pathExtension.lowercased()) })
-        else { return false }
-        AppSettings.shared.lastDataSourceFolderPath = url.deletingLastPathComponent().path
-        return loadAndBindDataSource(from: url, headerRow: true)
-    }
-
     // MARK: – Dev HTML loader
 
     private func devHTMLURL(_ name: String) -> URL? {
@@ -1206,47 +1169,6 @@ extension DesignerWindowController: WKScriptMessageHandler {
         default:
             break
         }
-    }
-}
-
-// MARK: – Custom-mode file-drop container (#19)
-//
-// Hosts the WKWebView and accepts Finder drops of a CSV/XLSX onto the window so the
-// Custom Designer can open a data file by drag-and-drop. The web view's own dragged
-// types are unregistered in present() so OS file drags fall through to this
-// container; intra-page HTML5 drag-and-drop is unaffected (it never crosses into
-// AppKit's dragging session).
-@MainActor
-final class DesignerDropView: NSView {
-    var onDragEnter: (@MainActor () -> Void)?
-    var onDragExit: (@MainActor () -> Void)?
-    var onDropFiles: (@MainActor ([URL]) -> Bool)?
-
-    private static let accepted: Set<String> = ["csv", "tsv", "xlsx"]
-
-    private func fileURLs(_ info: NSDraggingInfo) -> [URL] {
-        (info.draggingPasteboard.readObjects(forClasses: [NSURL.self],
-            options: [.urlReadingFileURLsOnly: true]) as? [URL]) ?? []
-    }
-    private func hasSupported(_ info: NSDraggingInfo) -> Bool {
-        fileURLs(info).contains { Self.accepted.contains($0.pathExtension.lowercased()) }
-    }
-
-    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        guard hasSupported(sender) else { return [] }
-        onDragEnter?()
-        return .copy
-    }
-    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-        hasSupported(sender) ? .copy : []
-    }
-    override func draggingExited(_ sender: NSDraggingInfo?) { onDragExit?() }
-    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool { hasSupported(sender) }
-    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        onDragExit?()
-        let good = fileURLs(sender).filter { Self.accepted.contains($0.pathExtension.lowercased()) }
-        guard !good.isEmpty else { return false }
-        return onDropFiles?(good) ?? false
     }
 }
 
