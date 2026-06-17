@@ -43,6 +43,17 @@ label.lbl{font-size:10px;color:var(--text2);display:block;margin-bottom:3px}
 .tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600}
 .tag.src{background:rgba(108,142,245,0.2);color:var(--accent)}
 .tag.dst{background:rgba(108,200,150,0.2);color:var(--green)}
+/* Database-pane record browser (custom mode). Ported from the Print window so the
+   per-row checkboxes + hover-to-edit ✎ behave identically. */
+.rec-row:hover{background:rgba(108,142,245,0.06)}
+.rec-cell{position:relative}
+.cell-edit{position:absolute;top:50%;right:3px;transform:translateY(-50%);opacity:0;border:1px solid var(--bd3);background:var(--surface);color:var(--text2);border-radius:3px;font-size:9px;line-height:1;padding:2px 4px;cursor:pointer;z-index:5}
+.rec-row:hover .cell-edit{opacity:.85}
+.cell-edit:hover{opacity:1;color:var(--accent);border-color:var(--accent)}
+.cb{width:14px;height:14px;border:1.5px solid var(--bd5);border-radius:3px;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;background:var(--bg2)}
+.cb.chk{background:var(--accent);border-color:var(--accent)}
+.cb.partial{background:var(--surface3);border-color:var(--accent)}
+.check-tick{color:#fff;font-size:9px;line-height:1}
 </style>
 </head>
 <body>
@@ -181,7 +192,8 @@ let nid=1;const mid=()=>`o${nid++}`;
 let S={
   spec:BL[1],selId:null,selIds:[],recIdx:0,wrap:true,showFields:false,zoom:1.0,
   snapGrid:true,snapObjects:true,gridSize:0.05,
-  tplName:'Untitled Template',modal:null,
+  // Custom mode opens "Untitled Custom Design"; template mode "Untitled Template".
+  tplName:(window._designerMode==='custom')?'Untitled Custom Design':'Untitled Template',modal:null,
   // Custom Designer print header state (custom mode only).
   activePrinter:null, copies:1,
   // Cut SETTING for the print job (Phase 6). null ⇒ use the per-stock default
@@ -191,6 +203,16 @@ let S={
   // Continuous-supply label length (inches); null ⇒ use the catalog default.
   // Ignored for die-cut supplies.
   labelLen:null,
+  // ── Custom Designer database-pane state (custom mode only) ──────────────────
+  // Mirrors the Print window's record browser over window._boundData rows.
+  // printRange: "all" | "selected" | "range" (which bound rows print).
+  printRange:"all", rangeFrom:1, rangeTo:1,
+  // _dbSel: a Set of per-row print-enable indices (the "selected" subset).
+  _dbSel:new Set(),
+  // _dbLastClick: anchor row for shift-click range selection.
+  _dbLastClick:null,
+  // _dbEditCell {i,c} / _dbEditVal: in-progress inline cell edit.
+  _dbEditCell:null, _dbEditVal:undefined,
   // Start blank — the standalone designer opens the Open dialog on launch so the
   // user picks a template rather than landing on a default one.
   objs:[]
@@ -199,6 +221,10 @@ let S={
 // at document start). Gates the print header + print path. The Template Designer
 // never sets this, so it looks/behaves exactly as before.
 function isCustomMode(){ return window._designerMode==='custom'; }
+// The default/new-document title: a Custom Design in custom mode, a Template
+// otherwise. Used by the default state, the New modal, and every place that
+// previously hard-coded "Untitled Template".
+function defaultDocName(){ return isCustomMode()?'Untitled Custom Design':'Untitled Template'; }
 // Persisted snap/grid prefs — Swift injects on load, we post on change.
 function initDesignerPrefs(p){
   if(!p)return;
@@ -1296,6 +1322,12 @@ function R(){
       const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
     }
   }
+  // Database-pane inline cell editor: re-focus across re-renders (custom mode).
+  // Caret goes to the end so typing continues seamlessly.
+  if(isCustomMode()&&S._dbEditCell){
+    const ce=document.getElementById('db-cell-edit-input');
+    if(ce){ ce.focus(); const n=ce.value.length; try{ce.setSelectionRange(n,n);}catch(_){} }
+  }
   scheduleRulers();   // redraw the edge rulers to match the (re)laid-out canvas
 
   // Toolbar: standalone shows New/Open/Save; when editing a template for the
@@ -1370,15 +1402,17 @@ function renderModal(){
   }
 
   if(S.modal==="new"){
+    const isC=isCustomMode();
     overlay.innerHTML=`
       <div class="modal">
-        <div class="modal-title">New Template</div>
+        <div class="modal-title">${isC?"New Custom Design":"New Template"}</div>
         <p style="color:var(--text2);font-size:13px;line-height:1.6;margin-bottom:16px">
-          Start a new blank template. Any unsaved changes to the current template will be lost.
+          ${isC?"Start a new blank custom design. Any unsaved changes to the current design will be lost."
+               :"Start a new blank template. Any unsaved changes to the current template will be lost."}
         </p>
         <div class="modal-row">
-          <label class="lbl">Template name</label>
-          <input id="new-tpl-name" class="inp" value="Untitled Template" style="font-size:14px;padding:6px 10px">
+          <label class="lbl">${isC?"Design name":"Template name"}</label>
+          <input id="new-tpl-name" class="inp" value="${defaultDocName()}" style="font-size:14px;padding:6px 10px">
         </div>
         <div class="modal-row">
           <label class="lbl">Label size</label>
@@ -2048,7 +2082,7 @@ function showModal(name){S.modal=name;renderModal();}
 function closeModal(){S.modal=null;renderModal();}
 
 function templateData(){
-  const name=S.tplName||"Untitled Template";
+  const name=S.tplName||defaultDocName();
   const d={
     version:1,
     name,
@@ -2104,7 +2138,12 @@ function dCassetteMatched(){ const c=dLoadedCassette(); return !!(c&&dCassetteSi
 function dCassetteMismatch(){ const c=dLoadedCassette(); return !!(c&&dCassetteSizeKnown(c)&&!dSameLabelSize(c,S.spec.n)); }
 function dRequiredSupply(specN){ const core=dSupplyCore(specN); return core?"BM/M6-"+core:(specN||""); }
 function dFmtIn(v){ return (v==null?"—":(+v).toString())+'"'; }
-function dCanPrint(){ return !!(S.objs.length>0&&dPrinter().status==="ready"); }
+function dCanPrint(){
+  if(!(S.objs.length>0&&dPrinter().status==="ready"))return false;
+  // With data bound, the chosen print range must select at least one row.
+  if(hasBoundData()&&dbPrintIndices().length===0)return false;
+  return true;
+}
 
 // ── "Buy more" — open the supplier page for the selected supply ─────────────────
 // Posts an openURL action; Swift opens the (http/https) URL in the system browser.
@@ -2123,6 +2162,28 @@ function buyMoreControl(){
   return`<div style="display:flex;align-items:center;gap:5px">
     <button class="btn" onclick="buyMore('roll')" title="Buy ${s.n} on bradyid.com" style="padding:4px 10px;font-size:11px">Buy more ↗</button>
     ${bulk}
+  </div>`;
+}
+
+// Print-range control (#6) — only once a data source is bound (columns present).
+// All / Selected (the checked rows) / Range (from..to), mirroring the Print
+// window's print bar. Returns "" with no data bound (single-label print).
+function buildPrintRangeControl(){
+  if(!hasBoundData())return "";
+  const total=dBoundRowCount();
+  const nSel=dbSelCount();
+  return`<div style="display:flex;align-items:center;gap:6px">
+    <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Print</span>
+    ${["all","selected","range"].map(v=>`
+      <label style="display:flex;align-items:center;gap:4px;cursor:pointer;padding:3px 8px;border-radius:4px;border:1px solid ${S.printRange===v?"var(--accent)":"var(--bd3)"};background:${S.printRange===v?"rgba(108,142,245,0.12)":"transparent"}">
+        <input type="radio" name="dprange" value="${v}" ${S.printRange===v?"checked":""} onchange="S.printRange='${v}';R()" style="display:none">
+        <span style="color:${S.printRange===v?"var(--text)":"var(--text2)"};font-size:11px">${v==="selected"?"Selected ("+nSel+")":v==="all"?"All ("+total+")":"Range"}</span>
+      </label>`).join("")}
+    ${S.printRange==="range"?`
+      <input type="number" class="inp" min="1" max="${total}" value="${S.rangeFrom}" style="width:54px;padding:3px 6px;font-size:11px" onchange="S.rangeFrom=Math.max(1,Math.min(parseInt(this.value)||1,${total}));R()">
+      <span style="color:var(--text3)">–</span>
+      <input type="number" class="inp" min="1" max="${total}" value="${S.rangeTo}" style="width:54px;padding:3px 6px;font-size:11px" onchange="S.rangeTo=Math.max(1,Math.min(parseInt(this.value)||${total},${total}));R()">
+      <span style="color:var(--text3);font-size:11px">(${Math.max(0,S.rangeTo-S.rangeFrom+1)})</span>`:""}
   </div>`;
 }
 
@@ -2161,6 +2222,8 @@ function buildCustomPrintHeader(){
         :dCassetteMismatch()?`<span title="Loaded ${escAttr(dLoadedCassette().partNumber)} doesn't match — the label may print misaligned or cropped" style="color:var(--red);font-size:12px;line-height:1;white-space:nowrap">⚠ mismatch</span>`:""}
       ${buyMoreControl()}
     </div>
+
+    ${buildPrintRangeControl()}
 
     <div style="flex:1"></div>
 
@@ -2248,6 +2311,15 @@ function doCustomPrint(){
     cutMode:dEffCutMode(),   // Phase 6 cut setting → PrintJobFile.cutMode
     record:customPrintRecord()
   };
+  // When a data source is bound, send the chosen subset of bound-row indices so
+  // Swift prints exactly All / Selected / Range (× copies). Omitted when unbound
+  // (single-label path).
+  if(hasBoundData()){
+    payload.recordIndices=dbPrintIndices();
+    payload.printRange=S.printRange;
+    payload.rangeFrom=S.rangeFrom;
+    payload.rangeTo=S.rangeTo;
+  }
   if(data.labelLengthInches) payload.labelLengthInches=data.labelLengthInches;
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
     window.webkit.messageHandlers.vectorlabel.postMessage({action:"printCustom",payload});
@@ -2404,7 +2476,7 @@ async function saveTemplate(){
 function newTemplate(){
   const nameEl=document.getElementById("new-tpl-name");
   const specEl=document.getElementById("new-tpl-spec");
-  const name=nameEl?nameEl.value.trim()||"Untitled Template":"Untitled Template";
+  const name=nameEl?nameEl.value.trim()||defaultDocName():defaultDocName();
   const specN=specEl?specEl.value:BL[1].n;
   snapshot();
   S.tplName=name;
@@ -2414,8 +2486,27 @@ function newTemplate(){
   S.selId=null;
   S._ef=undefined;
   S.modal=null;
+  // Custom mode "New" also unbinds any data source so the design starts blank.
+  if(isCustomMode())clearDataSourceCustom(true);
   R();
-  showToast("New template created");
+  showToast(isCustomMode()?"New custom design created":"New template created");
+}
+
+// Open a BLANK custom design (custom mode only). Called by Swift on standalone
+// launch instead of the template Open picker: clears the canvas to empty objs,
+// unbinds any data source, resets the title to "Untitled Custom Design", and
+// shows the normal Custom Designer toolbar. No picker, no template list.
+function newBlankCustomDesign(){
+  if(!isCustomMode())return;
+  window._printEdit=false;
+  S.modal=null;
+  S.tplName="Untitled Custom Design";
+  S._loadedId=null;
+  S.objs=[];
+  S.selId=null;S.selIds=[];S._ef=undefined;
+  S.copies=1;S.cutMode=null;
+  clearDataSourceCustom(true);   // empty database pane, single-label canvas
+  R();
 }
 
 async function openTemplate(){
@@ -2643,6 +2734,13 @@ function initBoundData(records, columns, filename, headerRow, isXLSX){
   window._editorRecords=null;        // RX is now the single source of truth
   S.recIdx=0;
   S._csvName=filename||"";
+  // Seed the database-pane print selection: all rows enabled by default (mirrors
+  // the Print window). Reset range + any in-progress cell edit.
+  const n=(records||[]).length;
+  S._dbSel=new Set((records||[]).map((_,i)=>i));
+  S._dbLastClick=null;
+  S._dbEditCell=null; S._dbEditVal=undefined;
+  S.printRange="all"; S.rangeFrom=1; S.rangeTo=Math.max(1,n);
   R();
   showToast("Bound "+(records?records.length:0)+" row"+((records&&records.length===1)?"":"s")+" from "+(filename||"file"));
 }
@@ -2650,10 +2748,31 @@ function hasBoundData(){ return !!(isCustomMode()&&window._boundData&&window._bo
 // True size of the print job, matching Swift: one label per bound ROW × copies
 // when a data source is bound, else just `copies`.
 function dBoundRowCount(){ return hasBoundData()?window._boundData.records.length:0; }
+
+// The bound-row indices that will print, honoring the print-range control (#6):
+//   all      → every bound row
+//   selected → exactly the checked rows (S._dbSel)
+//   range    → the 1-based from..to window over the bound rows
+// Returns [] with no data bound (the no-data print path is a single label and
+// ignores this). Indices are clamped to the row count.
+function dbPrintIndices(){
+  const n=dBoundRowCount();
+  if(n<=0)return [];
+  const sel=S._dbSel||new Set();
+  if(S.printRange==="selected"){
+    const out=[]; for(let i=0;i<n;i++)if(sel.has(i))out.push(i); return out;
+  }
+  if(S.printRange==="range"){
+    const from=Math.max(1,Math.min(S.rangeFrom||1,n));
+    const to=Math.max(from,Math.min(S.rangeTo||n,n));
+    const out=[]; for(let i=from-1;i<to;i++)out.push(i); return out;
+  }
+  const out=[]; for(let i=0;i<n;i++)out.push(i); return out;   // "all"
+}
 function dJobLabelCount(){
   const copies=Math.max(1,S.copies||1);
-  const rows=dBoundRowCount();
-  return rows>0?rows*copies:copies;
+  if(!hasBoundData())return copies;
+  return dbPrintIndices().length*copies;
 }
 
 // Called by Swift when a ".vlcus" is double-clicked in Finder (Custom Designer).
@@ -2679,6 +2798,10 @@ function initCustomDocument(doc){
     initBoundData(doc.records, doc.columns||[], doc.filename||"", !!doc.headerRow, !!doc.isXLSX);
   } else {
     window._boundData=null; RX=[]; S.recIdx=0; S._csvName="";
+    // No embedded data → reset the database-pane selection/edit/range state.
+    S._dbSel=new Set(); S._dbLastClick=null;
+    S._dbEditCell=null; S._dbEditVal=undefined;
+    S.printRange="all"; S.rangeFrom=1; S.rangeTo=1;
   }
   R();
   showToast("Opened: "+S.tplName);
@@ -2696,6 +2819,27 @@ function refreshDataSource(){
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
     window.webkit.messageHandlers.vectorlabel.postMessage({action:"refreshDataSource"});
 }
+// "Clear data" → unbind the data source (custom mode only): drop window._boundData,
+// reset the editor record set to empty (single-label canvas, no-data state) and
+// tell Swift to drop its BoundDataSource. `silent` skips the toast (used by New /
+// blank). Selection + cell-edit state are reset so a later bind starts clean.
+function clearDataSourceCustom(silent){
+  if(!isCustomMode())return;
+  window._boundData=null;
+  window._editorRecords=null;
+  RX=[];
+  S.recIdx=0;
+  S._csvName="";
+  S._dbSel=new Set();
+  S._dbLastClick=null;
+  S._dbEditCell=null;
+  S._dbEditVal=undefined;
+  S.printRange="all";
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"clearDataSource"});
+  R();
+  if(!silent)showToast("Data source cleared");
+}
 // Toggle "first row is headers" (xlsx). Re-opens the picker so Swift re-reads with
 // the new flag — the simplest correct path (the file must be re-parsed either way).
 function toggleHeaderRow(){
@@ -2705,17 +2849,124 @@ function toggleHeaderRow(){
   chooseDataSource();
 }
 
+// ── Database-pane record browser (custom mode only) ─────────────────────────────
+// Mirrors the Print window's record list over window._boundData rows: per-row
+// print-enable checkboxes with shift-click range selection (#7), and inline cell
+// editing (#8). All operate on S._dbSel / S._dbEditCell and post edits to Swift.
+
+// The bound rows (the editor record set) and the column list.
+function dbRows(){ return RX||[]; }
+function dbCols(){ const bd=window._boundData; return (bd&&bd.columns)?bd.columns:[]; }
+// How many rows are currently print-enabled (checked).
+function dbSelCount(){ const s=S._dbSel||(S._dbSel=new Set()); return s.size; }
+
+// Per-row checkbox click. Shift+click extends from the last-clicked row across
+// every row in between, applying the anchor row's resulting on/off state — the
+// same semantics as the Print window's rowCheckClick (rows here are a flat list,
+// so "visible position" == record index).
+function dbRowCheckClick(i,e){
+  const sel=S._dbSel||(S._dbSel=new Set());
+  if(e.shiftKey && S._dbLastClick!=null && S._dbLastClick!==i){
+    const target=sel.has(S._dbLastClick);   // match the anchor's state
+    const lo=Math.min(S._dbLastClick,i), hi=Math.max(S._dbLastClick,i);
+    for(let p=lo;p<=hi;p++){ if(target)sel.add(p); else sel.delete(p); }
+    S.printRange="selected"; S._dbLastClick=i; R(); return;
+  }
+  if(sel.has(i))sel.delete(i); else sel.add(i);
+  S.printRange="selected"; S._dbLastClick=i; R();
+}
+// Header checkbox: select-all / clear-all across the bound rows.
+function dbToggleAll(){
+  const sel=S._dbSel||(S._dbSel=new Set());
+  const rows=dbRows();
+  const allSel=rows.length>0&&rows.every((_,i)=>sel.has(i));
+  if(allSel){ rows.forEach((_,i)=>sel.delete(i)); }
+  else { rows.forEach((_,i)=>sel.add(i)); S.printRange="all"; }
+  R();
+}
+
+// ── Inline cell editing (mirrors the Print window) ──────────────────────────────
+function dbStartCellEdit(i,c){
+  const rows=dbRows();
+  S._dbEditCell={i:i,c:c};
+  S._dbEditVal=String(rows[i]&&rows[i][c]!=null?rows[i][c]:'');
+  R();
+  const el=document.getElementById('db-cell-edit-input');
+  if(el){ el.focus(); el.select(); }
+}
+function dbCancelCellEdit(){ S._dbEditCell=null; S._dbEditVal=undefined; R(); }
+function dbSaveCellEdit(){
+  if(S._dbEditCell){
+    const i=S._dbEditCell.i, c=S._dbEditCell.c, val=(S._dbEditVal!=null?S._dbEditVal:'');
+    const rows=dbRows();
+    if(rows[i]) rows[i][c]=val;       // update the in-memory bound data
+    if(window._boundData&&window._boundData.records&&window._boundData.records[i])
+      window._boundData.records[i][c]=val;
+    // Push the edit to Swift so the BoundDataSource (→ .vlcus snapshot + printed
+    // output) reflects it. Never writes back to the original CSV/Excel file.
+    if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
+      window.webkit.messageHandlers.vectorlabel.postMessage({action:"editRecord",payload:{index:i,field:c,value:val}});
+  }
+  S._dbEditCell=null; S._dbEditVal=undefined; R();
+}
+
+// One database-pane data cell: inline editor when this cell is being edited, else
+// the value with a hover ✎ edit button (mirrors the Print window's colDataCell).
+function dbCell(c,r,i){
+  if(S._dbEditCell&&S._dbEditCell.i===i&&S._dbEditCell.c===c){
+    const ev=esc(S._dbEditVal!=null?S._dbEditVal:'').replace(/"/g,'&quot;');
+    return`<div class="rec-cell" onclick="event.stopPropagation()" style="overflow:visible;position:relative;z-index:20;display:flex;align-items:center;gap:3px;background:var(--surface);box-shadow:0 0 0 2px var(--accent);border-radius:3px;padding:2px 4px">
+      <input id="db-cell-edit-input" value="${ev}" oninput="S._dbEditVal=this.value" onkeydown="if(event.key==='Enter'){event.preventDefault();dbSaveCellEdit()}else if(event.key==='Escape'){event.preventDefault();dbCancelCellEdit()}" style="flex:1;min-width:80px;width:120px;padding:2px 5px;font-size:11px;border:1px solid var(--bd3);border-radius:3px;background:var(--bg);color:var(--text)">
+      <button class="btn" onclick="event.stopPropagation();dbSaveCellEdit()" title="Save (Enter)" style="padding:1px 7px;font-size:12px;color:var(--green)">✓</button>
+      <button class="btn" onclick="event.stopPropagation();dbCancelCellEdit()" title="Cancel (Esc)" style="padding:1px 7px;font-size:12px;color:var(--red)">✕</button>
+    </div>`;
+  }
+  const v=r[c]; const has=v!==undefined&&v!=='';
+  const val=has?String(v):'—';
+  const editBtn=`<button class="cell-edit" tabindex="-1" title="Edit cell" onclick="event.stopPropagation();dbStartCellEdit(${i},'${jsAttr(c)}')">✎</button>`;
+  if(c==='_Side'){const side=v==='Source'?'src':'dst';return`<div class="rec-cell" style="padding:5px 8px;font-size:11px;white-space:normal;display:flex;align-items:center;position:relative"><span class="tag ${side}">${esc(val)}</span>${editBtn}</div>`;}
+  return`<div class="rec-cell" style="padding:5px 8px;font-size:11px;white-space:normal;overflow-wrap:anywhere;word-break:break-word;position:relative;color:${has?'var(--text)':'var(--text3)'};${(c==='Number'&&has)?'font-weight:600;':''}">${esc(val)}${editBtn}</div>`;
+}
+
+// The scrollable record table with the print-enable checkbox column + # + data.
+function dbRecordTable(){
+  const rows=dbRows(), cols=dbCols().filter(c=>!(window._hiddenColumns||[]).includes(c));
+  if(!cols.length)return`<div style="padding:12px;color:var(--text3);font-size:11px">All columns hidden — use the Columns menu to show some.</div>`;
+  const gt="34px 36px "+colGridTemplate(cols);
+  const sel=S._dbSel||(S._dbSel=new Set());
+  const allSel=rows.length>0&&rows.every((_,i)=>sel.has(i));
+  const someSel=rows.some((_,i)=>sel.has(i));
+  const hdr=`<div class="rec-row" style="display:grid;grid-template-columns:${gt};width:max-content;min-width:100%;position:sticky;top:0;z-index:3;background:var(--surface);border-bottom:1px solid var(--bd3)">
+    <div class="rec-cell" style="display:flex;align-items:center;justify-content:center">
+      <div class="cb ${allSel?"chk":someSel?"partial":""}" onclick="dbToggleAll()"><span class="check-tick">${allSel?"✓":someSel?"−":""}</span></div>
+    </div>
+    <div style="padding:5px 8px;font-size:10px;color:var(--text3);font-weight:600;display:flex;align-items:center">#</div>
+    ${cols.map(colHeaderCell).join('')}
+  </div>`;
+  const body=rows.map((r,i)=>{
+    const isSel=sel.has(i);
+    const isActive=S.recIdx===i;
+    return`<div class="rec-row" data-i="${i}" style="display:grid;grid-template-columns:${gt};width:max-content;min-width:100%;border-bottom:1px solid var(--bd1);cursor:pointer;align-items:stretch;${isActive?'background:rgba(108,142,245,0.18)':''}" onclick="S.recIdx=${i};S._dbLastClick=null;R()">
+      <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();dbRowCheckClick(${i},event)" title="Print this label — Shift+click to range select">
+        <div class="cb ${isSel?"chk":""}"><span class="check-tick">${isSel?"✓":""}</span></div>
+      </div>
+      <div class="rec-cell" style="display:flex;align-items:center;color:var(--text3);font-size:10px;padding:5px 8px">${i+1}</div>
+      ${cols.map(c=>dbCell(c,r,i)).join('')}
+    </div>`;
+  }).join('');
+  return`<div style="overflow:auto">${hdr}${body}</div>`;
+}
+
 // The bottom database panel — custom mode only. Shows the bound file, a headers
-// toggle (xlsx), the column list, the row count + row navigation, and the
-// Choose/Refresh buttons. Returns "" in template mode so the Template Designer is
-// untouched.
+// toggle (xlsx), the row/column count, and the Choose/Clear/Refresh buttons; when
+// data is bound it shows the record browser (checkboxes + inline editing).
+// Returns "" in template mode so the Template Designer is untouched.
 function buildDatabasePanel(){
   if(!isCustomMode())return "";
   const bd=window._boundData;
   const recs=RX||[];
   const bound=hasBoundData();
   const cols=bound?(bd.columns||[]):[];
-  const idx=Math.min(S.recIdx, Math.max(0,recs.length-1));
 
   const fileLbl=bound
     ? `<span style="color:var(--text);font-size:11px;font-weight:600" title="${(bd.filename||'').replace(/"/g,'&quot;')}">${esc(bd.filename||'file')}</span>`
@@ -2726,28 +2977,24 @@ function buildDatabasePanel(){
          <input type="checkbox" ${bd.headerRow?'checked':''} onchange="toggleHeaderRow()"> First row is headers
        </label>` : "";
 
-  const nav=bound
-    ? `<span style="color:var(--text3);font-size:10px">${idx+1} / ${recs.length}</span>
-       <button onclick="S.recIdx=Math.max(0,S.recIdx-1);R()" title="Previous row" class="btn" style="padding:2px 7px;font-size:13px;line-height:1" ${idx===0?"disabled":""}>‹</button>
-       <button onclick="S.recIdx=Math.min(${recs.length-1},S.recIdx+1);R()" title="Next row" class="btn" style="padding:2px 7px;font-size:13px;line-height:1" ${idx>=recs.length-1?"disabled":""}>›</button>`
+  const selInfo=bound
+    ? `<span style="color:var(--text3);font-size:10px">·</span><span style="color:var(--text2);font-size:11px">${dbSelCount()} of ${recs.length} selected</span>`
     : "";
 
-  const colChips=cols.length
-    ? cols.map(c=>`<span style="background:var(--surface3);border:1px solid var(--bd4);border-radius:4px;padding:2px 7px;color:var(--text2);font-size:10px;white-space:nowrap" title="Use this column in a text object's Field mode">${esc(c)}</span>`).join("")
-    : `<span style="color:var(--text3);font-size:11px">Choose a CSV or Excel file to bind columns.</span>`;
-
-  return `<div style="background:var(--surface);border-top:1px solid var(--bd2);flex-shrink:0">
-    <div style="display:flex;align-items:center;gap:10px;padding:5px 14px;border-bottom:1px solid var(--bd1)">
+  return `<div style="background:var(--surface);border-top:1px solid var(--bd2);flex-shrink:0;display:flex;flex-direction:column;max-height:240px">
+    <div style="display:flex;align-items:center;gap:10px;padding:5px 14px;border-bottom:1px solid var(--bd1);flex-shrink:0">
       <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Database</span>
       ${fileLbl}
-      ${bound?`<span style="color:var(--text3);font-size:10px">·</span><span style="color:var(--text2);font-size:11px">${recs.length} row${recs.length===1?'':'s'} · ${cols.length} column${cols.length===1?'':'s'}</span>`:""}
+      ${bound?`<span style="color:var(--text3);font-size:10px">·</span><span style="color:var(--text2);font-size:11px">${recs.length} row${recs.length===1?'':'s'} · ${cols.length} column${cols.length===1?'':'s'}</span>${selInfo}`:""}
       <div style="flex:1"></div>
       ${headerToggle}
-      ${nav}
       <button class="btn" onclick="chooseDataSource()" style="padding:3px 10px;font-size:11px">Choose data file…</button>
+      <button class="btn" onclick="clearDataSourceCustom()" style="padding:3px 10px;font-size:11px"${bound?"":" disabled"} title="Unbind the data source — back to a single label">Clear data</button>
       <button class="btn" onclick="refreshDataSource()" style="padding:3px 10px;font-size:11px"${bound?"":" disabled"} title="Re-read the bound file from disk">↻ Refresh from source</button>
     </div>
-    <div style="display:flex;flex-wrap:wrap;gap:5px;padding:6px 14px;max-height:64px;overflow-y:auto">${colChips}</div>
+    ${bound
+      ? `<div style="flex:1;overflow:auto;min-height:0">${dbRecordTable()}</div>`
+      : `<div style="padding:10px 14px;color:var(--text3);font-size:11px">Choose a CSV or Excel file to bind print data — one label per row.</div>`}
   </div>`;
 }
 

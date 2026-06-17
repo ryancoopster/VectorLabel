@@ -157,6 +157,9 @@ public final class DesignerWindowController: NSObject {
             win.makeFirstResponder(webView)
             if let idx = editTemplateIndex {
                 applyPendingEdit(idx)
+            } else if mode == .custom {
+                // Re-focusing the Custom Designer: never show the template picker.
+                webView?.evaluateJavaScript("window._printEdit=false; if(typeof R==='function')R();", completionHandler: nil)
             } else {
                 webView?.evaluateJavaScript("window._printEdit=false; if(typeof R==='function')R(); if(typeof openTemplate==='function')openTemplate();", completionHandler: nil)
             }
@@ -751,13 +754,24 @@ public final class DesignerWindowController: NSObject {
         // into PrintJobFile.cutMode AND baked into each label's VGL.
         let cutMode = CutMode(rawValue: (payload["cutMode"] as? String) ?? "") ?? .never
 
-        // One record per label: every bound row when a data source is bound; with NO
-        // data source, a single label against an EMPTY record so static text prints
-        // and field/formula text is blank (NOT the leftover sample/CSV preview record
-        // — that's only for the on-canvas preview, not the printed output).
+        // One record per label, honoring the print-range subset (Phase 6). When a
+        // data source is bound, the page sends `recordIndices` — the rows chosen by
+        // the print-range control (All / Selected / Range). We render exactly those
+        // rows (× copies). If the page sends nothing (older payloads), fall back to
+        // every bound row. With NO data source, a single label against an EMPTY
+        // record so static text prints and field/formula text is blank (NOT the
+        // leftover sample/CSV preview record — that's only for the on-canvas
+        // preview, not the printed output).
         let records: [WireRecord]
         if let ds = dataSource, !ds.records.isEmpty {
-            records = ds.records
+            if let idx = payload["recordIndices"] as? [Int] {
+                // Map the chosen indices to rows, dropping any out-of-range index.
+                records = idx.compactMap { $0 >= 0 && $0 < ds.records.count ? ds.records[$0] : nil }
+            } else {
+                records = ds.records
+            }
+            // Nothing selected ⇒ nothing to print.
+            guard !records.isEmpty else { return }
         } else {
             records = [WireRecord(side: "", wireID: "", fields: [:])]
         }
@@ -950,8 +964,10 @@ extension DesignerWindowController: WKNavigationDelegate {
         guard webView === self.webView else { return }
         // Apply the current light/dark theme.
         webView.evaluateJavaScript("if(typeof setTheme==='function')setTheme('\(AppSettings.shared.appearance)')", completionHandler: nil)
-        // Inject the most recent CSV with ≥10 records
-        if let result = findMostRecentCSV(minRecords: 10) {
+        // Inject the most recent CSV with ≥10 records — TEMPLATE MODE ONLY. The
+        // Custom Designer opens with NO bound data (empty database pane, single
+        // label), so it must never auto-load an Exports CSV.
+        if mode == .template, let result = findMostRecentCSV(minRecords: 10) {
             injectDesignerRecords(result.records, filename: result.url.lastPathComponent)
         }
         // Inject the templates-folder list so the designer's Open dialog can list them.
@@ -975,9 +991,15 @@ extension DesignerWindowController: WKNavigationDelegate {
         } else if pendingOpenTemplate != nil {
             // Finder opened a ".vltmp" (template mode): load it into the canvas.
             applyPendingOpenTemplate()
+        } else if mode == .custom {
+            // Custom Designer standalone launch: open a BLANK custom design — never
+            // the template Open picker, and with no bound data. The page's
+            // newBlankCustomDesign() clears the canvas + title ("Untitled Custom
+            // Design") and leaves the database pane empty.
+            webView.evaluateJavaScript("window._printEdit=false; if(typeof newBlankCustomDesign==='function')newBlankCustomDesign();", completionHandler: nil)
         } else {
-            // Standalone mode: ensure the New/Open/Save toolbar (not the
-            // print-edit Return buttons) and open the template picker.
+            // Template Designer standalone mode: ensure the New/Open/Save toolbar
+            // (not the print-edit Return buttons) and open the template picker.
             webView.evaluateJavaScript("window._printEdit=false; if(typeof openTemplate==='function')openTemplate();", completionHandler: nil)
         }
     }
@@ -1014,6 +1036,32 @@ extension DesignerWindowController: WKScriptMessageHandler {
         case "refreshDataSource":
             // Re-read the stored path (re-pick if it moved) and re-inject.
             refreshDataSource()
+
+        case "clearDataSource":
+            // Custom Designer only — unbind the data source. The canvas returns to
+            // the single-label (no-data) state and the DB pane shows the empty
+            // "choose a file" state. The page clears window._boundData itself.
+            if mode == .custom { dataSource = nil }
+
+        case "editRecord":
+            // Custom Designer only — live in-place edit of a bound-record field from
+            // the database pane. Updates the in-memory BoundDataSource so the edit
+            // persists into the .vlcus on save and the printed/preview output
+            // reflects it. NOTE: we never write back to the original CSV/Excel file
+            // (the .vlcus owns the data snapshot).
+            if mode == .custom, var ds = dataSource,
+               let p = body["payload"] as? [String: Any],
+               let index = p["index"] as? Int,
+               let field = p["field"] as? String,
+               let value = p["value"] as? String,
+               index >= 0, index < ds.records.count {
+                var f = ds.records[index].fields
+                f[field] = value
+                ds.records[index] = WireRecord(side: f["_Side"] ?? ds.records[index].side,
+                                               wireID: f["Number"] ?? ds.records[index].wireID,
+                                               fields: f)
+                dataSource = ds
+            }
 
         case "printCustom":
             // Custom Designer only — render the current canvas as a single label
