@@ -184,6 +184,10 @@ let S={
   tplName:'Untitled Template',modal:null,
   // Custom Designer print header state (custom mode only).
   activePrinter:null, copies:1,
+  // Cut SETTING for the print job (Phase 6). null ⇒ use the per-stock default
+  // (continuous → eachLabel; die-cut → never). One of
+  // "afterJobLast" | "eachLabel" | "never", carried in PrintJobFile.cutMode.
+  cutMode:null,
   // Continuous-supply label length (inches); null ⇒ use the catalog default.
   // Ignored for die-cut supplies.
   labelLen:null,
@@ -240,6 +244,16 @@ function normSel(){
 // it (fixed catalog height).
 function specIsContinuous(specN){ const s=BL.find(l=>l.n===specN); return !!(s&&s.ty==="continuous"); }
 function dContinuous(){ return specIsContinuous(S.spec.n); }
+// Default cut mode for a supply: continuous tape cuts after every label; die-cut
+// stock is pre-cut so the cutter never fires (Phase 6).
+function dDefaultCutMode(specN){
+  const s=BL.find(l=>l.n===specN);
+  if(s&&s.ty==="continuous")return "eachLabel";
+  if(s&&s.ty==="dieCut")return "never";
+  return "afterJobLast";
+}
+// Effective cut mode: explicit choice, else per-stock default for the current supply.
+function dEffCutMode(){ return S.cutMode||dDefaultCutMode(S.spec&&S.spec.n); }
 // Bounds for the chosen length (inches). Generous range; default to the catalog ph.
 const LEN_MIN=0.25, LEN_MAX=24;
 function dDefaultLen(specN){ const s=BL.find(l=>l.n===specN); return s?s.ph:1; }
@@ -269,6 +283,8 @@ function normSpec(){
 function pickSupply(specN){
   S.spec=BL.find(l=>l.n===specN)||BL[1];
   S.labelLen=specIsContinuous(specN)?dDefaultLen(specN):null;
+  // Drop any explicit cut override so the new stock's sensible default applies.
+  S.cutMode=null;
   R();
 }
 function setLabelLen(v){
@@ -2112,6 +2128,20 @@ function buildCustomPrintHeader(){
 
     <div style="flex:1"></div>
 
+    <!-- Cut option (Phase 6) -->
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px" title="When to actuate the printer's cutter">Cut</span>
+      <div style="position:relative">
+        <select class="inp" style="width:160px;padding:4px 24px 4px 8px;font-size:11px;appearance:none;-webkit-appearance:none;cursor:pointer"
+          title="When to cut the supply for this job" onchange="S.cutMode=this.value;R()">
+          <option value="afterJobLast"${dEffCutMode()==="afterJobLast"?" selected":""}>Cut at end of job</option>
+          <option value="eachLabel"${dEffCutMode()==="eachLabel"?" selected":""}>Cut after every label</option>
+          <option value="never"${dEffCutMode()==="never"?" selected":""}>No cut</option>
+        </select>
+        <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:9px;pointer-events:none">▼</div>
+      </div>
+    </div>
+
     <!-- Copies -->
     <div style="display:flex;align-items:center;gap:6px">
       <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Copies</span>
@@ -2167,6 +2197,7 @@ function doCustomPrint(){
     objs:data.objs,
     copies:Math.max(1,S.copies||1),
     printerID:S.activePrinter||"",
+    cutMode:dEffCutMode(),   // Phase 6 cut setting → PrintJobFile.cutMode
     record:customPrintRecord()
   };
   if(data.labelLengthInches) payload.labelLengthInches=data.labelLengthInches;

@@ -745,6 +745,10 @@ public final class DesignerWindowController: NSObject {
         let copies = max(1, (payload["copies"] as? Int) ?? 1)
         let printerID = (payload["printerID"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         let templateName = template.name
+        // Cut SETTING chosen in the Custom Designer print header (Phase 6). The JS
+        // defaults it per stock (continuous → eachLabel; die-cut → never). Carried
+        // into PrintJobFile.cutMode AND baked into each label's VGL.
+        let cutMode = CutMode(rawValue: (payload["cutMode"] as? String) ?? "") ?? .never
 
         // One record per label: every bound row when data is bound, else the single
         // previewed record (or an empty record so static text still renders).
@@ -763,19 +767,27 @@ public final class DesignerWindowController: NSObject {
         // Render off the main thread (matching the print window), then submit back
         // on the main actor.
         DispatchQueue.global(qos: .userInitiated).async {
-            var labels: [Data] = []
+            // First render each row's raster once (rendering is the expensive part);
+            // we then expand by `copies` and stamp the per-label cut command so the
+            // chosen cut SETTING applies across the whole expanded label list (e.g.
+            // afterJobLast cuts once after the very last copy of the last row).
+            var rasters: [(pixels: [UInt8], width: Int, height: Int)] = []
             var maxLabelPx = 0
             for record in records {
                 guard let rendered = LabelRenderer.render(template: template, record: record, offset: offset) else { continue }
-                // Die-cut default: no cutter actuation (CutMode.never → BradyVGL .never).
-                let vgl = BradyVGL.buildPrintJob(pixels: rendered.pixels,
-                                                 width: rendered.width, height: rendered.height,
-                                                 cutMode: .never)
                 maxLabelPx = max(maxLabelPx, rendered.width, rendered.height)
-                // copies > 1 ⇒ repeat each row's label that many times.
-                for _ in 0..<copies { labels.append(Data(vgl)) }
+                for _ in 0..<copies { rasters.append(rendered) }
             }
-            guard !labels.isEmpty else { return }
+            guard !rasters.isEmpty else { return }
+            let total = rasters.count
+            var labels: [Data] = []
+            labels.reserveCapacity(total)
+            for (i, r) in rasters.enumerated() {
+                let vglCut = BradyVGL.vglCutMode(forIPCRawValue: cutMode.rawValue, index: i, total: total)
+                let vgl = BradyVGL.buildPrintJob(pixels: r.pixels, width: r.width,
+                                                 height: r.height, cutMode: vglCut)
+                labels.append(Data(vgl))
+            }
             // Same pacing estimate the print window uses.
             let estLabelMs = Int(Double(maxLabelPx) / 300.0 * 370.0) + 300
 
@@ -788,7 +800,7 @@ public final class DesignerWindowController: NSObject {
                     templateName: templateName,
                     printerID: printerID,
                     copies: 1,            // copies are expanded into `labels` above
-                    cutMode: .never,      // die-cut default for this phase
+                    cutMode: cutMode,     // user-chosen cut setting (Phase 6)
                     estLabelMs: estLabelMs,
                     labels: labels
                 )

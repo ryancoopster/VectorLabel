@@ -203,6 +203,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             title: job.title,
             templateName: job.templateName,
             printerID: printerID,
+            cutMode: job.cutMode,
             estLabelMs: job.estLabelMs
         )
 

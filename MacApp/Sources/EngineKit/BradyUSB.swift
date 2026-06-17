@@ -21,14 +21,39 @@ struct BradyUSBDevice: Identifiable, Hashable {
 /// Add a CLibUSB system library target in Package.swift (see module.modulemap).
 ///
 /// VID 0x0E2E is confirmed for all Brady USB devices.
-/// M610 PID 0x010B and M611 PID 0x010C are both confirmed on hardware.
+/// M610 PID 0x010B is confirmed on hardware.
+///
+/// M611 (Phase 6): the M611 USB product id is NOT yet hardware-confirmed. We list
+/// 0x010C as a best guess so a known M611 maps to "M611", but to avoid missing a
+/// real M611 whose PID differs, enumeration ALSO accepts ANY device on the Brady
+/// VID (0x0E2E) and labels an unrecognised PID generically (see `modelFor`). This
+/// is conservative: an unknown Brady device is still surfaced as a printer rather
+/// than silently skipped.
+/// TODO: confirm the M611 PID on real hardware (plug in an M611, read
+/// `lsusb`/`system_profiler SPUSBDataType`, note its idProduct), then either fix
+/// the 0x010C entry or add the real PID to `knownModels` and tighten enumeration
+/// back to the known list if the generic fallback proves too broad.
 public enum BradyUSB {
 
     static let vendorID: UInt16 = 0x0E2E
     static let knownModels: [(pid: UInt16, model: String)] = [
         (0x010B, "M610"),
-        (0x010C, "M611"),
+        (0x010C, "M611"),   // UNVERIFIED PID — see header TODO
     ]
+
+    /// Map a Brady-VID product id to a model name. Known PIDs map exactly; any
+    /// other PID on the Brady VID falls back to a generic name so a connected
+    /// Brady printer with an unconfirmed PID (e.g. an M611 whose id differs from
+    /// our guess) is still detected and usable. Unknown → "M611" as the most
+    /// likely current Brady wire-label printer, with the PID appended so the
+    /// operator can report it for the TODO above.
+    static func modelFor(productID: UInt16) -> String {
+        if let m = knownModels.first(where: { $0.pid == productID })?.model { return m }
+        // Best-effort default for an unrecognised Brady device. We keep it as a
+        // valid model string ("M611") so status/UI stay happy, and the generic
+        // name is only used internally for the device "name".
+        return "M611"
+    }
     static let outEndpoint: UInt8  = 0x01   // bulk OUT — print data and queries
     static let inEndpoint: UInt8   = 0x82   // bulk IN — SmartCell responses
     static let chunkSize           = 512
@@ -98,16 +123,23 @@ public enum BradyUSB {
         defer { libusb_free_device_list(list, 1) }
         guard count > 0, let devices = list else { return [] }
 
-        let validPIDs = knownModels.map { $0.pid }
-
         for i in 0 ..< count {
             guard let dev = devices[Int(i)] else { continue }
             var desc = libusb_device_descriptor()
             guard libusb_get_device_descriptor(dev, &desc) == 0 else { continue }
-            guard desc.idVendor == vendorID, validPIDs.contains(desc.idProduct) else { continue }
+            // Accept ANY device on the Brady VID. Known PIDs map to their model;
+            // an unrecognised Brady PID is still surfaced (generic) rather than
+            // skipped, so a real M611 with an unconfirmed PID isn't missed.
+            guard desc.idVendor == vendorID else { continue }
 
-            let model = knownModels.first { $0.pid == desc.idProduct }?.model ?? "M6xx"
-            let name  = "Brady \(model)"
+            let model = modelFor(productID: desc.idProduct)
+            let isKnownPID = knownModels.contains { $0.pid == desc.idProduct }
+            // For a known PID the name is just "Brady M610"/"Brady M611"; for an
+            // unrecognised Brady device, include the hex PID so the operator can
+            // report it (see the M611-PID TODO in the type header).
+            let name  = isKnownPID
+                ? "Brady \(model)"
+                : "Brady \(model) (PID 0x\(String(desc.idProduct, radix: 16, uppercase: true)))"
 
             // Try to read serial number
             var serial = "\(desc.idProduct, radix: 16, uppercase: true)"
@@ -143,13 +175,13 @@ public enum BradyUSB {
             throw USBError.deviceNotFound(deviceID)
         }
 
-        let validPIDs = knownModels.map { $0.pid }
-
         for i in 0 ..< count {
             guard let dev = devices[Int(i)] else { continue }
             var desc = libusb_device_descriptor()
             guard libusb_get_device_descriptor(dev, &desc) == 0 else { continue }
-            guard desc.idVendor == vendorID, validPIDs.contains(desc.idProduct) else { continue }
+            // Match enumeration: accept any Brady-VID device (the composite id
+            // disambiguates which one to open).
+            guard desc.idVendor == vendorID else { continue }
 
             var handle: OpaquePointer?
             guard libusb_open(dev, &handle) == 0, let h = handle else { throw USBError.openFailed }

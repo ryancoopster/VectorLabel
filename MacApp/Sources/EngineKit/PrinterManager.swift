@@ -156,15 +156,25 @@ public final class PrinterManager: ObservableObject {
 
     /// Submit a set of VGL jobs to the given printer.
     /// Returns the created `PrintJob` so callers can observe its progress.
+    /// `cutMode` is the user-chosen cut SETTING for the job. The labels handed in
+    /// are already-rendered VGL buffers whose per-label cut command was baked in by
+    /// the front-end (via `BradyVGL.vglCutMode`), so the Engine doesn't re-stamp the
+    /// bytes here — it just carries the setting through for logging / future device
+    /// control. Defaulting to `.afterJobLast` keeps the existing single-job paths
+    /// (calibration grid, in-process callers) unchanged.
     @discardableResult
     public func submit(
         jobs: [[UInt8]],
         title: String,
         templateName: String,
         printerID: String,
+        cutMode: CutMode = .afterJobLast,
         estLabelMs: Int = 1000,
         delayMs: Int = AppSettings.shared.interLabelDelayMs
     ) -> PrintJob {
+        // The cut command is baked into each label's VGL by the front-end renderer;
+        // surface the chosen mode here so the device path / logs reflect it.
+        print("[PrinterManager] submit \(jobs.count) label(s) cutMode=\(cutMode.rawValue) → \(title)")
         let job = PrintJob(
             title: title,
             labelCount: jobs.count,

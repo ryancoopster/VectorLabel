@@ -561,6 +561,12 @@ extension PrintWindowController: WKScriptMessageHandler {
         let serial = printerID.split(separator: ":").dropFirst(2).joined(separator: ":")
         let offset = AppSettings.shared.calibrationOffset(forSerial: serial)
 
+        // Cut SETTING chosen in the print header (Phase 6). Falls back to the
+        // sensible default the JS picks per stock (continuous → eachLabel; die-cut
+        // → never; else afterJobLast). Carried into PrintJobFile.cutMode AND baked
+        // into each label's VGL via BradyVGL.vglCutMode.
+        let cutMode = CutMode(rawValue: (payload["cutMode"] as? String) ?? "") ?? .afterJobLast
+
         // Build the Recent Print record up front (on the main actor — it reads
         // window state). Then render the (potentially large) batch OFF the main
         // thread so the UI doesn't freeze, and submit back on the main actor.
@@ -568,10 +574,13 @@ extension PrintWindowController: WKScriptMessageHandler {
         DispatchQueue.global(qos: .userInitiated).async {
             var jobs: [[UInt8]] = []
             var labelPx = 0   // longest rendered dimension (px) → print-length estimate
-            for record in selectedRecords {
+            let total = selectedRecords.count
+            for (i, record) in selectedRecords.enumerated() {
                 guard let rendered = LabelRenderer.render(template: template, record: record, offset: offset) else { continue }
                 labelPx = max(labelPx, max(rendered.width, rendered.height))
-                jobs.append(BradyVGL.buildPrintJob(pixels: rendered.pixels, width: rendered.width, height: rendered.height))
+                let vglCut = BradyVGL.vglCutMode(forIPCRawValue: cutMode.rawValue, index: i, total: total)
+                jobs.append(BradyVGL.buildPrintJob(pixels: rendered.pixels, width: rendered.width,
+                                                   height: rendered.height, cutMode: vglCut))
             }
             // Estimate per-label print time from the label's print length. Calibrated
             // to measured hardware: a 1.5" label (~450 px @ 300 dpi) prints in ~0.85 s.
@@ -591,7 +600,7 @@ extension PrintWindowController: WKScriptMessageHandler {
                     templateName: templateName,
                     printerID: printerID,
                     copies: 1,
-                    cutMode: .afterJobLast,
+                    cutMode: cutMode,
                     estLabelMs: estLabelMs,
                     labels: jobs.map { Data($0) }
                 )

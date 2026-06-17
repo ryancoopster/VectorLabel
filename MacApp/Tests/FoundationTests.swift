@@ -371,6 +371,78 @@ final class FoundationTests: XCTestCase {
         XCTAssertEqual(back.labels, labels)
     }
 
+    // MARK: – Phase 6: cut-mode plumbing
+
+    /// `vglCutMode` maps the IPC cut SETTING onto the per-label BradyVGL.CutMode:
+    ///   never → every label .never; eachLabel → every label .eachLabel;
+    ///   afterJobLast → all .never except the last .afterJob.
+    func testVGLCutModeMapping() {
+        // never
+        XCTAssertEqual(BradyVGL.vglCutMode(forIPCRawValue: "never", index: 0, total: 3), .never)
+        XCTAssertEqual(BradyVGL.vglCutMode(forIPCRawValue: "never", index: 2, total: 3), .never)
+        // eachLabel
+        XCTAssertEqual(BradyVGL.vglCutMode(forIPCRawValue: "eachLabel", index: 0, total: 3), .eachLabel)
+        XCTAssertEqual(BradyVGL.vglCutMode(forIPCRawValue: "eachLabel", index: 2, total: 3), .eachLabel)
+        // afterJobLast: only the last index cuts
+        XCTAssertEqual(BradyVGL.vglCutMode(forIPCRawValue: "afterJobLast", index: 0, total: 3), .never)
+        XCTAssertEqual(BradyVGL.vglCutMode(forIPCRawValue: "afterJobLast", index: 1, total: 3), .never)
+        XCTAssertEqual(BradyVGL.vglCutMode(forIPCRawValue: "afterJobLast", index: 2, total: 3), .afterJob)
+        // unknown raw value defaults to the afterJobLast behaviour
+        XCTAssertEqual(BradyVGL.vglCutMode(forIPCRawValue: "bogus", index: 2, total: 3), .afterJob)
+        // single-label job: index 0 is the last, so it cuts
+        XCTAssertEqual(BradyVGL.vglCutMode(forIPCRawValue: "afterJobLast", index: 0, total: 1), .afterJob)
+    }
+
+    /// The IPC `CutMode` raw values must exactly match the strings `vglCutMode`
+    /// switches on, so the front-ends can pass `cutMode.rawValue` straight through.
+    func testIPCCutModeRawValuesMatchVGLMapping() {
+        XCTAssertEqual(CutMode.never.rawValue, "never")
+        XCTAssertEqual(CutMode.eachLabel.rawValue, "eachLabel")
+        XCTAssertEqual(CutMode.afterJobLast.rawValue, "afterJobLast")
+    }
+
+    /// The cut command lives behind one function. When enabled it emits the
+    /// historical `ESC M <mode> 00`; when disabled it's a no-op (empty), and a
+    /// built job then contains no cut bytes — proving the plumbing is testable
+    /// without sending unverified bytes to hardware.
+    func testCutCommandToggle() {
+        let saved = BradyVGL.cutCommandEnabled
+        defer { BradyVGL.cutCommandEnabled = saved }
+
+        BradyVGL.cutCommandEnabled = true
+        XCTAssertEqual(BradyVGL.cutCommand(for: .afterJob), [0x1B, 0x4D, 0x00, 0x00])
+        XCTAssertEqual(BradyVGL.cutCommand(for: .eachLabel), [0x1B, 0x4D, 0x01, 0x00])
+        XCTAssertEqual(BradyVGL.cutCommand(for: .never), [0x1B, 0x4D, 0x02, 0x00])
+
+        BradyVGL.cutCommandEnabled = false
+        XCTAssertEqual(BradyVGL.cutCommand(for: .eachLabel), [])
+
+        // Build a tiny 1x8 all-white label both ways; the disabled job is exactly
+        // the enabled job minus the 4 cut bytes.
+        let px = [UInt8](repeating: 0x00, count: 8)   // 1 col x 8 rows, blank
+        BradyVGL.cutCommandEnabled = true
+        let withCut = BradyVGL.buildPrintJob(pixels: px, width: 1, height: 8, cutMode: .eachLabel)
+        BradyVGL.cutCommandEnabled = false
+        let noCut = BradyVGL.buildPrintJob(pixels: px, width: 1, height: 8, cutMode: .eachLabel)
+        XCTAssertEqual(withCut.count - noCut.count, 4)
+        // The no-cut job must not contain the ESC M (0x1B 0x4D) "set cut mode" pair.
+        func containsESCM(_ bytes: [UInt8]) -> Bool {
+            guard bytes.count >= 2 else { return false }
+            for i in 0..<(bytes.count - 1) where bytes[i] == 0x1B && bytes[i + 1] == 0x4D { return true }
+            return false
+        }
+        XCTAssertTrue(containsESCM(withCut))
+        XCTAssertFalse(containsESCM(noCut))
+    }
+
+    /// The continuous feed-length command is a no-op by default (unverified bytes),
+    /// so it must not alter a built job until explicitly enabled.
+    func testFeedLengthCommandNoopByDefault() {
+        XCTAssertFalse(BradyVGL.feedLengthCommandEnabled)
+        XCTAssertEqual(BradyVGL.feedLengthCommand(lengthPixels: 450), [])
+        XCTAssertEqual(BradyVGL.feedLengthCommand(lengthPixels: 0), [])
+    }
+
     func testPrinterStatusFileRoundTrip() throws {
         let cas = CassetteStatus(partNumber: "M6-32-427", labelWidthMils: 1500, labelHeightMils: 1500,
                                  printableWidthMils: 1500, printableHeightMils: 500, isDieCut: true,

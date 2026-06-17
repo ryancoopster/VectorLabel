@@ -485,7 +485,28 @@ let P={
   sourceFile: "ESM_Kodak_Hall_Master_export_20260614_172508.csv",
   activePrinter: "m610-001",
   view: "print", // "print" | "editor"
+  // Cut SETTING for the print job (Phase 6). null ⇒ use the per-stock default
+  // (continuous → eachLabel; die-cut → never; else afterJobLast). One of
+  // "afterJobLast" | "eachLabel" | "never", carried in PrintJobFile.cutMode.
+  cutMode: null,
 };
+
+// The default cut mode for a given supply part number: continuous tape is cut
+// after every label (so each printed length is separated); die-cut stock is
+// pre-cut so the cutter never fires. Anything else cuts once at end of job.
+function defaultCutMode(specN){
+  const s=BL.find(l=>l.n===specN);
+  if(s&&s.ty==="continuous")return "eachLabel";
+  if(s&&s.ty==="dieCut")return "never";
+  return "afterJobLast";
+}
+// The effective cut mode right now: the user's explicit choice, else the
+// per-stock default for the active template's supply.
+function effCutMode(){
+  if(P.cutMode)return P.cutMode;
+  const t=tpl();
+  return defaultCutMode(t?t.specN:"");
+}
 function printer(){
   const pool=window._swiftPrinters||PRINTERS;
   return pool.find(p=>p.id===P.activePrinter)||pool[0]||{id:"",name:"No printer connected",model:"",status:"offline",serial:""};
@@ -1524,6 +1545,20 @@ function buildPrintBar(){
       })()}
     </div>
 
+    <!-- Cut option (Phase 6) -->
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px" title="When to actuate the printer's cutter">Cut</span>
+      <div style="position:relative">
+        <select class="inp" style="width:160px;padding:4px 24px 4px 8px;font-size:11px;appearance:none;-webkit-appearance:none;cursor:pointer"
+          title="When to cut the supply for this job" onchange="P.cutMode=this.value;R()">
+          <option value="afterJobLast" ${effCutMode()==="afterJobLast"?"selected":""}>Cut at end of job</option>
+          <option value="eachLabel" ${effCutMode()==="eachLabel"?"selected":""}>Cut after every label</option>
+          <option value="never" ${effCutMode()==="never"?"selected":""}>No cut</option>
+        </select>
+        <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:9px;pointer-events:none">▼</div>
+      </div>
+    </div>
+
     <!-- Print button — goes straight to printing, no confirmation -->
     <button class="btn primary" onclick="doPrint()" style="padding:6px 22px;font-size:13px;display:flex;flex-direction:column;align-items:center;line-height:1.1;gap:1px" ${canPrint?"":"disabled"}>
       <span>Print ${pCount} label${pCount!==1?"s":""}</span>
@@ -1607,6 +1642,7 @@ function buildPrintPayloadBody(indices){
     rangeTo: P.rangeTo,
     filter: P.filter,
     sort: P.sort,
+    cutMode: effCutMode(),   // Phase 6 cut setting → PrintJobFile.cutMode
   };
 }
 

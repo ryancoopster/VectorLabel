@@ -14,14 +14,92 @@ public enum BradyVGL {
         case never = 2
     }
 
+    // MARK: – Cut command (UNVERIFIED — confirm on M611 hardware before relying on this)
+    //
+    // ⚠️ UNVERIFIED — confirm on M611 hardware before relying on this. ⚠️
+    //
+    // The EXACT bytes the M610/M611 firmware uses to set the cut mode are not
+    // hardware-confirmed. Historically this code emitted `ESC M <mode> 00`
+    // (0x1B 0x4D <0|1|2> 0x00) as a "Set Cut Mode" command at the top of every
+    // job. That sequence has NOT been validated against a real cutter-equipped
+    // M611, so it lives here behind ONE function and can be corrected in exactly
+    // one place once the byte sequence is confirmed on hardware.
+    //
+    // Conservative design: this returns the historical `ESC M <mode> 00` bytes,
+    // which is what the renderer already sent for single labels — so behaviour is
+    // unchanged from before this phase. If a future hardware test shows these
+    // bytes can jam or damage the printer, change `cutCommandEnabled` to `false`
+    // below (or fix the bytes) — the plumbing keeps working either way.
+    //
+    // The three modes we map onto the wire:
+    //   .afterJob (0)  → cut once, after the (last) label of the job
+    //   .eachLabel (1) → cut after every label (needed for continuous tape)
+    //   .never (2)     → never actuate the cutter (die-cut stock is pre-cut)
+
+    /// Master switch for emitting the cut command. Set to `false` to turn the cut
+    /// command into a logged no-op (plumbing stays intact, no bytes reach the
+    /// cutter) until the sequence is hardware-verified. Left `true` to preserve the
+    /// pre-Phase-6 behaviour (renderer always sent `ESC M <mode> 00`).
+    public static var cutCommandEnabled = true
+
+    /// The single source of truth for the cut-mode byte sequence.
+    /// ⚠️ UNVERIFIED — confirm on M611 hardware before relying on this. ⚠️
+    /// Returns an empty array (a safe no-op) when disabled.
+    public static func cutCommand(for mode: CutMode) -> [UInt8] {
+        guard cutCommandEnabled else {
+            // No-op stub: do not touch the cutter. Logged so a hardware test can
+            // see the plumbing fired without risking a jam.
+            print("[BradyVGL] cutCommand(\(mode)) suppressed — cutCommandEnabled == false (UNVERIFIED bytes)")
+            return []
+        }
+        // ESC M <mode> 00  — historical "Set Cut Mode" (UNVERIFIED, see above).
+        return [0x1B, 0x4D, mode.rawValue, 0x00]
+    }
+
+    // MARK: – Continuous feed length (UNVERIFIED — confirm on M611 hardware)
+    //
+    // ⚠️ UNVERIFIED — confirm on M611 hardware before relying on this. ⚠️
+    //
+    // On a CONTINUOUS supply the printer must be told how long each printed label
+    // is so the cut/advance lands in the right place. The renderer already sizes
+    // the raster to the user-chosen length (effectivePrintableHeightInches → pixel
+    // height), so the image itself is correct; what is NOT confirmed is whether the
+    // M611 also needs an explicit "feed length" / "label length" command in the job
+    // stream, or what its bytes are. We expose the insertion point here as a no-op
+    // by default so nothing unverified reaches the printer. When the command is
+    // confirmed, fill in the bytes (length is the raster height in printer pixels,
+    // i.e. lengthInches * dpi) and flip `feedLengthCommandEnabled`.
+
+    /// Master switch for emitting a continuous feed-length command. Default `false`
+    /// (no-op) because the byte sequence is unverified.
+    public static var feedLengthCommandEnabled = false
+
+    /// Where the continuous "feed length" command would go. No-op until verified.
+    /// ⚠️ UNVERIFIED — confirm on M611 hardware before relying on this. ⚠️
+    /// `lengthPixels` is the printed label length along the feed, in printer pixels
+    /// (inches × dpi) — exactly the raster height the renderer produced.
+    public static func feedLengthCommand(lengthPixels: Int) -> [UInt8] {
+        guard feedLengthCommandEnabled, lengthPixels > 0 else {
+            return []   // no-op: the raster height already encodes the length
+        }
+        // TODO (UNVERIFIED): emit the M611 feed/label-length command here once its
+        // byte sequence is confirmed on hardware, e.g. ESC <op> <len-lo> <len-hi>.
+        let _ = lengthPixels
+        return []
+    }
+
     /// Build a complete VGL job for one label image.
     public static func buildPrintJob(pixels: [UInt8], width: Int, height: Int, cutMode: CutMode = .afterJob) -> [UInt8] {
         var job: [UInt8] = []
 
         // Job Start
         job += [0x1B, 0x58, 0x00]
-        // Set Cut Mode
-        job += [0x1B, 0x4D, cutMode.rawValue, 0x00]
+        // Continuous feed-length command would go here (no-op until verified).
+        // `height` is the raster height in printer pixels = the printed label
+        // length along the feed for continuous stock.
+        job += feedLengthCommand(lengthPixels: height)
+        // Set Cut Mode (UNVERIFIED bytes — see cutCommand).
+        job += cutCommand(for: cutMode)
 
         let bytesPerLine = (height + 7) / 8
 
@@ -166,6 +244,25 @@ public enum BradyVGL {
             }
             return buildPrintJob(pixels: label.pixels, width: label.width,
                                  height: label.height, cutMode: mode)
+        }
+    }
+
+    /// The per-label `BradyVGL.CutMode` to stamp on label `index` of a `total`-label
+    /// job for a given user-chosen `IPCCutMode`. This is the single place the
+    /// end-to-end cut SETTING (carried in `PrintJobFile.cutMode`) is mapped onto the
+    /// per-job wire mode, so the Engine and any future caller decide cut behaviour
+    /// identically:
+    ///   • `.never`        → every label `.never`  (die-cut / pre-cut stock)
+    ///   • `.eachLabel`    → every label `.eachLabel` (continuous tape, separate labels)
+    ///   • `.afterJobLast` → all `.never` except the last `.afterJob` (one cut at the end)
+    ///
+    /// `IPCCutMode` is the Core IPC `CutMode` (afterJobLast / eachLabel / never);
+    /// it is passed in by raw value to keep BradyVGL free of an import cycle.
+    public static func vglCutMode(forIPCRawValue raw: String, index: Int, total: Int) -> CutMode {
+        switch raw {
+        case "never":     return .never
+        case "eachLabel": return .eachLabel
+        default:          return (index == total - 1) ? .afterJob : .never   // afterJobLast
         }
     }
 }
