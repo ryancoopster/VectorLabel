@@ -304,13 +304,23 @@ final class PrinterManager: ObservableObject {
     private var cassetteFetchedAt: [String: Date] = [:]
     private let cassetteTTL: TimeInterval = 60
 
+    /// Reports the outcome of a user-initiated ("force") cassette detect back to
+    /// the UI as `(printerID, ok, busy)`, so the page can show success/failure/busy
+    /// instead of the "Detecting…" toast silently fading. Set by PrintWindowController.
+    var onForcedDetectResult: ((String, Bool, Bool) -> Void)?
+
     /// Read the loaded cassette's SmartCell chip for a printer and cache it
     /// (60 s TTL). The query is slow (several seconds when cold — the channel
     /// needs priming) and needs exclusive device access, so it runs on a
     /// background task behind the shared device lock and publishes to `cassettes`.
     /// Skipped while a print is in progress so it never delays a job.
     func refreshCassette(for printerID: String, force: Bool = false) {
-        if activeJobs.contains(where: { !$0.isComplete }) { return }  // don't delay a print
+        // Never delay a print. A background detect just bails; a user-initiated
+        // (force) detect reports "busy" so the operator isn't left without feedback.
+        if activeJobs.contains(where: { !$0.isComplete }) {
+            if force { onForcedDetectResult?(printerID, false, true) }
+            return
+        }
         if !force, let at = cassetteFetchedAt[printerID],
            Date().timeIntervalSince(at) < cassetteTTL { return }
 
@@ -332,6 +342,11 @@ final class PrinterManager: ObservableObject {
                     self.cassettes[printerID] = info
                     self.cassetteFetchedAt[printerID] = Date()
                 }
+            }
+            // Report the result of a user-initiated detect (ok = read succeeded).
+            if force {
+                let ok = info != nil
+                await MainActor.run { self.onForcedDetectResult?(printerID, ok, false) }
             }
         }
     }

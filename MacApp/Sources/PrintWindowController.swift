@@ -161,6 +161,12 @@ final class PrintWindowController: NSObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.pushCassettes() }
 
+        // Report the outcome of a user-initiated "Detect supply" so the page can
+        // show success/failure/busy instead of the toast quietly fading.
+        PrinterManager.shared.onForcedDetectResult = { [weak self] _, ok, busy in
+            self?.evalJS("if(typeof cassetteDetectResult==='function')cassetteDetectResult(\(ok),\(busy));")
+        }
+
         // Refresh templates whenever the store changes (any save anywhere).
         templatesObserver = TemplateStore.shared.$templates.dropFirst()
             .receive(on: RunLoop.main)

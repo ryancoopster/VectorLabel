@@ -7,6 +7,9 @@ shown in the menu-bar footer. Fix commits reference the code-review finding IDs
 
 ## [Unreleased]
 ### Fixed
+- **[M13]** "Detect supply" now gives feedback: it reports failure ("Couldn't
+  read the cassette…") and busy ("Printer busy…") instead of the toast silently
+  fading, and a forced detect during a print is no longer silently dropped.
 - **[M4]** Closed a filename -> JavaScript injection seam: dynamic strings spliced
   into evaluateJavaScript now route through one escaper that also handles CR/LF and
   U+2028/U+2029 (JS line terminators), so a crafted filename can no longer break

@@ -1398,6 +1398,14 @@ function detectCassette(){
   }
 }
 
+// Result of a user-initiated detect, pushed from Swift. On success the supply
+// display updates via updateCassettes(); here we just surface failure/busy.
+function cassetteDetectResult(ok,busy){
+  if(busy) showToast("Printer busy — finish the print first");
+  else if(!ok) showToast("Couldn't read the cassette — reseat the supply and try again");
+  else showToast("Cassette detected");
+}
+
 // ── Print bar ─────────────────────────────────────────────────────────────────
 function buildPrintBar(){
   const total=visibleIndices().length;
