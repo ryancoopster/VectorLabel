@@ -690,11 +690,30 @@ function passesFilter(i){
 // ── Sorting ───────────────────────────────────────────────────────────────────
 function sortActive(){ return !!(P.sort && (P.sort.rules||[]).some(r=>r.field)); }
 
+// When "inherit rack" is on, a record whose Rack is blank borrows its pair
+// partner's Rack for sorting purposes. Built per sort from the full record list
+// (so it works even if the partner is filtered out), keyed by record object.
+let _effRack=null;
+function buildEffRack(){
+  _effRack=new Map();
+  if(!(P.sort && P.sort.inheritRack))return;
+  for(let i=0;i<P.records.length;i++){
+    const r=P.records[i];
+    let v=(r&&r.Rack!=null)?r.Rack:"";
+    if(v===""){ const j=pairIdx(i); if(j!=null){ const p=P.records[j]; if(p&&p.Rack)v=p.Rack; } }
+    _effRack.set(r,v);
+  }
+}
+function sortVal(rec,field){
+  if(field==="Rack" && P.sort && P.sort.inheritRack && _effRack && _effRack.has(rec)) return _effRack.get(rec);
+  return rec?rec[field]:"";
+}
+
 // Natural, case-insensitive compare of two records by the active sort rules.
 function cmpRecs(ra,rb){
   for(const r of (P.sort.rules||[])){
     if(!r.field)continue;
-    const a=ra?ra[r.field]:"", b=rb?rb[r.field]:"";
+    const a=sortVal(ra,r.field), b=sortVal(rb,r.field);
     let c=String(a==null?"":a).localeCompare(String(b==null?"":b),undefined,{numeric:true,sensitivity:"base"});
     if(r.dir==="desc")c=-c;
     if(c)return c;
@@ -707,6 +726,7 @@ function cmpRecs(ra,rb){
 //  source → keep each Source+Destination pair together, ordered by the Source
 //  dest   → keep pairs together, ordered by the Destination
 function applySort(idx){
+  buildEffRack();
   const mode=(P.sort.pairMode)||"break";
   if(mode==="break") return idx.slice().sort((i,j)=>cmpRecs(P.records[i],P.records[j])||(i-j));
   const vis=new Set(idx), consumed=new Set(), units=[];
@@ -916,7 +936,7 @@ function openFilterModal(presetId){
 function closeFilterModal(){ P._filterDraft=null; P._sortDraft=null; P._editingPresetId=null; const m=document.getElementById('vl-filter-modal'); if(m)m.remove(); }
 // Convert the open drafts to applied filter/sort objects (null when empty).
 function draftToFilter(){ const d=P._filterDraft; return (d.groups||[]).some(groupReady)?{groups:d.groups,groupConnectors:d.groupConnectors,showBothSides:!!d.showBothSides}:null; }
-function draftToSort(){ const s=P._sortDraft; return (s.rules||[]).some(r=>r.field)?{rules:s.rules.filter(r=>r.field),pairMode:s.pairMode||"break"}:null; }
+function draftToSort(){ const s=P._sortDraft; return (s.rules||[]).some(r=>r.field)?{rules:s.rules.filter(r=>r.field),pairMode:s.pairMode||"break",inheritRack:!!s.inheritRack}:null; }
 function saveCurrentAsPreset(){
   const f=draftToFilter(), s=draftToSort();
   if(!f&&!s){ showToast("Add a filter or sort first"); return; }
@@ -959,6 +979,7 @@ function sdAddRule(){ P._sortDraft.rules.push({field:"",dir:"asc"}); renderFilte
 function sdRemoveRule(i){ P._sortDraft.rules.splice(i,1); if(!P._sortDraft.rules.length)P._sortDraft.rules.push({field:"",dir:"asc"}); renderFilterModal(); }
 function sdSet(i,prop,val){ P._sortDraft.rules[i][prop]=val; renderFilterModal(); }
 function sdSetPairMode(m){ P._sortDraft.pairMode=m; renderFilterModal(); }
+function sdSetInheritRack(v){ P._sortDraft.inheritRack=v; renderFilterModal(); }
 function fdAddRule(gi){
   const g=P._filterDraft.groups[gi];
   g.rules.push(newFilterRule());
@@ -1077,6 +1098,13 @@ function renderFilterModal(){
       </select>
       <button onclick="sdRemoveRule(${i})" title="Remove" ${sd.rules.length<=1?'disabled':''} style="flex-shrink:0;background:rgba(245,108,108,0.12);border:1px solid rgba(245,108,108,0.3);color:var(--red);border-radius:5px;padding:3px 9px;cursor:pointer;font-size:13px">×</button>
     </div>`).join('');
+  // Only relevant when sorting by Rack: treat a blank Rack on one end of a pair as
+  // its partner's Rack, so the two stay together.
+  const hasRackSort=sd.rules.some(r=>r.field==='Rack');
+  const inheritRackHtml=hasRackSort?`<label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer;color:var(--text-soft);font-size:12px">
+    <input type="checkbox" ${sd.inheritRack?'checked':''} onchange="sdSetInheritRack(this.checked)">
+    Inherit rack name from other end label when not present
+  </label>`:'';
 
   let m=document.getElementById('vl-filter-modal');
   if(!m){ m=document.createElement('div'); m.id='vl-filter-modal'; m.className='modal-overlay'; m.onclick=e=>{if(e.target===m)closeFilterModal();}; document.body.appendChild(m); }
@@ -1094,7 +1122,8 @@ function renderFilterModal(){
       <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Sort</div>
       ${pairHtml}
       ${sortRows}
-      <button class="btn" onclick="sdAddRule()" title="Add another sort level" style="margin-top:4px;font-size:12px">+ Add sort</button>
+      ${inheritRackHtml}
+      <button class="btn" onclick="sdAddRule()" title="Add another sort level" style="margin-top:8px;font-size:12px">+ Add sort</button>
     </div>
     <div class="modal-footer" style="justify-content:space-between">
       <div style="display:flex;gap:8px">
