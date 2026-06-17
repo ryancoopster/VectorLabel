@@ -25,6 +25,8 @@ let package = Package(
             resources: [
                 .copy("VectorLabelPrint.html"),
                 .copy("VectorLabelDesigner.html"),
+                .copy("AppIcon.icns"),
+                .copy("MenuBarIcon.png"),
             ],
             linkerSettings: [
                 .linkedFramework("AppKit"),

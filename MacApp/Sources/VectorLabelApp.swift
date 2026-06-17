@@ -36,6 +36,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var statusItem: NSStatusItem?
     private var cancellables: Set<AnyCancellable> = []
 
+    /// Loads an image asset from the SPM resource bundle (works in both the dev
+    /// `swift build` and the packaged .app). Returns nil if missing.
+    private static func bundledImage(_ name: String, ext: String) -> NSImage? {
+        guard let url = Bundle.module.url(forResource: name, withExtension: ext) else { return nil }
+        return NSImage(contentsOf: url)
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // WKWebView requires a bundle identifier for its sandboxed WebContent process.
         // When running from SPM/Xcode without INFOPLIST_FILE set, inject it directly.
@@ -47,6 +54,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
         // Apply the saved light/dark appearance to the whole app at launch.
         AppSettings.shared.applyNativeAppearance()
+        // Dock icon (also covers the dev binary, which has no bundle Info.plist).
+        if let appIcon = Self.bundledImage("AppIcon", ext: "icns") {
+            NSApp.applicationIconImage = appIcon
+        }
         printWindowController = PrintWindowController()
         // After a print starts, the print window closes itself and asks us to
         // pop open the menu so the user can watch printer/queue status.
@@ -73,8 +84,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // Set up the NSStatusItem — reliable for LSUIElement apps, no activation issues
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
-            button.title = "VL"
-            button.font = NSFont.systemFont(ofSize: 11, weight: .bold)
+            if let menuIcon = Self.bundledImage("MenuBarIcon", ext: "png") {
+                menuIcon.isTemplate = true   // auto-tints for light/dark menu bars
+                menuIcon.size = NSSize(width: 18, height: 18)
+                button.image = menuIcon
+                button.imagePosition = .imageOnly
+            } else {
+                button.title = "VL"          // fallback if the asset is missing
+                button.font = NSFont.systemFont(ofSize: 11, weight: .bold)
+            }
             button.action = #selector(toggleMenuBarPopover)
             button.target = self
         }

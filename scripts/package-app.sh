@@ -41,6 +41,10 @@ PB=/usr/libexec/PlistBuddy
 cp "$EXE" "$APP/Contents/MacOS/$APPNAME"
 [ -d "$RESBUNDLE" ] && cp -R "$RESBUNDLE" "$APP/Contents/Resources/"
 
+# App icon (Finder/Dock). CFBundleIconFile=AppIcon in Info.plist points here.
+# Must live in the app's own Resources, not just the nested SPM resource bundle.
+[ -f MacApp/Sources/AppIcon.icns ] && cp MacApp/Sources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+
 # Bundle libusb and make the executable load it from inside the .app.
 LIBUSB_SRC=$(otool -L "$EXE" | awk '/libusb-1\.0.*dylib/{print $1; exit}')
 LIBUSB_NAME=""
