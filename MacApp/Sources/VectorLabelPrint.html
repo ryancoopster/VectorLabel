@@ -1817,20 +1817,30 @@ async function loadCSV(){
   }
 }
 
+// Fallback CSV parser for the standalone (no-Swift-bridge) case. In the shipping
+// app the native bridge supplies parsed records, so this isn't used — but it must
+// not diverge from the Swift RFC-4180 parser: a newline inside a quoted field is
+// data, "" is an escaped quote, short rows are padded (never dropped).
 function parseCSV(text){
-  const lines=text.split(/\r?\n/).filter(l=>l.trim());
-  if(!lines.length)return[];
-  const headers=lines[0].split(",").map(h=>h.replace(/^"|"$/g,"").trim());
-  return lines.slice(1).map(line=>{
-    const vals=[];let cur="",inQ=false;
-    for(const c of line){
-      if(c==='"'){inQ=!inQ;}else if(c===','&&!inQ){vals.push(cur);cur="";}else cur+=c;
-    }
-    vals.push(cur);
-    const row={};
-    headers.forEach((h,i)=>row[h]=(vals[i]||"").replace(/^"|"$/g,""));
-    return row;
-  }).filter(r=>Object.values(r).some(v=>v));
+  const rows=[]; let rec=[], field="", inQ=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(inQ){
+      if(c==='"'){ if(text[i+1]==='"'){ field+='"'; i++; } else inQ=false; }
+      else field+=c;
+    } else if(c==='"'){ inQ=true; }
+    else if(c===','){ rec.push(field); field=""; }
+    else if(c==='\n'||c==='\r'){
+      if(c==='\r'&&text[i+1]==='\n') i++;
+      rec.push(field); field="";
+      if(!(rec.length===1&&rec[0]==="")) rows.push(rec);
+      rec=[];
+    } else field+=c;
+  }
+  if(field!==""||rec.length){ rec.push(field); if(!(rec.length===1&&rec[0]==="")) rows.push(rec); }
+  if(rows.length<2) return [];
+  const headers=rows[0];
+  return rows.slice(1).map(vals=>{ const row={}; headers.forEach((h,i)=>row[h]=vals[i]!=null?vals[i]:""); return row; });
 }
 
 // ── Main render ───────────────────────────────────────────────────────────────

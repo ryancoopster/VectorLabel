@@ -94,18 +94,24 @@ final class PrintWindowController: NSObject {
 
     func showForReprint(_ recent: RecentPrint) {
         capturePreviousApp()
+        // Load the source CSV first; exports are pruned (recent prints are not), so
+        // the file may be gone. Alert and abort rather than open an empty window.
+        guard let (csv, url) = loadCSVForReprint(recent) else {
+            let alert = NSAlert()
+            alert.messageText = "Can’t reprint — source file not found"
+            alert.informativeText = "The export “\(recent.sourceFileName)” is no longer in the Exports folder (it may have been pruned or moved)."
+            alert.alertStyle = .warning
+            alert.runModal()
+            return
+        }
         self.reprinting = recent
         self.currentRecentPrintID = nil
         // Clear any stale export URL so the recorded source filename comes from
         // the reprint record, not a previously-opened export.
         self.sourceFileURL = nil
-        self.csvWritebackURL = nil
+        self.records = csv
+        self.csvWritebackURL = url   // allow inline edits to persist on reprint too
         openWindowIfNeeded()
-        // Recent prints store the CSV path; try to reload it
-        if let (csv, url) = loadCSVForReprint(recent) {
-            self.records = csv
-            self.csvWritebackURL = url   // allow inline edits to persist on reprint too
-        }
         sendInitialState()
     }
 

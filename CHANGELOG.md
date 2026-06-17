@@ -7,6 +7,14 @@ shown in the menu-bar footer. Fix commits reference the code-review finding IDs
 
 ## [Unreleased]
 ### Fixed
+- **[M12]** Reprinting an export whose file was pruned/moved now shows a clear
+  alert instead of silently opening an empty window.
+- **[M3]** Two template names that sanitize to the same filename no longer
+  silently overwrite each other -- a colliding save picks a free name (re-saving
+  the same template still overwrites its own file).
+- **[L4]** Replaced the naive JS fallback CSV parsers in both web views with a
+  correct RFC-4180 parser matching the Swift one (no divergence if the standalone
+  path is ever used).
 - **[M7/M8/M9/M10]** Performance: visibleIndices is computed once per render (was
   ~12x); column detection is memoized by records identity; the print batch renders
   off the main thread (no UI freeze on large jobs); and inline-edit CSV writeback

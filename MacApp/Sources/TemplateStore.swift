@@ -147,8 +147,20 @@ final class TemplateStore: ObservableObject {
         let safe = template.name
             .components(separatedBy: CharacterSet.alphanumerics.union(.init(charactersIn: " _-")).inverted)
             .joined(separator: "_")
-        let filename = safe.isEmpty ? "template" : safe
-        let url = folderURL.appendingPathComponent("\(filename).vlt.json")
+        let base = safe.isEmpty ? "template" : safe
+        // Different names can sanitize to the same filename (e.g. "A/B" and "A:B"
+        // both → "A_B"). Don't silently overwrite a DIFFERENT template — pick a free
+        // name. Re-saving the same template (same id) still overwrites its own file.
+        var filename = base
+        var url = folderURL.appendingPathComponent("\(filename).vlt.json")
+        var n = 2
+        while FileManager.default.fileExists(atPath: url.path),
+              let data = try? Data(contentsOf: url),
+              let existing = try? JSONDecoder().decode(VLTemplate.self, from: data),
+              existing.id != template.id {
+            filename = "\(base)-\(n)"; n += 1
+            url = folderURL.appendingPathComponent("\(filename).vlt.json")
+        }
         let data = try JSONEncoder().encode(template)
         try data.write(to: url, options: .atomic)
         reload()
