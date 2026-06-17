@@ -10,3 +10,5 @@ __pycache__/
 # Packaging output
 dist/
 *.dmg
+# Generated at build time by scripts/stamp-version.sh (also regenerated in CI)
+MacApp/Sources/Generated/BuildInfo.swift
