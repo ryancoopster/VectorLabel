@@ -71,7 +71,13 @@ final class FoundationTests: XCTestCase {
     /// catalog single-sourced without runtime injection.
     func testJSCatalogMirrorsCatalogJSON() throws {
         struct JSProj: Codable { let tw: Double; let th: Double; let pw: Double; let ph: Double; let lb: String }
-        struct SpecT: Codable { let partNumber: String; let js: JSProj }
+        struct SpecT: Codable {
+            let partNumber: String
+            let widthInches: Double; let heightInches: Double
+            let printableWidthInches: Double; let printableHeightInches: Double
+            let feedRotationDeg: Double
+            let js: JSProj
+        }
         struct FileT: Codable { let sizes: [SpecT] }
 
         let sourcesDir = URL(fileURLWithPath: #filePath)   // MacApp/Tests/FoundationTests.swift
@@ -100,6 +106,20 @@ final class FoundationTests: XCTestCase {
                           "VectorLabelPrint.html BL is out of sync with BradyCatalog.json. Expected entry:\n\(lit)")
             XCTAssertTrue(designHTML.contains(lit),
                           "VectorLabelDesigner.html BL is out of sync with BradyCatalog.json. Expected entry:\n\(lit)")
+        }
+
+        // Cross-view invariant: within one entry, the JS projection must agree
+        // with the Swift fields, so editing one side without the other fails.
+        for s in catalog.sizes {
+            XCTAssertEqual(s.js.pw, s.printableWidthInches,  "\(s.partNumber): JS pw must equal Swift printableWidthInches")
+            XCTAssertEqual(s.js.ph, s.printableHeightInches, "\(s.partNumber): JS ph must equal Swift printableHeightInches")
+            if s.feedRotationDeg == 90 {   // rotated supplies present the long axis swapped
+                XCTAssertEqual(s.js.tw, s.heightInches, "\(s.partNumber): rotated 90°, JS tw must equal Swift heightInches")
+                XCTAssertEqual(s.js.th, s.widthInches,  "\(s.partNumber): rotated 90°, JS th must equal Swift widthInches")
+            } else {
+                XCTAssertEqual(s.js.tw, s.widthInches,  "\(s.partNumber): JS tw must equal Swift widthInches")
+                XCTAssertEqual(s.js.th, s.heightInches, "\(s.partNumber): JS th must equal Swift heightInches")
+            }
         }
 
         // The two HTML BL blocks must be identical to each other.

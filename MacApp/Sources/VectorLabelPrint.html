@@ -1977,6 +1977,12 @@ function R(){
   P._visCache = computeVisibleIndices();
   // Keep the preview pointed at a visible row when a filter is active.
   if(P.records.length){ const vis=P._visCache; if(vis.length&&!vis.includes(P.previewIdx))P.previewIdx=vis[0]; }
+  // If an inline edit's row gets filtered/searched out of view, tear the editor
+  // down. Otherwise P.editCell is orphaned: the input is gone but the keydown
+  // handler still hijacks Enter/Escape app-wide, and Enter would commit a stale
+  // value to Swift. (The row can only be edited while visible, so leaving the
+  // visible set means the edit is abandoned.)
+  if(P.editCell && P._visCache.indexOf(P.editCell.i)<0){ P.editCell=null; P.editVal=undefined; }
   // Preserve the record list's scroll position across the full re-render (R()
   // rebuilds all of #app, which would otherwise snap the list back to the top —
   // e.g. on the 5s printer rescan or any row click).
@@ -2074,6 +2080,14 @@ function R(){
     _recEl.scrollTop=_prevScroll;
     _recEl.addEventListener("scroll",onRecScroll,{passive:true});
     measureRecordRows();   // record real row heights so the window/scrollbar stay accurate
+    // Re-window when the viewport height becomes known/changes: the first build
+    // may use a fallback height, and window resizes don't fire a scroll event.
+    // (#recScroll's box is layout-driven, not content-driven, so this won't loop.)
+    if(typeof ResizeObserver!=='undefined'){
+      if(!window._recResizeObs) window._recResizeObs=new ResizeObserver(()=>onRecScroll());
+      window._recResizeObs.disconnect();
+      window._recResizeObs.observe(_recEl);
+    }
   }
   const _pvEl=document.getElementById("vl-preview-scroll");
   if(_pvEl) _pvEl.scrollTop=_prevPreviewScroll;
