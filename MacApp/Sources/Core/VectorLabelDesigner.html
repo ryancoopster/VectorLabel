@@ -157,10 +157,16 @@ let S={
   spec:BL[1],selId:null,selIds:[],recIdx:0,wrap:true,showFields:false,zoom:1.0,
   snapGrid:true,snapObjects:true,gridSize:0.05,
   tplName:'Untitled Template',modal:null,
+  // Custom Designer print header state (custom mode only).
+  activePrinter:null, copies:1,
   // Start blank — the standalone designer opens the Open dialog on launch so the
   // user picks a template rather than landing on a default one.
   objs:[]
 };
+// True only in the Custom Designer (Swift injects window._designerMode='custom'
+// at document start). Gates the print header + print path. The Template Designer
+// never sets this, so it looks/behaves exactly as before.
+function isCustomMode(){ return window._designerMode==='custom'; }
 // Persisted snap/grid prefs — Swift injects on load, we post on change.
 function initDesignerPrefs(p){
   if(!p)return;
@@ -1057,6 +1063,8 @@ function R(){
       <span id="ed-toolbar-btns"></span>
     </div>
 
+    ${buildCustomPrintHeader()}
+
     <!-- Second toolbar: snap/grid controls -->
     <div style="background:var(--surface);border-bottom:1px solid var(--bd2);padding:0 14px;display:flex;align-items:center;gap:10px;height:34px;flex-shrink:0">
       <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Snap</span>
@@ -1279,6 +1287,26 @@ function renderModal(){
             <button class="btn" onclick="closeModal()">Cancel</button>
             <button class="btn" onclick="loadSelectedTemplate()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600" ${!(cards.length&&S._openSel!==undefined)?"disabled":""}>Open</button>
           </div>
+        </div>
+      </div>`;
+  }
+
+  // Custom Designer: confirmation when Print is pressed with a label-size
+  // mismatch. "Print anyway" forces the print; Cancel just dismisses.
+  if(S.modal==="confirmMismatch"){
+    const c=dLoadedCassette();
+    const loaded=dCassetteSizeKnown(c)?`${dFmtIn(c.labelWidthMils/1000)} × ${dFmtIn(c.labelHeightMils/1000)}`:"unknown";
+    const spec=BL.find(l=>l.n===S.spec.n);
+    const tmpl=spec?`${dFmtIn(spec.tw)} × ${dFmtIn(spec.th)}`:"unknown";
+    overlay.innerHTML=`
+      <div class="modal" style="width:430px">
+        <div class="modal-title" style="display:flex;align-items:center;gap:8px"><span style="color:var(--warn)">⚠</span> Label size doesn't match</div>
+        <div style="color:var(--text2);font-size:13px;line-height:1.6;margin:6px 0 18px">
+          The loaded label (<b style="color:var(--text)">${loaded}</b>) doesn't match this template's size (<b style="color:var(--text)">${tmpl}</b>). The print may be misaligned or cropped.<br><br>Print anyway?
+        </div>
+        <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px">
+          <button class="btn" onclick="closeModal()">Cancel</button>
+          <button class="btn" onclick="S.modal=null;S._printForce=true;doCustomPrint()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Print anyway</button>
         </div>
       </div>`;
   }
@@ -1811,6 +1839,15 @@ document.addEventListener("keydown",function(e){
   const tag=(document.activeElement||{}).tagName||"";
   const inInput=["INPUT","TEXTAREA","SELECT"].includes(tag);
 
+  // ⌘Return (Custom Designer only) — print the current canvas, mirroring the
+  // Print button. Works even from an input field (matching the print window).
+  if(isCustomMode()&&(e.metaKey||e.ctrlKey)&&(e.key==="Enter"||e.key==="Return")){
+    if(S.modal||!dCanPrint())return;
+    e.preventDefault();
+    doCustomPrint();
+    return;
+  }
+
   // Cmd/Ctrl+Z — undo (works even in inputs to avoid blocking browser undo,
   // but we only intercept if NOT in an input)
   if((e.metaKey||e.ctrlKey)&&e.key==="z"&&!inInput){
@@ -1865,6 +1902,135 @@ function templateData(){
     specN:S.spec.n,
     objs:JSON.parse(JSON.stringify(S.objs))
   };
+}
+
+// ── Custom Designer print header (Phase 2) ──────────────────────────────────────
+// Shown ONLY in custom mode (window._designerMode==='custom'). Mirrors the Print
+// window header: printer picker, cassette match/mismatch indicator, copies field,
+// and a Print button (⌘Return). Single-label print of the current canvas.
+
+// Swift injects the live printer list (updateDesignerPrinters) and detected
+// cassettes (updateDesignerCassettes), the same JSON the print window consumes.
+function updateDesignerPrinters(printers){
+  window._dprinters=(printers||[]).map(p=>({
+    id:p.id, name:p.name, model:p.model||"M6xx", status:p.status||"ready", serial:p.serial||""
+  }));
+  // Keep the current selection if still present; else pick a ready printer.
+  if(!window._dprinters.find(p=>p.id===S.activePrinter)){
+    S.activePrinter=(window._dprinters.find(p=>p.status==="ready")||window._dprinters[0]||{}).id||null;
+  }
+  if(isCustomMode())R();
+}
+function updateDesignerCassettes(map){
+  window._dcassettes=map||{};
+  if(isCustomMode())R();
+}
+function dPrinters(){ return window._dprinters||[]; }
+function dPrinter(){ return dPrinters().find(p=>p.id===S.activePrinter)||{id:null,name:"",status:"offline"}; }
+function dLoadedCassette(){ return (window._dcassettes||{})[S.activePrinter]||null; }
+
+// Strip the model prefix so "BM-32-427" (catalog) matches "M6-32-427" (SmartCell).
+// BM-109-427 is the bulk box for M6-33-427 — same supply. (Same logic as the
+// print window's supplyCore.)
+function dSupplyCore(pn){ let c=(pn||"").replace(/^[A-Za-z0-9]+-/,"").toUpperCase(); if(c==="109-427")c="33-427"; return c; }
+function dCassetteSizeKnown(c){ return !!(c && typeof c.labelWidthMils==='number' && typeof c.labelHeightMils==='number'); }
+// Whether the loaded cassette's real dimensions equal the template's label size,
+// in either orientation (within ~0.1"). Mirrors the print window's sameLabelSize.
+function dSameLabelSize(c,specN){
+  if(!dCassetteSizeKnown(c))return false;
+  const spec=BL.find(l=>l.n===specN)||BL.find(l=>dSupplyCore(l.n)===dSupplyCore(specN));
+  if(!spec)return false;
+  const tw=spec.tw*1000, th=spec.th*1000, cw=c.labelWidthMils, ch=c.labelHeightMils;
+  const tol=100, close=(a,b)=>Math.abs(a-b)<=tol;
+  return (close(cw,tw)&&close(ch,th))||(close(cw,th)&&close(ch,tw));
+}
+function dCassetteMatched(){ const c=dLoadedCassette(); return !!(c&&dCassetteSizeKnown(c)&&dSameLabelSize(c,S.spec.n)); }
+function dCassetteMismatch(){ const c=dLoadedCassette(); return !!(c&&dCassetteSizeKnown(c)&&!dSameLabelSize(c,S.spec.n)); }
+function dRequiredSupply(specN){ const core=dSupplyCore(specN); return core?"BM/M6-"+core:(specN||""); }
+function dFmtIn(v){ return (v==null?"—":(+v).toString())+'"'; }
+function dCanPrint(){ return !!(S.objs.length>0&&dPrinter().status==="ready"); }
+
+// The custom-mode print header markup (returns "" in template mode so the
+// Template Designer is untouched).
+function buildCustomPrintHeader(){
+  if(!isCustomMode())return "";
+  const pr=dPrinter();
+  const printers=dPrinters();
+  const canPrint=dCanPrint();
+  const copies=Math.max(1,S.copies||1);
+  const dot=pr.status==="ready"?"var(--green)":pr.status==="busy"?"var(--warn)":"var(--red)";
+  const statusLbl=pr.status==="ready"?"Ready":pr.status==="busy"?"Busy":"Offline";
+  return`<div style="background:var(--surface);border-bottom:1px solid var(--bd2);padding:0 14px;display:flex;align-items:center;gap:12px;height:42px;flex-shrink:0">
+    <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Print</span>
+
+    <!-- Printer picker -->
+    <div style="position:relative">
+      <select class="inp" style="width:210px;padding:5px 26px 5px 30px;appearance:none;-webkit-appearance:none;cursor:pointer" onchange="S.activePrinter=this.value;R()">
+        ${printers.length===0
+          ? `<option value="">No printers connected</option>`
+          : printers.map(p=>`<option value="${p.id}"${S.activePrinter===p.id?" selected":""}>${(p.name||"")}${p.serial?" — "+p.serial:""}</option>`).join("")}
+      </select>
+      <div style="position:absolute;left:9px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:${dot};pointer-events:none"></div>
+      <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:9px;pointer-events:none">▼</div>
+    </div>
+    <span style="font-size:11px;color:${dot}">${statusLbl}</span>
+
+    <!-- Cassette match / mismatch indicator -->
+    <div style="display:flex;align-items:center;gap:7px">
+      <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Supply</span>
+      <span style="color:var(--text2);font-size:11px;font-family:monospace" title="Required supply for ${S.spec.n}">${dRequiredSupply(S.spec.n)}</span>
+      ${dCassetteMatched()?`<span title="Loaded cassette matches the required supply" style="color:var(--green);font-size:18px;line-height:1;font-weight:800">✓</span>`
+        :dCassetteMismatch()?`<span title="Loaded ${dLoadedCassette().partNumber} doesn't match — the label may print misaligned or cropped" style="color:var(--red);font-size:12px;line-height:1;white-space:nowrap">⚠ mismatch</span>`:""}
+    </div>
+
+    <div style="flex:1"></div>
+
+    <!-- Copies -->
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Copies</span>
+      <input type="number" class="inp" min="1" max="999" value="${copies}" style="width:58px;padding:4px 6px;font-size:12px" onchange="S.copies=Math.max(1,Math.min(999,parseInt(this.value)||1));R()">
+    </div>
+
+    <!-- Print button — ⌘Return -->
+    <button class="btn primary" onclick="doCustomPrint()" style="padding:6px 20px;font-size:13px;display:flex;flex-direction:column;align-items:center;line-height:1.1;gap:1px"${canPrint?"":" disabled"}>
+      <span>Print ${copies} label${copies!==1?"s":""}</span>
+      <span style="font-size:9px;opacity:0.7;font-weight:400">⌘ Return</span>
+    </button>
+  </div>`;
+}
+
+// The record bound to the canvas right now — the previewed editor record, so
+// field/formula text on the printed label matches what the user sees. Sent to
+// Swift as a flat {col:value} object; Swift renders against it (or an empty
+// record if absent → static text only).
+function customPrintRecord(){
+  const recs=window._editorRecords||RX;
+  const rec=recs[S.recIdx];
+  return rec?Object.assign({},rec):null;
+}
+
+// Render the current canvas as a single label and submit it to the print queue
+// via Swift. Single-label this phase; "copies" repeats it.
+function doCustomPrint(){
+  if(!isCustomMode()||!dCanPrint())return;
+  if(dCassetteMismatch()&&!S._printForce){ S.modal="confirmMismatch"; renderModal(); return; }
+  S._printForce=false;
+  const data=templateData();
+  const payload={
+    name:S.tplName||"Custom Label",
+    specN:data.specN,
+    objs:data.objs,
+    copies:Math.max(1,S.copies||1),
+    printerID:S.activePrinter||"",
+    record:customPrintRecord()
+  };
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"printCustom",payload});
+  }
+}
+// Swift calls this once the job has been submitted to the queue.
+function customPrintSubmitted(copies){
+  showToast("Printing "+copies+" label"+(copies!==1?"s":""));
 }
 
 // ── Print-window edit mode ─────────────────────────────────────────────────────

@@ -49,6 +49,22 @@ public final class DesignerWindowController: NSObject {
     /// Hosts use this to refocus/refresh the print window.
     public var onEditReturn: ((_ saved: Bool, _ templateIndex: Int?) -> Void)?
 
+    // MARK: – Custom-mode print path (Phase 2)
+    //
+    // Only the Custom Designer (`mode == .custom`) prints. It owns a Core-only
+    // `IPCPrintBackend` that publishes printer/cassette status from the Engine and
+    // submits rendered jobs to the IPC queue — never linking EngineKit/libusb.
+    // In `.template` mode all of this stays nil so the Template Designer behaves
+    // exactly as before.
+
+    /// The print backend (custom mode only). Reads the Engine's published status
+    /// and writes jobs into the print queue.
+    private var printBackend: PrintBackend?
+
+    /// The latest printer + cassette status, used to inject the same JSON shapes
+    /// the print window consumes (updatePrinters / updateCassettes equivalents).
+    private var lastStatus: PrinterStatusFile?
+
     public init(mode: DesignerMode) {
         self.mode = mode
         super.init()
@@ -104,10 +120,13 @@ public final class DesignerWindowController: NSObject {
         let contentController = WKUserContentController()
         contentController.add(self, name: "vectorlabel")
         // Set the theme before first paint (avoids a flash of the old theme when
-        // the designer reopens after a light/dark switch).
+        // the designer reopens after a light/dark switch). Also stamp the designer
+        // mode at document start so the HTML can gate the custom-mode print header
+        // (window._designerMode==='custom') before its first render.
         let theme = AppSettings.shared.isLight ? "light" : ""
+        let modeJS = (mode == .custom) ? "window._designerMode='custom';" : ""
         contentController.addUserScript(WKUserScript(
-            source: "document.documentElement.dataset.theme='\(theme)';",
+            source: "document.documentElement.dataset.theme='\(theme)';\(modeJS)",
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController = contentController
         let wv = WKWebView(frame: .zero, configuration: config)
@@ -137,6 +156,10 @@ public final class DesignerWindowController: NSObject {
         win.makeFirstResponder(wv)
         window = win
 
+        // Custom mode only: own a print backend, observe its status, and inject
+        // printer/cassette state into the designer once the page loads.
+        if mode == .custom { startPrintBackendIfNeeded() }
+
         // Keep the designer's column config in sync with the shared setting.
         AppSettings.shared.$recordColumnOrder.dropFirst().receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.injectColumnConfig() }.store(in: &cancellables)
@@ -162,6 +185,10 @@ public final class DesignerWindowController: NSObject {
                 self.webView = nil
                 self.window = nil
                 self.cancellables.removeAll()
+                // Custom mode: tear down the print backend's status watcher.
+                self.printBackend?.stop()
+                self.printBackend = nil
+                self.lastStatus = nil
                 if let token = self.closeObserver {
                     NotificationCenter.default.removeObserver(token)
                     self.closeObserver = nil
@@ -344,6 +371,174 @@ public final class DesignerWindowController: NSObject {
         )
     }
 
+    // MARK: – Custom-mode print backend (Phase 2)
+
+    /// Create (once) and start the IPC print backend, wiring its status changes to
+    /// re-inject printer/cassette state into the designer. Custom mode only.
+    private func startPrintBackendIfNeeded() {
+        guard mode == .custom else { return }
+        if printBackend == nil {
+            let backend = IPCPrintBackend()
+            backend.onStatusChange = { [weak self] status in
+                guard let self else { return }
+                self.lastStatus = status
+                self.injectPrinters()
+                self.injectCassettes()
+            }
+            printBackend = backend
+            backend.start()
+        }
+        // Seed the most recent status (start() emits it synchronously, but the page
+        // may not be loaded yet — injectPrinters/Cassettes no-op until it is, and
+        // the navigation didFinish re-injects).
+        if let s = printBackend?.status { lastStatus = s }
+    }
+
+    /// Printers from the latest status as [{id,name,model,serial,status}] — the
+    /// same shape the print window consumes via updatePrinters / initPrintWindow.
+    private func printersJSONString() -> String {
+        let dicts: [[String: String]] = (lastStatus?.printers ?? []).map { p in
+            ["id": p.id, "name": p.name, "model": p.model, "serial": p.serial, "status": p.status]
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: dicts),
+              let json = String(data: data, encoding: .utf8) else { return "[]" }
+        return json
+    }
+
+    /// Detected cassette info keyed by printer id — the identical object the print
+    /// window's updateCassettes consumes (reproduced from each CassetteStatus).
+    private func cassettesJSONString() -> String {
+        var dict: [String: [String: Any]] = [:]
+        for p in lastStatus?.printers ?? [] {
+            guard let c = p.cassette else { continue }
+            var entry: [String: Any] = [
+                "partNumber": c.partNumber,
+                "labelWidthMils": c.labelWidthMils,
+                "labelHeightMils": c.labelHeightMils,
+                "isDieCut": c.isDieCut,
+                "supplyRemainingPct": c.supplyRemainingPct,
+                "pixelWidth": c.pixelWidth,
+                "pixelHeight": c.pixelHeight,
+            ]
+            if let perRoll = c.labelsPerRoll ?? BradyCatalog.labelsPerRoll(forPartNumber: c.partNumber) {
+                entry["labelsPerRoll"] = perRoll
+            }
+            dict[p.id] = entry
+        }
+        if let data = try? JSONSerialization.data(withJSONObject: dict),
+           let json = String(data: data, encoding: .utf8) { return json }
+        return "{}"
+    }
+
+    /// Push the current printer list into the designer (custom mode). No-ops until
+    /// the page defines updateDesignerPrinters.
+    private func injectPrinters() {
+        webView?.evaluateJavaScript(
+            "if(typeof updateDesignerPrinters==='function')updateDesignerPrinters(\(printersJSONString()));",
+            completionHandler: nil)
+    }
+
+    /// Push the detected cassettes into the designer (custom mode).
+    private func injectCassettes() {
+        webView?.evaluateJavaScript(
+            "if(typeof updateDesignerCassettes==='function')updateDesignerCassettes(\(cassettesJSONString()));",
+            completionHandler: nil)
+    }
+
+    /// Render the designer's current canvas to a single Brady VGL job and submit it
+    /// to the IPC queue. `payload` is {name, specN, objs, copies, printerID?}.
+    ///
+    /// Single-label only this phase: the canvas renders against the bound preview
+    /// record if one is provided (so field/formula text matches what the user
+    /// sees), else an empty WireRecord (static text renders; field/formula blank).
+    private func handlePrintCustom(_ payloadAny: Any?) {
+        guard mode == .custom,
+              let backend = printBackend,
+              let payload = payloadAny as? [String: Any]
+        else { return }
+
+        // Decode the canvas into a VLTemplate via the SAME {name, specN, objs}
+        // shape the saveTemplate path produces, so rendering matches the designer.
+        let tplDict: [String: Any] = [
+            "name": (payload["name"] as? String) ?? "Custom Label",
+            "specN": (payload["specN"] as? String) ?? "",
+            "objs": payload["objs"] ?? [],
+            "version": 1,
+            "id": UUID().uuidString,
+        ]
+        // A template with no objects (or an unknown spec) can't render — bail.
+        guard let objs = tplDict["objs"] as? [Any], !objs.isEmpty,
+              let data = try? JSONSerialization.data(withJSONObject: tplDict),
+              let template = try? JSONDecoder().decode(VLTemplate.self, from: data),
+              template.labelSize != nil
+        else { return }
+
+        let copies = max(1, (payload["copies"] as? Int) ?? 1)
+        let printerID = (payload["printerID"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        let templateName = template.name
+
+        // Bind the current preview record if the page sent one; else an empty
+        // record so static text renders and field/formula text renders blank.
+        let record = customPrintRecord(from: payload["record"])
+
+        // Per-printer calibration offset (keyed by the printer's serial, as the
+        // print window does). printerID is "vid:pid:serial".
+        let serial = (printerID ?? "").split(separator: ":").dropFirst(2).joined(separator: ":")
+        let offset = AppSettings.shared.calibrationOffset(forSerial: serial)
+
+        // Render off the main thread (matching the print window), then submit back
+        // on the main actor.
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let rendered = LabelRenderer.render(template: template, record: record, offset: offset) else { return }
+            // Die-cut default: no cutter actuation (CutMode.never → BradyVGL .never).
+            let vgl = BradyVGL.buildPrintJob(pixels: rendered.pixels,
+                                             width: rendered.width, height: rendered.height,
+                                             cutMode: .never)
+            let labelPx = max(rendered.width, rendered.height)
+            // Same pacing estimate the print window uses.
+            let estLabelMs = Int(Double(labelPx) / 300.0 * 370.0) + 300
+            // copies > 1 ⇒ repeat the single rendered label.
+            let labels = Array(repeating: Data(vgl), count: copies)
+
+            Task { @MainActor in
+                let job = PrintJobFile(
+                    id: UUID().uuidString,
+                    createdAt: ISO8601DateFormatter().string(from: Date()),
+                    sourceApp: "customdesigner",
+                    title: templateName.isEmpty ? "Custom Label" : templateName,
+                    templateName: templateName,
+                    printerID: printerID,
+                    copies: 1,            // copies are expanded into `labels` above
+                    cutMode: .never,      // die-cut default for this phase
+                    estLabelMs: estLabelMs,
+                    labels: labels
+                )
+                do { try backend.submit(job) }
+                catch { print("[DesignerWindowController] printCustom submit failed: \(error)") }
+                self.webView?.evaluateJavaScript(
+                    "if(typeof customPrintSubmitted==='function')customPrintSubmitted(\(copies));",
+                    completionHandler: nil)
+            }
+        }
+    }
+
+    /// Build the WireRecord to render the custom label against. The page sends the
+    /// currently-previewed record as a flat {col:value} object; we map it onto a
+    /// WireRecord. Missing/nil ⇒ an empty record (static text only).
+    private func customPrintRecord(from any: Any?) -> WireRecord {
+        guard let dict = any as? [String: Any] else {
+            return WireRecord(side: "", wireID: "", fields: [:])
+        }
+        var fields: [String: String] = [:]
+        for (k, v) in dict {
+            if let s = v as? String { fields[k] = s }
+            else if let n = v as? NSNumber { fields[k] = n.stringValue }
+        }
+        return WireRecord(side: fields["_Side"] ?? "",
+                          wireID: fields["Number"] ?? "",
+                          fields: fields)
+    }
+
     // MARK: – Dev HTML loader
 
     private func devHTMLURL(_ name: String) -> URL? {
@@ -410,6 +605,11 @@ extension DesignerWindowController: WKNavigationDelegate {
         injectDesignerTemplates()
         injectColumnConfig()
         injectDesignerPrefs()
+        // Custom mode: seed the print header with the latest printer/cassette state.
+        if mode == .custom {
+            injectPrinters()
+            injectCassettes()
+        }
         if let idx = pendingEditTemplateIndex {
             // Editing for the print window: load that template, skip the picker.
             applyPendingEdit(idx)
@@ -445,6 +645,11 @@ extension DesignerWindowController: WKScriptMessageHandler {
 
         case "browseDataSource":
             browseForDataSource()
+
+        case "printCustom":
+            // Custom Designer only — render the current canvas as a single label
+            // and submit it to the IPC print queue.
+            handlePrintCustom(body["payload"])
 
         case "deleteTemplate":
             if let p = body["payload"] as? [String: Any], let id = p["id"] as? String {
