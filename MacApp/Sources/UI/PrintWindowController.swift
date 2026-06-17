@@ -2,9 +2,7 @@ import AppKit
 import WebKit
 import SwiftUI
 import Combine
-import UserNotifications
 import VectorLabelCore
-import VectorLabelEngineKit
 
 /// Opens the print window (VectorLabelPrint.html in a WKWebView) when a new
 /// export is detected, and also when the user taps "Reprint" in the menu bar.
@@ -17,7 +15,19 @@ import VectorLabelEngineKit
 ///   "close"   payload: null
 ///   "ready"   payload: null   (JS has finished loading, send initial state)
 @MainActor
-final class PrintWindowController: NSObject {
+public final class PrintWindowController: NSObject {
+
+    /// Source of printer/cassette state and job submission. Injected by the host
+    /// (the combined app injects a `LocalPrintBackend` wrapping PrinterManager; a
+    /// standalone front-end would inject an `IPCPrintBackend`). Setting it (re)wires
+    /// the status observer.
+    public var backend: PrintBackend? {
+        didSet { wireBackend() }
+    }
+
+    /// The most recent status pushed by the backend, used to translate printer +
+    /// cassette state into the JSON shapes the web UI consumes.
+    private var lastStatus: PrinterStatusFile?
 
     private var window: NSWindow?
     private var webView: WKWebView?
@@ -30,16 +40,6 @@ final class PrintWindowController: NSObject {
     private var csvWritebackURL: URL?
     private var reprinting: RecentPrint?
 
-    // Observes the active PrintJob so we can drive the web view's progress UI.
-    private var jobObservers: Set<AnyCancellable> = []
-
-    // Keeps the print window's printer dropdown in sync with the live USB scan.
-    // Without this, a window opened before the scan finishes shows no printers.
-    private var printerObserver: AnyCancellable?
-
-    // Pushes detected cassette (SmartCell) info into the web view as it updates.
-    private var cassetteObserver: AnyCancellable?
-
     // Pushes the shared record-column config (order/hidden/widths) into the web
     // view when it changes (e.g. the user reorders columns in the designer).
     private var columnObservers: Set<AnyCancellable> = []
@@ -48,15 +48,12 @@ final class PrintWindowController: NSObject {
     // reflects edits made anywhere (standalone designer or edit-return).
     private var templatesObserver: AnyCancellable?
 
-    // Recent-print record for the job submitted this session, so its status can
-    // be updated (printing → complete / cancelled-mid-print). nil until Print is
+    // Recent-print record for the job submitted this session. nil until Print is
     // clicked; while nil, a ✕ Cancel records a "cancelled before printing" entry.
+    // Once a job is submitted to the backend it is recorded as `.printing`; live
+    // outcome tracking (complete / cancelled-mid-print / failed) now lives in the
+    // Engine's menu bar, not this window.
     private var currentRecentPrintID: UUID?
-
-    // Long-lived observers that update a Recent Print's status when its job
-    // finishes. Kept here (not in jobObservers) so they survive the window
-    // closing immediately after the print starts.
-    private var printStatusObservers: Set<AnyCancellable> = []
 
     // The app that was frontmost before the print window appeared, so we can
     // return the user to it after the print starts.
@@ -64,16 +61,38 @@ final class PrintWindowController: NSObject {
 
     /// Called after a print is submitted: the window has closed and the caller
     /// should open the menu-bar popover so the user can watch printer status.
-    var onPrintStarted: (() -> Void)?
+    public var onPrintStarted: (() -> Void)?
 
     /// Called when the user taps Edit on a template — the caller opens the
     /// Template Designer for that template (by list index; the print window
     /// stays open). Index, not id, because ids can be duplicated.
-    var onEditTemplate: ((Int) -> Void)?
+    public var onEditTemplate: ((Int) -> Void)?
+
+    public override init() { super.init() }
+
+    // MARK: – Backend wiring
+
+    /// Subscribe to the backend's status changes and seed the current value. The
+    /// backend emits its current status synchronously on `start()` (and again on
+    /// every change), so a window opened before the first change still gets state.
+    private func wireBackend() {
+        guard let backend else { return }
+        backend.onStatusChange = { [weak self] status in
+            guard let self else { return }
+            self.lastStatus = status
+            self.pushPrinters()
+            self.pushCassettes()
+        }
+        if let s = backend.status {
+            lastStatus = s
+            pushPrinters()
+            pushCassettes()
+        }
+    }
 
     // MARK: – Show / hide
 
-    func showForNewExport(fileURL: URL, records: [WireRecord]) {
+    public func showForNewExport(fileURL: URL, records: [WireRecord]) {
         capturePreviousApp()
         self.records = records
         self.sourceFileURL = fileURL
@@ -94,7 +113,7 @@ final class PrintWindowController: NSObject {
         }
     }
 
-    func showForReprint(_ recent: RecentPrint) {
+    public func showForReprint(_ recent: RecentPrint) {
         capturePreviousApp()
         // Load the source CSV first; exports are pruned (recent prints are not), so
         // the file may be gone. Alert and abort rather than open an empty window.
@@ -117,11 +136,8 @@ final class PrintWindowController: NSObject {
         sendInitialState()
     }
 
-    func close() {
+    public func close() {
         flushWriteback()   // persist any debounced inline edit before tearing down
-        jobObservers.removeAll()
-        printerObserver = nil
-        cassetteObserver = nil
         columnObservers.removeAll()
         templatesObserver = nil
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "vectorlabel")
@@ -158,23 +174,10 @@ final class PrintWindowController: NSObject {
         wv.navigationDelegate = self
         self.webView = wv
 
-        // Push live printer-list changes into the web view. $printers emits its
-        // current value immediately and again on every scan change, so a window
-        // opened before the USB scan finishes still gets printers when they appear.
-        printerObserver = PrinterManager.shared.$printers
-            .receive(on: RunLoop.main)
-            .sink { [weak self] printers in self?.pushPrinters(printers) }
-
-        // Push detected cassette info as it changes (auto-detect or manual).
-        cassetteObserver = PrinterManager.shared.$cassettes
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.pushCassettes() }
-
-        // Report the outcome of a user-initiated "Detect supply" so the page can
-        // show success/failure/busy instead of the toast quietly fading.
-        PrinterManager.shared.onForcedDetectResult = { [weak self] _, ok, busy in
-            self?.evalJS("if(typeof cassetteDetectResult==='function')cassetteDetectResult(\(ok),\(busy));")
-        }
+        // Live printer-list + cassette changes now arrive via the PrintBackend's
+        // onStatusChange (wired in wireBackend()), which translates the Engine's
+        // PrinterStatusFile into the same JSON the page already consumes. A window
+        // opened before the first status still gets state from the seeded value.
 
         // Refresh templates whenever the store changes (any save anywhere).
         templatesObserver = TemplateStore.shared.$templates.dropFirst()
@@ -226,7 +229,7 @@ final class PrintWindowController: NSObject {
 
     /// Called when the designer finishes editing for the print window: refocus
     /// the print window and refresh its template list (selection/task preserved).
-    func returnFromEdit() {
+    public func returnFromEdit() {
         guard window != nil else { return }
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
@@ -250,23 +253,35 @@ final class PrintWindowController: NSObject {
 
     // MARK: – JS bridge: push data into the web view
 
+    /// The printers from the latest backend status as [id,name,model,serial,status]
+    /// dicts — the same shape the page consumes via updatePrinters / initPrintWindow.
+    private func printerDicts() -> [[String: String]] {
+        (lastStatus?.printers ?? []).map { p in
+            ["id": p.id, "name": p.name, "model": p.model, "serial": p.serial,
+             "status": p.status]
+        }
+    }
+
+    /// The latest printer list as a JSON array string ("[]" when none).
+    private func printersJSONString() -> String {
+        guard let data = try? JSONSerialization.data(withJSONObject: printerDicts()),
+              let json = String(data: data, encoding: .utf8) else { return "[]" }
+        return json
+    }
+
     /// Pushes the current printer list to the web view without resetting the
     /// user's record selection. No-ops when the page isn't loaded yet.
-    private func pushPrinters(_ printers: [PrinterDevice]) {
-        let dicts = printers.map { p -> [String: String] in
-            ["id": p.id, "name": p.name, "model": p.model, "serial": p.serial,
-             "status": p.status.rawValue]
-        }
-        guard let data = try? JSONSerialization.data(withJSONObject: dicts),
-              let json = String(data: data, encoding: .utf8)
-        else { return }
-        evalJS("if(typeof updatePrinters==='function')updatePrinters(\(json));")
+    private func pushPrinters() {
+        evalJS("if(typeof updatePrinters==='function')updatePrinters(\(printersJSONString()));")
     }
 
     /// Detected cassette info keyed by printer id, as a JSON object string.
+    /// Reproduced from each PrinterStatusEntry's CassetteStatus so the page sees
+    /// the identical fields it did when this came straight from PrinterManager.
     private func cassettesJSONString() -> String {
         var dict: [String: [String: Any]] = [:]
-        for (id, c) in PrinterManager.shared.cassettes {
+        for p in lastStatus?.printers ?? [] {
+            guard let c = p.cassette else { continue }
             var entry: [String: Any] = [
                 "partNumber": c.partNumber,
                 "labelWidthMils": c.labelWidthMils,
@@ -276,10 +291,12 @@ final class PrintWindowController: NSObject {
                 "pixelWidth": c.pixelWidth,
                 "pixelHeight": c.pixelHeight,
             ]
-            if let perRoll = BradyCatalog.labelsPerRoll(forPartNumber: c.partNumber) {
+            // Prefer the value the Engine already resolved; fall back to the local
+            // catalog so the field is present even on an older status file.
+            if let perRoll = c.labelsPerRoll ?? BradyCatalog.labelsPerRoll(forPartNumber: c.partNumber) {
                 entry["labelsPerRoll"] = perRoll
             }
-            dict[id] = entry
+            dict[p.id] = entry
         }
         if let data = try? JSONSerialization.data(withJSONObject: dict),
            let json = String(data: data, encoding: .utf8) { return json }
@@ -306,14 +323,7 @@ final class PrintWindowController: NSObject {
               let templatesJSON = String(data: templatesData, encoding: .utf8)
         else { return }
 
-        let printerJSON: String
-        let printerDicts = PrinterManager.shared.printers.map { p -> [String: String] in
-            ["id": p.id, "name": p.name, "model": p.model, "serial": p.serial,
-             "status": p.status.rawValue]
-        }
-        if let data = try? JSONSerialization.data(withJSONObject: printerDicts),
-           let s = String(data: data, encoding: .utf8) { printerJSON = s }
-        else { printerJSON = "[]" }
+        let printerJSON = printersJSONString()
 
         let sourceFile = sourceFileURL?.lastPathComponent
             ?? reprinting?.sourceFileName
@@ -410,7 +420,7 @@ final class PrintWindowController: NSObject {
 // MARK: – WKNavigationDelegate
 
 extension PrintWindowController: WKNavigationDelegate {
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         sendInitialState()
     }
 }
@@ -418,8 +428,8 @@ extension PrintWindowController: WKNavigationDelegate {
 // MARK: – WKScriptMessageHandler (JS → Swift messages)
 
 extension PrintWindowController: WKScriptMessageHandler {
-    func userContentController(_ userContentController: WKUserContentController,
-                                didReceive message: WKScriptMessage) {
+    public func userContentController(_ userContentController: WKUserContentController,
+                                       didReceive message: WKScriptMessage) {
         guard let body = message.body as? [String: Any],
               let action = body["action"] as? String
         else { return }
@@ -434,7 +444,7 @@ extension PrintWindowController: WKScriptMessageHandler {
         case "detectCassette":
             let printerID = (body["payload"] as? [String: Any])?["printerID"] as? String ?? ""
             if !printerID.isEmpty {
-                PrinterManager.shared.refreshCassette(for: printerID, force: true)
+                backend?.requestCassetteRefresh(printerID: printerID)
             }
 
         case "editRecord":
@@ -560,17 +570,35 @@ extension PrintWindowController: WKScriptMessageHandler {
 
             Task { @MainActor in
                 guard !jobs.isEmpty else { return }   // nothing printable — keep window open
-                let job = PrinterManager.shared.submit(
-                    jobs: jobs, title: title, templateName: templateName,
-                    printerID: printerID, estLabelMs: estLabelMs
+                // Hand the rendered batch to the print backend as a PrintJobFile.
+                // The combined app's LocalPrintBackend forwards it to PrinterManager
+                // exactly as before; a standalone front-end would write it to the
+                // IPC queue for the Engine to print.
+                let job = PrintJobFile(
+                    id: UUID().uuidString,
+                    createdAt: ISO8601DateFormatter().string(from: Date()),
+                    sourceApp: "autoprint",
+                    title: title,
+                    templateName: templateName,
+                    printerID: printerID,
+                    copies: 1,
+                    cutMode: .afterJobLast,
+                    estLabelMs: estLabelMs,
+                    labels: jobs.map { Data($0) }
                 )
+                do {
+                    try self.backend?.submit(job)
+                } catch {
+                    print("[PrintWindowController] submit failed: \(error)")
+                }
                 if let recent = recent {
                     self.currentRecentPrintID = recent.id
                     RecentPrintsStore.shared.add(recent)
-                    self.trackPrintStatus(job: job, recentID: recent.id)
                 }
                 // The print has started: close the window, return to the prior app,
-                // and pop the menu so the user can watch the queue.
+                // and pop the menu so the user can watch the queue. Live job outcome
+                // (complete / cancelled / failed) is now tracked by the Engine's menu
+                // bar, not this window.
                 let started = self.onPrintStarted
                 let prior = self.previousApp
                 self.previousApp = nil
@@ -611,7 +639,7 @@ extension PrintWindowController: WKScriptMessageHandler {
             title: title,
             sourceFileName: sourceFileURL?.lastPathComponent ?? reprinting?.sourceFileName ?? "",
             templateName: templateName,
-            printerName: PrinterManager.shared.printers.first { $0.id == printerID }?.name ?? printerID,
+            printerName: lastStatus?.printers.first { $0.id == printerID }?.name ?? printerID,
             labelCount: labelCount,
             printRange: printRange,
             selectedIndices: recordIndices,
@@ -623,56 +651,16 @@ extension PrintWindowController: WKScriptMessageHandler {
         )
     }
 
-    /// Update a Recent Print's status when its job finishes. The observer lives
-    /// in `printStatusObservers` so it outlives the print window (which closes
-    /// immediately after the print starts).
-    private func trackPrintStatus(job: PrintJob, recentID: UUID) {
-        var cancellable: AnyCancellable?
-        cancellable = job.$isComplete.sink { [weak self] complete in
-            guard complete else { return }
-            Task { @MainActor in
-                let outcome: RecentPrint.Status = job.didFail ? .failed
-                    : (job.isCancelled ? .cancelledMidPrint : .complete)
-                RecentPrintsStore.shared.updateStatus(id: recentID, to: outcome)
-                if outcome == .failed {
-                    let printer = PrinterManager.shared.printers.first { $0.id == job.printerID }?.name ?? job.printerID
-                    PrintWindowController.notifyPrintFailed(jobTitle: job.title, printer: printer)
-                }
-                if let c = cancellable { self?.printStatusObservers.remove(c) }
-            }
-        }
-        if let c = cancellable { printStatusObservers.insert(c) }
-    }
-
     private func evalJS(_ js: String) {
         webView?.evaluateJavaScript(js, completionHandler: nil)
-    }
-
-    /// Post a system notification when a print fails. The print window has already
-    /// closed by then, so this is the operator's active signal. Authorization is
-    /// requested lazily — only the first time a print actually fails — so an app
-    /// that never fails a print never prompts.
-    static func notifyPrintFailed(jobTitle: String, printer: String) {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
-            guard granted else { return }
-            let content = UNMutableNotificationContent()
-            content.title = "Print failed"
-            content.body = "\(jobTitle) — \(printer)"
-            content.sound = .default
-            UNUserNotificationCenter.current().add(
-                UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
-        }
     }
 }
 
 // MARK: – NSWindowDelegate
 
 extension PrintWindowController: NSWindowDelegate {
-    func windowWillClose(_ notification: Notification) {
+    public func windowWillClose(_ notification: Notification) {
         flushWriteback()   // persist any debounced inline edit
-        jobObservers.removeAll()
-        printerObserver = nil
-        cassetteObserver = nil
         columnObservers.removeAll()
         templatesObserver = nil
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "vectorlabel")

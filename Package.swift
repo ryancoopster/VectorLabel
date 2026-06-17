@@ -36,14 +36,26 @@ let package = Package(
             dependencies: ["VectorLabelCore", "CLibUSB"],
             path: "MacApp/Sources/EngineKit"
         ),
+        .target(
+            name: "VectorLabelUI",
+            dependencies: ["VectorLabelCore"],
+            path: "MacApp/Sources/UI",
+            linkerSettings: [
+                .linkedFramework("AppKit"),
+                .linkedFramework("WebKit"),
+                .linkedFramework("CoreGraphics"),
+                .linkedFramework("CoreText"),
+            ]
+        ),
         .executableTarget(
             name: "VectorLabel",
-            dependencies: ["VectorLabelCore", "VectorLabelEngineKit"],
+            dependencies: ["VectorLabelCore", "VectorLabelEngineKit", "VectorLabelUI"],
             path: "MacApp/Sources",
             exclude: [
                 "Core",
                 "CLibUSB",
                 "EngineKit",
+                "UI",
                 "Info.plist",
             ],
             linkerSettings: [
