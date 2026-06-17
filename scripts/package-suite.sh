@@ -91,15 +91,29 @@ package_one() {
 
   cp "$BINDIR/$EXE" "$APP/Contents/MacOS/$EXE"
   for b in "$BINDIR"/*.bundle; do [ -d "$b" ] && cp -R "$b" "$APP/Contents/Resources/"; done
-  [ -f MacApp/Sources/Core/AppIcon.icns ] && cp MacApp/Sources/Core/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+
+  # App icon (Phase 7): the Custom Designer gets the "CL" monogram
+  # (AppIconCustom.icns); the other three get the "L" monogram (AppIcon.icns).
+  # Both ship as Contents/Resources/AppIcon.icns so CFBundleIconFile stays "AppIcon".
+  # If the CL icon couldn't be generated in this environment, fall back to the L
+  # icon so packaging never breaks (TODO: regenerate AppIconCustom.icns on macOS
+  # with Pillow + qlmanage via scripts/icon/build-icon.sh).
+  local ICON_SRC=MacApp/Sources/Core/AppIcon.icns
+  if [ "$EXE" = "VectorLabelCustomDesigner" ] && [ -f MacApp/Sources/Core/AppIconCustom.icns ]; then
+    ICON_SRC=MacApp/Sources/Core/AppIconCustom.icns
+  elif [ "$EXE" = "VectorLabelCustomDesigner" ]; then
+    echo "WARNING: AppIconCustom.icns missing — Custom Designer falling back to the L icon. TODO: run scripts/icon/build-icon.sh on macOS." >&2
+  fi
+  [ -f "$ICON_SRC" ] && cp "$ICON_SRC" "$APP/Contents/Resources/AppIcon.icns"
 
   # Custom file types (Phase 4): the two designers OWN one document type each so
   # Finder shows the files and a double-click opens the right app.
   #   Template Designer → ".vltmp"  (com.sai.vectorlabel.vltmp)
   #   Custom Designer   → ".vlcus"  (com.sai.vectorlabel.vlcus)
-  # Both are JSON (conform to public.json + public.data). The doc icon is the app
-  # icon for now (Phase 7 finalizes icons). Registered as an exported UTI plus a
-  # CFBundleDocumentTypes entry (Editor role, Owner rank).
+  # Both are JSON (conform to public.json + public.data). The doc icon is the
+  # owning app's icon (UTTypeIconFile/CFBundleTypeIconFile = "AppIcon"), so the
+  # Custom Designer's .vlcus files inherit its CL mark. Registered as an exported
+  # UTI plus a CFBundleDocumentTypes entry (Editor role, Owner rank).
   case "$EXE" in
     VectorLabelTemplateDesigner) register_doc_type "$APP/Contents/Info.plist" \
         "com.sai.vectorlabel.vltmp" "vltmp" "VectorLabel Template" ;;

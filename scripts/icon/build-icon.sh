@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
-# Regenerate the VectorLabel app icon + menu-bar glyph from scripts/icon/glyph.py.
+# Regenerate the VectorLabel app icons + menu-bar glyph from scripts/icon/glyph.py.
 #
 # Writes:
-#   MacApp/Sources/Core/AppIcon.icns     – Finder/Dock icon (CFBundleIconFile=AppIcon)
-#   MacApp/Sources/Core/MenuBarIcon.png  – menu-bar template glyph (isTemplate at runtime)
-# Commit those, then run scripts/package-suite.sh to bundle them into the .app.
+#   MacApp/Sources/Core/AppIcon.icns        – L monogram, the Finder/Dock icon for
+#                                             Engine / Auto Print / Template Designer
+#   MacApp/Sources/Core/AppIconCustom.icns  – CL monogram, the Custom Designer icon
+#   MacApp/Sources/Core/MenuBarIcon.png     – menu-bar template glyph (isTemplate at runtime)
+# Both .icns use CFBundleIconFile=AppIcon; package-suite.sh copies the right one
+# into each app as Contents/Resources/AppIcon.icns.
+# Commit those, then run scripts/package-suite.sh to bundle them into the .apps.
 #
 # Requires macOS (qlmanage, sips, iconutil — all built in) and Python Pillow
 # (pip3 install pillow).
@@ -26,20 +30,28 @@ render() {
   mv "$BUILD/$(basename "$svg").png" "$out"
 }
 
-echo "→ App icon"
-python3 "$HERE/glyph.py" svg-app "$BUILD/app.svg"
-render "$BUILD/app.svg" "$BUILD/app_raw.png" 1024
-python3 "$HERE/glyph.py" mask "$BUILD/app_raw.png" "$BUILD/master.png" 1024
+# build_app_icon  VARIANT(L|CL)  OUT.icns  TAG
+# Emit the squircle app icon for the given monogram variant into an .icns.
+build_app_icon() {
+  local variant="$1" out="$2" tag="$3"
+  echo "→ App icon ($tag, $variant monogram)"
+  python3 "$HERE/glyph.py" svg-app "$BUILD/$tag.svg" "$variant"
+  render "$BUILD/$tag.svg" "$BUILD/${tag}_raw.png" 1024
+  python3 "$HERE/glyph.py" mask "$BUILD/${tag}_raw.png" "$BUILD/${tag}_master.png" 1024
 
-ICONSET="$BUILD/AppIcon.iconset"; mkdir -p "$ICONSET"
-for pair in 16:icon_16x16 32:icon_16x16@2x 32:icon_32x32 64:icon_32x32@2x \
-            128:icon_128x128 256:icon_128x128@2x 256:icon_256x256 512:icon_256x256@2x \
-            512:icon_512x512 1024:icon_512x512@2x; do
-  px="${pair%%:*}"; name="${pair##*:}"
-  sips -z "$px" "$px" "$BUILD/master.png" --out "$ICONSET/$name.png" >/dev/null
-done
-iconutil -c icns "$ICONSET" -o "$SRC/AppIcon.icns"
-echo "  wrote $SRC/AppIcon.icns"
+  local iconset="$BUILD/$tag.iconset"; rm -rf "$iconset"; mkdir -p "$iconset"
+  for pair in 16:icon_16x16 32:icon_16x16@2x 32:icon_32x32 64:icon_32x32@2x \
+              128:icon_128x128 256:icon_128x128@2x 256:icon_256x256 512:icon_256x256@2x \
+              512:icon_512x512 1024:icon_512x512@2x; do
+    local px="${pair%%:*}" name="${pair##*:}"
+    sips -z "$px" "$px" "$BUILD/${tag}_master.png" --out "$iconset/$name.png" >/dev/null
+  done
+  iconutil -c icns "$iconset" -o "$out"
+  echo "  wrote $out"
+}
+
+build_app_icon L  "$SRC/AppIcon.icns"       app
+build_app_icon CL "$SRC/AppIconCustom.icns" appcustom
 
 echo "→ Menu-bar glyph"
 python3 "$HERE/glyph.py" svg-menu "$BUILD/menu.svg"
@@ -47,4 +59,4 @@ render "$BUILD/menu.svg" "$BUILD/menu_raw.png" 1024
 python3 "$HERE/glyph.py" menu "$BUILD/menu_raw.png" "$SRC/MenuBarIcon.png"
 echo "  wrote $SRC/MenuBarIcon.png"
 
-echo "Done. Run scripts/package-suite.sh (or scripts/install.sh) to pick up the new icon."
+echo "Done. Run scripts/package-suite.sh (or scripts/install.sh) to pick up the new icons."
