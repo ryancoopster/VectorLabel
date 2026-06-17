@@ -2,6 +2,7 @@ import AppKit
 import WebKit
 import SwiftUI
 import Combine
+import UserNotifications
 
 /// Opens the print window (VectorLabelPrint.html in a WKWebView) when a new
 /// export is detected, and also when the user taps "Reprint" in the menu bar.
@@ -614,6 +615,10 @@ extension PrintWindowController: WKScriptMessageHandler {
                 let outcome: RecentPrint.Status = job.didFail ? .failed
                     : (job.isCancelled ? .cancelledMidPrint : .complete)
                 RecentPrintsStore.shared.updateStatus(id: recentID, to: outcome)
+                if outcome == .failed {
+                    let printer = PrinterManager.shared.printers.first { $0.id == job.printerID }?.name ?? job.printerID
+                    PrintWindowController.notifyPrintFailed(jobTitle: job.title, printer: printer)
+                }
                 if let c = cancellable { self?.printStatusObservers.remove(c) }
             }
         }
@@ -622,6 +627,22 @@ extension PrintWindowController: WKScriptMessageHandler {
 
     private func evalJS(_ js: String) {
         webView?.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    /// Post a system notification when a print fails. The print window has already
+    /// closed by then, so this is the operator's active signal. Authorization is
+    /// requested lazily — only the first time a print actually fails — so an app
+    /// that never fails a print never prompts.
+    static func notifyPrintFailed(jobTitle: String, printer: String) {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            guard granted else { return }
+            let content = UNMutableNotificationContent()
+            content.title = "Print failed"
+            content.body = "\(jobTitle) — \(printer)"
+            content.sound = .default
+            UNUserNotificationCenter.current().add(
+                UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+        }
     }
 }
 

@@ -7,6 +7,10 @@ shown in the menu-bar footer. Fix commits reference the code-review finding IDs
 
 ## [Unreleased]
 ### Fixed
+- **[H8b]** A failed print now posts a system notification banner ("Print
+  failed -- <job>, <printer>") so the operator is alerted even after the print
+  window has closed. Notification permission is requested lazily, only on the
+  first failure.
 - **[H8]** USB print failures are no longer recorded as a successful "Complete"
   print -- added a `.failed` job/recent-print status (shown in red in the menu)
   set when a send throws mid-batch.
