@@ -234,12 +234,12 @@ final class PrinterManager: ObservableObject {
     /// The label-size whose printable area the calibration grid is drawn for:
     /// the loaded cassette's supply if recognised, else a sensible default.
     func calibrationSize(for printerID: String) -> BradyLabelSize {
-        func core(_ pn: String) -> String {
-            guard let dash = pn.firstIndex(of: "-") else { return pn.uppercased() }
-            return String(pn[pn.index(after: dash)...]).uppercased()
-        }
+        // Use the canonical BradyCatalog.core so the bulk-box↔cartridge equivalence
+        // (e.g. BM-109-427 == M6-33-427) is applied here exactly as it is in the
+        // renderer and supply matching; a local copy previously omitted it and made
+        // a 109-427 cassette fall back to the default 32-427 calibration grid.
         if let c = cassettes[printerID], !c.partNumber.isEmpty,
-           let match = BradyCatalog.sizes.first(where: { core($0.partNumber) == core(c.partNumber) }) {
+           let match = BradyCatalog.sizes.first(where: { BradyCatalog.core($0.partNumber) == BradyCatalog.core(c.partNumber) }) {
             return match
         }
         return BradyCatalog.size(forPartNumber: "BM-32-427") ?? BradyCatalog.sizes[0]

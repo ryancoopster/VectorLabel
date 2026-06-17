@@ -6,6 +6,11 @@ shown in the menu-bar footer. Fix commits reference the code-review finding IDs
 (H#, M#, L#) from the review report on the Desktop.
 
 ## [Unreleased]
+### Fixed
+- **[H11]** Calibration grid printed at the wrong size for BM-109-427 cassettes —
+  `calibrationSize` used a local part-number normalizer that omitted the
+  bulk-box↔cartridge equivalence; now uses the canonical `BradyCatalog.core`.
+
 ### Added
 - Build versioning: every build is stamped with semver + build number + commit SHA
   (`scripts/stamp-version.sh` → `BuildInfo`), shown in the menu-bar footer.
