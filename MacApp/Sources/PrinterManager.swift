@@ -76,6 +76,7 @@ final class PrinterManager: ObservableObject {
     @Published var activeJobs: [PrintJob] = []
 
     private var scanTimer: Timer?
+    private var scanInFlight = false   // prevents overlapping scans piling up if one runs long
 
     // MARK: – USB scan
 
@@ -92,10 +93,15 @@ final class PrinterManager: ObservableObject {
     func scanNow() { performScan() }
 
     private func performScan() {
+        // Skip if a scan is still running, so slow USB enumeration can't pile up
+        // overlapping detached tasks all contending for device access.
+        if scanInFlight { return }
+        scanInFlight = true
         // Perform USB enumeration on a background thread so we don't block the main queue.
         Task.detached {
             let found = BradyUSB.enumeratePrinters()
             await MainActor.run {
+                defer { self.scanInFlight = false }
                 // Merge: update status for existing entries, add new ones, mark missing as offline
                 var updated: [PrinterDevice] = []
                 for discovered in found {
@@ -162,13 +168,15 @@ final class PrinterManager: ObservableObject {
         activeJobs.append(job)
         setPrinterBusy(printerID, busy: true)
 
-        Task.detached {
-            // Per-printer lock: jobs to the SAME printer queue and run one at a
-            // time, but different printers print concurrently.
-            let lock = BradyUSB.deviceLock(for: printerID)
-
-            func finish() async {
-                await MainActor.run {
+        // Run device I/O on the printer's dedicated SERIAL queue (not the Swift
+        // cooperative pool). The serial queue gives the same per-printer mutual
+        // exclusion the old semaphore did, but blocking USB sends + pacing sleeps
+        // here can't starve the cooperative pool. @Published mutations hop to the
+        // main actor; everything else stays on the queue thread.
+        let queue = BradyUSB.deviceQueue(for: printerID)
+        queue.async {
+            func finishOnMain() {
+                Task { @MainActor in
                     job.isComplete = true
                     // Keep this printer busy if it still has queued/printing jobs.
                     let stillBusy = self.activeJobs.contains {
@@ -180,48 +188,39 @@ final class PrinterManager: ObservableObject {
             }
 
             // Cancelled while still queued — finish without touching the device.
-            if job.isCancelled { await finish(); return }
-            lock.wait()
-            if job.isCancelled { lock.signal(); await finish(); return }
-            await MainActor.run { job.isPrinting = true }
+            if job.isCancelled { finishOnMain(); return }
+            Task { @MainActor in job.isPrinting = true }
 
             do {
                 let handle = try BradyUSB.openPrinterByID(printerID)
                 defer { BradyUSB.close(handle) }
 
                 // The printer buffers everything sent to it almost instantly (no USB
-                // backpressure) and exposes no usable per-label status — confirmed by
-                // probing: status queries return only constant media info, the
-                // "labels remaining" counter is unreliable/lumpy, and there's no
-                // unsolicited completion message. So we PACE the sends to the real
-                // print rate (calibrated from label length): the bar advances honestly
-                // one label at a time as each finishes printing, and — because we send
-                // one at a time and check between them — Cancel actually stops the
-                // remaining labels (anything already sent stays in the printer).
+                // backpressure) and exposes no usable per-label status. So we PACE the
+                // sends to the real print rate (calibrated from label length): the bar
+                // advances one label at a time as each finishes, and — because we send
+                // one at a time and check between them — Cancel stops the remaining
+                // labels (anything already sent stays in the printer).
                 let count = jobs.count
                 let perLabelMs = max(150, estLabelMs)
                 let initialRem = BradyUSB.labelsRemaining(handle: handle)   // -1 if unavailable
                 for (i, vglJob) in jobs.enumerated() {
                     if job.isCancelled { break }
                     try BradyUSB.sendJob(vglJob, handle: handle)
-                    // Pace the bar to ~one label's print time, staying responsive to
-                    // cancellation, then count this label as printed.
                     var waited = 0
                     while waited < perLabelMs && !job.isCancelled { usleep(40_000); waited += 40 }
                     if job.isCancelled { break }
-                    await MainActor.run { job.completedLabels = i + 1 }
+                    Task { @MainActor in job.completedLabels = i + 1 }
                 }
-                // Keep the job "printing" — status visible and cancellable — until the
-                // printer confirms it physically finished: its labels-remaining counter
-                // drops by the job's label count (a real "done" over the USB
-                // back-channel). Bounded so a supply that doesn't report can't hang it.
+                // Keep the job "printing" (status visible + cancellable) until the
+                // printer's labels-remaining counter drops by the job's label count.
+                // Bounded so a supply that doesn't report can't hang it.
                 if !job.isCancelled && initialRem >= 0 {
                     let startNs = DispatchTime.now().uptimeNanoseconds
                     let capMs = count * perLabelMs * 2 + 8000
-                    var elapsedMs = 0
                     while !job.isCancelled {
                         let rem = BradyUSB.labelsRemaining(handle: handle)
-                        elapsedMs = Int((DispatchTime.now().uptimeNanoseconds &- startNs) / 1_000_000)
+                        let elapsedMs = Int((DispatchTime.now().uptimeNanoseconds &- startNs) / 1_000_000)
                         if rem >= 0 && (initialRem - rem) >= count { break }   // truly finished
                         if elapsedMs >= capMs { break }                        // safety cap
                         usleep(200_000)
@@ -231,8 +230,7 @@ final class PrinterManager: ObservableObject {
                 print("[PrinterManager] Print failed: \(error)")
                 job.markFailed()
             }
-            lock.signal()
-            await finish()
+            finishOnMain()
         }
 
         return job
@@ -317,9 +315,9 @@ final class PrinterManager: ObservableObject {
         if !force, let at = cassetteFetchedAt[printerID],
            Date().timeIntervalSince(at) < cassetteTTL { return }
 
-        Task.detached {
-            let lock = BradyUSB.deviceLock(for: printerID)
-            lock.wait()
+        // Same per-printer serial queue as printing — serializes against jobs and
+        // stays off the cooperative pool.
+        BradyUSB.deviceQueue(for: printerID).async {
             var info: BradyUSB.SmartCellInfo?
             do {
                 let handle = try BradyUSB.openPrinterByID(printerID)
@@ -328,18 +326,13 @@ final class PrinterManager: ObservableObject {
             } catch {
                 // LIBUSB_ERROR_ACCESS or not found — keep any cached value.
             }
-            lock.signal()
-
-            if let info {
-                await MainActor.run {
+            Task { @MainActor in
+                if let info {
                     self.cassettes[printerID] = info
                     self.cassetteFetchedAt[printerID] = Date()
                 }
-            }
-            // Report the result of a user-initiated detect (ok = read succeeded).
-            if force {
-                let ok = info != nil
-                await MainActor.run { self.onForcedDetectResult?(printerID, ok, false) }
+                // Report the result of a user-initiated detect (ok = read succeeded).
+                if force { self.onForcedDetectResult?(printerID, info != nil, false) }
             }
         }
     }

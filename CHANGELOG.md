@@ -7,6 +7,10 @@ shown in the menu-bar footer. Fix commits reference the code-review finding IDs
 
 ## [Unreleased]
 ### Fixed
+- **[H7/M5/L3]** Moved blocking USB work off Swift's cooperative thread pool onto
+  per-printer serial DispatchQueues (replacing the device semaphore), so long
+  prints + pacing sleeps can no longer starve/deadlock the pool under multi-printer
+  load. Added a scan-overlap guard. Clears the Swift-6 `wait` warnings.
 - **[H3]** Pinned the CSV read/write round-trip: factored the RFC-4180 writer into
   WireExportParser.csvText and added a golden test proving an inline edit survives
   save->reload, including values with commas, quotes, and embedded newlines.

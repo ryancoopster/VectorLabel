@@ -41,13 +41,18 @@ enum BradyUSB {
     /// printer. A semaphore (not NSLock) because the print task `await`s while
     /// holding it and may resume on a different thread.
     private static let locksLock = NSLock()
-    private static var deviceLocks: [String: DispatchSemaphore] = [:]
-    static func deviceLock(for id: String) -> DispatchSemaphore {
+    private static var deviceQueues: [String: DispatchQueue] = [:]
+    /// One serial queue per printer. Serializes all device access to that printer
+    /// (prints and cassette reads run one at a time) while different printers run
+    /// concurrently — replacing the old DispatchSemaphore. Crucially this is a
+    /// dedicated GCD queue, so the long blocking USB work + pacing sleeps no longer
+    /// park threads in Swift's cooperative pool.
+    static func deviceQueue(for id: String) -> DispatchQueue {
         locksLock.lock(); defer { locksLock.unlock() }
-        if let s = deviceLocks[id] { return s }
-        let s = DispatchSemaphore(value: 1)
-        deviceLocks[id] = s
-        return s
+        if let q = deviceQueues[id] { return q }
+        let q = DispatchQueue(label: "vectorlabel.printer.\(id)", qos: .utility)
+        deviceQueues[id] = q
+        return q
     }
 
     enum USBError: Error, LocalizedError {
