@@ -1254,6 +1254,9 @@ function buildPreviewPanel(){
   // fitPreviewLabel() (after render and while dragging the resize splitter), so
   // it grows/shrinks as the sidebar is resized.
   const lw=spec.pw*SC, lh=spec.ph*SC;
+  // Continuous supplies use the template's chosen printed length; die-cut use the
+  // catalog's fixed printable height (mirrors renderLabel's phIn).
+  const printablePh=(spec.ty==="continuous"&&t.labelLengthInches>0)?t.labelLengthInches:spec.ph;
   return`<div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:20px">
     <div style="display:flex;align-items:center;gap:6px;width:100%;justify-content:center">
       <button onclick="P.previewIdx=${prevIdx};R()" title="Previous label" class="btn" style="padding:3px 10px;font-size:15px;line-height:1" ${vpos<=0?"disabled":""}>‹</button>
@@ -1281,7 +1284,7 @@ function buildPreviewPanel(){
       </div>
       <div style="display:flex;justify-content:space-between;gap:8px;margin-top:2px;font-size:11px">
         <span style="color:var(--text2)">Printable area</span>
-        <span style="color:var(--text);font-family:monospace">${fmtIn(spec.pw)} × ${fmtIn(spec.ph)}</span>
+        <span style="color:var(--text);font-family:monospace">${fmtIn(spec.pw)} × ${fmtIn(printablePh)}</span>
       </div>
       ${buyMoreControl(t.specN)}
     </div>

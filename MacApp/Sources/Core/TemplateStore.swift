@@ -121,19 +121,32 @@ public final class TemplateStore: ObservableObject {
         var result: [VLTemplate] = []
 
         let templateFiles = contents.filter { Self.isTemplateFile($0) }
-        // Stems that already have a ".vltmp" file. A legacy file with the same stem
-        // is its migration source — skip it so a migrated template appears once.
-        let vltmpStems = Set(templateFiles.filter { Self.isVLTMP($0) }.map { Self.stem($0) })
+        // The template id (NOT the filename stem) is the dedup key: a legacy
+        // ".vlt.json"/".json" file is a migration SOURCE only when a ".vltmp"
+        // already holds the SAME id. Keying by stem (the pre-fix behaviour) lost a
+        // template whenever two legacy files shared a stem but had different ids —
+        // the second collapsed into the first's migrated ".vltmp". Map every
+        // already-present ".vltmp" id so we can recognise an already-migrated
+        // legacy file, and track ".vltmp" stems so migration picks a free filename.
+        var vltmpIDs = Set<String>()
+        var usedVLTMPStems = Set<String>()
+        for url in templateFiles where Self.isVLTMP(url) {
+            usedVLTMPStems.insert(Self.stem(url))
+            if let data = try? Data(contentsOf: url),
+               let t = try? decoder.decode(VLTemplate.self, from: data) {
+                vltmpIDs.insert(t.id)
+            }
+        }
 
         for url in templateFiles
             .sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
             let fnameStem = Self.stem(url)
-            // Skip legacy ".vlt.json"/".json" when a ".vltmp" of the same name
-            // exists (it's the up-to-date copy; the legacy file stays on disk).
-            if !Self.isVLTMP(url), vltmpStems.contains(fnameStem) { continue }
             guard let data = try? Data(contentsOf: url),
                   var tpl = try? decoder.decode(VLTemplate.self, from: data)
             else { continue }
+            // Skip a legacy file whose id already lives in a ".vltmp" — it's that
+            // template's migration source (the legacy file stays on disk untouched).
+            if !Self.isVLTMP(url), vltmpIDs.contains(tpl.id) { continue }
             // The filename is the display name (so renaming a file on disk
             // updates the name everywhere). Strip the known template suffixes.
             let fname = fnameStem
@@ -150,13 +163,22 @@ public final class TemplateStore: ObservableObject {
             }
             seenIDs.insert(tpl.id)
             // Migrate legacy ".vlt.json"/".json" to a ".vltmp" copy so Finder
-            // integration applies to old saves too. Only write the copy if no
-            // ".vltmp" with this stem already exists (don't clobber a newer save).
+            // integration applies to old saves too. Disambiguate the filename on a
+            // stem collision with a DIFFERENT id (same pattern as save()) so two
+            // legacy files sharing a stem don't clobber each other into one ".vltmp".
             if !Self.isVLTMP(url) {
-                let target = folderURL.appendingPathComponent("\(fname).\(Self.templateExtension)")
+                let base = fname.isEmpty ? "template" : fname
+                var targetStem = base
+                var n = 2
+                while usedVLTMPStems.contains(targetStem) {
+                    targetStem = "\(base)-\(n)"; n += 1
+                }
+                let target = folderURL.appendingPathComponent("\(targetStem).\(Self.templateExtension)")
                 if !fm.fileExists(atPath: target.path),
                    let migrated = try? encoder.encode(tpl) {
                     try? migrated.write(to: target, options: .atomic)
+                    usedVLTMPStems.insert(targetStem)
+                    vltmpIDs.insert(tpl.id)
                 }
             }
             result.append(tpl)

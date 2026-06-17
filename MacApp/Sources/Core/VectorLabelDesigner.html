@@ -1426,6 +1426,23 @@ function renderModal(){
       </div>`;
   }
 
+  // Custom Designer: confirm a large print job (> 10 labels) so a bound dataset
+  // (e.g. 200 rows) can't be sent by surprise. "Print" forces it through.
+  if(S.modal==="confirmLargeJob"){
+    const n=dJobLabelCount();
+    overlay.innerHTML=`
+      <div class="modal" style="width:430px">
+        <div class="modal-title" style="display:flex;align-items:center;gap:8px"><span style="color:var(--warn)">⚠</span> Print ${n} labels?</div>
+        <div style="color:var(--text2);font-size:13px;line-height:1.6;margin:6px 0 18px">
+          This job will print <b style="color:var(--text)">${n}</b> label${n!==1?"s":""}. Continue?
+        </div>
+        <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px">
+          <button class="btn" onclick="closeModal()">Cancel</button>
+          <button class="btn" onclick="S.modal=null;S._largeJobForce=true;doCustomPrint()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Print ${n} labels</button>
+        </div>
+      </div>`;
+  }
+
   document.body.appendChild(overlay);
   // Auto-focus name input if present
   const ni=document.getElementById("tpl-name-inp")||document.getElementById("new-tpl-name");
@@ -2100,6 +2117,8 @@ function buildCustomPrintHeader(){
   const printers=dPrinters();
   const canPrint=dCanPrint();
   const copies=Math.max(1,S.copies||1);
+  // True job size: Swift prints one label per BOUND ROW × copies (else just copies).
+  const jobLabelCount=dJobLabelCount();
   const dot=pr.status==="ready"?"var(--green)":pr.status==="busy"?"var(--warn)":"var(--red)";
   const statusLbl=pr.status==="ready"?"Ready":pr.status==="busy"?"Busy":"Offline";
   return`<div style="background:var(--surface);border-bottom:1px solid var(--bd2);padding:0 14px;display:flex;align-items:center;gap:12px;height:42px;flex-shrink:0">
@@ -2150,17 +2169,20 @@ function buildCustomPrintHeader(){
 
     <!-- Print button — ⌘Return -->
     <button class="btn primary" onclick="doCustomPrint()" style="padding:6px 20px;font-size:13px;display:flex;flex-direction:column;align-items:center;line-height:1.1;gap:1px"${canPrint?"":" disabled"}>
-      <span>Print ${copies} label${copies!==1?"s":""}</span>
+      <span>Print ${jobLabelCount} label${jobLabelCount!==1?"s":""}</span>
       <span style="font-size:9px;opacity:0.7;font-weight:400">⌘ Return</span>
     </button>
   </div>`;
 }
 
-// The record bound to the canvas right now — the previewed editor record, so
-// field/formula text on the printed label matches what the user sees. Sent to
-// Swift as a flat {col:value} object; Swift renders against it (or an empty
-// record if absent → static text only).
+// The record to render the PRINTED label against. When a data source is bound,
+// Swift prints one label per bound row, so we only need to forward a record for
+// the no-data-source case — and there the printed label should be BLANK for
+// field/formula text (only static text shows), NOT the leftover sample/CSV
+// preview record. So return null when unbound; Swift renders against an empty
+// record. (The on-canvas preview still uses the previewed record, unchanged.)
 function customPrintRecord(){
+  if(!hasBoundData()) return null;
   const recs=window._editorRecords||RX;
   const rec=recs[S.recIdx];
   return rec?Object.assign({},rec):null;
@@ -2190,6 +2212,10 @@ function doCustomPrint(){
   if(!isCustomMode()||!dCanPrint())return;
   if(dCassetteMismatch()&&!S._printForce){ S.modal="confirmMismatch"; renderModal(); return; }
   S._printForce=false;
+  // Guard against firing off a big batch by surprise (e.g. a 200-row dataset):
+  // confirm when the true job size exceeds 10 labels.
+  if(dJobLabelCount()>10&&!S._largeJobForce){ S.modal="confirmLargeJob"; renderModal(); return; }
+  S._largeJobForce=false;
   const data=templateData();
   const payload={
     name:S.tplName||"Custom Label",
@@ -2249,6 +2275,7 @@ function edPrintCancel(){ _vlPost("editReturn",{save:false}); }
 function edPrintSave(){
   const data=templateData();
   const payload={name:S.tplName,specN:data.specN,objs:data.objs};
+  if(data.labelLengthInches) payload.labelLengthInches=data.labelLengthInches;
   if(S._loadedId)payload.id=S._loadedId;
   // Single message: Swift saves THEN refreshes the print window (ordered).
   _vlPost("editReturn",{save:true,template:payload});
@@ -2305,6 +2332,7 @@ async function saveTemplate(){
   // (WKWebView has no File System Access API, so the browser path below can't run.)
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
     const payload={name:S.tplName,specN:data.specN,objs:data.objs};
+    if(data.labelLengthInches) payload.labelLengthInches=data.labelLengthInches;
     if(S._loadedId)payload.id=S._loadedId;
     // Save As & Return (print edit): one ordered message — save then return.
     if(window._printEdit&&window._printReturnAfterSave){
@@ -2597,6 +2625,14 @@ function initBoundData(records, columns, filename, headerRow, isXLSX){
   showToast("Bound "+(records?records.length:0)+" row"+((records&&records.length===1)?"":"s")+" from "+(filename||"file"));
 }
 function hasBoundData(){ return !!(isCustomMode()&&window._boundData&&window._boundData.records&&window._boundData.records.length); }
+// True size of the print job, matching Swift: one label per bound ROW × copies
+// when a data source is bound, else just `copies`.
+function dBoundRowCount(){ return hasBoundData()?window._boundData.records.length:0; }
+function dJobLabelCount(){
+  const copies=Math.max(1,S.copies||1);
+  const rows=dBoundRowCount();
+  return rows>0?rows*copies:copies;
+}
 
 // Called by Swift when a ".vlcus" is double-clicked in Finder (Custom Designer).
 // Loads the saved canvas AND the embedded data snapshot in one shot, so the

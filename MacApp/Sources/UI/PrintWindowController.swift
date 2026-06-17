@@ -572,12 +572,23 @@ extension PrintWindowController: WKScriptMessageHandler {
         // thread so the UI doesn't freeze, and submit back on the main actor.
         let recent = makeRecentPrint(from: payload, labelCount: selectedRecords.count, status: .printing)
         DispatchQueue.global(qos: .userInitiated).async {
-            var jobs: [[UInt8]] = []
+            // Render first, dropping any record that produces no raster. The cut
+            // index MUST be keyed over the labels actually EMITTED — if we keyed it
+            // to `selectedRecords.count - 1` and the final record rendered nil, the
+            // afterJobLast end-of-job cut would land on a label that never goes out
+            // and be lost. (DesignerWindowController computes its cut over `rasters`
+            // for the same reason.)
+            var rasters: [(pixels: [UInt8], width: Int, height: Int)] = []
             var labelPx = 0   // longest rendered dimension (px) → print-length estimate
-            let total = selectedRecords.count
-            for (i, record) in selectedRecords.enumerated() {
+            for record in selectedRecords {
                 guard let rendered = LabelRenderer.render(template: template, record: record, offset: offset) else { continue }
                 labelPx = max(labelPx, max(rendered.width, rendered.height))
+                rasters.append(rendered)
+            }
+            let total = rasters.count
+            var jobs: [[UInt8]] = []
+            jobs.reserveCapacity(total)
+            for (i, rendered) in rasters.enumerated() {
                 let vglCut = BradyVGL.vglCutMode(forIPCRawValue: cutMode.rawValue, index: i, total: total)
                 jobs.append(BradyVGL.buildPrintJob(pixels: rendered.pixels, width: rendered.width,
                                                    height: rendered.height, cutMode: vglCut))

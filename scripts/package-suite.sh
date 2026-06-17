@@ -108,17 +108,22 @@ package_one() {
 
   # Custom file types (Phase 4): the two designers OWN one document type each so
   # Finder shows the files and a double-click opens the right app.
-  #   Template Designer → ".vltmp"  (com.sai.vectorlabel.vltmp)
-  #   Custom Designer   → ".vlcus"  (com.sai.vectorlabel.vlcus)
+  #   Template Designer → ".vltmp"  (com.sai.vectorlabel${SUFFIX}.vltmp)
+  #   Custom Designer   → ".vlcus"  (com.sai.vectorlabel${SUFFIX}.vlcus)
   # Both are JSON (conform to public.json + public.data). The doc icon is the
   # owning app's icon (UTTypeIconFile/CFBundleTypeIconFile = "AppIcon"), so the
   # Custom Designer's .vlcus files inherit its CL mark. Registered as an exported
   # UTI plus a CFBundleDocumentTypes entry (Editor role, Owner rank).
+  #
+  # The $SUFFIX (".beta" for beta, "" for prod) is threaded into the UTI so beta
+  # and production export DISTINCT UTIs (com.sai.vectorlabel.beta.vltmp vs
+  # com.sai.vectorlabel.vltmp). Without it both variants exported the same UTI and
+  # Launch Services would collide them, opening the wrong app on double-click.
   case "$EXE" in
     VectorLabelTemplateDesigner) register_doc_type "$APP/Contents/Info.plist" \
-        "com.sai.vectorlabel.vltmp" "vltmp" "VectorLabel Template" ;;
+        "com.sai.vectorlabel${SUFFIX}.vltmp" "vltmp" "VectorLabel Template" ;;
     VectorLabelCustomDesigner)   register_doc_type "$APP/Contents/Info.plist" \
-        "com.sai.vectorlabel.vlcus" "vlcus" "VectorLabel Custom Label" ;;
+        "com.sai.vectorlabel${SUFFIX}.vlcus" "vlcus" "VectorLabel Custom Label" ;;
   esac
 
   local DYLIB_PATH=""

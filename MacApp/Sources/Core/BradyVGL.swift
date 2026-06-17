@@ -25,22 +25,26 @@ public enum BradyVGL {
     // M611, so it lives here behind ONE function and can be corrected in exactly
     // one place once the byte sequence is confirmed on hardware.
     //
-    // Conservative design: this returns the historical `ESC M <mode> 00` bytes,
-    // which is what the renderer already sent for single labels — so behaviour is
-    // unchanged from before this phase. If a future hardware test shows these
-    // bytes can jam or damage the printer, change `cutCommandEnabled` to `false`
-    // below (or fix the bytes) — the plumbing keeps working either way.
+    // The cut feature is FULLY PLUMBED end to end: the UI cut setting flows into
+    // `PrintJobFile.cutMode`, which `vglCutMode(forIPCRawValue:index:total:)` maps to
+    // a per-label `CutMode`, which `buildPrintJob` stamps via `cutCommand(for:)`. The
+    // ONLY unverified piece is the actual byte sequence the M611 firmware expects, so
+    // the emission is gated OFF by default (`cutCommandEnabled == false`) — no cut
+    // bytes reach real hardware, and the historical Auto-Print/Print die-cut wire
+    // stream is left byte-for-byte unchanged. Once the `ESC M <mode> 00` sequence is
+    // confirmed on a cutter-equipped M611 (and `cutCommand(for:)` corrected if the
+    // bytes differ), flip `cutCommandEnabled` to `true` to turn the cut on.
     //
     // The three modes we map onto the wire:
     //   .afterJob (0)  → cut once, after the (last) label of the job
     //   .eachLabel (1) → cut after every label (needed for continuous tape)
     //   .never (2)     → never actuate the cutter (die-cut stock is pre-cut)
 
-    /// Master switch for emitting the cut command. Set to `false` to turn the cut
-    /// command into a logged no-op (plumbing stays intact, no bytes reach the
-    /// cutter) until the sequence is hardware-verified. Left `true` to preserve the
-    /// pre-Phase-6 behaviour (renderer always sent `ESC M <mode> 00`).
-    public static var cutCommandEnabled = true
+    /// Master switch for emitting the cut command. Default `false`: the cut command
+    /// is a logged no-op (plumbing stays intact, NO bytes reach the cutter) because
+    /// the `ESC M <mode> 00` sequence is UNVERIFIED on real M611 hardware. Flip to
+    /// `true` only after the byte sequence is confirmed (see the note above).
+    public static var cutCommandEnabled = false
 
     /// The single source of truth for the cut-mode byte sequence.
     /// ⚠️ UNVERIFIED — confirm on M611 hardware before relying on this. ⚠️

@@ -750,13 +750,15 @@ public final class DesignerWindowController: NSObject {
         // into PrintJobFile.cutMode AND baked into each label's VGL.
         let cutMode = CutMode(rawValue: (payload["cutMode"] as? String) ?? "") ?? .never
 
-        // One record per label: every bound row when data is bound, else the single
-        // previewed record (or an empty record so static text still renders).
+        // One record per label: every bound row when a data source is bound; with NO
+        // data source, a single label against an EMPTY record so static text prints
+        // and field/formula text is blank (NOT the leftover sample/CSV preview record
+        // — that's only for the on-canvas preview, not the printed output).
         let records: [WireRecord]
         if let ds = dataSource, !ds.records.isEmpty {
             records = ds.records
         } else {
-            records = [customPrintRecord(from: payload["record"])]
+            records = [WireRecord(side: "", wireID: "", fields: [:])]
         }
 
         // Per-printer calibration offset (keyed by the printer's serial, as the
@@ -884,23 +886,6 @@ public final class DesignerWindowController: NSObject {
                 }
             }
         }
-    }
-
-    /// Build the WireRecord to render the custom label against. The page sends the
-    /// currently-previewed record as a flat {col:value} object; we map it onto a
-    /// WireRecord. Missing/nil ⇒ an empty record (static text only).
-    private func customPrintRecord(from any: Any?) -> WireRecord {
-        guard let dict = any as? [String: Any] else {
-            return WireRecord(side: "", wireID: "", fields: [:])
-        }
-        var fields: [String: String] = [:]
-        for (k, v) in dict {
-            if let s = v as? String { fields[k] = s }
-            else if let n = v as? NSNumber { fields[k] = n.stringValue }
-        }
-        return WireRecord(side: fields["_Side"] ?? "",
-                          wireID: fields["Number"] ?? "",
-                          fields: fields)
     }
 
     // MARK: – Dev HTML loader

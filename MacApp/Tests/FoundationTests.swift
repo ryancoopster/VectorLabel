@@ -298,6 +298,23 @@ final class FoundationTests: XCTestCase {
         XCTAssertEqual(recs?[0].fields["Name (2)"], "c")   // duplicate disambiguated
     }
 
+    /// A real `.xlsx` with NO xl/sharedStrings.xml (inline strings + a numeric cell)
+    /// must still parse. CoreXLSX returns nil (not throws) for parseSharedStrings()
+    /// when the table is absent, so the reader must tolerate a nil SharedStrings and
+    /// fall back to inlineString / raw value. Fixture: a 2×2 sheet —
+    /// header row "Number","Qty" (inline strings), data row "N1", 42 (number).
+    func testExcelReaderToleratesMissingSharedStrings() throws {
+        let url = try XCTUnwrap(
+            Bundle.module.url(forResource: "inline-no-sharedstrings", withExtension: "xlsx"),
+            "missing test fixture inline-no-sharedstrings.xlsx")
+        let recs = try XCTUnwrap(
+            ExcelRecordReader.records(fileURL: url, headerRow: true),
+            "reader rejected a valid .xlsx that has no shared-strings table")
+        XCTAssertEqual(recs.count, 1)
+        XCTAssertEqual(recs[0].fields["Number"], "N1")   // inline string resolved
+        XCTAssertEqual(recs[0].fields["Qty"], "42")      // numeric cell → raw value
+    }
+
     // MARK: – Formula engine (H4–H6, M1, M2, L1) — Swift must match the JS preview
 
     func testFormulaRealTemplate() {

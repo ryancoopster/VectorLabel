@@ -27,8 +27,12 @@ public enum ExcelRecordReader {
     /// Returns nil if the file can't be opened or has no usable sheet.
     public static func rows(fileURL: URL) -> [[String]]? {
         guard let file = XLSXFile(filepath: fileURL.path) else { return nil }
-        guard let shared = try? file.parseSharedStrings(),
-              let paths = try? file.parseWorksheetPaths(),
+        // CoreXLSX returns nil (it does NOT throw) when xl/sharedStrings.xml is
+        // absent — legal for numeric-only or inline-string sheets. `try?` flattens
+        // that nil, so a `guard let` would reject a perfectly valid workbook. Keep
+        // SharedStrings optional and let cellString fall back to inline/raw values.
+        let shared = (try? file.parseSharedStrings()) ?? nil
+        guard let paths = try? file.parseWorksheetPaths(),
               let firstPath = paths.first,
               let worksheet = try? file.parseWorksheet(at: firstPath)
         else { return nil }
@@ -144,10 +148,12 @@ public enum ExcelRecordReader {
         return out
     }
 
-    /// The display string for a cell: resolves shared strings, falls back to inline
-    /// strings, then to the raw value (numbers/dates render as their stored text).
-    private static func cellString(_ cell: Cell, sharedStrings: SharedStrings) -> String {
-        if let s = cell.stringValue(sharedStrings) { return s }
+    /// The display string for a cell: resolves shared strings (when the workbook
+    /// has a shared-strings table), falls back to inline strings, then to the raw
+    /// value (numbers/dates render as their stored text). `sharedStrings` is nil for
+    /// numeric-only / inline-string workbooks that omit xl/sharedStrings.xml.
+    private static func cellString(_ cell: Cell, sharedStrings: SharedStrings?) -> String {
+        if let ss = sharedStrings, let s = cell.stringValue(ss) { return s }
         if let inline = cell.inlineString?.text { return inline }
         return cell.value ?? ""
     }

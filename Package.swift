@@ -33,6 +33,10 @@ let package = Package(
             name: "VectorLabelCore",
             dependencies: ["CoreXLSX"],
             path: "MacApp/Sources/Core",
+            // AppIconCustom.icns is consumed only by scripts/package-suite.sh from the
+            // repo path (never via Bundle at runtime), so exclude it from the target to
+            // silence SPM's "unhandled file" warning.
+            exclude: ["AppIconCustom.icns"],
             resources: [
                 .copy("BradyCatalog.json"),
                 .copy("VectorLabelPrint.html"),
@@ -84,7 +88,12 @@ let package = Package(
         .testTarget(
             name: "VectorLabelTests",
             dependencies: ["VectorLabelCore"],
-            path: "MacApp/Tests"
+            path: "MacApp/Tests",
+            resources: [
+                // Tiny inline-string .xlsx (no xl/sharedStrings.xml) used to verify
+                // ExcelRecordReader tolerates a nil SharedStrings table.
+                .copy("Fixtures/inline-no-sharedstrings.xlsx"),
+            ]
         ),
     ]
 )
