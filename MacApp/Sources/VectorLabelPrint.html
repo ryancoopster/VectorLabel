@@ -1307,16 +1307,21 @@ function sameLabelSize(c,specN){
   return (close(cw,tw)&&close(ch,th))||(close(cw,th)&&close(ch,tw));
 }
 
+// Matching is based purely on label SIZE — the loaded cassette's real dimensions
+// vs the template's label size — not the part number. (When the cassette doesn't
+// report its size, treat it as unknown: neither matched nor mismatched.)
+function cassetteSizeKnown(c){ return !!(c && typeof c.labelWidthMils==='number' && typeof c.labelHeightMils==='number'); }
+
 function cassetteMatched(){
   const c=loadedCassette(), t=tpl();
-  if(!c||!t||!c.partNumber)return false;
-  return supplyCore(c.partNumber)===supplyCore(t.specN) || sameLabelSize(c,t.specN);
+  if(!c||!t||!cassetteSizeKnown(c))return false;
+  return sameLabelSize(c,t.specN);
 }
 
 function cassetteMismatch(){
   const c=loadedCassette(), t=tpl();
-  if(!c||!t||!c.partNumber)return false;
-  return !cassetteMatched();
+  if(!c||!t||!cassetteSizeKnown(c))return false;
+  return !sameLabelSize(c,t.specN);
 }
 
 // Estimated labels remaining on the loaded roll = labelsPerRoll × supply%/100.
@@ -1452,6 +1457,7 @@ window.addEventListener("keydown",function(e){
   }
   // Escape closes the expanded preview.
   if(e.key==="Escape"&&P.modal==="preview"){ e.preventDefault(); closeExpandedPreview(); return; }
+  if(e.key==="Escape"&&P.modal==="confirmMismatch"){ e.preventDefault(); P.modal=null; R(); return; }
   // ⌘Return (or Ctrl+Return) prints, mirroring the Print button.
   if((e.metaKey||e.ctrlKey)&&(e.key==="Enter"||e.key==="Return")){
     if(modalOpen||!canPrintNow())return;
@@ -1498,9 +1504,33 @@ function buildPrintPayloadBody(indices){
   };
 }
 
-function doPrint(){
+// Confirmation shown when Print is pressed with a label-size mismatch. Cancel
+// just dismisses (back to the print window); "Print anyway" forces the print.
+function buildMismatchConfirmModal(){
+  const c=loadedCassette(), t=tpl();
+  const loaded=cassetteSizeKnown(c)?`${fmtIn(c.labelWidthMils/1000)} × ${fmtIn(c.labelHeightMils/1000)}`:"unknown";
+  const spec=BL.find(l=>l.n===(t&&t.specN));
+  const tmpl=spec?`${fmtIn(spec.tw)} × ${fmtIn(spec.th)}`:"unknown";
+  return `<div class="modal-overlay" onclick="if(event.target===this){P.modal=null;R()}">
+    <div class="modal" style="width:430px">
+      <div class="modal-title" style="display:flex;align-items:center;gap:8px"><span style="color:var(--warn)">⚠</span> Label size doesn't match</div>
+      <div style="color:var(--text2);font-size:13px;line-height:1.6;margin:6px 0 18px">
+        The loaded label (<b style="color:var(--text)">${loaded}</b>) doesn't match this template's size (<b style="color:var(--text)">${tmpl}</b>). The print may be misaligned or cropped.<br><br>Print anyway?
+      </div>
+      <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn" onclick="P.modal=null;R()">Cancel</button>
+        <button class="btn primary" onclick="P.modal=null;doPrint(true)">Print anyway</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function doPrint(force){
   const n=printCount();
   if(n===0)return;
+
+  // Confirm before printing when the loaded label size doesn't match the template.
+  if(!force && cassetteMismatch()){ P.modal="confirmMismatch"; R(); return; }
 
   const indices=printIndices();
   const payload={ action:"print", payload:buildPrintPayloadBody(indices) };
@@ -1886,6 +1916,7 @@ function R(){
 
     ${P.modal==="printing"||P.modal==="done"?buildPrintingModal():""}
     ${P.modal==="preview"?buildExpandedPreviewModal():""}
+    ${P.modal==="confirmMismatch"?buildMismatchConfirmModal():""}
   `;
   applyColVars();
   // Restore scroll position and wire wheel acceleration (bound once on #app,
