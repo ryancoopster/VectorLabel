@@ -10,24 +10,15 @@ import AppKit
 // MARK: – Brady label geometry
 
 extension BradyLabelSize {
-    /// Printable area in inches. For BM-33-427 the printable zone is 1.5×1.5,
-    /// even though the total label is 4×1.5.
+    /// Printable area in inches, from the catalog (BradyCatalog.json). For
+    /// BM-33-427 the printable zone is 1.5×1.5 even though the total label is
+    /// 1.5×4.0. Unknown part numbers fall back to the physical size.
     var printableWidthInches: Double {
-        switch partNumber {
-        case "BM-31-427": return 1.0
-        case "BM-32-427": return 1.5
-        case "BM-33-427": return 1.5
-        default: return widthInches
-        }
+        BradyCatalog.printableWidthInches(forPartNumber: partNumber) ?? widthInches
     }
 
     var printableHeightInches: Double {
-        switch partNumber {
-        case "BM-31-427": return 0.5
-        case "BM-32-427": return 0.5
-        case "BM-33-427": return 1.5
-        default: return heightInches
-        }
+        BradyCatalog.printableHeightInches(forPartNumber: partNumber) ?? heightInches
     }
 
     var printablePixelWidth:  Int { Int((printableWidthInches  * Double(dpi)).rounded()) }
@@ -69,13 +60,15 @@ enum LabelRenderer {
         ctx.translateBy(x: 0, y: CGFloat(ph))
         ctx.scaleBy(x: 1, y: -1)
 
-        // The 33-427 supply (M6-33-427 / BM-109-427) feeds rotated 90° relative
-        // to the designer layout, so the whole label is rotated to match. The
-        // printable area is square, so this stays in bounds.
-        if BradyCatalog.core(size.partNumber) == "33-427" {
+        // Some supplies (e.g. the 33-427 / BM-109-427) feed rotated relative to
+        // the designer layout, so the whole label is rotated to match. The angle
+        // comes from the catalog (feedRotationDeg); its printable area is square,
+        // so a 90° rotation stays in bounds.
+        let feedRotation = BradyCatalog.feedRotationDeg(forPartNumber: size.partNumber)
+        if abs(feedRotation) > 0.0001 {
             let cx = CGFloat(pw) / 2, cy = CGFloat(ph) / 2
             ctx.translateBy(x: cx, y: cy)
-            ctx.rotate(by: .pi / 2)   // 90° clockwise in this y-down space
+            ctx.rotate(by: CGFloat(feedRotation) * .pi / 180)   // clockwise in this y-down space
             ctx.translateBy(x: -cx, y: -cy)
         }
 

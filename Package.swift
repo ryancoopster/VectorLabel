@@ -27,6 +27,7 @@ let package = Package(
                 .copy("VectorLabelDesigner.html"),
                 .copy("AppIcon.icns"),
                 .copy("MenuBarIcon.png"),
+                .copy("BradyCatalog.json"),
             ],
             linkerSettings: [
                 .linkedFramework("AppKit"),

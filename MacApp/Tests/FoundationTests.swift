@@ -24,8 +24,92 @@ final class FoundationTests: XCTestCase {
 
     func testLabelsPerRollKnownSizes() {
         XCTAssertEqual(BradyCatalog.labelsPerRoll(forPartNumber: "M6-31-427"), 250)
+        XCTAssertEqual(BradyCatalog.labelsPerRoll(forPartNumber: "M6-32-427"), 250)
         XCTAssertEqual(BradyCatalog.labelsPerRoll(forPartNumber: "BM-109-427"), 100)  // via 33-427
         XCTAssertNil(BradyCatalog.labelsPerRoll(forPartNumber: "ZZ-999-000"))
+    }
+
+    // MARK: – Single-source catalog (M6)
+
+    /// The catalog must come from the bundled BradyCatalog.json, not the built-in
+    /// fallback — proves the resource path resolves in both `swift build` and the
+    /// packaged .app.
+    func testCatalogLoadsFromResource() {
+        _ = BradyCatalog.sizes                       // force the lazy load
+        XCTAssertTrue(BradyCatalog.loadedFromResource,
+                      "BradyCatalog fell back to the built-in table — the bundled JSON did not load")
+    }
+
+    /// Pin the exact physical + printable sizes and the feed rotation. These drive
+    /// label rendering; any change here changes what prints. BM-33-427 is the
+    /// tricky one: physical 1.5×4.0, printable 1.5×1.5, rotated 90°.
+    func testBradyGeometryPinned() {
+        let expected: [String: (w: Double, h: Double, pw: Double, ph: Double, rot: Double)] = [
+            "BM-31-427": (1.0, 1.5, 1.0, 0.5, 0),
+            "BM-32-427": (1.5, 1.5, 1.5, 0.5, 0),
+            "BM-33-427": (1.5, 4.0, 1.5, 1.5, 90),
+        ]
+        XCTAssertEqual(BradyCatalog.sizes.count, 3)
+        for (pn, e) in expected {
+            guard let s = BradyCatalog.size(forPartNumber: pn) else { return XCTFail("missing \(pn)") }
+            XCTAssertEqual(s.widthInches, e.w, "physical width \(pn)")
+            XCTAssertEqual(s.heightInches, e.h, "physical height \(pn)")
+            XCTAssertEqual(s.printableWidthInches, e.pw, "printable width \(pn)")
+            XCTAssertEqual(s.printableHeightInches, e.ph, "printable height \(pn)")
+            XCTAssertEqual(BradyCatalog.feedRotationDeg(forPartNumber: pn), e.rot, "feed rotation \(pn)")
+        }
+        // Only the 33-427 family rotates, and it does so regardless of prefix
+        // (matches the old core-based renderer gate).
+        XCTAssertEqual(BradyCatalog.feedRotationDeg(forPartNumber: "BM-31-427"), 0)
+        XCTAssertEqual(BradyCatalog.feedRotationDeg(forPartNumber: "M6-33-427"), 90)
+        XCTAssertEqual(BradyCatalog.feedRotationDeg(forPartNumber: "BM-109-427"), 90)
+    }
+
+    /// The JS `BL` tables embedded in the two HTML UIs are mirrors of
+    /// BradyCatalog.json's `js` projection. This fails if either HTML drifts from
+    /// the catalog, or if the two HTML copies differ from each other — keeping the
+    /// catalog single-sourced without runtime injection.
+    func testJSCatalogMirrorsCatalogJSON() throws {
+        struct JSProj: Codable { let tw: Double; let th: Double; let pw: Double; let ph: Double; let lb: String }
+        struct SpecT: Codable { let partNumber: String; let js: JSProj }
+        struct FileT: Codable { let sizes: [SpecT] }
+
+        let sourcesDir = URL(fileURLWithPath: #filePath)   // MacApp/Tests/FoundationTests.swift
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Sources")
+        let json = try Data(contentsOf: sourcesDir.appendingPathComponent("BradyCatalog.json"))
+        let catalog = try JSONDecoder().decode(FileT.self, from: json)
+
+        // JS number formatting: integers without ".0", values <1 without a leading 0.
+        func jsNum(_ v: Double) -> String {
+            if v == v.rounded() { return String(Int(v)) }
+            var s = String(v)
+            if s.hasPrefix("0.") { s = String(s.dropFirst()) }
+            return s
+        }
+        func entryLiteral(_ s: SpecT) -> String {
+            "{n:\"\(s.partNumber)\",tw:\(jsNum(s.js.tw)),th:\(jsNum(s.js.th)),pw:\(jsNum(s.js.pw)),ph:\(jsNum(s.js.ph)),lb:'\(s.js.lb)'}"
+        }
+
+        let printHTML = try String(contentsOf: sourcesDir.appendingPathComponent("VectorLabelPrint.html"), encoding: .utf8)
+        let designHTML = try String(contentsOf: sourcesDir.appendingPathComponent("VectorLabelDesigner.html"), encoding: .utf8)
+
+        for s in catalog.sizes {
+            let lit = entryLiteral(s)
+            XCTAssertTrue(printHTML.contains(lit),
+                          "VectorLabelPrint.html BL is out of sync with BradyCatalog.json. Expected entry:\n\(lit)")
+            XCTAssertTrue(designHTML.contains(lit),
+                          "VectorLabelDesigner.html BL is out of sync with BradyCatalog.json. Expected entry:\n\(lit)")
+        }
+
+        // The two HTML BL blocks must be identical to each other.
+        func blBlock(_ html: String) -> Substring? {
+            guard let start = html.range(of: "const BL=["),
+                  let end = html.range(of: "];", range: start.upperBound..<html.endIndex) else { return nil }
+            return html[start.lowerBound..<end.upperBound]
+        }
+        XCTAssertEqual(blBlock(printHTML), blBlock(designHTML),
+                       "The BL catalog tables in the print and designer HTML differ from each other")
     }
 
     // MARK: – CSV parser (H1)
