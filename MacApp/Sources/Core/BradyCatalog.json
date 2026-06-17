@@ -1,5 +1,5 @@
 {
-  "_comment": "Single source of truth for the Brady wrap-around wire-label catalog. Swift (BradyCatalog.swift) loads this at runtime; the JS `BL` tables in VectorLabelPrint.html and VectorLabelDesigner.html are mirrors of the `js` projection below and are kept in sync by a unit test (BradyCatalogTests). To add or change a supply, edit ONLY this file, then update the two HTML BL literals to match (the test will tell you the exact expected values). NOTE: BM-33-427 deliberately differs between Swift and JS — Swift stores the physical size 1.5x4.0 and rotates the label 90 deg at print time (feedRotationDeg), while JS stores it un-rotated as 4x1.5; both render correctly. Do not 'fix' this.",
+  "_comment": "Single source of truth for the Brady wrap-around wire-label catalog. Swift (BradyCatalog.swift) loads this at runtime; the JS `BL` tables in VectorLabelPrint.html and VectorLabelDesigner.html are mirrors of the `js` projection below and are kept in sync by a unit test (BradyCatalogTests). To add or change a supply, edit ONLY this file, then update the two HTML BL literals to match (the test will tell you the exact expected values). NOTE: BM-33-427 deliberately differs between Swift and JS — Swift stores the physical size 1.5x4.0 and rotates the label 90 deg at print time (feedRotationDeg), while JS stores it un-rotated as 4x1.5; both render correctly. Do not 'fix' this. Per-entry fields added in Phase 5: material (Brady part family e.g. B-427), type ('dieCut' | 'continuous'), laminated (bool), buyUrlRoll / buyUrlBulk (bradyid.com product/family URLs, may be ''). For continuous entries widthInches is the web width and the height/length is user-set at print time (printableHeightInches is the catalog DEFAULT length, overridable in the designer). Some continuous geometry is approximate (noted per entry); the EXISTING 3 die-cut entries' geometry/rotation/labelsPerRoll/js MUST NOT change.",
   "coreEquivalences": { "109-427": "33-427" },
   "sizes": [
     {
@@ -7,21 +7,155 @@
       "widthInches": 1.0, "heightInches": 1.5,
       "printableWidthInches": 1.0, "printableHeightInches": 0.5,
       "feedRotationDeg": 0, "labelsPerRoll": 250,
-      "js": { "tw": 1, "th": 1.5, "pw": 1, "ph": 0.5, "lb": "BM-31-427 — 1\"×1.5\"" }
+      "material": "B-427", "type": "dieCut", "laminated": true,
+      "buyUrlRoll": "https://www.bradyid.com/wire-cable-labels/bradymarker-xc-plus-self-laminating-wire-cable-labels-cps-1037890",
+      "buyUrlBulk": "https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255",
+      "js": { "tw": 1, "th": 1.5, "pw": 1, "ph": 0.5, "lb": "BM-31-427 — 1\"×1.5\"", "mt": "B-427", "ty": "dieCut", "lm": true, "br": "https://www.bradyid.com/wire-cable-labels/bradymarker-xc-plus-self-laminating-wire-cable-labels-cps-1037890", "bb": "https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255" }
     },
     {
       "partNumber": "BM-32-427",
       "widthInches": 1.5, "heightInches": 1.5,
       "printableWidthInches": 1.5, "printableHeightInches": 0.5,
       "feedRotationDeg": 0, "labelsPerRoll": 250,
-      "js": { "tw": 1.5, "th": 1.5, "pw": 1.5, "ph": 0.5, "lb": "BM-32-427 — 1.5\"×1.5\"" }
+      "material": "B-427", "type": "dieCut", "laminated": true,
+      "buyUrlRoll": "https://www.bradyid.com/wire-cable-labels/bradymarker-xc-plus-self-laminating-wire-cable-labels-cps-1037890",
+      "buyUrlBulk": "https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255",
+      "js": { "tw": 1.5, "th": 1.5, "pw": 1.5, "ph": 0.5, "lb": "BM-32-427 — 1.5\"×1.5\"", "mt": "B-427", "ty": "dieCut", "lm": true, "br": "https://www.bradyid.com/wire-cable-labels/bradymarker-xc-plus-self-laminating-wire-cable-labels-cps-1037890", "bb": "https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255" }
     },
     {
       "partNumber": "BM-33-427",
       "widthInches": 1.5, "heightInches": 4.0,
       "printableWidthInches": 1.5, "printableHeightInches": 1.5,
       "feedRotationDeg": 90, "labelsPerRoll": 100,
-      "js": { "tw": 4, "th": 1.5, "pw": 1.5, "ph": 1.5, "lb": "BM-33-427 — 4\"×1.5\" (1.5\" printable)" }
+      "material": "B-427", "type": "dieCut", "laminated": true,
+      "buyUrlRoll": "https://www.bradyid.com/wire-cable-labels/bradymarker-xc-plus-self-laminating-wire-cable-labels-cps-1037890",
+      "buyUrlBulk": "https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255",
+      "js": { "tw": 4, "th": 1.5, "pw": 1.5, "ph": 1.5, "lb": "BM-33-427 — 4\"×1.5\" (1.5\" printable)", "mt": "B-427", "ty": "dieCut", "lm": true, "br": "https://www.bradyid.com/wire-cable-labels/bradymarker-xc-plus-self-laminating-wire-cable-labels-cps-1037890", "bb": "https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255" }
+    },
+
+    {
+      "_note": "B-427 self-laminating vinyl die-cut family (M6/M611). Sizes approximate from the published M6-xx-427 dimensions; printable height is the white print zone above the clear self-laminating tail. BM- bulk equivalents listed where known.",
+      "partNumber": "M6-11-427",
+      "widthInches": 0.5, "heightInches": 1.0,
+      "printableWidthInches": 0.5, "printableHeightInches": 0.25,
+      "feedRotationDeg": 0, "labelsPerRoll": 250,
+      "material": "B-427", "type": "dieCut", "laminated": true,
+      "buyUrlRoll": "https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",
+      "buyUrlBulk": "https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255",
+      "js": { "tw": 0.5, "th": 1, "pw": 0.5, "ph": 0.25, "lb": "M6-11-427 — 0.5\"×1\"", "mt": "B-427", "ty": "dieCut", "lm": true, "br": "https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905", "bb": "https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255" }
+    },
+    {
+      "partNumber": "M6-17-427",
+      "widthInches": 0.75, "heightInches": 1.0,
+      "printableWidthInches": 0.75, "printableHeightInches": 0.25,
+      "feedRotationDeg": 0, "labelsPerRoll": 250,
+      "material": "B-427", "type": "dieCut", "laminated": true,
+      "buyUrlRoll": "https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",
+      "buyUrlBulk": "https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255",
+      "js": { "tw": 0.75, "th": 1, "pw": 0.75, "ph": 0.25, "lb": "M6-17-427 — 0.75\"×1\"", "mt": "B-427", "ty": "dieCut", "lm": true, "br": "https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905", "bb": "https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255" }
+    },
+    {
+      "partNumber": "M6-19-427",
+      "widthInches": 1.0, "heightInches": 1.0,
+      "printableWidthInches": 1.0, "printableHeightInches": 0.375,
+      "feedRotationDeg": 0, "labelsPerRoll": 250,
+      "material": "B-427", "type": "dieCut", "laminated": true,
+      "buyUrlRoll": "https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",
+      "buyUrlBulk": "https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255",
+      "js": { "tw": 1, "th": 1, "pw": 1, "ph": 0.375, "lb": "M6-19-427 — 1\"×1\"", "mt": "B-427", "ty": "dieCut", "lm": true, "br": "https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905", "bb": "https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255" }
+    },
+    {
+      "partNumber": "M6-21-427",
+      "widthInches": 1.0, "heightInches": 1.5,
+      "printableWidthInches": 1.0, "printableHeightInches": 0.5,
+      "feedRotationDeg": 0, "labelsPerRoll": 250,
+      "material": "B-427", "type": "dieCut", "laminated": true,
+      "buyUrlRoll": "https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",
+      "buyUrlBulk": "https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255",
+      "js": { "tw": 1, "th": 1.5, "pw": 1, "ph": 0.5, "lb": "M6-21-427 — 1\"×1.5\"", "mt": "B-427", "ty": "dieCut", "lm": true, "br": "https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905", "bb": "https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255" }
+    },
+    {
+      "partNumber": "M6-31-427",
+      "widthInches": 1.0, "heightInches": 1.5,
+      "printableWidthInches": 1.0, "printableHeightInches": 0.5,
+      "feedRotationDeg": 0, "labelsPerRoll": 250,
+      "material": "B-427", "type": "dieCut", "laminated": true,
+      "buyUrlRoll": "https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",
+      "buyUrlBulk": "https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255",
+      "js": { "tw": 1, "th": 1.5, "pw": 1, "ph": 0.5, "lb": "M6-31-427 — 1\"×1.5\"", "mt": "B-427", "ty": "dieCut", "lm": true, "br": "https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905", "bb": "https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255" }
+    },
+    {
+      "partNumber": "M6-32-427",
+      "widthInches": 1.5, "heightInches": 1.5,
+      "printableWidthInches": 1.5, "printableHeightInches": 0.5,
+      "feedRotationDeg": 0, "labelsPerRoll": 250,
+      "material": "B-427", "type": "dieCut", "laminated": true,
+      "buyUrlRoll": "https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",
+      "buyUrlBulk": "https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255",
+      "js": { "tw": 1.5, "th": 1.5, "pw": 1.5, "ph": 0.5, "lb": "M6-32-427 — 1.5\"×1.5\"", "mt": "B-427", "ty": "dieCut", "lm": true, "br": "https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905", "bb": "https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255" }
+    },
+    {
+      "_note": "M6-33-427 rotates 90deg at print time exactly like BM-33-427 (its bulk equivalent BM-109-427 maps to 33-427 via coreEquivalences). Physical 1.5x4.0, printable 1.5x1.5.",
+      "partNumber": "M6-33-427",
+      "widthInches": 1.5, "heightInches": 4.0,
+      "printableWidthInches": 1.5, "printableHeightInches": 1.5,
+      "feedRotationDeg": 90, "labelsPerRoll": 100,
+      "material": "B-427", "type": "dieCut", "laminated": true,
+      "buyUrlRoll": "https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",
+      "buyUrlBulk": "https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255",
+      "js": { "tw": 4, "th": 1.5, "pw": 1.5, "ph": 1.5, "lb": "M6-33-427 — 4\"×1.5\" (1.5\" printable)", "mt": "B-427", "ty": "dieCut", "lm": true, "br": "https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905", "bb": "https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255" }
+    },
+    {
+      "partNumber": "M6-34-427",
+      "widthInches": 2.0, "heightInches": 2.0,
+      "printableWidthInches": 2.0, "printableHeightInches": 1.0,
+      "feedRotationDeg": 0, "labelsPerRoll": 100,
+      "material": "B-427", "type": "dieCut", "laminated": true,
+      "buyUrlRoll": "https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",
+      "buyUrlBulk": "https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255",
+      "js": { "tw": 2, "th": 2, "pw": 2, "ph": 1, "lb": "M6-34-427 — 2\"×2\"", "mt": "B-427", "ty": "dieCut", "lm": true, "br": "https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905", "bb": "https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255" }
+    },
+
+    {
+      "_note": "Continuous (tape) supplies: widthInches is the web width; the label length is user-set at print time (printableHeightInches here is the catalog DEFAULT length, overridable in the designer). type='continuous', laminated=false. labelsPerRoll is null (sold by length).",
+      "partNumber": "M6C-500-422",
+      "widthInches": 0.5, "heightInches": 1.0,
+      "printableWidthInches": 0.5, "printableHeightInches": 1.0,
+      "feedRotationDeg": 0, "labelsPerRoll": null,
+      "material": "B-422", "type": "continuous", "laminated": false,
+      "buyUrlRoll": "https://www.bradyid.com/labels/m6-m7-continuous-tapes-cps-1107906",
+      "buyUrlBulk": "",
+      "js": { "tw": 0.5, "th": 1, "pw": 0.5, "ph": 1, "lb": "M6C-500-422 — 0.5\" continuous (polyester)", "mt": "B-422", "ty": "continuous", "lm": false, "br": "https://www.bradyid.com/labels/m6-m7-continuous-tapes-cps-1107906", "bb": "" }
+    },
+    {
+      "partNumber": "M6C-1000-422",
+      "widthInches": 1.0, "heightInches": 1.0,
+      "printableWidthInches": 1.0, "printableHeightInches": 1.0,
+      "feedRotationDeg": 0, "labelsPerRoll": null,
+      "material": "B-422", "type": "continuous", "laminated": false,
+      "buyUrlRoll": "https://www.bradyid.com/labels/m6-m7-continuous-tapes-cps-1107906",
+      "buyUrlBulk": "",
+      "js": { "tw": 1, "th": 1, "pw": 1, "ph": 1, "lb": "M6C-1000-422 — 1\" continuous (polyester)", "mt": "B-422", "ty": "continuous", "lm": false, "br": "https://www.bradyid.com/labels/m6-m7-continuous-tapes-cps-1107906", "bb": "" }
+    },
+    {
+      "partNumber": "M6C-1900-430",
+      "widthInches": 1.9, "heightInches": 1.0,
+      "printableWidthInches": 1.9, "printableHeightInches": 1.0,
+      "feedRotationDeg": 0, "labelsPerRoll": null,
+      "material": "B-430", "type": "continuous", "laminated": false,
+      "buyUrlRoll": "https://www.bradyid.com/labels/m6-m7-continuous-tapes-cps-1107906",
+      "buyUrlBulk": "",
+      "js": { "tw": 1.9, "th": 1, "pw": 1.9, "ph": 1, "lb": "M6C-1900-430 — 1.9\" continuous (clear polyester)", "mt": "B-430", "ty": "continuous", "lm": false, "br": "https://www.bradyid.com/labels/m6-m7-continuous-tapes-cps-1107906", "bb": "" }
+    },
+    {
+      "partNumber": "M6C-2000-595",
+      "widthInches": 2.0, "heightInches": 1.0,
+      "printableWidthInches": 2.0, "printableHeightInches": 1.0,
+      "feedRotationDeg": 0, "labelsPerRoll": null,
+      "material": "B-595", "type": "continuous", "laminated": false,
+      "buyUrlRoll": "https://www.bradyid.com/labels/m6-m7-continuous-tapes-cps-1107906",
+      "buyUrlBulk": "",
+      "js": { "tw": 2, "th": 1, "pw": 2, "ph": 1, "lb": "M6C-2000-595 — 2\" continuous (vinyl)", "mt": "B-595", "ty": "continuous", "lm": false, "br": "https://www.bradyid.com/labels/m6-m7-continuous-tapes-cps-1107906", "bb": "" }
     }
   ]
 }

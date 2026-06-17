@@ -50,9 +50,21 @@ label.lbl{font-size:10px;color:var(--text2);display:block;margin-bottom:3px}
 <script>
 const FONTS=["Helvetica Neue","Arial","Arial Narrow","Verdana","Tahoma","Courier New","Georgia","Impact"];
 const BL=[
-  {n:"BM-31-427",tw:1,th:1.5,pw:1,ph:.5,lb:'BM-31-427 — 1"×1.5"'},
-  {n:"BM-32-427",tw:1.5,th:1.5,pw:1.5,ph:.5,lb:'BM-32-427 — 1.5"×1.5"'},
-  {n:"BM-33-427",tw:4,th:1.5,pw:1.5,ph:1.5,lb:'BM-33-427 — 4"×1.5" (1.5" printable)'}
+  {n:"BM-31-427",tw:1,th:1.5,pw:1,ph:.5,lb:'BM-31-427 — 1"×1.5"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/bradymarker-xc-plus-self-laminating-wire-cable-labels-cps-1037890",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
+  {n:"BM-32-427",tw:1.5,th:1.5,pw:1.5,ph:.5,lb:'BM-32-427 — 1.5"×1.5"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/bradymarker-xc-plus-self-laminating-wire-cable-labels-cps-1037890",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
+  {n:"BM-33-427",tw:4,th:1.5,pw:1.5,ph:1.5,lb:'BM-33-427 — 4"×1.5" (1.5" printable)',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/bradymarker-xc-plus-self-laminating-wire-cable-labels-cps-1037890",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
+  {n:"M6-11-427",tw:.5,th:1,pw:.5,ph:.25,lb:'M6-11-427 — 0.5"×1"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
+  {n:"M6-17-427",tw:.75,th:1,pw:.75,ph:.25,lb:'M6-17-427 — 0.75"×1"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
+  {n:"M6-19-427",tw:1,th:1,pw:1,ph:.375,lb:'M6-19-427 — 1"×1"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
+  {n:"M6-21-427",tw:1,th:1.5,pw:1,ph:.5,lb:'M6-21-427 — 1"×1.5"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
+  {n:"M6-31-427",tw:1,th:1.5,pw:1,ph:.5,lb:'M6-31-427 — 1"×1.5"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
+  {n:"M6-32-427",tw:1.5,th:1.5,pw:1.5,ph:.5,lb:'M6-32-427 — 1.5"×1.5"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
+  {n:"M6-33-427",tw:4,th:1.5,pw:1.5,ph:1.5,lb:'M6-33-427 — 4"×1.5" (1.5" printable)',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
+  {n:"M6-34-427",tw:2,th:2,pw:2,ph:1,lb:'M6-34-427 — 2"×2"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
+  {n:"M6C-500-422",tw:.5,th:1,pw:.5,ph:1,lb:'M6C-500-422 — 0.5" continuous (polyester)',mt:"B-422",ty:"continuous",lm:false,br:"https://www.bradyid.com/labels/m6-m7-continuous-tapes-cps-1107906",bb:""},
+  {n:"M6C-1000-422",tw:1,th:1,pw:1,ph:1,lb:'M6C-1000-422 — 1" continuous (polyester)',mt:"B-422",ty:"continuous",lm:false,br:"https://www.bradyid.com/labels/m6-m7-continuous-tapes-cps-1107906",bb:""},
+  {n:"M6C-1900-430",tw:1.9,th:1,pw:1.9,ph:1,lb:'M6C-1900-430 — 1.9" continuous (clear polyester)',mt:"B-430",ty:"continuous",lm:false,br:"https://www.bradyid.com/labels/m6-m7-continuous-tapes-cps-1107906",bb:""},
+  {n:"M6C-2000-595",tw:2,th:1,pw:2,ph:1,lb:'M6C-2000-595 — 2" continuous (vinyl)',mt:"B-595",ty:"continuous",lm:false,br:"https://www.bradyid.com/labels/m6-m7-continuous-tapes-cps-1107906",bb:""}
 ];
 const FD=[
   {f:"Number",c:"Number"},{f:"Cable Name",c:"Cable"},{f:"Signal",c:"Signal"},
@@ -172,6 +184,9 @@ let S={
   tplName:'Untitled Template',modal:null,
   // Custom Designer print header state (custom mode only).
   activePrinter:null, copies:1,
+  // Continuous-supply label length (inches); null ⇒ use the catalog default.
+  // Ignored for die-cut supplies.
+  labelLen:null,
   // Start blank — the standalone designer opens the Open dialog on launch so the
   // user picks a template rather than landing on a default one.
   objs:[]
@@ -216,6 +231,62 @@ function normSel(){
   S.selIds=S.selIds.filter(id=>S.objs.some(o=>o.id===id));
   if(S.selId && !S.selIds.includes(S.selId)) S.selIds=[S.selId];
   if(!S.selId) S.selIds=[];
+}
+
+// ── Continuous-supply label length ──────────────────────────────────────────────
+// Continuous (tape) supplies have no fixed height — the user sets the printed
+// label LENGTH (inches) along the feed. We expose a length field for them and
+// carry the value into rendering, printing and saving. Die-cut supplies ignore
+// it (fixed catalog height).
+function specIsContinuous(specN){ const s=BL.find(l=>l.n===specN); return !!(s&&s.ty==="continuous"); }
+function dContinuous(){ return specIsContinuous(S.spec.n); }
+// Bounds for the chosen length (inches). Generous range; default to the catalog ph.
+const LEN_MIN=0.25, LEN_MAX=24;
+function dDefaultLen(specN){ const s=BL.find(l=>l.n===specN); return s?s.ph:1; }
+// The effective chosen length for the current supply (inches). null/0 ⇒ default.
+function dEffLen(){
+  if(!dContinuous())return null;
+  const v=parseFloat(S.labelLen);
+  if(isFinite(v)&&v>0) return Math.min(LEN_MAX,Math.max(LEN_MIN,v));
+  return dDefaultLen(S.spec.n);
+}
+// Rewrite S.spec to a working copy whose printable height (ph) and total height
+// (th) reflect the chosen continuous length. Called at the top of R() so all the
+// downstream geometry (canvas, rulers, snap) uses the live length. Die-cut
+// supplies pass through unchanged. Idempotent — always re-derived from the BL
+// base entry by part number.
+function normSpec(){
+  const base=BL.find(l=>l.n===(S.spec&&S.spec.n))||BL[1];
+  if(base.ty==="continuous"){
+    const len=dEffLen()||base.ph;
+    S.spec=Object.assign({},base,{ph:len,th:len});
+  }else{
+    S.spec=base;
+  }
+}
+// Change the selected supply. Reset the continuous length to the new supply's
+// default so a stale length never carries across supplies (die-cut clears it).
+function pickSupply(specN){
+  S.spec=BL.find(l=>l.n===specN)||BL[1];
+  S.labelLen=specIsContinuous(specN)?dDefaultLen(specN):null;
+  R();
+}
+function setLabelLen(v){
+  const n=parseFloat(v);
+  S.labelLen=(isFinite(n)&&n>0)?Math.min(LEN_MAX,Math.max(LEN_MIN,n)):null;
+  R();
+}
+// Apply a supply + (optional) continuous length when loading a saved template or
+// document. Die-cut supplies clear the length; continuous supplies adopt the
+// saved labelLengthInches (falling back to the catalog default).
+function applyLoadedSpec(specN,lenInches){
+  S.spec=BL.find(l=>l.n===specN)||BL[1];
+  if(specIsContinuous(specN)){
+    const n=parseFloat(lenInches);
+    S.labelLen=(isFinite(n)&&n>0)?Math.min(LEN_MAX,Math.max(LEN_MIN,n)):dDefaultLen(specN);
+  }else{
+    S.labelLen=null;
+  }
 }
 function selObjs(){ return (S.selIds||[]).map(id=>gobj(id)).filter(Boolean); }
 function uobjAll(patch){ snapshot(); (S.selIds||[]).forEach(id=>uobj(id,patch)); R(); }
@@ -1047,6 +1118,7 @@ function scheduleCanvas(){
 
 function R(){
   normSel();
+  normSpec();
   const rec=(window._editorRecords||RX)[S.recIdx];
   const selObj=S.selId?gobj(S.selId):null;
 
@@ -1056,9 +1128,14 @@ function R(){
       <span style="color:var(--accent);font-weight:700;font-size:15px;letter-spacing:-.3px">VectorLabel</span>
       <span style="color:var(--text3);font-size:11px">${isCustomMode()?'Custom Designer':'Template Designer'}</span>
       <div style="flex:1"></div>
-      <select class="inp" style="width:auto" onchange="S.spec=BL.find(l=>l.n===this.value);R()">
+      <select class="inp" style="width:auto" onchange="pickSupply(this.value)">
         ${BL.map(l=>`<option value="${l.n}"${S.spec.n===l.n?" selected":""}>${l.lb}</option>`).join("")}
       </select>
+      ${dContinuous()?`<div style="display:flex;align-items:center;gap:5px" title="Continuous supply — set the printed label length">
+        <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Length</span>
+        <input type="number" class="inp" min="${LEN_MIN}" max="${LEN_MAX}" step="0.05" value="${(dEffLen()||dDefaultLen(S.spec.n))}" style="width:64px;padding:4px 6px;font-size:12px" onchange="setLabelLen(this.value)">
+        <span style="color:var(--text3);font-size:11px">in</span>
+      </div>`:""}
       <button class="btn${S.wrap?" on":""}" onclick="S.wrap=!S.wrap;R()">${S.wrap?"Hide wrap":"Show wrap"}</button>
       <div style="display:flex;align-items:center;gap:4px;background:var(--surface3);border:1px solid var(--bd4);border-radius:4px;padding:2px 6px">
         <button onclick="S.zoom=Math.max(0.25,S.zoom-0.25);R()" title="Zoom out" style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:16px;padding:0 2px;line-height:1">−</button>
@@ -1922,12 +1999,15 @@ function closeModal(){S.modal=null;renderModal();}
 
 function templateData(){
   const name=S.tplName||"Untitled Template";
-  return{
+  const d={
     version:1,
     name,
     specN:S.spec.n,
     objs:JSON.parse(JSON.stringify(S.objs))
   };
+  // Continuous supplies persist the chosen label length (inches); die-cut omit it.
+  if(dContinuous()){ const len=dEffLen(); if(len) d.labelLengthInches=len; }
+  return d;
 }
 
 // ── Custom Designer print header (Phase 2) ──────────────────────────────────────
@@ -1976,6 +2056,26 @@ function dRequiredSupply(specN){ const core=dSupplyCore(specN); return core?"BM/
 function dFmtIn(v){ return (v==null?"—":(+v).toString())+'"'; }
 function dCanPrint(){ return !!(S.objs.length>0&&dPrinter().status==="ready"); }
 
+// ── "Buy more" — open the supplier page for the selected supply ─────────────────
+// Posts an openURL action; Swift opens the (http/https) URL in the system browser.
+function buyMore(which){
+  const s=BL.find(l=>l.n===S.spec.n); if(!s)return;
+  const url=(which==="bulk"?(s.bb||s.br):(s.br||s.bb))||"";
+  if(!url)return;
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"openURL",payload:{url}});
+}
+// "Buy more ↗" control for the selected supply (roll + optional bulk link).
+// Shown in the Custom Designer print header; "" when no buy URL is known.
+function buyMoreControl(){
+  const s=BL.find(l=>l.n===S.spec.n); if(!s||!(s.br||s.bb))return "";
+  const bulk=(s.bb&&s.bb!==s.br)?`<button class="btn" onclick="buyMore('bulk')" title="Buy a bulk box of ${s.n}" style="padding:4px 8px;font-size:10px">Bulk ↗</button>`:"";
+  return`<div style="display:flex;align-items:center;gap:5px">
+    <button class="btn" onclick="buyMore('roll')" title="Buy ${s.n} on bradyid.com" style="padding:4px 10px;font-size:11px">Buy more ↗</button>
+    ${bulk}
+  </div>`;
+}
+
 // The custom-mode print header markup (returns "" in template mode so the
 // Template Designer is untouched).
 function buildCustomPrintHeader(){
@@ -2007,6 +2107,7 @@ function buildCustomPrintHeader(){
       <span style="color:var(--text2);font-size:11px;font-family:monospace" title="Required supply for ${S.spec.n}">${dRequiredSupply(S.spec.n)}</span>
       ${dCassetteMatched()?`<span title="Loaded cassette matches the required supply" style="color:var(--green);font-size:18px;line-height:1;font-weight:800">✓</span>`
         :dCassetteMismatch()?`<span title="Loaded ${dLoadedCassette().partNumber} doesn't match — the label may print misaligned or cropped" style="color:var(--red);font-size:12px;line-height:1;white-space:nowrap">⚠ mismatch</span>`:""}
+      ${buyMoreControl()}
     </div>
 
     <div style="flex:1"></div>
@@ -2047,6 +2148,7 @@ function saveCustomDocument(){
     objs:data.objs,
     copies:Math.max(1,S.copies||1)
   };
+  if(data.labelLengthInches) payload.labelLengthInches=data.labelLengthInches;
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
     window.webkit.messageHandlers.vectorlabel.postMessage({action:"saveCustomDocument",payload});
   }
@@ -2067,6 +2169,7 @@ function doCustomPrint(){
     printerID:S.activePrinter||"",
     record:customPrintRecord()
   };
+  if(data.labelLengthInches) payload.labelLengthInches=data.labelLengthInches;
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
     window.webkit.messageHandlers.vectorlabel.postMessage({action:"printCustom",payload});
   }
@@ -2105,7 +2208,7 @@ function initPrintEdit(template){
   if(template){
     S.tplName=template.name||"Untitled Template";
     S._loadedId=template.id||null;
-    S.spec=BL.find(l=>l.n===template.specN)||BL[1];
+    applyLoadedSpec(template.specN,template.labelLengthInches);
     S.objs=sanitizeObjs(template.objs);
     S.selId=null;S._ef=undefined;S.modal=null;
   }
@@ -2225,7 +2328,7 @@ function newTemplate(){
   snapshot();
   S.tplName=name;
   S._loadedId=null;   // new template → new file on save
-  S.spec=BL.find(l=>l.n===specN)||BL[1];
+  applyLoadedSpec(specN);
   S.objs=[];
   S.selId=null;
   S._ef=undefined;
@@ -2322,7 +2425,7 @@ function loadSelectedTemplate(){
   snapshot();
   S.tplName=t.name||"Untitled Template";
   S._loadedId=t.id||null;   // preserve id so a later Save overwrites in place
-  S.spec=BL.find(l=>l.n===t.specN)||BL[1];
+  applyLoadedSpec(t.specN,t.labelLengthInches);
   S.objs=JSON.parse(JSON.stringify(t.objs));
   S.selId=null;S._ef=undefined;
   S.modal=null;
@@ -2339,7 +2442,7 @@ function initOpenTemplate(t){
   S.modal=null;
   S.tplName=t.name||"Untitled Template";
   S._loadedId=t.id||null;
-  S.spec=BL.find(l=>l.n===t.specN)||BL[1];
+  applyLoadedSpec(t.specN,t.labelLengthInches);
   S.objs=sanitizeObjs(t.objs);
   S.selId=null;S._ef=undefined;
   R();
@@ -2476,7 +2579,7 @@ function initCustomDocument(doc){
   // Canvas
   S.tplName=doc.name||"Custom Label";
   S._loadedId=null;
-  S.spec=BL.find(l=>l.n===doc.specN)||BL[1];
+  applyLoadedSpec(doc.specN,doc.labelLengthInches);
   S.objs=sanitizeObjs(doc.objs||[]);
   S.selId=null;S._ef=undefined;
   S.copies=Math.max(1,doc.copies||1);

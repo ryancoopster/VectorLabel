@@ -49,7 +49,9 @@ final class FoundationTests: XCTestCase {
             "BM-32-427": (1.5, 1.5, 1.5, 0.5, 0),
             "BM-33-427": (1.5, 4.0, 1.5, 1.5, 90),
         ]
-        XCTAssertEqual(BradyCatalog.sizes.count, 3)
+        // The original 3 die-cut supplies must still be present with byte-identical
+        // geometry/rotation (Phase 5 only ADDS supplies + metadata).
+        XCTAssertGreaterThanOrEqual(BradyCatalog.sizes.count, 3)
         for (pn, e) in expected {
             guard let s = BradyCatalog.size(forPartNumber: pn) else { return XCTFail("missing \(pn)") }
             XCTAssertEqual(s.widthInches, e.w, "physical width \(pn)")
@@ -65,17 +67,62 @@ final class FoundationTests: XCTestCase {
         XCTAssertEqual(BradyCatalog.feedRotationDeg(forPartNumber: "BM-109-427"), 90)
     }
 
+    /// Phase 5 additive metadata: supply type (die-cut vs continuous) and buy URLs.
+    /// The existing die-cut supplies must report dieCut; the M6C-* tapes continuous.
+    func testSupplyTypeAndBuyURLs() {
+        // Existing die-cut supplies unchanged.
+        XCTAssertEqual(BradyCatalog.supplyType(forPartNumber: "BM-31-427"), .dieCut)
+        XCTAssertFalse(BradyCatalog.isContinuous(forPartNumber: "BM-32-427"))
+        XCTAssertEqual(BradyCatalog.supplyType(forPartNumber: "M6-33-427"), .dieCut)
+        // Continuous tapes.
+        XCTAssertTrue(BradyCatalog.isContinuous(forPartNumber: "M6C-1000-422"))
+        XCTAssertEqual(BradyCatalog.supplyType(forPartNumber: "M6C-2000-595"), .continuous)
+        // Unknown parts safely default to die-cut.
+        XCTAssertEqual(BradyCatalog.supplyType(forPartNumber: "ZZ-999-000"), .dieCut)
+        XCTAssertFalse(BradyCatalog.isContinuous(forPartNumber: "ZZ-999-000"))
+        // Buy URLs are present for the original supplies and are https.
+        let roll = BradyCatalog.buyUrlRoll(forPartNumber: "BM-32-427")
+        XCTAssertTrue(roll.hasPrefix("https://"), "expected an https buy URL, got \(roll)")
+        // Unknown part → empty URLs (no crash).
+        XCTAssertEqual(BradyCatalog.buyUrlRoll(forPartNumber: "ZZ-999-000"), "")
+    }
+
+    /// Continuous supplies render at the user-chosen label length; die-cut keep the
+    /// catalog's fixed printable height. effectivePrintableHeightInches drives the
+    /// renderer's pixel height.
+    func testContinuousLabelLength() {
+        // Die-cut: labelLengthInches is ignored; printable height stays fixed.
+        var dieCut = VLTemplate(name: "d", specN: "BM-32-427", objs: [])
+        XCTAssertEqual(dieCut.effectivePrintableHeightInches, 0.5)
+        dieCut.labelLengthInches = 3.0
+        XCTAssertEqual(dieCut.effectivePrintableHeightInches, 0.5, "die-cut ignores labelLengthInches")
+        // Continuous: with a chosen length, the printable height becomes that length.
+        var cont = VLTemplate(name: "c", specN: "M6C-1000-422", objs: [])
+        cont.labelLengthInches = 2.5
+        XCTAssertEqual(cont.effectivePrintableHeightInches, 2.5)
+        // Continuous with no chosen length falls back to the catalog default.
+        let contDefault = VLTemplate(name: "c2", specN: "M6C-1000-422", objs: [])
+        XCTAssertEqual(contDefault.effectivePrintableHeightInches,
+                       BradyCatalog.size(forPartNumber: "M6C-1000-422")?.printableHeightInches)
+    }
+
     /// The JS `BL` tables embedded in the two HTML UIs are mirrors of
     /// BradyCatalog.json's `js` projection. This fails if either HTML drifts from
     /// the catalog, or if the two HTML copies differ from each other — keeping the
     /// catalog single-sourced without runtime injection.
     func testJSCatalogMirrorsCatalogJSON() throws {
-        struct JSProj: Codable { let tw: Double; let th: Double; let pw: Double; let ph: Double; let lb: String }
+        struct JSProj: Codable {
+            let tw: Double; let th: Double; let pw: Double; let ph: Double; let lb: String
+            // Phase 5 additive projection: material, type, laminated, buy URLs.
+            let mt: String; let ty: String; let lm: Bool; let br: String; let bb: String
+        }
         struct SpecT: Codable {
             let partNumber: String
             let widthInches: Double; let heightInches: Double
             let printableWidthInches: Double; let printableHeightInches: Double
             let feedRotationDeg: Double
+            let material: String; let type: String; let laminated: Bool
+            let buyUrlRoll: String; let buyUrlBulk: String
             let js: JSProj
         }
         struct FileT: Codable { let sizes: [SpecT] }
@@ -95,7 +142,7 @@ final class FoundationTests: XCTestCase {
             return s
         }
         func entryLiteral(_ s: SpecT) -> String {
-            "{n:\"\(s.partNumber)\",tw:\(jsNum(s.js.tw)),th:\(jsNum(s.js.th)),pw:\(jsNum(s.js.pw)),ph:\(jsNum(s.js.ph)),lb:'\(s.js.lb)'}"
+            "{n:\"\(s.partNumber)\",tw:\(jsNum(s.js.tw)),th:\(jsNum(s.js.th)),pw:\(jsNum(s.js.pw)),ph:\(jsNum(s.js.ph)),lb:'\(s.js.lb)',mt:\"\(s.js.mt)\",ty:\"\(s.js.ty)\",lm:\(s.js.lm),br:\"\(s.js.br)\",bb:\"\(s.js.bb)\"}"
         }
 
         let printHTML = try String(contentsOf: sourcesDir.appendingPathComponent("VectorLabelPrint.html"), encoding: .utf8)
@@ -121,6 +168,14 @@ final class FoundationTests: XCTestCase {
                 XCTAssertEqual(s.js.tw, s.widthInches,  "\(s.partNumber): JS tw must equal Swift widthInches")
                 XCTAssertEqual(s.js.th, s.heightInches, "\(s.partNumber): JS th must equal Swift heightInches")
             }
+            // Phase 5: the JS projection must agree with the Swift metadata fields,
+            // so editing one side without the other fails the test.
+            XCTAssertEqual(s.js.mt, s.material,   "\(s.partNumber): JS mt must equal Swift material")
+            XCTAssertEqual(s.js.ty, s.type,       "\(s.partNumber): JS ty must equal Swift type")
+            XCTAssertEqual(s.js.lm, s.laminated,  "\(s.partNumber): JS lm must equal Swift laminated")
+            XCTAssertEqual(s.js.br, s.buyUrlRoll, "\(s.partNumber): JS br must equal Swift buyUrlRoll")
+            XCTAssertEqual(s.js.bb, s.buyUrlBulk, "\(s.partNumber): JS bb must equal Swift buyUrlBulk")
+            XCTAssertTrue(s.type == "dieCut" || s.type == "continuous", "\(s.partNumber): type must be dieCut or continuous")
         }
 
         // The two HTML BL blocks must be identical to each other.

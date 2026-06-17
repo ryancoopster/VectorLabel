@@ -61,8 +61,24 @@ public struct VLTemplate: Codable, Identifiable, Hashable {
     public var name: String
     public var specN: String       // Brady part number e.g. "BM-32-427"
     public var objs: [TemplateObject]
+    /// For CONTINUOUS supplies only: the user-chosen printed label length in
+    /// inches (along the feed). nil/0 for die-cut supplies, which use the catalog's
+    /// fixed printable height. Optional so older die-cut templates decode unchanged.
+    public var labelLengthInches: Double? = nil
 
     public var labelSize: BradyLabelSize? { BradyCatalog.size(forPartNumber: specN) }
+
+    /// The printable height (inches) used for rendering: the catalog's fixed value
+    /// for die-cut supplies, or the user-set `labelLengthInches` for continuous
+    /// supplies (falling back to the catalog default when none was set).
+    public var effectivePrintableHeightInches: Double? {
+        guard let size = labelSize else { return nil }
+        if BradyCatalog.isContinuous(forPartNumber: specN),
+           let len = labelLengthInches, len > 0 {
+            return len
+        }
+        return size.printableHeightInches
+    }
 }
 
 // MARK: – TemplateStore

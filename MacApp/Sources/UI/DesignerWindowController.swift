@@ -377,9 +377,13 @@ public final class DesignerWindowController: NSObject {
         let filename = (doc.dataSourceURL?.lastPathComponent ?? "").jsonQuoted
         let nameJSON = doc.name.jsonQuoted
         let specJSON = doc.specN.jsonQuoted
+        // Continuous supplies carry the saved label length (inches); 0 ⇒ default.
+        let lenInches = (doc.template.labelLengthInches ?? 0) > 0
+            ? (doc.template.labelLengthInches ?? 0) : doc.labelLengthInches
         let js = """
         if(typeof initCustomDocument==='function')initCustomDocument({\
         name:\(nameJSON),specN:\(specJSON),objs:\(objJSON),copies:\(doc.copies),\
+        labelLengthInches:\(lenInches),\
         records:\(recJSON),columns:\(colJSON),filename:\(filename),\
         headerRow:\(doc.dataSourceHeaderRow),isXLSX:\(isXLSX),\
         hasDataSource:\(doc.dataSourceURL != nil)});
@@ -717,13 +721,20 @@ public final class DesignerWindowController: NSObject {
 
         // Decode the canvas into a VLTemplate via the SAME {name, specN, objs}
         // shape the saveTemplate path produces, so rendering matches the designer.
-        let tplDict: [String: Any] = [
+        var tplDict: [String: Any] = [
             "name": (payload["name"] as? String) ?? "Custom Label",
             "specN": (payload["specN"] as? String) ?? "",
             "objs": payload["objs"] ?? [],
             "version": 1,
             "id": UUID().uuidString,
         ]
+        // Continuous supplies carry a user-chosen label length (inches) → printable
+        // height at render time. Die-cut supplies omit it (catalog fixed height).
+        if let len = payload["labelLengthInches"] as? Double, len > 0 {
+            tplDict["labelLengthInches"] = len
+        } else if let lenN = payload["labelLengthInches"] as? NSNumber, lenN.doubleValue > 0 {
+            tplDict["labelLengthInches"] = lenN.doubleValue
+        }
         // A template with no objects (or an unknown spec) can't render — bail.
         guard let objs = tplDict["objs"] as? [Any], !objs.isEmpty,
               let data = try? JSONSerialization.data(withJSONObject: tplDict),
@@ -797,13 +808,18 @@ public final class DesignerWindowController: NSObject {
 
         // Decode the canvas into a VLTemplate (same {name, specN, objs} shape).
         let name = (payload["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Custom Label"
-        let tplDict: [String: Any] = [
+        var tplDict: [String: Any] = [
             "name": name,
             "specN": (payload["specN"] as? String) ?? "",
             "objs": payload["objs"] ?? [],
             "version": 1,
             "id": UUID().uuidString,
         ]
+        if let len = payload["labelLengthInches"] as? Double, len > 0 {
+            tplDict["labelLengthInches"] = len
+        } else if let lenN = payload["labelLengthInches"] as? NSNumber, lenN.doubleValue > 0 {
+            tplDict["labelLengthInches"] = lenN.doubleValue
+        }
         guard let data = try? JSONSerialization.data(withJSONObject: tplDict),
               let template = try? JSONDecoder().decode(VLTemplate.self, from: data)
         else { return }
@@ -828,6 +844,7 @@ public final class DesignerWindowController: NSObject {
             rows: rows,
             dataSourcePath: srcPath,
             dataSourceHeaderRow: headerRow,
+            labelLengthInches: template.labelLengthInches ?? 0,
             copies: copies)
 
         let panel = NSSavePanel()
@@ -1009,6 +1026,15 @@ extension DesignerWindowController: WKScriptMessageHandler {
         case "deleteTemplate":
             if let p = body["payload"] as? [String: Any], let id = p["id"] as? String {
                 confirmAndDeleteTemplate(id: id, name: p["name"] as? String ?? "this template")
+            }
+
+        case "openURL":
+            // "Buy more" — open a bradyid.com supply URL in the system browser.
+            // Only http(s) URLs are honored (never file:// or arbitrary schemes).
+            if let urlStr = (body["payload"] as? [String: Any])?["url"] as? String,
+               let url = URL(string: urlStr),
+               let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
+                NSWorkspace.shared.open(url)
             }
 
         case "setColumnConfig":

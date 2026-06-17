@@ -464,6 +464,15 @@ extension PrintWindowController: WKScriptMessageHandler {
                 scheduleWriteback()
             }
 
+        case "openURL":
+            // "Buy more" — open a bradyid.com supply URL in the system browser.
+            // Only http(s) URLs are honored (never file:// or arbitrary schemes).
+            if let urlStr = (body["payload"] as? [String: Any])?["url"] as? String,
+               let url = URL(string: urlStr),
+               let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
+                NSWorkspace.shared.open(url)
+            }
+
         case "setColumnConfig":
             AppSettings.shared.applyColumnConfigPayload(body["payload"])
 

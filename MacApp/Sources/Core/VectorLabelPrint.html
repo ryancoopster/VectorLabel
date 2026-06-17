@@ -174,9 +174,21 @@ function textValue(o,rec){
 
 // ── Label preview renderer ────────────────────────────────────────────────────
 const BL=[
-  {n:"BM-31-427",tw:1,th:1.5,pw:1,ph:.5,lb:'BM-31-427 — 1"×1.5"'},
-  {n:"BM-32-427",tw:1.5,th:1.5,pw:1.5,ph:.5,lb:'BM-32-427 — 1.5"×1.5"'},
-  {n:"BM-33-427",tw:4,th:1.5,pw:1.5,ph:1.5,lb:'BM-33-427 — 4"×1.5" (1.5" printable)'}
+  {n:"BM-31-427",tw:1,th:1.5,pw:1,ph:.5,lb:'BM-31-427 — 1"×1.5"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/bradymarker-xc-plus-self-laminating-wire-cable-labels-cps-1037890",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
+  {n:"BM-32-427",tw:1.5,th:1.5,pw:1.5,ph:.5,lb:'BM-32-427 — 1.5"×1.5"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/bradymarker-xc-plus-self-laminating-wire-cable-labels-cps-1037890",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
+  {n:"BM-33-427",tw:4,th:1.5,pw:1.5,ph:1.5,lb:'BM-33-427 — 4"×1.5" (1.5" printable)',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/bradymarker-xc-plus-self-laminating-wire-cable-labels-cps-1037890",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
+  {n:"M6-11-427",tw:.5,th:1,pw:.5,ph:.25,lb:'M6-11-427 — 0.5"×1"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
+  {n:"M6-17-427",tw:.75,th:1,pw:.75,ph:.25,lb:'M6-17-427 — 0.75"×1"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
+  {n:"M6-19-427",tw:1,th:1,pw:1,ph:.375,lb:'M6-19-427 — 1"×1"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
+  {n:"M6-21-427",tw:1,th:1.5,pw:1,ph:.5,lb:'M6-21-427 — 1"×1.5"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
+  {n:"M6-31-427",tw:1,th:1.5,pw:1,ph:.5,lb:'M6-31-427 — 1"×1.5"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
+  {n:"M6-32-427",tw:1.5,th:1.5,pw:1.5,ph:.5,lb:'M6-32-427 — 1.5"×1.5"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
+  {n:"M6-33-427",tw:4,th:1.5,pw:1.5,ph:1.5,lb:'M6-33-427 — 4"×1.5" (1.5" printable)',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
+  {n:"M6-34-427",tw:2,th:2,pw:2,ph:1,lb:'M6-34-427 — 2"×2"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
+  {n:"M6C-500-422",tw:.5,th:1,pw:.5,ph:1,lb:'M6C-500-422 — 0.5" continuous (polyester)',mt:"B-422",ty:"continuous",lm:false,br:"https://www.bradyid.com/labels/m6-m7-continuous-tapes-cps-1107906",bb:""},
+  {n:"M6C-1000-422",tw:1,th:1,pw:1,ph:1,lb:'M6C-1000-422 — 1" continuous (polyester)',mt:"B-422",ty:"continuous",lm:false,br:"https://www.bradyid.com/labels/m6-m7-continuous-tapes-cps-1107906",bb:""},
+  {n:"M6C-1900-430",tw:1.9,th:1,pw:1.9,ph:1,lb:'M6C-1900-430 — 1.9" continuous (clear polyester)',mt:"B-430",ty:"continuous",lm:false,br:"https://www.bradyid.com/labels/m6-m7-continuous-tapes-cps-1107906",bb:""},
+  {n:"M6C-2000-595",tw:2,th:1,pw:2,ph:1,lb:'M6C-2000-595 — 2" continuous (vinyl)',mt:"B-595",ty:"continuous",lm:false,br:"https://www.bradyid.com/labels/m6-m7-continuous-tapes-cps-1107906",bb:""}
 ];
 const SC=185;
 // Objects may be positioned up to this many inches beyond the printable area on
@@ -198,7 +210,10 @@ function autoFitPx(text,o,basePx,boxW,pad){
 
 function renderLabel(tpl,rec,scale=1){
   const spec=BL.find(l=>l.n===tpl.specN)||BL[1];
-  const pw=spec.pw*SC*scale,ph=spec.ph*SC*scale;
+  // Continuous supplies have a user-set printed length (tpl.labelLengthInches);
+  // die-cut supplies use the catalog's fixed printable height.
+  const phIn=(spec.ty==="continuous"&&tpl.labelLengthInches>0)?tpl.labelLengthInches:spec.ph;
+  const pw=spec.pw*SC*scale,ph=phIn*SC*scale;
   const sc=SC*scale;
   const objs=(tpl.objs||[]).map(o=>{
     const x=o.x*sc,y=o.y*sc,w=(o.w||1)*sc,h=(o.h||0)*sc;
@@ -1247,6 +1262,7 @@ function buildPreviewPanel(){
         <span style="color:var(--text2)">Printable area</span>
         <span style="color:var(--text);font-family:monospace">${fmtIn(spec.pw)} × ${fmtIn(spec.ph)}</span>
       </div>
+      ${buyMoreControl(t.specN)}
     </div>
   </div>`;
 }
@@ -1405,6 +1421,25 @@ function requiredSupplyDisplay(specN){
 
 // Format an inch value, e.g. 1.5 -> 1.5", 1 -> 1".
 function fmtIn(v){ return (v==null?"—":(+v).toString())+'"'; }
+
+// ── "Buy more" — open the supplier page for a supply ───────────────────────────
+// Posts an openURL action; Swift opens the (http/https) URL in the system browser.
+function buyMore(specN,which){
+  const s=BL.find(l=>l.n===specN); if(!s)return;
+  const url=(which==="bulk"?(s.bb||s.br):(s.br||s.bb))||"";
+  if(!url)return;
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"openURL",payload:{url}});
+}
+// "Buy more ↗" control (roll + optional bulk link) for a supply. "" if no URL.
+function buyMoreControl(specN){
+  const s=BL.find(l=>l.n===specN); if(!s||!(s.br||s.bb))return "";
+  const bulk=(s.bb&&s.bb!==s.br)?`<button class="btn" onclick="buyMore('${s.n}','bulk')" title="Buy a bulk box of ${s.n}" style="padding:3px 8px;font-size:10px">Bulk ↗</button>`:"";
+  return`<div style="display:flex;align-items:center;gap:5px;margin-top:7px">
+    <button class="btn" onclick="buyMore('${s.n}','roll')" title="Buy ${s.n} on bradyid.com" style="padding:3px 10px;font-size:11px">Buy more ↗</button>
+    ${bulk}
+  </div>`;
+}
 
 // Called by Swift when detected cassette info changes (auto-detect or manual).
 function updateCassettes(map){

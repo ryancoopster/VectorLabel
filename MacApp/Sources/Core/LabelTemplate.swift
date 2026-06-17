@@ -40,9 +40,13 @@ public enum LabelRenderer {
     public static func render(template: VLTemplate, record: WireRecord,
                        offset: (dx: Double, dy: Double) = (0, 0)) -> (pixels: [UInt8], width: Int, height: Int)? {
         guard let size = template.labelSize else { return nil }
-        let pw  = size.printablePixelWidth
-        let ph  = size.printablePixelHeight
         let dpi = size.dpi
+        let pw  = size.printablePixelWidth
+        // Continuous supplies have no fixed height — the printable height is the
+        // user-chosen label length (effectivePrintableHeightInches); die-cut
+        // supplies keep the catalog's fixed printable height.
+        let phInches = template.effectivePrintableHeightInches ?? size.printableHeightInches
+        let ph  = max(1, Int((phInches * Double(dpi)).rounded()))
 
         let colorSpace = CGColorSpaceCreateDeviceGray()
         guard let ctx = CGContext(
