@@ -7,6 +7,12 @@ shown in the menu-bar footer. Fix commits reference the code-review finding IDs
 
 ## [Unreleased]
 ### Fixed
+- **[M7/M8/M9/M10]** Performance: visibleIndices is computed once per render (was
+  ~12x); column detection is memoized by records identity; the print batch renders
+  off the main thread (no UI freeze on large jobs); and inline-edit CSV writeback
+  is debounced + written off-main. (H12 true row windowing deferred -- rows already
+  use content-visibility for render virtualization; full DOM windowing is higher
+  risk and needs UI testing.)
 - **[H14/H15]** Treat imported templates as untrusted: both web views now sanitize
   template objects on import (regenerate ids, whitelist/strip the font, allow only
   data:image sources), closing the stored-XSS sinks where object fields were

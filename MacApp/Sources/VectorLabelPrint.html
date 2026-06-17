@@ -298,12 +298,20 @@ function currentRecords(){ return window._editorRecords||(typeof P!=='undefined'
 const DEFAULT_COL_W=120;
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
+// Memoized by records-array identity + the column order, so the O(records×keys)
+// scan only reruns when the data or column layout actually changes — not on every
+// render/interaction. (An inline edit mutates a value in place without replacing
+// the array, so columns stay valid.)
+let _colsMemo = { recRef: null, ord: null, val: null };
 function recordColumns(records){
+  const ord = (window._columnOrder||[]).join(',');
+  if(_colsMemo.recRef===records && _colsMemo.ord===ord) return _colsMemo.val;
   const present=[];
   records.forEach(r=>Object.keys(r).forEach(k=>{ if(!present.includes(k)) present.push(k); }));
   const out=(window._columnOrder||[]).filter(k=>present.includes(k));
   ['_Side','Number','Cable','Signal','Device_Name','Socket_Name'].forEach(k=>{ if(present.includes(k)&&!out.includes(k)) out.push(k); });
   present.forEach(k=>{ if(!out.includes(k)) out.push(k); });
+  _colsMemo = { recRef: records, ord: ord, val: out };
   return out;
 }
 function colLabel(k){ return k==='_Side'?'Side':k.replace(/_/g,' '); }
@@ -756,13 +764,17 @@ function applySort(idx){
 }
 
 // Absolute indices of records currently shown, in display order (filter + sort).
-function visibleIndices(){
+// Computed once per render and cached in P._visCache (set/cleared by R()), so the
+// ~dozen calls a single render makes don't each re-run filter + sort. Calls
+// outside a render (event handlers) compute fresh.
+function computeVisibleIndices(){
   const all=P.records.map((_,i)=>i);
   let idx=filterActive()?all.filter(passesFilter):all;
   if(searchActive()) idx=idx.filter(i=>passesSearch(P.records[i]));
   if(sortActive()) idx=applySort(idx);
   return idx;
 }
+function visibleIndices(){ return P._visCache || computeVisibleIndices(); }
 
 // ── Quick search (all fields) ───────────────────────────────────────────────────
 function searchActive(){ return !!(P.search||"").trim(); }
@@ -1855,8 +1867,11 @@ function R(){
     return;
   }
   const t=tpl();
+  // Cache the visible-index computation for the duration of this render so the
+  // many visibleIndices() calls below don't each re-run filter + sort.
+  P._visCache = computeVisibleIndices();
   // Keep the preview pointed at a visible row when a filter is active.
-  if(P.records.length){ const vis=visibleIndices(); if(vis.length&&!vis.includes(P.previewIdx))P.previewIdx=vis[0]; }
+  if(P.records.length){ const vis=P._visCache; if(vis.length&&!vis.includes(P.previewIdx))P.previewIdx=vis[0]; }
   // Preserve the record list's scroll position across the full re-render (R()
   // rebuilds all of #app, which would otherwise snap the list back to the top —
   // e.g. on the 5s printer rescan or any row click).
@@ -1991,6 +2006,7 @@ function R(){
     document.getElementById("app").addEventListener("wheel", onRecWheel, {passive:false});
     window._recWheelBound=true;
   }
+  P._visCache = null;   // clear per-render cache; handlers compute fresh between renders
 }
 
 

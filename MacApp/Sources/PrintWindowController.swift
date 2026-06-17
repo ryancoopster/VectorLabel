@@ -110,6 +110,7 @@ final class PrintWindowController: NSObject {
     }
 
     func close() {
+        flushWriteback()   // persist any debounced inline edit before tearing down
         jobObservers.removeAll()
         printerObserver = nil
         cassetteObserver = nil
@@ -353,21 +354,43 @@ final class PrintWindowController: NSObject {
         return nil
     }
 
-    /// Persist `records` back to the source CSV, preserving its column order.
-    /// Session inline edits → durable. No-op if there's no known source file.
+    private var writebackWork: DispatchWorkItem?
+
+    /// Debounced persistence of inline edits to the source CSV — coalesces rapid
+    /// edits into one write ~0.6 s after the last change instead of rewriting the
+    /// whole file on every keystroke-commit. Call `flushWriteback()` on close.
+    private func scheduleWriteback() {
+        writebackWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.writeRecordsBackToCSV() }
+        writebackWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: work)
+    }
+
+    /// Write any pending edit immediately (e.g. before the window closes).
+    private func flushWriteback() {
+        guard writebackWork != nil else { return }
+        writebackWork?.cancel(); writebackWork = nil
+        writeRecordsBackToCSV()
+    }
+
+    /// Persist `records` back to the source CSV, preserving its column order. The
+    /// records snapshot is taken on the main actor; the header read + serialize +
+    /// write run off the main thread so a large export doesn't block the UI.
     private func writeRecordsBackToCSV() {
         guard let url = csvWritebackURL else { return }
-        // The column order MUST come from the existing file's header. Never
-        // synthesize one — a sorted-union-of-keys fallback would reorder the schema
-        // and drop any column empty in every record, corrupting the file. If the
-        // header can't be read, abort rather than write a malformed CSV.
-        guard let content = try? String(contentsOf: url, encoding: .utf8),
-              let headers = WireExportParser.parseCSV(content).first, !headers.isEmpty else {
-            print("[writeRecordsBackToCSV] aborting: could not read the source header from \(url.lastPathComponent)")
-            return
+        let snapshot = records   // value-type copy, safe to use off the main actor
+        DispatchQueue.global(qos: .utility).async {
+            // The column order MUST come from the existing header — never synthesize
+            // one (a sorted-union fallback would reorder/drop columns). Abort if it
+            // can't be read rather than write a malformed CSV.
+            guard let content = try? String(contentsOf: url, encoding: .utf8),
+                  let headers = WireExportParser.parseCSV(content).first, !headers.isEmpty else {
+                print("[writeRecordsBackToCSV] aborting: could not read the source header from \(url.lastPathComponent)")
+                return
+            }
+            let csv = WireExportParser.csvText(records: snapshot, headers: headers)
+            try? csv.write(to: url, atomically: true, encoding: .utf8)
         }
-        let csv = WireExportParser.csvText(records: records, headers: headers)
-        try? csv.write(to: url, atomically: true, encoding: .utf8)
     }
 
     // MARK: – Dev HTML loader
@@ -421,7 +444,7 @@ extension PrintWindowController: WKScriptMessageHandler {
                 records[index] = WireRecord(side: f["_Side"] ?? records[index].side,
                                             wireID: f["Number"] ?? records[index].wireID,
                                             fields: f)
-                writeRecordsBackToCSV()
+                scheduleWriteback()
             }
 
         case "setColumnConfig":
@@ -512,48 +535,43 @@ extension PrintWindowController: WKScriptMessageHandler {
         let serial = printerID.split(separator: ":").dropFirst(2).joined(separator: ":")
         let offset = AppSettings.shared.calibrationOffset(forSerial: serial)
 
-        var jobs: [[UInt8]] = []
-        var labelPx = 0   // longest rendered dimension (px) → print-length estimate
-        for record in selectedRecords {
-            guard let rendered = LabelRenderer.render(template: template, record: record, offset: offset) else { continue }
-            labelPx = max(labelPx, max(rendered.width, rendered.height))
-            let job = BradyVGL.buildPrintJob(pixels: rendered.pixels, width: rendered.width, height: rendered.height)
-            jobs.append(job)
+        // Build the Recent Print record up front (on the main actor — it reads
+        // window state). Then render the (potentially large) batch OFF the main
+        // thread so the UI doesn't freeze, and submit back on the main actor.
+        let recent = makeRecentPrint(from: payload, labelCount: selectedRecords.count, status: .printing)
+        DispatchQueue.global(qos: .userInitiated).async {
+            var jobs: [[UInt8]] = []
+            var labelPx = 0   // longest rendered dimension (px) → print-length estimate
+            for record in selectedRecords {
+                guard let rendered = LabelRenderer.render(template: template, record: record, offset: offset) else { continue }
+                labelPx = max(labelPx, max(rendered.width, rendered.height))
+                jobs.append(BradyVGL.buildPrintJob(pixels: rendered.pixels, width: rendered.width, height: rendered.height))
+            }
+            // Estimate per-label print time from the label's print length. Calibrated
+            // to measured hardware: a 1.5" label (~450 px @ 300 dpi) prints in ~0.85 s.
+            let estLabelMs = Int(Double(labelPx) / 300.0 * 370.0) + 300
+
+            Task { @MainActor in
+                guard !jobs.isEmpty else { return }   // nothing printable — keep window open
+                let job = PrinterManager.shared.submit(
+                    jobs: jobs, title: title, templateName: templateName,
+                    printerID: printerID, estLabelMs: estLabelMs
+                )
+                if let recent = recent {
+                    self.currentRecentPrintID = recent.id
+                    RecentPrintsStore.shared.add(recent)
+                    self.trackPrintStatus(job: job, recentID: recent.id)
+                }
+                // The print has started: close the window, return to the prior app,
+                // and pop the menu so the user can watch the queue.
+                let started = self.onPrintStarted
+                let prior = self.previousApp
+                self.previousApp = nil
+                self.close()
+                prior?.activate()
+                started?()
+            }
         }
-
-        // Nothing printable — keep the window open.
-        guard !jobs.isEmpty else { return }
-
-        // Estimate per-label print time from the label's print length. Calibrated to
-        // measured hardware: a 1.5" label (~450 px @ 300 dpi) prints in ~0.85 s.
-        let labelInches = Double(labelPx) / 300.0
-        let estLabelMs = Int(labelInches * 370.0) + 300
-
-        // Submit (queues on the chosen printer; prints concurrently with others).
-        let job = PrinterManager.shared.submit(
-            jobs: jobs,
-            title: title,
-            templateName: templateName,
-            printerID: printerID,
-            estLabelMs: estLabelMs
-        )
-
-        // Record in Recent Prints as in-progress; a long-lived observer updates
-        // the status when the job finishes (survives the window closing below).
-        if let recent = makeRecentPrint(from: payload, labelCount: jobs.count, status: .printing) {
-            currentRecentPrintID = recent.id
-            RecentPrintsStore.shared.add(recent)
-            trackPrintStatus(job: job, recentID: recent.id)
-        }
-
-        // The print has started: close the window, return the user to the app
-        // they were in, and pop open the menu so they can watch the queue.
-        let started = onPrintStarted
-        let prior = previousApp
-        previousApp = nil
-        close()
-        prior?.activate()
-        started?()
     }
 
     /// Builds a RecentPrint from a print/cancel payload, or nil if required
@@ -644,6 +662,7 @@ extension PrintWindowController: WKScriptMessageHandler {
 
 extension PrintWindowController: NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
+        flushWriteback()   // persist any debounced inline edit
         jobObservers.removeAll()
         printerObserver = nil
         cassetteObserver = nil

@@ -2,8 +2,8 @@
 // Build identity baked in at compile time so every build is traceable.
 enum BuildInfo {
     static let version = "1.1.0"          // semantic version (from /VERSION)
-    static let build   = "193"            // git commit count (monotonic)
-    static let commit  = "4bdbbf6+"     // short SHA (+ = uncommitted changes)
+    static let build   = "194"            // git commit count (monotonic)
+    static let commit  = "c1eb8d5+"     // short SHA (+ = uncommitted changes)
     static let date    = "2026-06-17"             // build date
 
     /// e.g. "1.1.0 (build 214 · a1b2c3d)"
