@@ -1868,6 +1868,101 @@ function onRecWheel(e){
   el.scrollTop+=delta*mult;
 }
 
+// ── Record-list windowing (H12) ──────────────────────────────────────────────
+// The list can hold thousands of rows, and R() rebuilds all of #app on every
+// click / search keystroke / printer poll. content-visibility already skips
+// off-screen layout+paint, but each row node is still created. So we keep only
+// the visible slice (plus a buffer) in the DOM and use top/bottom spacer <div>s
+// to preserve the scroll height. Rows wrap to variable heights, so per-record
+// heights are measured after each paint and cached in P._rowH (keyed by absolute
+// index); unmeasured rows use ROW_EST. The cache self-corrects as rows scroll
+// through the viewport, so it never needs explicit invalidation on width changes.
+const ROW_EST=36, WIN_BUFFER=8;
+function rowH(i){ const h=P._rowH&&P._rowH[i]; return (h>0)?h:ROW_EST; }
+function listMetrics(vis){
+  const offs=new Array(vis.length+1); offs[0]=0;
+  for(let k=0;k<vis.length;k++) offs[k+1]=offs[k]+rowH(vis[k]);
+  return {offs,total:offs[vis.length]};
+}
+function windowRange(vis,scrollTop,clientH){
+  const m=listMetrics(vis);
+  if(vis.length===0) return {lo:0,hi:-1,offs:m.offs,total:m.total};
+  const ch=clientH>0?clientH:600, st=scrollTop>0?scrollTop:0;
+  let lo=0; while(lo<vis.length-1 && m.offs[lo+1]<=st) lo++;
+  let hi=lo;  while(hi<vis.length-1 && m.offs[hi+1]<st+ch) hi++;
+  lo=Math.max(0,lo-WIN_BUFFER); hi=Math.min(vis.length-1,hi+WIN_BUFFER);
+  // Keep the edited row and the previewed row in the DOM so inline editing and
+  // arrow-key navigation never lose their element.
+  if(P.editCell){ const e=vis.indexOf(P.editCell.i); if(e>=0){ if(e<lo)lo=e; if(e>hi)hi=e; } }
+  const pv=vis.indexOf(P.previewIdx); if(pv>=0){ if(pv<lo)lo=pv; if(pv>hi)hi=pv; }
+  return {lo,hi,offs:m.offs,total:m.total};
+}
+function buildRow(i,vpos,cols,gridT){
+  const r=P.records[i];
+  const isSel=P.selected.has(i);
+  const isPrev=P.previewIdx===i;
+  const ps2=pairChkState(i);
+  return`<div class="rec-row${isSel?" selected":""}${isPrev?" active-preview":""}" data-i="${i}" style="grid-template-columns:${gridT};align-items:stretch" onclick="P.previewIdx=${i};P.lastClickIdx=null;R()">
+    <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();rowCheckClick(${i},event)" title="Print this label — Shift+click to range select">
+      <div class="cb ${isSel?"chk":""}"><span class="check-tick">${isSel?"✓":""}</span></div>
+    </div>
+    <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();pairCheckClick(${i},event)" title="Toggle Source + Destination pair — Shift+click to range select">
+      <div style="width:18px;height:14px;border:1.5px solid ${ps2?'rgba(108,142,245,0.6)':'var(--bd3)'};border-radius:3px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:${ps2==='chk'?'rgba(108,142,245,0.2)':ps2==='partial'?'rgba(108,142,245,0.08)':'transparent'}">
+        <span style="color:${ps2?'var(--accent)':'var(--bd4)'};font-size:8px;line-height:1">⇅</span>
+      </div>
+    </div>
+    <div class="rec-cell" style="display:flex;align-items:center;color:var(--text3);font-size:10px">${vpos+1}</div>
+    ${cols.map(c=>colDataCell(c,r,i)).join('')}
+  </div>`;
+}
+function recordListHeader(vis,cols,gridT){
+  const allSel=vis.length>0&&vis.every(i=>P.selected.has(i));
+  const someSel=vis.some(i=>P.selected.has(i));
+  return`<div class="rec-row" style="grid-template-columns:${gridT};position:sticky;top:0;z-index:3;background:var(--surface);border-bottom:1px solid var(--bd3)">
+    <div class="rec-cell" style="display:flex;align-items:center;justify-content:center">
+      <div class="cb ${allSel?"chk":someSel?"partial":""}" onclick="toggleAll()">
+        <span class="check-tick">${allSel?"✓":someSel?"−":""}</span>
+      </div>
+    </div>
+    <div class="rec-hdr-cell" title="Toggle pair (Source + Destination)" style="text-align:center;font-size:9px">⇅</div>
+    <div class="rec-hdr-cell">#</div>
+    ${cols.map(colHeaderCell).join('')}
+  </div>`;
+}
+function buildRecordListInner(vis,cols,gridT,scrollTop,clientH){
+  const header=recordListHeader(vis,cols,gridT);
+  if(vis.length===0)
+    return`${header}<div style="padding:30px 16px;text-align:center;color:var(--text2);font-size:12px">No records match the current filter.</div>`;
+  const {lo,hi,offs,total}=windowRange(vis,scrollTop,clientH);
+  let rows="";
+  for(let k=lo;k<=hi;k++) rows+=buildRow(vis[k],k,cols,gridT);
+  P._win={lo,hi};
+  return`${header}<div style="height:${offs[lo]}px"></div>${rows}<div style="height:${Math.max(0,total-offs[hi+1])}px"></div>`;
+}
+function measureRecordRows(){
+  if(!P._rowH) P._rowH={};
+  const sc=document.getElementById("recScroll"); if(!sc) return;
+  sc.querySelectorAll('.rec-row[data-i]').forEach(el=>{
+    const i=+el.getAttribute('data-i'), h=el.offsetHeight;
+    if(i>=0&&h>0) P._rowH[i]=h;
+  });
+}
+function onRecScroll(){
+  if(P.editCell) return;            // don't disturb an open inline editor
+  if(P._scrollRAF) return;
+  P._scrollRAF=requestAnimationFrame(()=>{
+    P._scrollRAF=null;
+    const sc=document.getElementById("recScroll"); if(!sc) return;
+    const vis=visibleIndices();
+    const w=windowRange(vis,sc.scrollTop,sc.clientHeight);
+    if(P._win&&P._win.lo===w.lo&&P._win.hi===w.hi) return;   // window unchanged
+    const cols=P.records.length?visibleColumns(P.records):[];
+    const gridT="var(--col-cb) var(--col-pair) var(--col-num) "+colGridTemplate(cols);
+    const inner=sc.firstElementChild;
+    if(inner){ inner.innerHTML=buildRecordListInner(vis,cols,gridT,sc.scrollTop,sc.clientHeight); measureRecordRows(); }
+  });
+}
+
 function R(){
   if(P.view==="editor"){return;} // editor managed by initDesigner
   // Hold a neutral loading screen until Swift has injected the real records,
@@ -1886,6 +1981,7 @@ function R(){
   // rebuilds all of #app, which would otherwise snap the list back to the top —
   // e.g. on the 5s printer rescan or any row click).
   const _prevScroll=(document.getElementById("recScroll")||{}).scrollTop||0;
+  const _prevClientH=(document.getElementById("recScroll")||{}).clientHeight||0;
   const _prevPreviewScroll=(document.getElementById("vl-preview-scroll")||{}).scrollTop||0;
   // Preserve the inline cell-edit input's focus + caret across the rebuild, so a
   // background re-render (printer/cassette poll, job updates) doesn't kick the
@@ -1942,45 +2038,13 @@ function R(){
           ${filterActive()?`<span style="display:flex;align-items:center;gap:5px;min-width:0;overflow:hidden"><span style="color:var(--accent);font-weight:600;flex-shrink:0">Filter:</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(filterSummary())}">${esc(filterSummary())}</span></span>`:""}
           ${sortActive()?`<span style="display:flex;align-items:center;gap:5px;min-width:0;overflow:hidden"><span style="color:var(--accent);font-weight:600;flex-shrink:0">Sort:</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(sortSummary())}">${esc(sortSummary())}</span></span>`:""}
         </div>`:""}
-        <!-- Grid headers -->
+        <!-- Grid headers + windowed record rows (only the visible slice is in the DOM) -->
         ${(()=>{
           const cols=P.records.length?visibleColumns(P.records):[];
           const gridT="var(--col-cb) var(--col-pair) var(--col-num) "+colGridTemplate(cols);
           const vis=visibleIndices();
-          const allSel=vis.length>0&&vis.every(i=>P.selected.has(i));
-          const someSel=vis.some(i=>P.selected.has(i));
-          const header=`<div class="rec-row" style="grid-template-columns:${gridT};position:sticky;top:0;z-index:3;background:var(--surface);border-bottom:1px solid var(--bd3)">
-            <div class="rec-cell" style="display:flex;align-items:center;justify-content:center">
-              <div class="cb ${allSel?"chk":someSel?"partial":""}" onclick="toggleAll()">
-                <span class="check-tick">${allSel?"✓":someSel?"−":""}</span>
-              </div>
-            </div>
-            <div class="rec-hdr-cell" title="Toggle pair (Source + Destination)" style="text-align:center;font-size:9px">⇅</div>
-            <div class="rec-hdr-cell">#</div>
-            ${cols.map(colHeaderCell).join('')}
-          </div>`;
-          if(vis.length===0){
-            return`<div id="recScroll" style="overflow:auto;flex:1"><div style="min-width:max-content">${header}<div style="padding:30px 16px;text-align:center;color:var(--text2);font-size:12px">No records match the current filter.</div></div></div>`;
-          }
-          const rows=vis.map((i,vpos)=>{
-            const r=P.records[i];
-            const isSel=P.selected.has(i);
-            const isPrev=P.previewIdx===i;
-            const ps2=pairChkState(i);
-            return`<div class="rec-row recv${isSel?" selected":""}${isPrev?" active-preview":""}" style="grid-template-columns:${gridT};align-items:stretch" onclick="P.previewIdx=${i};P.lastClickIdx=null;R()">
-              <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();rowCheckClick(${i},event)" title="Print this label — Shift+click to range select">
-                <div class="cb ${isSel?"chk":""}"><span class="check-tick">${isSel?"✓":""}</span></div>
-              </div>
-              <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();pairCheckClick(${i},event)" title="Toggle Source + Destination pair — Shift+click to range select">
-                <div style="width:18px;height:14px;border:1.5px solid ${ps2?'rgba(108,142,245,0.6)':'var(--bd3)'};border-radius:3px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:${ps2==='chk'?'rgba(108,142,245,0.2)':ps2==='partial'?'rgba(108,142,245,0.08)':'transparent'}">
-                  <span style="color:${ps2?'var(--accent)':'var(--bd4)'};font-size:8px;line-height:1">⇅</span>
-                </div>
-              </div>
-              <div class="rec-cell" style="display:flex;align-items:center;color:var(--text3);font-size:10px">${vpos+1}</div>
-              ${cols.map(c=>colDataCell(c,r,i)).join('')}
-            </div>`;
-          }).join("");
-          return`<div id="recScroll" style="overflow:auto;flex:1"><div style="min-width:max-content">${header}${rows}</div></div>`;
+          const inner=buildRecordListInner(vis,cols,gridT,_prevScroll,_prevClientH);
+          return`<div id="recScroll" style="overflow:auto;flex:1"><div style="min-width:max-content">${inner}</div></div>`;
         })()}
       </div>
 
@@ -2006,7 +2070,11 @@ function R(){
   // Restore scroll position and wire wheel acceleration (bound once on #app,
   // which survives innerHTML swaps).
   const _recEl=document.getElementById("recScroll");
-  if(_recEl) _recEl.scrollTop=_prevScroll;
+  if(_recEl){
+    _recEl.scrollTop=_prevScroll;
+    _recEl.addEventListener("scroll",onRecScroll,{passive:true});
+    measureRecordRows();   // record real row heights so the window/scrollbar stay accurate
+  }
   const _pvEl=document.getElementById("vl-preview-scroll");
   if(_pvEl) _pvEl.scrollTop=_prevPreviewScroll;
   if(_editCaret){ const _ei=document.getElementById("cell-edit-input");
