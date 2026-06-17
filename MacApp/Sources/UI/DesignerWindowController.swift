@@ -422,7 +422,7 @@ public final class DesignerWindowController: NSObject {
         guard let wv = webView else { return }
         let s = AppSettings.shared
         wv.evaluateJavaScript(
-            "if(typeof initDesignerPrefs==='function')initDesignerPrefs({snapGrid:\(s.designerSnapGrid),snapObjects:\(s.designerSnapObjects),gridSize:\(s.designerGridSize),recH:\(s.designerRecordsHeight)});",
+            "if(typeof initDesignerPrefs==='function')initDesignerPrefs({snapGrid:\(s.designerSnapGrid),snapObjects:\(s.designerSnapObjects),gridSize:\(s.designerGridSize),recH:\(s.designerRecordsHeight),propW:\(s.designerPropsWidth)});",
             completionHandler: nil
         )
     }
@@ -1096,6 +1096,7 @@ extension DesignerWindowController: WKScriptMessageHandler {
                 if let v = p["snapObjects"] as? Bool { AppSettings.shared.designerSnapObjects = v }
                 if let v = p["gridSize"] as? Double { AppSettings.shared.designerGridSize = v }
                 if let v = p["recH"] as? Double { AppSettings.shared.designerRecordsHeight = v }
+                if let v = p["propW"] as? Double { AppSettings.shared.designerPropsWidth = v }
             }
 
         case "editReturn":

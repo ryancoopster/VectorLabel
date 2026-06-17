@@ -188,10 +188,16 @@ function autoFitPx(text,o,basePx,boxW,pad){
 }
 
 // ── State ─────────────────────────────────────────────────────────────────────
+// Properties-panel width bounds (px). Clamp the persisted/dragged width here.
+const PROP_MIN=170, PROP_MAX=560, PROP_DEFAULT=220;
 let nid=1;const mid=()=>`o${nid++}`;
 let S={
   spec:BL[1],selId:null,selIds:[],recIdx:0,wrap:true,showFields:false,zoom:1.0,
   snapGrid:true,snapObjects:true,gridSize:0.05,
+  // Width (px) of the right-hand properties (inspector) panel. Drag its left-edge
+  // splitter to resize; persisted via setDesignerPrefs (mirrors recH). Swift
+  // injects the saved value on load through initDesignerPrefs.
+  propW:220,
   // Custom mode opens "Untitled Custom Design"; template mode "Untitled Template".
   tplName:(window._designerMode==='custom')?'Untitled Custom Design':'Untitled Template',modal:null,
   // Custom Designer print header state (custom mode only).
@@ -232,11 +238,12 @@ function initDesignerPrefs(p){
   if(typeof p.snapObjects==='boolean')S.snapObjects=p.snapObjects;
   if(typeof p.gridSize==='number')S.gridSize=p.gridSize;
   if(typeof p.recH==='number'&&p.recH>0)S.recH=p.recH;
+  if(typeof p.propW==='number'&&p.propW>0)S.propW=Math.max(PROP_MIN,Math.min(PROP_MAX,p.propW));
   R();
 }
 function saveDesignerPrefs(){
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
-    window.webkit.messageHandlers.vectorlabel.postMessage({action:"setDesignerPrefs",payload:{snapGrid:S.snapGrid,snapObjects:S.snapObjects,gridSize:S.gridSize,recH:S.recH||160}});
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"setDesignerPrefs",payload:{snapGrid:S.snapGrid,snapObjects:S.snapObjects,gridSize:S.gridSize,recH:S.recH||160,propW:S.propW||PROP_DEFAULT}});
 }
 function gobj(id){return S.objs.find(o=>o.id===id);}
 function uobj(id,p){S.objs=S.objs.map(o=>o.id===id?Object.assign({},o,p):o);}
@@ -795,8 +802,9 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
   // Canvas holds the printable area plus an invisible 2" positioning margin on
   // every side. Objects can overhang the printable edges into that margin; only
   // the printable area prints. The margin is not visually called out.
+  const canvasDrop=readOnly?"":`ondragover="onCanvasDragOver(event)" ondragleave="onCanvasDragLeave(event)" ondrop="onColDropToCanvas(event)"`;
   return `<div style="display:flex;flex-direction:column;align-items:flex-start;flex-shrink:0">
-    <div onmousedown="${readOnly?'':`if(event.target===this)deselect()`}" style="width:${bw}px;height:${bh}px;background:transparent;position:relative;overflow:hidden;flex-shrink:0">
+    <div onmousedown="${readOnly?'':`if(event.target===this)deselect()`}" ${canvasDrop} style="width:${bw}px;height:${bh}px;background:transparent;position:relative;overflow:hidden;flex-shrink:0">
       <!-- Printable area (only this prints) -->
       <div id="printable-area" style="position:absolute;left:${B}px;top:${B}px;width:${pw}px;height:${ph}px;background:#fff;box-shadow:0 0 0 1.5px var(--accent);pointer-events:none"></div>
       ${wrapZone}
@@ -989,7 +997,7 @@ function buildProps(){
              <option value="">— choose column —</option>
              ${fieldDefs().map(f=>`<option value="${escAttr(f.c)}"${o.field===f.c?" selected":""}>${esc(f.f)}</option>`).join("")}
            </select>
-           <div style="color:var(--text3);font-size:10px;margin-top:5px;line-height:1.4">…or drag a column header from the Records panel onto the text box.</div>`
+           <div style="color:var(--text3);font-size:10px;margin-top:5px;line-height:1.4">…or drag a column header from the ${isCustomMode()?'Database pane':'Records panel'} onto the text box, or onto an empty spot to create a new field.</div>`
       : `<input id="fxbar" class="inp" value="${(o.f||"").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}" style="font-family:monospace;font-size:12px" oninput="S._ef=this.value" onblur="commitF()" onkeydown="if(event.key==='Enter')commitF()" placeholder='=IF(Number&lt;&gt;&quot;&quot;,Number,&quot;&quot;)'>
          <div style="display:flex;gap:5px;margin-top:5px">
            <button class="btn${S.showFields?" on":""}" onclick="S.showFields=!S.showFields;R()" style="font-size:11px">Fields ▾</button>
@@ -1283,6 +1291,10 @@ function R(){
             </div>
           </div>
         </div>
+        <!-- Center "Records" navigator: Template Designer only. In custom mode the
+             bottom Database pane is the record browser (selection + editing), so
+             this duplicate navigator is hidden (CLEANUP). -->
+        ${isCustomMode()?"":`
         <!-- Resize handle -->
         <div id="rec-resizer" style="height:5px;cursor:row-resize;background:rgba(108,142,245,0.0);border-top:1px solid var(--bd3);flex-shrink:0" onmouseenter="this.style.background='rgba(108,142,245,0.25)'" onmouseleave="this.style.background='rgba(108,142,245,0)'" onmousedown="startRecResize(event)"></div>
         <!-- Record selector -->
@@ -1297,11 +1309,12 @@ function R(){
             ${buildColumnsMenu()}
           </div>
           ${buildEditorRecordTable()}
-        </div>
+        </div>`}
       </div>
 
-      <!-- Right: properties -->
-      <div style="width:220px;background:var(--surface);border-left:1px solid var(--bd2);padding:12px;overflow-y:auto;flex-shrink:0">
+      <!-- Right: properties (horizontally resizable — drag the left-edge splitter) -->
+      <div id="props-pane" style="width:${S.propW||PROP_DEFAULT}px;background:var(--surface);border-left:1px solid var(--bd2);padding:12px;overflow-y:auto;flex-shrink:0;position:relative">
+        <div onmousedown="startPropResize(event)" title="Drag to resize the properties panel" style="position:absolute;left:-3px;top:0;bottom:0;width:8px;cursor:ew-resize;z-index:6"></div>
         ${buildProps()}
       </div>
     </div>
@@ -1516,14 +1529,66 @@ function setTextMode(id,m){
   uobj(id,patch); S._ef=(m==="formula"?(o.f||patch.f):undefined); S.showFields=false; R();
 }
 
-// Drop a record-column header onto a text box → field mode bound to that column.
+// The column/field name carried by an in-flight header drag. Prefer the
+// dataTransfer payload (set in colDragStart) and fall back to the module var
+// (set even when setData is unavailable). Used by both drop targets.
+function dragColName(e){
+  let key="";
+  try{ if(e.dataTransfer) key=e.dataTransfer.getData("text/plain")||""; }catch(_){}
+  return key||_vlDragCol||"";
+}
+
+// Drop a record-column header onto a text box → field mode bound to that column
+// (Target A). stopPropagation so the canvas-container drop handler (Target B,
+// create-new) does not also fire as the event bubbles.
 function onColDropToText(e,id){
-  e.preventDefault();
-  const key=(e.dataTransfer&&(e.dataTransfer.getData("text/plain")))||_vlDragCol;
+  e.preventDefault(); e.stopPropagation();
+  const key=dragColName(e);
   if(typeof colClearDrag==="function")colClearDrag();
   if(!key)return;
   snapshot();
   uobj(id,{mode:"field",field:key}); S.selId=id; S._ef=undefined; R();
+}
+
+// Drop a record-column header onto the empty canvas workspace (Target B) →
+// CREATE a new field-mode text object at the drop point. Mirrors addObj("tx")
+// but bound to the field. The drop point is converted from screen px to label
+// inches via the printable-area rect and the SC*zoom scale (same model startDrag
+// uses), then offset so the new box's top-left lands roughly under the cursor.
+function onColDropToCanvas(e){
+  e.preventDefault();
+  const key=dragColName(e);
+  if(typeof colClearDrag==="function")colClearDrag();
+  if(!key)return;
+  const pa=document.getElementById("printable-area");
+  let x=0.05, y=0.05;
+  if(pa){
+    const r=pa.getBoundingClientRect();              // printable origin (screen px, post-zoom)
+    const sc=SC*S.zoom;
+    x=(e.clientX-r.left)/sc;                          // → inches from printable origin
+    y=(e.clientY-r.top)/sc;
+    const w=0.5, h=0.2;
+    x=Math.max(-BLEED_IN, Math.min(x-w/2, S.spec.pw)); // center the box on the cursor, clamp into bounds
+    y=Math.max(-BLEED_IN, Math.min(y-h/2, S.spec.ph));
+    x=snapToGrid(x); y=snapToGrid(y);
+  }
+  snapshot();
+  const id=mid();
+  S.objs.push({id,x:x,y:y,t:"tx",w:.5,h:.2,mode:"field",field:key,al:"left",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100});
+  S.selId=id; S.selIds=[id]; S._ef=undefined; R();
+}
+
+// Drag-over feedback on the canvas workspace: allow the drop and show a subtle
+// accent ring on the printable area.
+function onCanvasDragOver(e){
+  e.preventDefault();
+  if(e.dataTransfer)e.dataTransfer.dropEffect='copy';
+  const pa=document.getElementById("printable-area");
+  if(pa)pa.style.boxShadow='0 0 0 1.5px var(--accent),0 0 0 4px rgba(108,142,245,0.35)';
+}
+function onCanvasDragLeave(e){
+  const pa=document.getElementById("printable-area");
+  if(pa)pa.style.boxShadow='0 0 0 1.5px var(--accent)';
 }
 
 // Static-text editing. Updates the model live without a full re-render (which
@@ -1614,6 +1679,26 @@ function startRecResize(e){
   function mu(){window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",mu);saveDesignerPrefs();}
   window.addEventListener("mousemove",mv);
   window.addEventListener("mouseup",mu);
+}
+
+// Drag the splitter on the properties panel's LEFT edge to resize it; persist on
+// release (mirrors the print window's startPreviewResize). Dragging left widens.
+// Applies in both designer modes. Width is clamped to PROP_MIN..PROP_MAX.
+function startPropResize(e){
+  e.preventDefault(); e.stopPropagation();
+  const startX=e.clientX, startW=S.propW||PROP_DEFAULT;
+  const pane=document.getElementById("props-pane");
+  function mv(ev){
+    const maxW=Math.min(PROP_MAX, Math.max(PROP_MIN, window.innerWidth-360));
+    let w=Math.max(PROP_MIN, Math.min(startW+(startX-ev.clientX), maxW));   // drag left → wider
+    S.propW=w;
+    if(pane)pane.style.width=w+"px";
+  }
+  function mu(){
+    window.removeEventListener("mousemove",mv); window.removeEventListener("mouseup",mu);
+    saveDesignerPrefs();
+  }
+  window.addEventListener("mousemove",mv); window.addEventListener("mouseup",mu);
 }
 // ── Undo history ─────────────────────────────────────────────────────────────
 const HISTORY=[];

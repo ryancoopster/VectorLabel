@@ -102,6 +102,10 @@ public final class AppSettings: ObservableObject {
     @Published public var designerRecordsHeight: Double {
         didSet { UserDefaults.standard.set(designerRecordsHeight, forKey: "designerRecordsHeight") }
     }
+    /// Width (px) of the designer's right-hand properties (inspector) panel.
+    @Published public var designerPropsWidth: Double {
+        didSet { UserDefaults.standard.set(designerPropsWidth, forKey: "designerPropsWidth") }
+    }
 
     // MARK: – Printer calibration (per printer, keyed by serial number)
 
@@ -217,6 +221,7 @@ public final class AppSettings: ObservableObject {
         designerSnapObjects = defaults.object(forKey: "designerSnapObjects") as? Bool ?? true
         designerGridSize    = defaults.object(forKey: "designerGridSize") as? Double ?? 0.05
         designerRecordsHeight = defaults.object(forKey: "designerRecordsHeight") as? Double ?? 160
+        designerPropsWidth  = defaults.object(forKey: "designerPropsWidth") as? Double ?? 220
         if let d = defaults.data(forKey: "printerCalibration"),
            let m = try? JSONDecoder().decode([String: [Double]].self, from: d) {
             printerCalibration = m
@@ -249,6 +254,7 @@ public final class AppSettings: ObservableObject {
         designerSnapObjects  = true
         designerGridSize     = 0.05
         designerRecordsHeight = 160
+        designerPropsWidth   = 220
         filterSortPresetsJSON = "[]"
         appearance           = "dark"
         showInDock           = false
