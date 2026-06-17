@@ -153,7 +153,15 @@ public enum ExcelRecordReader {
     /// value (numbers/dates render as their stored text). `sharedStrings` is nil for
     /// numeric-only / inline-string workbooks that omit xl/sharedStrings.xml.
     private static func cellString(_ cell: Cell, sharedStrings: SharedStrings?) -> String {
-        if let ss = sharedStrings, let s = cell.stringValue(ss) { return s }
+        if let ss = sharedStrings {
+            if let s = cell.stringValue(ss) { return s }
+            // A rich-text shared string has a nil plain `.text` (so stringValue is
+            // nil) but carries its content in formatting runs. Join the runs'
+            // `.text` BEFORE the cell.value fallback — otherwise cell.value returns
+            // the raw shared-string INDEX (e.g. "3") for these cells.
+            let runs = cell.richStringValue(ss).compactMap { $0.text }
+            if !runs.isEmpty { return runs.joined() }
+        }
         if let inline = cell.inlineString?.text { return inline }
         return cell.value ?? ""
     }

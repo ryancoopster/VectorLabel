@@ -312,6 +312,21 @@ function startColResize(e,col){
 function currentRecords(){ return window._editorRecords||(typeof P!=='undefined'&&P.records&&P.records.length?P.records:RX); }
 const DEFAULT_COL_W=120;
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+// Escape for an HTML attribute VALUE (adds quote escaping on top of esc()).
+function escAttr(s){ return esc(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+// Escape a string interpolated as a single-quoted JS string literal sitting INSIDE
+// an HTML attribute (e.g. onclick="f('${jsAttr(c)}')") — neutralises both the JS
+// string context (backslash, quotes) and the HTML attribute context (&<>) so a
+// crafted column name can't run arbitrary JS in the privileged WKWebView.
+function jsAttr(s){
+  return String(s)
+    .replace(/\\/g,'\\\\')
+    .replace(/'/g,'\\\'')
+    .replace(/"/g,'&quot;')
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;');
+}
 
 // Memoized by records-array identity + the column order, so the O(records×keys)
 // scan only reruns when the data or column layout actually changes — not on every
@@ -401,7 +416,8 @@ function toggleColumn(c){ (window._hiddenColumns||[]).includes(c)?showColumn(c):
 function colHeaderContextMenu(e,c){ e.preventDefault(); hideColumn(c); }
 
 function colHeaderCell(c){
-  return `<div data-colhdr draggable="true" ondragstart="colDragStart(event,'${c}')" ondragover="colDragOver(event,this)" ondragend="colDragEnd(event)" ondrop="colDrop(event,'${c}')" oncontextmenu="colHeaderContextMenu(event,'${c}')" title="Drag to reorder · right-click to hide" style="position:relative;padding:5px 8px;font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;cursor:grab;box-sizing:border-box">${esc(colLabel(c))}<div onmousedown="colResizeStart(event,'${c}')" style="position:absolute;top:0;right:0;width:6px;height:100%;cursor:col-resize"></div></div>`;
+  const j=jsAttr(c);
+  return `<div data-colhdr draggable="true" ondragstart="colDragStart(event,'${j}')" ondragover="colDragOver(event,this)" ondragend="colDragEnd(event)" ondrop="colDrop(event,'${j}')" oncontextmenu="colHeaderContextMenu(event,'${j}')" title="Drag to reorder · right-click to hide" style="position:relative;padding:5px 8px;font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;cursor:grab;box-sizing:border-box">${esc(colLabel(c))}<div onmousedown="colResizeStart(event,'${j}')" style="position:absolute;top:0;right:0;width:6px;height:100%;cursor:col-resize"></div></div>`;
 }
 function colDataCell(c,r,i){
   // Inline editor for this cell.
@@ -448,10 +464,10 @@ function buildColumnsMenu(){
   const hidden=new Set(window._hiddenColumns||[]);
   return `<div onclick="event.stopPropagation()" style="position:absolute;right:16px;top:26px;z-index:30;background:var(--surface);border:1px solid var(--bd4);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.5);padding:5px;max-height:300px;overflow-y:auto;min-width:200px">
     <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;padding:3px 6px 5px">Columns</div>
-    ${cols.map(c=>`<div draggable="true" ondragstart="colDragStart(event,'${c}')" ondragover="colDragOver(event,this)" ondragend="colDragEnd(event)" ondrop="colDrop(event,'${c}')" style="display:flex;align-items:center;gap:7px;padding:3px 6px;border-radius:4px">
+    ${cols.map(c=>`<div draggable="true" ondragstart="colDragStart(event,'${jsAttr(c)}')" ondragover="colDragOver(event,this)" ondragend="colDragEnd(event)" ondrop="colDrop(event,'${jsAttr(c)}')" style="display:flex;align-items:center;gap:7px;padding:3px 6px;border-radius:4px">
       <span title="Drag to reorder" style="cursor:grab;color:var(--text2);font-size:12px;user-select:none">⋮⋮</span>
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;font-size:12px;color:var(--text)">
-        <input type="checkbox" ${hidden.has(c)?'':'checked'} onchange="toggleColumn('${c}')"> ${esc(colLabel(c))}
+        <input type="checkbox" ${hidden.has(c)?'':'checked'} onchange="toggleColumn('${jsAttr(c)}')"> ${esc(colLabel(c))}
       </label>
     </div>`).join('')}
   </div>`;
@@ -1086,7 +1102,7 @@ function connToggle(curr,onclickPrefix){
 
 function renderFilterGroup(g,gi,multi){
   const cols=recordColumns(currentRecords());
-  const fieldOpts=sel=>cols.map(c=>`<option value="${c}" ${c===sel?'selected':''}>${esc(colLabel(c))}</option>`).join('');
+  const fieldOpts=sel=>cols.map(c=>`<option value="${escAttr(c)}" ${c===sel?'selected':''}>${esc(colLabel(c))}</option>`).join('');
   const opOpts=sel=>FILTER_OPS.map(o=>`<option value="${o.op}" ${o.op===sel?'selected':''}>${o.label}</option>`).join('');
   const rowsHtml=g.rules.map((r,ri)=>{
     const conn = ri>0 ? `<div style="margin:6px 0">${connToggle(g.connectors[ri-1],`fdSetConn(${gi},${ri-1},`)}</div>` : '';
@@ -1097,7 +1113,7 @@ function renderFilterGroup(g,gi,multi){
        </select>`;
     const valCell = !opNeedsValue(r.op) ? '<div style="flex:1"></div>' :
       r.valueType==='field'
-        ? `<select class="inp" style="flex:1;min-width:0" onchange="fdSet(${gi},${ri},'value',this.value)">${cols.map(c=>`<option value="${c}" ${c===r.value?'selected':''}>${esc(colLabel(c))}</option>`).join('')}</select>`
+        ? `<select class="inp" style="flex:1;min-width:0" onchange="fdSet(${gi},${ri},'value',this.value)">${cols.map(c=>`<option value="${escAttr(c)}" ${c===r.value?'selected':''}>${esc(colLabel(c))}</option>`).join('')}</select>`
         : `<input class="inp" style="flex:1;min-width:0" value="${esc(r.value||'')}" oninput="fdSetText(${gi},${ri},this.value)" placeholder="match value">`;
     return `<div style="margin-bottom:4px">
       ${conn}
@@ -1147,7 +1163,7 @@ function renderFilterModal(){
       <span style="color:var(--text2);font-size:11px;width:42px;flex-shrink:0">${i===0?'Sort by':'then by'}</span>
       <select class="inp" style="flex:1;min-width:0" onchange="sdSet(${i},'field',this.value)">
         <option value="">— none —</option>
-        ${cols.map(c=>`<option value="${c}" ${r.field===c?'selected':''}>${esc(colLabel(c))}</option>`).join('')}
+        ${cols.map(c=>`<option value="${escAttr(c)}" ${r.field===c?'selected':''}>${esc(colLabel(c))}</option>`).join('')}
       </select>
       <select class="inp" style="width:auto;flex-shrink:0" onchange="sdSet(${i},'dir',this.value)">
         <option value="asc" ${r.dir!=='desc'?'selected':''}>A→Z</option>
@@ -1534,7 +1550,7 @@ function buildPrintBar(){
           onchange="P.activePrinter=this.value;R()">
           ${(window._swiftPrinters||PRINTERS).length===0
             ? `<option value="">No printers connected</option>`
-            : (window._swiftPrinters||PRINTERS).map(p=>`<option value="${p.id}" ${P.activePrinter===p.id?"selected":""}>${p.name}${p.serial?" — "+p.serial:""}</option>`).join("")}
+            : (window._swiftPrinters||PRINTERS).map(p=>`<option value="${escAttr(p.id)}" ${P.activePrinter===p.id?"selected":""}>${esc(p.name)}${p.serial?" — "+esc(p.serial):""}</option>`).join("")}
         </select>
         <div style="position:absolute;left:10px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:${pr.status==="ready"?"var(--green)":pr.status==="busy"?"var(--warn)":"var(--red)"};pointer-events:none"></div>
         <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:9px;pointer-events:none">▼</div>

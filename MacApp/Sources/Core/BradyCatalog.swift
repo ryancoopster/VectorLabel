@@ -128,7 +128,7 @@ public enum BradyCatalog {
     public private(set) static var loadedFromResource = false
 
     fileprivate static let file: CatalogFile = {
-        if let url = Bundle.module.url(forResource: "BradyCatalog", withExtension: "json"),
+        if let url = CoreResources.url("BradyCatalog", "json"),
            let data = try? Data(contentsOf: url),
            let decoded = try? JSONDecoder().decode(CatalogFile.self, from: data) {
             loadedFromResource = true

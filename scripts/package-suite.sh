@@ -90,7 +90,17 @@ package_one() {
   fi
 
   cp "$BINDIR/$EXE" "$APP/Contents/MacOS/$EXE"
-  for b in "$BINDIR"/*.bundle; do [ -d "$b" ] && cp -R "$b" "$APP/Contents/Resources/"; done
+  # Copy ONLY the resource bundles the apps actually use, by explicit name. A
+  # glob over *.bundle would also scoop up a stale VectorLabel_VectorLabel.bundle
+  # left from the pre-restructure target, which must NOT ship. Core is required;
+  # the dependency resource bundles (CoreXLSX / ZIPFoundation) are copied only if
+  # they exist for this build.
+  for BUNDLE in \
+    VectorLabel_VectorLabelCore.bundle \
+    CoreXLSX_CoreXLSX.bundle \
+    ZIPFoundation_ZIPFoundation.bundle; do
+    [ -d "$BINDIR/$BUNDLE" ] && cp -R "$BINDIR/$BUNDLE" "$APP/Contents/Resources/"
+  done
 
   # App icon (Phase 7): the Custom Designer gets the "CL" monogram
   # (AppIconCustom.icns); the other three get the "L" monogram (AppIcon.icns).

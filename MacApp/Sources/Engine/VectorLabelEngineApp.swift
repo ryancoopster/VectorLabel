@@ -173,6 +173,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     // PrinterManager, then observes the returned PrintJob and reports the outcome
     // back to the queue via PrintQueue.complete().
 
+    // Guards the re-drain so a flapping printer list can't hot-loop the backlog.
+    private var lastRedrainAt: Date = .distantPast
+
     private func startQueueConsumer() {
         let watcher = PrintQueueWatcher(queue: PrintQueue()) { [weak self] job, processingURL in
             // PrintQueueWatcher invokes onJob on its FolderWatcher thread; hop to
@@ -181,22 +184,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
         watcher.start()
         queueWatcher = watcher
+
+        // The startup backlog drain (in watcher.start) can run before the async USB
+        // scan has populated `printers`; no-printer jobs are then re-queued rather
+        // than failed (see consume()). Re-drain the queue whenever the printer list
+        // transitions to non-empty so those re-queued jobs print once a printer
+        // appears. A short backoff prevents a flapping list from hot-looping.
+        PrinterManager.shared.$printers
+            .receive(on: RunLoop.main)
+            .sink { [weak self] printers in
+                guard let self else { return }
+                guard !printers.isEmpty else { return }
+                let now = Date()
+                guard now.timeIntervalSince(self.lastRedrainAt) > 1.0 else { return }
+                self.lastRedrainAt = now
+                self.queueWatcher?.drainBacklog()
+            }
+            .store(in: &cancellables)
     }
 
     private func consume(job: PrintJobFile, processingURL: URL) {
-        // Resolve the target printer: the job's explicit id, else the sole ready
-        // printer, matching the IPC contract.
-        let printerID = job.printerID
-            ?? PrinterManager.shared.printers.first(where: { $0.status == .ready })?.id
-            ?? PrinterManager.shared.printers.first?.id
-            ?? ""
-
-        // No printer at all: can't print this job — route it to failed/ so it
-        // doesn't get stuck in processing/ forever.
-        guard !printerID.isEmpty else {
-            PrintQueue().complete(processingURL, success: false)
+        // A job that names a SPECIFIC printer is resolved to exactly that id; if
+        // it's absent we fail it (same as before). A job with no printerID
+        // (Custom Designer's "Engine picks the printer" contract) is resolved to
+        // the sole ready / any printer.
+        if let explicitID = job.printerID, !explicitID.isEmpty {
+            consumeResolved(job: job, processingURL: processingURL, printerID: explicitID)
             return
         }
+
+        let auto = PrinterManager.shared.printers.first(where: { $0.status == .ready })?.id
+            ?? PrinterManager.shared.printers.first?.id
+
+        guard let printerID = auto, !printerID.isEmpty else {
+            // No printer resolvable. If the USB scan hasn't completed yet, the
+            // printer list is simply empty *for now* — un-claim the job back to
+            // queue/ so it's re-drained once a printer appears (see the $printers
+            // observer in startQueueConsumer). Only fail if the scan has run and
+            // genuinely found no printer.
+            if PrinterManager.shared.hasScannedOnce {
+                PrintQueue().complete(processingURL, success: false)
+            } else {
+                PrintQueue().requeue(processingURL)
+            }
+            return
+        }
+        consumeResolved(job: job, processingURL: processingURL, printerID: printerID)
+    }
+
+    private func consumeResolved(job: PrintJobFile, processingURL: URL, printerID: String) {
 
         let printJob = PrinterManager.shared.submit(
             jobs: job.labels.map { [UInt8]($0) },

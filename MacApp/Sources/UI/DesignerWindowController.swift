@@ -383,6 +383,7 @@ public final class DesignerWindowController: NSObject {
         let js = """
         if(typeof initCustomDocument==='function')initCustomDocument({\
         name:\(nameJSON),specN:\(specJSON),objs:\(objJSON),copies:\(doc.copies),\
+        cutMode:\(doc.cutMode.rawValue.jsonQuoted),\
         labelLengthInches:\(lenInches),\
         records:\(recJSON),columns:\(colJSON),filename:\(filename),\
         headerRow:\(doc.dataSourceHeaderRow),isXLSX:\(isXLSX),\
@@ -838,6 +839,9 @@ public final class DesignerWindowController: NSObject {
               let template = try? JSONDecoder().decode(VLTemplate.self, from: data)
         else { return }
         let copies = max(1, (payload["copies"] as? Int) ?? 1)
+        // The effective cut mode chosen in the designer, so the choice round-trips
+        // in the .vlcus. Falls back to .never if absent/unrecognised.
+        let cutMode = CutMode(rawValue: (payload["cutMode"] as? String) ?? "") ?? .never
 
         // Embedded data snapshot from the in-memory bound source (if any).
         var rows: [[String: String]] = []
@@ -859,6 +863,7 @@ public final class DesignerWindowController: NSObject {
             dataSourcePath: srcPath,
             dataSourceHeaderRow: headerRow,
             labelLengthInches: template.labelLengthInches ?? 0,
+            cutMode: cutMode,
             copies: copies)
 
         let panel = NSSavePanel()

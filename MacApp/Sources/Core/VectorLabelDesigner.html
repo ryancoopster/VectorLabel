@@ -346,6 +346,22 @@ function startEdColResize(e,col){
 function currentRecords(){ return window._editorRecords||RX; }
 const DEFAULT_COL_W=120;
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+// Escape for an HTML attribute VALUE (adds quote escaping on top of esc()).
+function escAttr(s){ return esc(s).replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+// Escape a string that is interpolated as a single-quoted JS string literal sitting
+// INSIDE an HTML attribute (e.g. onclick="f('${jsAttr(c)}')"). Must neutralise both
+// the JS-string context (backslash, quotes) AND the HTML-attribute context (the
+// &<> chars) so a crafted column name can't break out and run arbitrary JS in the
+// privileged WKWebView. Order matters: backslash first.
+function jsAttr(s){
+  return String(s)
+    .replace(/\\/g,'\\\\')
+    .replace(/'/g,'\\\'')
+    .replace(/"/g,'&quot;')
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;');
+}
 
 // Full column list (incl. hidden): saved order first, then friendly, then rest.
 function recordColumns(records){
@@ -434,7 +450,8 @@ function colHeaderContextMenu(e,c){ e.preventDefault(); hideColumn(c); }
 
 // One header cell: drag to reorder, right-edge to resize, right-click to hide.
 function colHeaderCell(c){
-  return `<div data-colhdr draggable="true" ondragstart="colDragStart(event,'${c}')" ondragover="colDragOver(event,this)" ondragend="colDragEnd(event)" ondrop="colDrop(event,'${c}')" oncontextmenu="colHeaderContextMenu(event,'${c}')" title="Drag to reorder · right-click to hide" style="position:relative;padding:5px 8px;font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;cursor:grab;box-sizing:border-box">${esc(colLabel(c))}<div onmousedown="colResizeStart(event,'${c}')" style="position:absolute;top:0;right:0;width:6px;height:100%;cursor:col-resize"></div></div>`;
+  const j=jsAttr(c);
+  return `<div data-colhdr draggable="true" ondragstart="colDragStart(event,'${j}')" ondragover="colDragOver(event,this)" ondragend="colDragEnd(event)" ondrop="colDrop(event,'${j}')" oncontextmenu="colHeaderContextMenu(event,'${j}')" title="Drag to reorder · right-click to hide" style="position:relative;padding:5px 8px;font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;cursor:grab;box-sizing:border-box">${esc(colLabel(c))}<div onmousedown="colResizeStart(event,'${j}')" style="position:absolute;top:0;right:0;width:6px;height:100%;cursor:col-resize"></div></div>`;
 }
 
 // Columns dropdown: checkboxes to show/hide + grab handle to reorder.
@@ -445,10 +462,10 @@ function buildColumnsMenu(){
   const hidden=new Set(window._hiddenColumns||[]);
   return `<div onclick="event.stopPropagation()" style="position:absolute;right:8px;top:26px;z-index:30;background:var(--surface);border:1px solid var(--bd4);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.5);padding:5px;max-height:280px;overflow-y:auto;min-width:190px">
     <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;padding:3px 6px 5px">Columns</div>
-    ${cols.map(c=>`<div draggable="true" ondragstart="colDragStart(event,'${c}')" ondragover="colDragOver(event,this)" ondragend="colDragEnd(event)" ondrop="colDrop(event,'${c}')" style="display:flex;align-items:center;gap:7px;padding:3px 6px;border-radius:4px">
+    ${cols.map(c=>`<div draggable="true" ondragstart="colDragStart(event,'${jsAttr(c)}')" ondragover="colDragOver(event,this)" ondragend="colDragEnd(event)" ondrop="colDrop(event,'${jsAttr(c)}')" style="display:flex;align-items:center;gap:7px;padding:3px 6px;border-radius:4px">
       <span title="Drag to reorder" style="cursor:grab;color:var(--text2);font-size:12px;user-select:none">⋮⋮</span>
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;font-size:12px;color:var(--text)">
-        <input type="checkbox" ${hidden.has(c)?'':'checked'} onchange="toggleColumn('${c}')"> ${esc(colLabel(c))}
+        <input type="checkbox" ${hidden.has(c)?'':'checked'} onchange="toggleColumn('${jsAttr(c)}')"> ${esc(colLabel(c))}
       </label>
     </div>`).join('')}
   </div>`;
@@ -944,7 +961,7 @@ function buildProps(){
       : tmode==="field"
         ? `<select class="inp" onchange="uobj('${o.id}',{field:this.value});R()">
              <option value="">— choose column —</option>
-             ${fieldDefs().map(f=>`<option value="${f.c}"${o.field===f.c?" selected":""}>${f.f}</option>`).join("")}
+             ${fieldDefs().map(f=>`<option value="${escAttr(f.c)}"${o.field===f.c?" selected":""}>${esc(f.f)}</option>`).join("")}
            </select>
            <div style="color:var(--text3);font-size:10px;margin-top:5px;line-height:1.4">…or drag a column header from the Records panel onto the text box.</div>`
       : `<input id="fxbar" class="inp" value="${(o.f||"").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}" style="font-family:monospace;font-size:12px" oninput="S._ef=this.value" onblur="commitF()" onkeydown="if(event.key==='Enter')commitF()" placeholder='=IF(Number&lt;&gt;&quot;&quot;,Number,&quot;&quot;)'>
@@ -952,7 +969,7 @@ function buildProps(){
            <button class="btn${S.showFields?" on":""}" onclick="S.showFields=!S.showFields;R()" style="font-size:11px">Fields ▾</button>
            <button class="btn" onclick="openFormulaEditor('${o.id}')" style="font-size:11px" title="Open the formula editor with a live preview">Editor ⤢</button>
          </div>
-         ${S.showFields?`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;max-height:120px;overflow-y:auto">${fieldDefs().map(f=>`<button class="fbtn" onclick="insertField('${f.f.replace(/'/g,"\\'")}')">${f.f}</button>`).join("")}</div>`:""}`;
+         ${S.showFields?`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;max-height:120px;overflow-y:auto">${fieldDefs().map(f=>`<button class="fbtn" onclick="insertField('${jsAttr(f.f)}')">${esc(f.f)}</button>`).join("")}</div>`:""}`;
     return `<div style="display:flex;flex-direction:column;gap:0">
       ${posButtons(o)}
       <div class="sec">Text source</div>
@@ -1091,11 +1108,11 @@ function buildProps(){
 function buildRecordTable(){
   const cols=FD.slice(0,9);
   const rows=RX.map((r,i)=>`<tr class="recrow${S.recIdx===i?" selrow":""}" onclick="S.recIdx=${i};R()">
-    ${cols.map(f=>`<td style="color:${r[f.c]?"var(--text)":"var(--text3)"}">${(r[f.c]||"—").substring(0,22)}</td>`).join("")}
+    ${cols.map(f=>`<td style="color:${r[f.c]?"var(--text)":"var(--text3)"}">${esc((r[f.c]||"—").substring(0,22))}</td>`).join("")}
   </tr>`).join("");
   const heads=cols.map(f=>`<th style="padding:5px 8px;text-align:left;border-bottom:1px solid var(--bd2);background:var(--surface);white-space:nowrap;position:sticky;top:0">
-    <div style="color:var(--text);font-size:11px;font-weight:600">${f.f}</div>
-    <div style="color:var(--text3);font-size:10px">${f.c}</div>
+    <div style="color:var(--text);font-size:11px;font-weight:600">${esc(f.f)}</div>
+    <div style="color:var(--text3);font-size:10px">${esc(f.c)}</div>
   </th>`).join("");
   return `<div style="overflow-x:auto;border-top:1px solid var(--bd2)">
     <table style="width:100%;border-collapse:collapse;font-size:11px">
@@ -1525,7 +1542,7 @@ function renderFormulaModal(){
   m.innerHTML=`<div class="modal" style="min-width:560px;max-width:700px">
     <div class="modal-title">Formula editor</div>
     <textarea id="fxText" class="inp" rows="4" style="font-family:monospace;font-size:13px;width:100%;resize:vertical" oninput="_fxState.f=this.value;fxRefresh()" placeholder='=IF(Number&lt;&gt;&quot;&quot;,Number,&quot;&quot;)'>${esc(_fxState.f)}</textarea>
-    <div style="display:flex;flex-wrap:wrap;gap:4px;margin:8px 0;max-height:96px;overflow-y:auto">${fieldDefs().map(f=>`<button class="fbtn" onclick="fxInsert('${f.f.replace(/'/g,"\\'")}')">${f.f}</button>`).join('')}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px;margin:8px 0;max-height:96px;overflow-y:auto">${fieldDefs().map(f=>`<button class="fbtn" onclick="fxInsert('${jsAttr(f.f)}')">${esc(f.f)}</button>`).join('')}</div>
     <div style="background:var(--bg2);border:1px solid var(--bd3);border-radius:6px;padding:10px 12px;margin-bottom:6px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
         <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Live preview</span>
@@ -2129,7 +2146,7 @@ function buildCustomPrintHeader(){
       <select class="inp" style="width:210px;padding:5px 26px 5px 30px;appearance:none;-webkit-appearance:none;cursor:pointer" onchange="S.activePrinter=this.value;R()">
         ${printers.length===0
           ? `<option value="">No printers connected</option>`
-          : printers.map(p=>`<option value="${p.id}"${S.activePrinter===p.id?" selected":""}>${(p.name||"")}${p.serial?" — "+p.serial:""}</option>`).join("")}
+          : printers.map(p=>`<option value="${escAttr(p.id)}"${S.activePrinter===p.id?" selected":""}>${esc(p.name||"")}${p.serial?" — "+esc(p.serial):""}</option>`).join("")}
       </select>
       <div style="position:absolute;left:9px;top:50%;transform:translateY(-50%);width:7px;height:7px;border-radius:50%;background:${dot};pointer-events:none"></div>
       <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:9px;pointer-events:none">▼</div>
@@ -2141,7 +2158,7 @@ function buildCustomPrintHeader(){
       <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Supply</span>
       <span style="color:var(--text2);font-size:11px;font-family:monospace" title="Required supply for ${S.spec.n}">${dRequiredSupply(S.spec.n)}</span>
       ${dCassetteMatched()?`<span title="Loaded cassette matches the required supply" style="color:var(--green);font-size:18px;line-height:1;font-weight:800">✓</span>`
-        :dCassetteMismatch()?`<span title="Loaded ${dLoadedCassette().partNumber} doesn't match — the label may print misaligned or cropped" style="color:var(--red);font-size:12px;line-height:1;white-space:nowrap">⚠ mismatch</span>`:""}
+        :dCassetteMismatch()?`<span title="Loaded ${escAttr(dLoadedCassette().partNumber)} doesn't match — the label may print misaligned or cropped" style="color:var(--red);font-size:12px;line-height:1;white-space:nowrap">⚠ mismatch</span>`:""}
       ${buyMoreControl()}
     </div>
 
@@ -2198,7 +2215,8 @@ function saveCustomDocument(){
     name:S.tplName||"Custom Label",
     specN:data.specN,
     objs:data.objs,
-    copies:Math.max(1,S.copies||1)
+    copies:Math.max(1,S.copies||1),
+    cutMode:dEffCutMode()   // persist the effective cut mode so it round-trips in .vlcus
   };
   if(data.labelLengthInches) payload.labelLengthInches=data.labelLengthInches;
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
@@ -2211,10 +2229,14 @@ function saveCustomDocument(){
 function doCustomPrint(){
   if(!isCustomMode()||!dCanPrint())return;
   if(dCassetteMismatch()&&!S._printForce){ S.modal="confirmMismatch"; renderModal(); return; }
-  S._printForce=false;
   // Guard against firing off a big batch by surprise (e.g. a 200-row dataset):
   // confirm when the true job size exceeds 10 labels.
   if(dJobLabelCount()>10&&!S._largeJobForce){ S.modal="confirmLargeJob"; renderModal(); return; }
+  // Both guards passed — only NOW clear the force flags. Clearing _printForce
+  // before the large-job guard would re-show the mismatch dialog for a job that
+  // is BOTH size-mismatched AND large (the large-job re-entry would find the
+  // flag already reset).
+  S._printForce=false;
   S._largeJobForce=false;
   const data=templateData();
   const payload={
@@ -2637,7 +2659,7 @@ function dJobLabelCount(){
 // Called by Swift when a ".vlcus" is double-clicked in Finder (Custom Designer).
 // Loads the saved canvas AND the embedded data snapshot in one shot, so the
 // document opens exactly as it was saved even if the source file is gone.
-//   doc = {name, specN, objs, copies, records:[{col:val}], columns:[String],
+//   doc = {name, specN, objs, copies, cutMode, records:[{col:val}], columns:[String],
 //          filename, headerRow, isXLSX, hasDataSource}
 function initCustomDocument(doc){
   if(!doc)return;
@@ -2650,6 +2672,8 @@ function initCustomDocument(doc){
   S.objs=sanitizeObjs(doc.objs||[]);
   S.selId=null;S._ef=undefined;
   S.copies=Math.max(1,doc.copies||1);
+  // Restore the saved cut mode (null falls back to the size's default via dEffCutMode).
+  S.cutMode=doc.cutMode||null;
   // Embedded data snapshot → bind it like a freshly-loaded source.
   if(doc.records&&doc.records.length){
     initBoundData(doc.records, doc.columns||[], doc.filename||"", !!doc.headerRow, !!doc.isXLSX);

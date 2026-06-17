@@ -315,6 +315,23 @@ final class FoundationTests: XCTestCase {
         XCTAssertEqual(recs[0].fields["Qty"], "42")      // numeric cell → raw value
     }
 
+    /// A shared-string cell that points at a RICH-TEXT entry (formatting runs, no
+    /// top-level <t>) must resolve to the joined run text, not the raw shared-string
+    /// index. Fixture sharedStrings: 0="Name", 1="Tag", 2=rich-text "Hello "+"World".
+    /// Sheet: header "Name","Tag"; data row references string 2 (rich) and string 1.
+    func testExcelReaderResolvesRichTextSharedStrings() throws {
+        let url = try XCTUnwrap(
+            Bundle.module.url(forResource: "richtext-sharedstrings", withExtension: "xlsx"),
+            "missing test fixture richtext-sharedstrings.xlsx")
+        let recs = try XCTUnwrap(
+            ExcelRecordReader.records(fileURL: url, headerRow: true),
+            "reader rejected a valid .xlsx with rich-text shared strings")
+        XCTAssertEqual(recs.count, 1)
+        // The rich-text cell must join its runs, not print the index "2".
+        XCTAssertEqual(recs[0].fields["Name"], "Hello World")
+        XCTAssertEqual(recs[0].fields["Tag"], "Tag")
+    }
+
     // MARK: – Formula engine (H4–H6, M1, M2, L1) — Swift must match the JS preview
 
     func testFormulaRealTemplate() {

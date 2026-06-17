@@ -86,6 +86,36 @@ public struct PrintQueue {
         try? FileManager.default.moveItem(at: processingURL, to: target)
     }
 
+    /// Un-claim a processing job by moving it back to queue/, so it will be
+    /// re-drained later. Used when a job can't be acted on *yet* (e.g. the USB
+    /// scan hasn't populated the printer list) but should not be failed.
+    /// Returns the new queue URL on success.
+    @discardableResult
+    public func requeue(_ processingURL: URL) -> URL? {
+        let dest = queueDir.appendingPathComponent(processingURL.lastPathComponent)
+        try? FileManager.default.removeItem(at: dest)
+        do {
+            try FileManager.default.moveItem(at: processingURL, to: dest)
+            return dest
+        } catch {
+            return nil
+        }
+    }
+
+    /// Sweep processing/ on startup: any leftover `<id>.json` is the residue of a
+    /// crash/quit mid-print, and would otherwise be stranded forever. Move each
+    /// back to queue/ so the normal drain reprocesses it.
+    public func recoverProcessingJobs() {
+        ensureDirs()
+        let items = (try? FileManager.default.contentsOfDirectory(
+            at: processingDir, includingPropertiesForKeys: nil)) ?? []
+        for url in items where url.pathExtension == "json" {
+            let dest = queueDir.appendingPathComponent(url.lastPathComponent)
+            try? FileManager.default.removeItem(at: dest)
+            try? FileManager.default.moveItem(at: url, to: dest)
+        }
+    }
+
     // MARK: – Status (Engine publishes, front-ends read)
 
     public func publishStatus(_ status: PrinterStatusFile) throws {
@@ -118,6 +148,9 @@ public final class PrintQueueWatcher {
 
     public func start() {
         queue.ensureDirs()
+        // Recover orphaned processing/ jobs (crash/quit mid-print) back to queue/
+        // BEFORE wiring the watcher, so they're picked up by the backlog drain.
+        queue.recoverProcessingJobs()
         let fw = FolderWatcher(root: queue.queueDir, suffix: ".json", latency: 0.2) { [weak self] url in
             guard let self, let claimed = self.queue.claim(url) else { return }
             self.onJob(claimed.job, claimed.processingURL)
@@ -125,6 +158,13 @@ public final class PrintQueueWatcher {
         fw.start()
         watcher = fw
         // Drain anything already waiting (e.g. jobs submitted before the Engine launched).
+        drainBacklog()
+    }
+
+    /// Claim + dispatch every job currently sitting in queue/. Safe to call more
+    /// than once (e.g. re-run once the printer list becomes non-empty) — claim()
+    /// atomically moves each file, so a job already claimed is skipped.
+    public func drainBacklog() {
         for url in queue.pendingJobURLs() {
             if let claimed = queue.claim(url) { onJob(claimed.job, claimed.processingURL) }
         }

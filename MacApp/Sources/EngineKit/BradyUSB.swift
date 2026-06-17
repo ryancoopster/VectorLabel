@@ -54,6 +54,37 @@ public enum BradyUSB {
         // name is only used internally for the device "name".
         return "M611"
     }
+#if canImport(CLibUSB)
+    /// True if this Brady-VID device is an actual label printer that we should
+    /// list / claim. A device qualifies if its PID is a known printer PID, OR it
+    /// presents a USB printer-class interface (bInterfaceClass == 0x07) in its
+    /// active config. This stops us from detaching/claiming non-printer Brady
+    /// peripherals (which the old VID-only match would touch every 5 s).
+    static func deviceIsPrinter(_ dev: OpaquePointer, desc: libusb_device_descriptor) -> Bool {
+        // Known printer PID → definitely a printer (cheap, no descriptor read).
+        if knownModels.contains(where: { $0.pid == desc.idProduct }) { return true }
+
+        // Otherwise inspect the active configuration for a printer-class interface.
+        var configPtr: UnsafeMutablePointer<libusb_config_descriptor>?
+        guard libusb_get_active_config_descriptor(dev, &configPtr) == 0,
+              let config = configPtr else { return false }
+        defer { libusb_free_config_descriptor(config) }
+
+        let cfg = config.pointee
+        guard let interfaces = cfg.interface else { return false }
+        for i in 0 ..< Int(cfg.bNumInterfaces) {
+            let iface = interfaces[i]
+            guard let altsettings = iface.altsetting else { continue }
+            for a in 0 ..< Int(iface.num_altsetting) {
+                if altsettings[a].bInterfaceClass == LIBUSB_CLASS_PRINTER.rawValue {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+#endif
+
     static let outEndpoint: UInt8  = 0x01   // bulk OUT — print data and queries
     static let inEndpoint: UInt8   = 0x82   // bulk IN — SmartCell responses
     static let chunkSize           = 512
@@ -127,10 +158,13 @@ public enum BradyUSB {
             guard let dev = devices[Int(i)] else { continue }
             var desc = libusb_device_descriptor()
             guard libusb_get_device_descriptor(dev, &desc) == 0 else { continue }
-            // Accept ANY device on the Brady VID. Known PIDs map to their model;
-            // an unrecognised Brady PID is still surfaced (generic) rather than
-            // skipped, so a real M611 with an unconfirmed PID isn't missed.
+            // Brady VID, AND it must actually be a printer: a known printer PID,
+            // or a device presenting a USB printer-class interface. A non-printer
+            // Brady peripheral on the same VID is skipped (no longer surfaced or
+            // — critically — claimed). A real M611 with an unconfirmed PID is still
+            // found because it presents a printer-class interface.
             guard desc.idVendor == vendorID else { continue }
+            guard deviceIsPrinter(dev, desc: desc) else { continue }
 
             let model = modelFor(productID: desc.idProduct)
             let isKnownPID = knownModels.contains { $0.pid == desc.idProduct }
@@ -179,9 +213,12 @@ public enum BradyUSB {
             guard let dev = devices[Int(i)] else { continue }
             var desc = libusb_device_descriptor()
             guard libusb_get_device_descriptor(dev, &desc) == 0 else { continue }
-            // Match enumeration: accept any Brady-VID device (the composite id
-            // disambiguates which one to open).
+            // Match enumeration: only an actual printer (known PID or printer-class
+            // interface) is a candidate. This guard runs BEFORE libusb_open /
+            // detach_kernel_driver / claim_interface, so a non-printer Brady device
+            // is never touched even if its composite id were somehow requested.
             guard desc.idVendor == vendorID else { continue }
+            guard deviceIsPrinter(dev, desc: desc) else { continue }
 
             var handle: OpaquePointer?
             guard libusb_open(dev, &handle) == 0, let h = handle else { throw USBError.openFailed }

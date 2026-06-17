@@ -93,6 +93,10 @@ let package = Package(
                 // Tiny inline-string .xlsx (no xl/sharedStrings.xml) used to verify
                 // ExcelRecordReader tolerates a nil SharedStrings table.
                 .copy("Fixtures/inline-no-sharedstrings.xlsx"),
+                // .xlsx whose shared-strings table has a rich-text entry (runs, no
+                // top-level <t>), used to verify the reader joins the runs instead
+                // of emitting the raw shared-string index.
+                .copy("Fixtures/richtext-sharedstrings.xlsx"),
             ]
         ),
     ]

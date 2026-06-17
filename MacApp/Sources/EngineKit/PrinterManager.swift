@@ -81,6 +81,12 @@ public final class PrinterManager: ObservableObject {
     @Published public var printers: [PrinterDevice] = []
     @Published public var activeJobs: [PrintJob] = []
 
+    /// True once at least one USB enumeration scan has completed. Lets the Engine
+    /// distinguish "the scan hasn't run yet" (a no-printer job should be re-queued,
+    /// not failed) from "the scan ran and found nothing" (fail a job that needs a
+    /// printer). Published so the queue drain can react when scanning finishes.
+    @Published public private(set) var hasScannedOnce: Bool = false
+
     private var scanTimer: Timer?
     private var scanInFlight = false   // prevents overlapping scans piling up if one runs long
 
@@ -107,7 +113,7 @@ public final class PrinterManager: ObservableObject {
         Task.detached {
             let found = BradyUSB.enumeratePrinters()
             await MainActor.run {
-                defer { self.scanInFlight = false }
+                defer { self.scanInFlight = false; self.hasScannedOnce = true }
                 // Merge: update status for existing entries, add new ones, mark missing as offline
                 var updated: [PrinterDevice] = []
                 for discovered in found {
