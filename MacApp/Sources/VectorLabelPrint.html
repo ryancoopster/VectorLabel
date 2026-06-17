@@ -1184,7 +1184,7 @@ function startPreviewResize(e){
 // ── Label preview panel ───────────────────────────────────────────────────────
 function buildPreviewPanel(){
   const t=tpl();
-  const rec=P.records[P.previewIdx];
+  const rec=recForRender(P.previewIdx);
   // Navigate within the visible (filtered) rows, not absolute indices.
   const vis=visibleIndices();
   const vpos=vis.indexOf(P.previewIdx);
@@ -1316,6 +1316,19 @@ function toggleDefaultTemplate(checked){
 // ── Loaded cassette (SmartCell) detection ──────────────────────────────────────
 // window._cassettes maps printerID -> {partNumber, supplyRemainingPct, ...}.
 function loadedCassette(){ return (window._cassettes||{})[P.activePrinter]||null; }
+
+// The record to render on a label. With "inherit rack" on, a blank-Rack side of a
+// pair shows its partner's rack in parentheses, e.g. "(RIO RACK)". Returns the
+// original record unchanged otherwise.
+function recForRender(i){
+  const r=P.records[i];
+  if(!r||!(P.sort&&P.sort.inheritRack))return r;
+  if(r.Rack==null||r.Rack===""){
+    const j=pairIdx(i);
+    if(j!=null){ const p=P.records[j]; if(p&&p.Rack) return Object.assign({},r,{Rack:"("+p.Rack+")"}); }
+  }
+  return r;
+}
 
 // Strip the model prefix so "BM-32-427" (catalog) matches "M6-32-427" (SmartCell).
 // BM-109-427 is the bulk box for M6-33-427, so treat them as the same supply.
@@ -1671,7 +1684,7 @@ function buildExpandedPreviewModal(){
   // when disabled tiles are hidden.
   const tiles = (t&&vis.length) ? vis.map((i,vpos)=>{
     if(PREVIEW_ENABLED_ONLY && !P.selected.has(i)) return "";
-    const rec=P.records[i];
+    const rec=recForRender(i);
     const isPrev=P.previewIdx===i;
     const isSel=P.selected.has(i);
     const ps=pairChkState(i);

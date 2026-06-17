@@ -493,10 +493,24 @@ extension PrintWindowController: WKScriptMessageHandler {
               ?? TemplateStore.shared.templates.first
         else { return }
 
+        // When "inherit rack" is on, a blank-Rack side of a pair prints its
+        // partner's rack in parentheses, e.g. "(RIO RACK)" — matching the preview.
+        let inheritRack = (payload["sort"] as? [String: Any])?["inheritRack"] as? Bool ?? false
+        func renderRecord(_ i: Int) -> WireRecord {
+            let rec = records[i]
+            guard inheritRack, (rec.fields["Rack"] ?? "").isEmpty else { return rec }
+            var partner: Int? = nil
+            if rec.side == "Source", i + 1 < records.count, records[i + 1].side == "Destination" { partner = i + 1 }
+            else if rec.side == "Destination", i - 1 >= 0, records[i - 1].side == "Source" { partner = i - 1 }
+            guard let p = partner, let prack = records[p].fields["Rack"], !prack.isEmpty else { return rec }
+            var f = rec.fields; f["Rack"] = "(" + prack + ")"
+            return WireRecord(side: rec.side, wireID: rec.wireID, fields: f)
+        }
+
         // Render VGL jobs
         let selectedRecords = recordIndices.compactMap { i -> WireRecord? in
             guard i >= 0 && i < records.count else { return nil }
-            return records[i]
+            return renderRecord(i)
         }
 
         // Per-printer calibration offset (keyed by the printer's serial).
