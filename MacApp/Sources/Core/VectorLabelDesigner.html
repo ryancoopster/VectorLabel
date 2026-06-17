@@ -2238,7 +2238,12 @@ function updateDesignerPrinters(printers){
 }
 function updateDesignerCassettes(map){
   window._dcassettes=map||{};
-  const sig=JSON.stringify(window._dcassettes);
+  // Signature from only the match-relevant fields (not the volatile supply % /
+  // pixel counts) so normal cassette-read jitter doesn't force a full rebuild.
+  const sig=JSON.stringify(Object.keys(window._dcassettes).sort().map(k=>{
+    const c=window._dcassettes[k]||{};
+    return [k,c.partNumber,c.labelWidthMils,c.labelHeightMils,c.isDieCut];
+  }));
   if(isCustomMode() && sig!==window._dcassettesSig){ window._dcassettesSig=sig; R(); }
 }
 function dPrinters(){ return window._dprinters||[]; }
@@ -2276,8 +2281,11 @@ function dCassetteMismatch(){ const c=dLoadedCassette(); return !!(c&&dCassetteS
 // matches — so the picker + supply indicator show e.g. '0.5" continuous', never a
 // part number or material. Die-cut wire labels keep their descriptor (#16).
 function supplyOptionLabel(l){
-  if(l&&l.ty==="continuous")return dFmtIn(l.tw)+' continuous';
-  return l?l.lb:"";
+  if(!l)return "";
+  if(l.ty==="continuous")return dFmtIn(l.tw)+' continuous';
+  // Cable-wrap (die-cut) labels show the PRINTABLE dimension (W × H), not the full
+  // label height, so the dropdown reflects the usable print area.
+  return l.n+' — '+dFmtIn(l.pw)+' × '+dFmtIn(l.ph);
 }
 function dSupplyTypeDesc(l){
   if(!l)return "";
@@ -3174,7 +3182,7 @@ function dbRecordTable(){
   const body=rows.map((r,i)=>{
     const isSel=sel.has(i);
     const isActive=S.recIdx===i;
-    return`<div class="rec-row" data-i="${i}" style="display:grid;grid-template-columns:${gt};width:max-content;min-width:100%;border-bottom:1px solid var(--bd1);cursor:pointer;align-items:stretch;${isActive?'background:rgba(108,142,245,0.18)':''}" onclick="S.recIdx=${i};S._dbLastClick=null;R()">
+    return`<div class="rec-row" data-i="${i}" style="display:grid;grid-template-columns:${gt};width:max-content;min-width:100%;border-bottom:1px solid var(--bd1);cursor:pointer;align-items:stretch;content-visibility:auto;contain-intrinsic-size:0 28px;${isActive?'background:rgba(108,142,245,0.18)':''}" onclick="S.recIdx=${i};S._dbLastClick=null;R()">
       <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();dbRowCheckClick(${i},event)" title="Print this label — Shift+click to range select">
         <div class="cb ${isSel?"chk":""}"><span class="check-tick">${isSel?"✓":""}</span></div>
       </div>

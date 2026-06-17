@@ -254,7 +254,7 @@ public final class DesignerWindowController: NSObject {
                     NotificationCenter.default.removeObserver(token)
                     self.closeObserver = nil
                 }
-                TemplateStore.shared.reload()
+                if self.mode == .template { TemplateStore.shared.reload() }
                 // If the designer was closed (e.g. via its close button) while
                 // editing for the print window, tell the host to return.
                 if self.designerForPrintEdit {
@@ -1004,12 +1004,15 @@ extension DesignerWindowController: WKNavigationDelegate {
         if mode == .template, let result = findMostRecentCSV(minRecords: 10) {
             injectDesignerRecords(result.records, filename: result.url.lastPathComponent)
         }
-        // Inject the templates-folder list so the designer's Open dialog can list
-        // them — TEMPLATE MODE ONLY. The Custom Designer has no template picker and
-        // must never receive template state (it would be the only thing that could
-        // surface a template-open prompt in custom mode).
-        TemplateStore.shared.reload()
-        if mode == .template { injectDesignerTemplates() }
+        // Reading the Templates folder (under ~/Documents) triggers the macOS
+        // "access your Documents folder" prompt and is pointless for the Custom
+        // Designer (no template picker), so ONLY the Template Designer reloads +
+        // injects the template list. This keeps the Custom Designer from prompting
+        // for Documents access on launch.
+        if mode == .template {
+            TemplateStore.shared.reload()
+            injectDesignerTemplates()
+        }
         injectColumnConfig()
         injectDesignerPrefs()
         // Custom mode: seed the print header with the latest printer/cassette state
