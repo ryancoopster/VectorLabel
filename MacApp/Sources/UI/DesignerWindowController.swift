@@ -1,6 +1,7 @@
 import AppKit
 import WebKit
 import Combine
+import UniformTypeIdentifiers
 import VectorLabelCore
 
 /// Which flavour of the designer this controller hosts.
@@ -64,6 +65,26 @@ public final class DesignerWindowController: NSObject {
     /// The latest printer + cassette status, used to inject the same JSON shapes
     /// the print window consumes (updatePrinters / updateCassettes equivalents).
     private var lastStatus: PrinterStatusFile?
+
+    // MARK: – Custom-mode bound data source (Phase 3)
+    //
+    // The Custom Designer can bind a CSV/XLSX file as its print data: one label per
+    // row. We keep the parsed records + the source path + the "first row is headers"
+    // flag in memory here — this is the in-memory doc that Phase 4's `.vlcus` will
+    // persist. Template mode never sets any of this.
+
+    /// The bound data source for the Custom Designer, if the user picked one.
+    private struct BoundDataSource {
+        var path: URL
+        /// Whether the first row of the file supplies column headers. Only
+        /// meaningful for .xlsx; CSV always has a header row (WireExportParser).
+        var headerRow: Bool
+        /// Parsed records, one per data row — the print path renders one label each.
+        var records: [WireRecord]
+        /// Column names in display order (the union across records, header order).
+        var columns: [String]
+    }
+    private var dataSource: BoundDataSource?
 
     public init(mode: DesignerMode) {
         self.mode = mode
@@ -333,28 +354,170 @@ public final class DesignerWindowController: NSObject {
         }
     }
 
-    /// Finder panel (at the Exports folder) to pick a CSV data source for the
-    /// designer preview; loads it and injects the records.
-    private func browseForDataSource() {
+    /// Finder panel (at the Exports folder) to pick a CSV/XLSX data source.
+    ///
+    /// Template mode keeps the original lightweight behavior: pick a CSV export and
+    /// inject it as the designer preview (no binding, CSV only). Custom mode allows
+    /// CSV *or* .xlsx, honors the "first row is headers" flag the page sends, BINDS
+    /// the data into the in-memory doc, and prints one label per row.
+    ///
+    /// `headerRow` is the page's current toggle state (xlsx only — CSV always has a
+    /// header row). Defaults to true.
+    private func browseForDataSource(headerRow: Bool = true) {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.commaSeparatedText]
+        if mode == .custom {
+            // CSV + XLSX. UTType.spreadsheet covers .xlsx; also accept it by
+            // extension in case the system doesn't resolve the UTI.
+            var types: [UTType] = [.commaSeparatedText]
+            if let xlsx = UTType(filenameExtension: "xlsx") { types.append(xlsx) }
+            types.append(.spreadsheet)
+            panel.allowedContentTypes = types
+            panel.message = "Choose a CSV or Excel (.xlsx) file to bind as print data"
+        } else {
+            panel.allowedContentTypes = [.commaSeparatedText]
+            panel.message = "Choose a CSV export to preview in the designer"
+        }
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.directoryURL = AppSettings.shared.exportsFolderURL
-        panel.message = "Choose a CSV export to preview in the designer"
         panel.level = .modalPanel
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             MainActor.assumeIsolated {
-                guard let self = self, let wv = self.webView,
-                      let records = WireExportParser.parse(fileURL: url)
-                else { return }
-                guard let data = try? JSONEncoder().encode(records),
-                      let json = String(data: data, encoding: .utf8) else { return }
-                let fnJSON = url.lastPathComponent.jsonQuoted
-                wv.evaluateJavaScript("if(typeof initDesignerRecords==='function')initDesignerRecords(\(json),\(fnJSON));", completionHandler: nil)
+                guard let self = self else { return }
+                if self.mode == .custom {
+                    self.loadAndBindDataSource(from: url, headerRow: headerRow)
+                } else {
+                    // Template mode: original preview-only CSV path.
+                    guard let wv = self.webView,
+                          let records = WireExportParser.parse(fileURL: url),
+                          let data = try? JSONEncoder().encode(records),
+                          let json = String(data: data, encoding: .utf8) else { return }
+                    let fnJSON = url.lastPathComponent.jsonQuoted
+                    wv.evaluateJavaScript("if(typeof initDesignerRecords==='function')initDesignerRecords(\(json),\(fnJSON));", completionHandler: nil)
+                }
             }
         }
+    }
+
+    /// Parse `url` (CSV via WireExportParser, .xlsx via ExcelRecordReader), store it
+    /// as the bound data source, and inject the columns + rows into the designer.
+    /// `headerRow` only applies to .xlsx. Returns true on success.
+    @discardableResult
+    private func loadAndBindDataSource(from url: URL, headerRow: Bool) -> Bool {
+        let isXLSX = url.pathExtension.lowercased() == "xlsx"
+        let records: [WireRecord]?
+        var fileColumns: [String] = []
+        if isXLSX {
+            // Read the grid once: it gives both the records and the file column order
+            // (WireRecord's fields are unordered, so we can't recover order from them).
+            if let grid = ExcelRecordReader.rows(fileURL: url) {
+                records = ExcelRecordReader.records(rows: grid, headerRow: headerRow)
+                fileColumns = headerColumns(fromGrid: grid, headerRow: headerRow)
+            } else {
+                records = nil
+            }
+        } else {
+            records = WireExportParser.parse(fileURL: url)
+            // CSV header order = the first parsed row's column order.
+            if let text = try? String(contentsOf: url, encoding: .utf8) {
+                fileColumns = WireExportParser.parseCSV(text).first ?? []
+            }
+        }
+        guard let records, !records.isEmpty else {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Couldn’t read “\(url.lastPathComponent)”"
+            alert.informativeText = isXLSX
+                ? "The Excel file is empty or unreadable. Make sure it has at least one row of data on the first sheet."
+                : "The CSV file is empty or unreadable. Make sure it has a header row and at least one data row."
+            alert.runModal()
+            return false
+        }
+
+        // Prefer the file's header order, then append any extra keys the records
+        // carry (e.g. synthesized _Side/Number) that weren't literal headers.
+        let columns = columnOrder(for: records, preferred: fileColumns)
+        // CSV always has headers; only persist the toggle's effect for xlsx.
+        dataSource = BoundDataSource(path: url,
+                                     headerRow: isXLSX ? headerRow : true,
+                                     records: records,
+                                     columns: columns)
+        injectBoundData()
+        return true
+    }
+
+    /// The column names in file order: when `headerRow`, the first grid row trimmed
+    /// (blanks → "Column N"); otherwise generic "Column 1…N" across the widest row.
+    /// Mirrors ExcelRecordReader's header naming so the chips match the field keys.
+    private func headerColumns(fromGrid grid: [[String]], headerRow: Bool) -> [String] {
+        let width = grid.map(\.count).max() ?? 0
+        guard width > 0 else { return [] }
+        if !headerRow { return (1...width).map { "Column \($0)" } }
+        let first = grid.first ?? []
+        var out: [String] = []
+        var seen: [String: Int] = [:]
+        for i in 0..<width {
+            var name = i < first.count ? first[i].trimmingCharacters(in: .whitespacesAndNewlines) : ""
+            if name.isEmpty { name = "Column \(i + 1)" }
+            if let n = seen[name] { seen[name] = n + 1; name = "\(name) (\(n + 1))" } else { seen[name] = 1 }
+            out.append(name)
+        }
+        return out
+    }
+
+    /// Re-read the STORED data source from disk and re-inject. If the file no longer
+    /// exists, show an open panel so the user can repoint it, then re-read.
+    private func refreshDataSource() {
+        guard mode == .custom, let ds = dataSource else { return }
+        if FileManager.default.fileExists(atPath: ds.path.path) {
+            loadAndBindDataSource(from: ds.path, headerRow: ds.headerRow)
+        } else {
+            let panel = NSOpenPanel()
+            var types: [UTType] = [.commaSeparatedText]
+            if let xlsx = UTType(filenameExtension: "xlsx") { types.append(xlsx) }
+            types.append(.spreadsheet)
+            panel.allowedContentTypes = types
+            panel.allowsMultipleSelection = false
+            panel.canChooseDirectories = false
+            panel.directoryURL = ds.path.deletingLastPathComponent()
+            panel.message = "“\(ds.path.lastPathComponent)” was moved or deleted. Choose the file again."
+            panel.level = .modalPanel
+            panel.begin { [weak self] response in
+                guard response == .OK, let url = panel.url else { return }
+                MainActor.assumeIsolated {
+                    self?.loadAndBindDataSource(from: url, headerRow: ds.headerRow)
+                }
+            }
+        }
+    }
+
+    /// Column list for the DB panel + field source: the file's header order first
+    /// (`preferred`), then any remaining record keys (sorted, deterministic) so no
+    /// column is ever dropped even if a record carries a key absent from the header.
+    private func columnOrder(for records: [WireRecord], preferred: [String]) -> [String] {
+        var out: [String] = []
+        for c in preferred where !out.contains(c) { out.append(c) }
+        for r in records {
+            for k in r.fields.keys.sorted() where !out.contains(k) { out.append(k) }
+        }
+        return out
+    }
+
+    /// Inject the bound data source (columns + records + metadata) into the designer
+    /// so the DB panel can show columns, the row count, and drive the preview.
+    private func injectBoundData() {
+        guard let wv = webView, let ds = dataSource,
+              let recData = try? JSONEncoder().encode(ds.records),
+              let recJSON = String(data: recData, encoding: .utf8),
+              let colData = try? JSONSerialization.data(withJSONObject: ds.columns),
+              let colJSON = String(data: colData, encoding: .utf8)
+        else { return }
+        let fnJSON = ds.path.lastPathComponent.jsonQuoted
+        let isXLSX = ds.path.pathExtension.lowercased() == "xlsx"
+        wv.evaluateJavaScript(
+            "if(typeof initBoundData==='function')initBoundData(\(recJSON),\(colJSON),\(fnJSON),\(ds.headerRow),\(isXLSX));",
+            completionHandler: nil)
     }
 
     private func injectBrowsedTemplate(from url: URL) {
@@ -445,12 +608,14 @@ public final class DesignerWindowController: NSObject {
             completionHandler: nil)
     }
 
-    /// Render the designer's current canvas to a single Brady VGL job and submit it
-    /// to the IPC queue. `payload` is {name, specN, objs, copies, printerID?}.
+    /// Render the designer's current canvas to a Brady VGL job and submit it to the
+    /// IPC queue. `payload` is {name, specN, objs, copies, printerID?, record?}.
     ///
-    /// Single-label only this phase: the canvas renders against the bound preview
-    /// record if one is provided (so field/formula text matches what the user
-    /// sees), else an empty WireRecord (static text renders; field/formula blank).
+    /// Data binding (Phase 3): when a data source is bound, prints ONE label per
+    /// bound row — each row's WireRecord is rendered and the labels are concatenated
+    /// into a single multi-label job (× copies). With no data bound, prints a single
+    /// label rendered against the previewed record (so field/formula text matches
+    /// what the user sees), or an empty WireRecord if none was sent.
     private func handlePrintCustom(_ payloadAny: Any?) {
         guard mode == .custom,
               let backend = printBackend,
@@ -477,9 +642,14 @@ public final class DesignerWindowController: NSObject {
         let printerID = (payload["printerID"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         let templateName = template.name
 
-        // Bind the current preview record if the page sent one; else an empty
-        // record so static text renders and field/formula text renders blank.
-        let record = customPrintRecord(from: payload["record"])
+        // One record per label: every bound row when data is bound, else the single
+        // previewed record (or an empty record so static text still renders).
+        let records: [WireRecord]
+        if let ds = dataSource, !ds.records.isEmpty {
+            records = ds.records
+        } else {
+            records = [customPrintRecord(from: payload["record"])]
+        }
 
         // Per-printer calibration offset (keyed by the printer's serial, as the
         // print window does). printerID is "vid:pid:serial".
@@ -489,16 +659,21 @@ public final class DesignerWindowController: NSObject {
         // Render off the main thread (matching the print window), then submit back
         // on the main actor.
         DispatchQueue.global(qos: .userInitiated).async {
-            guard let rendered = LabelRenderer.render(template: template, record: record, offset: offset) else { return }
-            // Die-cut default: no cutter actuation (CutMode.never → BradyVGL .never).
-            let vgl = BradyVGL.buildPrintJob(pixels: rendered.pixels,
-                                             width: rendered.width, height: rendered.height,
-                                             cutMode: .never)
-            let labelPx = max(rendered.width, rendered.height)
+            var labels: [Data] = []
+            var maxLabelPx = 0
+            for record in records {
+                guard let rendered = LabelRenderer.render(template: template, record: record, offset: offset) else { continue }
+                // Die-cut default: no cutter actuation (CutMode.never → BradyVGL .never).
+                let vgl = BradyVGL.buildPrintJob(pixels: rendered.pixels,
+                                                 width: rendered.width, height: rendered.height,
+                                                 cutMode: .never)
+                maxLabelPx = max(maxLabelPx, rendered.width, rendered.height)
+                // copies > 1 ⇒ repeat each row's label that many times.
+                for _ in 0..<copies { labels.append(Data(vgl)) }
+            }
+            guard !labels.isEmpty else { return }
             // Same pacing estimate the print window uses.
-            let estLabelMs = Int(Double(labelPx) / 300.0 * 370.0) + 300
-            // copies > 1 ⇒ repeat the single rendered label.
-            let labels = Array(repeating: Data(vgl), count: copies)
+            let estLabelMs = Int(Double(maxLabelPx) / 300.0 * 370.0) + 300
 
             Task { @MainActor in
                 let job = PrintJobFile(
@@ -516,7 +691,7 @@ public final class DesignerWindowController: NSObject {
                 do { try backend.submit(job) }
                 catch { print("[DesignerWindowController] printCustom submit failed: \(error)") }
                 self.webView?.evaluateJavaScript(
-                    "if(typeof customPrintSubmitted==='function')customPrintSubmitted(\(copies));",
+                    "if(typeof customPrintSubmitted==='function')customPrintSubmitted(\(labels.count));",
                     completionHandler: nil)
             }
         }
@@ -605,10 +780,12 @@ extension DesignerWindowController: WKNavigationDelegate {
         injectDesignerTemplates()
         injectColumnConfig()
         injectDesignerPrefs()
-        // Custom mode: seed the print header with the latest printer/cassette state.
+        // Custom mode: seed the print header with the latest printer/cassette state
+        // and re-inject any already-bound data source (so a reload keeps the binding).
         if mode == .custom {
             injectPrinters()
             injectCassettes()
+            if dataSource != nil { injectBoundData() }
         }
         if let idx = pendingEditTemplateIndex {
             // Editing for the print window: load that template, skip the picker.
@@ -644,7 +821,14 @@ extension DesignerWindowController: WKScriptMessageHandler {
             browseForTemplate()
 
         case "browseDataSource":
-            browseForDataSource()
+            // Custom mode sends the current "first row is headers" toggle so the
+            // xlsx read matches what the user expects. Template mode ignores it.
+            let headerRow = (body["payload"] as? [String: Any])?["headerRow"] as? Bool ?? true
+            browseForDataSource(headerRow: headerRow)
+
+        case "refreshDataSource":
+            // Re-read the stored path (re-pick if it moved) and re-inject.
+            refreshDataSource()
 
         case "printCustom":
             // Custom Designer only — render the current canvas as a single label

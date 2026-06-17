@@ -17,6 +17,11 @@ let package = Package(
         .executable(name: "VectorLabelTemplateDesigner", targets: ["VectorLabelTemplateDesigner"]),
         .executable(name: "VectorLabelCustomDesigner", targets: ["VectorLabelCustomDesigner"]),
     ],
+    dependencies: [
+        // Phase 3: .xlsx reading for the Custom Designer's database binding.
+        // Core-only — does NOT pull in libusb; stays out of the Engine constraint.
+        .package(url: "https://github.com/CoreOffice/CoreXLSX.git", from: "0.14.2"),
+    ],
     targets: [
         .systemLibrary(
             name: "CLibUSB",
@@ -26,6 +31,7 @@ let package = Package(
         ),
         .target(
             name: "VectorLabelCore",
+            dependencies: ["CoreXLSX"],
             path: "MacApp/Sources/Core",
             resources: [
                 .copy("BradyCatalog.json"),

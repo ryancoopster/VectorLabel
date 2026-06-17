@@ -192,6 +192,57 @@ final class FoundationTests: XCTestCase {
         XCTAssertEqual(recs2[1].side, "Destination")
     }
 
+    // MARK: – ExcelRecordReader (Phase 3) — xlsx grid → records, header toggle
+
+    /// With the header toggle ON, the first row names the columns and the rest are
+    /// data — mirroring WireExportParser's record shape (Number/_Side surfaced).
+    func testExcelRecordsWithHeaderRow() {
+        let grid = [["_Side", "Number", "Cable"],
+                    ["Source", "N1", "RIO 1"],
+                    ["Destination", "N1", "RIO 1"]]
+        let recs = ExcelRecordReader.records(rows: grid, headerRow: true)
+        XCTAssertEqual(recs?.count, 2)
+        XCTAssertEqual(recs?[0].wireID, "N1")
+        XCTAssertEqual(recs?[0].side, "Source")
+        XCTAssertEqual(recs?[0].fields["Cable"], "RIO 1")
+        XCTAssertEqual(recs?[1].side, "Destination")
+    }
+
+    /// With the header toggle OFF, every row is data and columns become "Column N".
+    func testExcelRecordsGenericHeaders() {
+        let grid = [["A", "B"], ["C", "D"]]
+        let recs = ExcelRecordReader.records(rows: grid, headerRow: false)
+        XCTAssertEqual(recs?.count, 2)
+        XCTAssertEqual(recs?[0].fields["Column 1"], "A")
+        XCTAssertEqual(recs?[0].fields["Column 2"], "B")
+        XCTAssertEqual(recs?[1].fields["Column 1"], "C")
+    }
+
+    /// Short rows are padded (never dropped) so a row's index stays put — the same
+    /// guarantee the CSV parser makes.
+    func testExcelRecordsPadsShortRow() {
+        let grid = [["Number", "Cable", "Signal"],
+                    ["N1"],                 // short
+                    ["N2", "RIO", "LAN"]]
+        let recs = ExcelRecordReader.records(rows: grid, headerRow: true)
+        XCTAssertEqual(recs?.count, 2)
+        XCTAssertEqual(recs?[0].fields["Cable"], "")    // padded
+        XCTAssertEqual(recs?[0].fields["Signal"], "")
+        XCTAssertEqual(recs?[1].fields["Signal"], "LAN")
+    }
+
+    /// Blank header cells get a "Column N" name and duplicates are disambiguated,
+    /// so no two columns collapse into one field.
+    func testExcelRecordsNormalizesHeaders() {
+        let grid = [["Name", "", "Name"],
+                    ["a", "b", "c"]]
+        let recs = ExcelRecordReader.records(rows: grid, headerRow: true)
+        XCTAssertEqual(recs?.count, 1)
+        XCTAssertEqual(recs?[0].fields["Name"], "a")
+        XCTAssertEqual(recs?[0].fields["Column 2"], "b")   // blank header → Column 2
+        XCTAssertEqual(recs?[0].fields["Name (2)"], "c")   // duplicate disambiguated
+    }
+
     // MARK: – Formula engine (H4–H6, M1, M2, L1) — Swift must match the JS preview
 
     func testFormulaRealTemplate() {
