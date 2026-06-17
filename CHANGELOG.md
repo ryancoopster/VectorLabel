@@ -7,6 +7,10 @@ shown in the menu-bar footer. Fix commits reference the code-review finding IDs
 
 ## [Unreleased]
 ### Fixed
+- **[H2]** Inline-edit CSV writeback can no longer corrupt the file: removed the
+  sorted-union header fallback (it reordered/dropped columns) -- it now aborts if
+  the source header can't be read -- and corrected the false "session-only"
+  comment. (Round-trip safety from H1; writer becomes JSON after migration.)
 - **[H1]** Replaced the line-based CSV parser with a full-document RFC-4180
   parser: a newline inside a quoted field no longer tears the record (and drops
   every row after it, shifting absolute indices). Ragged rows are padded, never

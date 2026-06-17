@@ -389,36 +389,4 @@ enum WireExportParser {
         if !field.isEmpty || !record.isEmpty { endRecord() }   // flush a final row with no trailing newline
         return rows
     }
-
-    /// RFC-4180 compliant CSV line parser.
-    static func parseCSVLine(_ line: String) -> [String] {
-        var fields: [String] = []
-        var current = ""
-        var inQuotes = false
-        let chars = Array(line)
-        var i = 0
-        while i < chars.count {
-            let c = chars[i]
-            if inQuotes {
-                if c == "\"" {
-                    if i + 1 < chars.count && chars[i+1] == "\"" {
-                        current.append("\""); i += 1   // escaped quote
-                    } else {
-                        inQuotes = false
-                    }
-                } else {
-                    current.append(c)
-                }
-            } else {
-                switch c {
-                case "\"": inQuotes = true
-                case ",":  fields.append(current); current = ""
-                default:   current.append(c)
-                }
-            }
-            i += 1
-        }
-        fields.append(current)
-        return fields
-    }
 }

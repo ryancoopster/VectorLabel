@@ -357,20 +357,15 @@ final class PrintWindowController: NSObject {
     /// Session inline edits → durable. No-op if there's no known source file.
     private func writeRecordsBackToCSV() {
         guard let url = csvWritebackURL else { return }
-        var headers: [String] = []
-        if let content = try? String(contentsOf: url, encoding: .utf8),
-           let firstLine = content.components(separatedBy: .newlines).first(where: { !$0.isEmpty }) {
-            headers = WireExportParser.parseCSVLine(firstLine)
+        // The column order MUST come from the existing file's header. Never
+        // synthesize one — a sorted-union-of-keys fallback would reorder the schema
+        // and drop any column empty in every record, corrupting the file. If the
+        // header can't be read, abort rather than write a malformed CSV.
+        guard let content = try? String(contentsOf: url, encoding: .utf8),
+              let headers = WireExportParser.parseCSV(content).first, !headers.isEmpty else {
+            print("[writeRecordsBackToCSV] aborting: could not read the source header from \(url.lastPathComponent)")
+            return
         }
-        if headers.isEmpty {
-            // Fallback: union of keys across records, with _Side & Number leading.
-            var seen = Set<String>(); var cols: [String] = []
-            for r in records { for k in r.fields.keys where !seen.contains(k) { seen.insert(k); cols.append(k) } }
-            cols.sort()
-            headers = ["_Side", "Number"].filter { cols.contains($0) }
-                    + cols.filter { $0 != "_Side" && $0 != "Number" }
-        }
-        guard !headers.isEmpty else { return }
         func field(_ s: String) -> String {
             if s.contains(",") || s.contains("\"") || s.contains("\n") || s.contains("\r") {
                 return "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\""
@@ -420,9 +415,9 @@ extension PrintWindowController: WKScriptMessageHandler {
             }
 
         case "editRecord":
-            // Live in-place edit of a record field from the print window, so the
-            // printed output (rendered from this copy) reflects it. Session-only —
-            // not written back to the source CSV.
+            // Live in-place edit of a record field from the print window. Updates
+            // the in-memory record (so the rendered/printed output reflects it) AND
+            // persists it back to the source CSV via writeRecordsBackToCSV().
             if let p = body["payload"] as? [String: Any],
                let index = p["index"] as? Int,
                let field = p["field"] as? String,
