@@ -7,6 +7,12 @@ shown in the menu-bar footer. Fix commits reference the code-review finding IDs
 
 ## [Unreleased]
 ### Fixed
+- **[H4/H5/H6/M1/M2/L1]** Formula engine now agrees across the designer preview,
+  print preview, and Swift print renderer: Swift matches the JS comparison grammar
+  (string equality after a bare identifier), JS truthiness ("0" is truthy),
+  unknown-identifier fallback (shows the name), the friendly-name table, and
+  JS-style number stringification. Unified the two JS FD tables. Pinned by golden
+  tests including the real label templates.
 - **[H7/M5/L3]** Moved blocking USB work off Swift's cooperative thread pool onto
   per-printer serial DispatchQueues (replacing the device semaphore), so long
   prints + pacing sleeps can no longer starve/deadlock the pool under multi-printer

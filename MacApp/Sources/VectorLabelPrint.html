@@ -93,11 +93,16 @@ label.lbl{font-size:10px;color:var(--text2);display:block;margin-bottom:3px}
 <div id="app" style="display:flex;flex-direction:column;height:100vh"></div>
 <script>
 // ── Field definitions ─────────────────────────────────────────────────────────
+// MUST stay identical to VectorLabelDesigner.html FD and FormulaEngine.fieldMap
+// (Swift) so a formula resolves the same in the designer, the print preview, and
+// on the printed label.
 const FD=[
   {f:"Number",c:"Number"},{f:"Cable Name",c:"Cable"},{f:"Signal",c:"Signal"},
-  {f:"Connector",c:"Connector"},{f:"Device Name",c:"Device_Name"},
-  {f:"Socket Name",c:"Socket_Name"},{f:"Other Device",c:"Other_Device"},
-  {f:"Other Socket",c:"Other_Socket"},{f:"Rack",c:"Rack"},{f:"Room",c:"Room"}
+  {f:"Connector",c:"Connector"},{f:"Device Name",c:"Device_Name"},{f:"Device Tag",c:"Device_Tag"},
+  {f:"Socket Name",c:"Socket_Name"},{f:"Socket Tag",c:"Socket_Tag"},
+  {f:"Other Device",c:"Other_Device"},{f:"Other Socket",c:"Other_Socket"},
+  {f:"Other Connector",c:"Other_Connector"},{f:"Rack",c:"Rack"},{f:"Room",c:"Room"},
+  {f:"Rack U",c:"RackU"},{f:"Side",c:"_Side"},{f:"Cable Type",c:"Cable_Type"},{f:"Cable Length",c:"CableLength"}
 ];
 
 // ── Formula engine (same as designer) ────────────────────────────────────────

@@ -21,9 +21,23 @@ enum FormulaEngine {
         do {
             var pos = 0
             let result = try parseExpr(tokens: tokens, pos: &pos, fields: fields)
-            return "\(result ?? "")"
+            return jsString(result)
         } catch {
             return ""
+        }
+    }
+
+    /// Stringify a value the way JavaScript's `String()` does, so numbers match the
+    /// preview: an integral Double prints without a decimal ("2", not "2.0"), and a
+    /// Bool prints "true"/"false".
+    static func jsString(_ v: Any?) -> String {
+        switch v {
+        case nil:             return ""
+        case let b as Bool:   return b ? "true" : "false"
+        case let i as Int:    return String(i)
+        case let d as Double: return d == d.rounded() && abs(d) < 1e15 ? String(Int(d)) : String(d)
+        case let s as String: return s
+        default:              return "\(v!)"
         }
     }
 
@@ -95,29 +109,37 @@ enum FormulaEngine {
 
     private enum ParseError: Error { case unexpected }
 
-    /// Resolve a field name against the record. Try exact match, then case-insensitive.
+    /// Friendly-name → column-key map. MUST stay identical to the `FD` tables in
+    /// VectorLabelDesigner.html / VectorLabelPrint.html so a formula like
+    /// `=Cable Name` resolves the same in the preview and on the printed label.
+    static let fieldMap: [(friendly: String, column: String)] = [
+        ("Number", "Number"), ("Cable Name", "Cable"), ("Signal", "Signal"),
+        ("Connector", "Connector"), ("Device Name", "Device_Name"), ("Device Tag", "Device_Tag"),
+        ("Socket Name", "Socket_Name"), ("Socket Tag", "Socket_Tag"),
+        ("Other Device", "Other_Device"), ("Other Socket", "Other_Socket"),
+        ("Other Connector", "Other_Connector"), ("Rack", "Rack"), ("Room", "Room"),
+        ("Rack U", "RackU"), ("Side", "_Side"), ("Cable Type", "Cable_Type"), ("Cable Length", "CableLength"),
+    ]
+
+    /// Resolve an identifier the way the JS engine's `rv()` does (so preview == print):
+    /// exact column match, then the friendly-name table (case-insensitive), then a
+    /// case-insensitive column match, and finally — for an UNKNOWN identifier — the
+    /// raw name itself (matching the JS fallback; a typo shows the name, not blank).
     private static func resolveField(_ name: String, fields: [String: String]) -> String {
         if let v = fields[name] { return v }
         let lower = name.lowercased()
-        return fields.first { $0.key.lowercased() == lower }?.value ?? ""
+        if let m = fieldMap.first(where: { $0.friendly.lowercased() == lower || $0.column.lowercased() == lower }) {
+            return fields[m.column] ?? ""
+        }
+        if let v = fields.first(where: { $0.key.lowercased() == lower })?.value { return v }
+        return name
     }
 
-    /// Parses a comparison: concat ((= | <>) concat)?
-    /// Comparison binds looser than concatenation, matching Excel, so
-    /// `A&B = C&D` means `(A&B) = (C&D)`. Works on any operand — field,
-    /// string literal, number, function result, or parenthesised expression.
+    /// Top-level expression = concatenation. Comparison is NOT handled here; it
+    /// fires only immediately after a bare field identifier (in parsePrimary),
+    /// exactly matching the JS engine's `pe()`/`pp()` so preview == print.
     private static func parseExpr(tokens: [Token], pos: inout Int, fields: [String: String]) throws -> Any? {
-        let left = try parseConcat(tokens: tokens, pos: &pos, fields: fields)
-
-        guard pos < tokens.count else { return left }
-        let isNE: Bool = { if case .ne = tokens[pos] { return true }; return false }()
-        let isEQ: Bool = { if case .eq = tokens[pos] { return true }; return false }()
-        guard isNE || isEQ else { return left }
-
-        pos += 1
-        let right = try parseConcat(tokens: tokens, pos: &pos, fields: fields)
-        let equal = looseEqual(left, right)
-        return isNE ? !equal : equal
+        try parseConcat(tokens: tokens, pos: &pos, fields: fields)
     }
 
     /// Parses: primary (&  primary)*
@@ -128,25 +150,9 @@ enum FormulaEngine {
             guard case .amp = tokens[pos] else { break }
             pos += 1
             let right = try parsePrimary(tokens: tokens, pos: &pos, fields: fields)
-            left = "\(left ?? "")\(right ?? "")"
+            left = jsString(left) + jsString(right)
         }
         return left
-    }
-
-    /// Loose equality: compare numerically when both sides look like numbers
-    /// (so `LEN(x)=3` works despite `3` tokenising as a Double), else as strings.
-    private static func looseEqual(_ a: Any?, _ b: Any?) -> Bool {
-        if let da = anyToDouble(a), let db = anyToDouble(b) { return da == db }
-        return "\(a ?? "")" == "\(b ?? "")"
-    }
-
-    private static func anyToDouble(_ v: Any?) -> Double? {
-        switch v {
-        case let d as Double: return d
-        case let i as Int:    return Double(i)
-        case let s as String: return s.isEmpty ? nil : Double(s)
-        default:              return nil
-        }
     }
 
     private static func parsePrimary(tokens: [Token], pos: inout Int, fields: [String: String]) throws -> Any? {
@@ -181,7 +187,20 @@ enum FormulaEngine {
                 return evalFunction(name.uppercased(), args: args, fields: fields)
             }
 
-            // Plain field reference (comparisons are handled in parseExpr)
+            // Comparison fires only directly after a bare identifier, with a single
+            // primary right operand and STRING equality — matching the JS engine.
+            if pos < tokens.count {
+                let isNE: Bool = { if case .ne = tokens[pos] { return true }; return false }()
+                let isEQ: Bool = { if case .eq = tokens[pos] { return true }; return false }()
+                if isNE || isEQ {
+                    pos += 1
+                    let right = try parsePrimary(tokens: tokens, pos: &pos, fields: fields)
+                    let equal = resolveField(name, fields: fields) == jsString(right)
+                    return isNE ? !equal : equal
+                }
+            }
+
+            // Plain field reference.
             return resolveField(name, fields: fields)
 
         case .ne, .eq, .amp, .comma, .rparen:
@@ -192,7 +211,7 @@ enum FormulaEngine {
     // MARK: – Built-in functions
 
     private static func evalFunction(_ name: String, args: [Any?], fields: [String: String]) -> Any? {
-        func str(_ v: Any?) -> String { "\(v ?? "")" }
+        func str(_ v: Any?) -> String { jsString(v) }
         func num(_ v: Any?) -> Int {
             // Numeric literals tokenise as Double, so "3.0" would fail Int(_:).
             if let d = v as? Double { return Int(d) }
@@ -200,9 +219,14 @@ enum FormulaEngine {
             let s = str(v)
             return Int(s) ?? Int(Double(s) ?? 0)
         }
+        // JS truthiness (so IF() branches the same in preview and print): a bool is
+        // itself; a number is true when non-zero; ANY non-empty string is true —
+        // including "0" and "false" (a string field value of "0" is truthy in JS).
         func bool(_ v: Any?) -> Bool {
             if let b = v as? Bool { return b }
-            let s = str(v); return !s.isEmpty && s != "false" && s != "0"
+            if let d = v as? Double { return d != 0 }
+            if let i = v as? Int { return i != 0 }
+            return !str(v).isEmpty
         }
 
         // Helper to safely pull an element from [Any?] without Any?? double-optional

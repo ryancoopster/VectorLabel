@@ -87,6 +87,47 @@ final class FoundationTests: XCTestCase {
         XCTAssertEqual(recs2[1].side, "Destination")
     }
 
+    // MARK: – Formula engine (H4–H6, M1, M2, L1) — Swift must match the JS preview
+
+    func testFormulaRealTemplate() {
+        let f = #"=IF(Number<>"",Number&IF(Cable<>""," - "&Cable,""),IF(Cable<>"",Cable,""))"#
+        XCTAssertEqual(FormulaEngine.evaluate(f, fields: ["Number": "N044", "Cable": "RIO 1 PRI"]), "N044 - RIO 1 PRI")
+        XCTAssertEqual(FormulaEngine.evaluate(f, fields: ["Number": "", "Cable": "X"]), "X")
+        XCTAssertEqual(FormulaEngine.evaluate(f, fields: ["Number": "", "Cable": ""]), "")
+    }
+
+    func testFormulaFriendlyNames() {   // H6 — Swift had no friendly-name table
+        XCTAssertEqual(FormulaEngine.evaluate("=Cable Name", fields: ["Cable": "RIO 1"]), "RIO 1")
+        XCTAssertEqual(FormulaEngine.evaluate("=Device Name", fields: ["Device_Name": "SWITCH"]), "SWITCH")
+        XCTAssertEqual(FormulaEngine.evaluate("=Rack U", fields: ["RackU": "22"]), "22")
+    }
+
+    func testFormulaUnknownIdentifierReturnsName() {   // H5 — was blank in Swift
+        XCTAssertEqual(FormulaEngine.evaluate("=Bogus", fields: [:]), "Bogus")
+    }
+
+    func testFormulaZeroIsTruthy() {   // M1/L1 — Swift treated "0" as false
+        XCTAssertEqual(FormulaEngine.evaluate(#"=IF(RackU,"y","n")"#, fields: ["RackU": "0"]), "y")
+        XCTAssertEqual(FormulaEngine.evaluate(#"=IF(RackU,"y","n")"#, fields: ["RackU": ""]), "n")
+    }
+
+    func testFormulaComparison() {   // H4 — string equality, after a bare identifier
+        XCTAssertEqual(FormulaEngine.evaluate(#"=IF(Signal="LAN","Y","N")"#, fields: ["Signal": "LAN"]), "Y")
+        XCTAssertEqual(FormulaEngine.evaluate(#"=IF(Signal="LAN","Y","N")"#, fields: ["Signal": "MIDI"]), "N")
+        XCTAssertEqual(FormulaEngine.evaluate(#"=IF(Number<>"","has","none")"#, fields: ["Number": "N1"]), "has")
+    }
+
+    func testFormulaNumberStringifyMatchesJS() {   // jsString: integral numbers print without ".0"
+        XCTAssertEqual(FormulaEngine.evaluate(#"=IF(RackU=22,"y","n")"#, fields: ["RackU": "22"]), "y")
+        XCTAssertEqual(FormulaEngine.evaluate(#"=LEN(Number)&" chars""#, fields: ["Number": "N044"]), "4 chars")
+    }
+
+    func testFormulaFunctions() {
+        XCTAssertEqual(FormulaEngine.evaluate("=LEFT(Cable,3)", fields: ["Cable": "RIORIO"]), "RIO")
+        XCTAssertEqual(FormulaEngine.evaluate("=UPPER(Signal)", fields: ["Signal": "lan"]), "LAN")
+        XCTAssertEqual(FormulaEngine.evaluate("=TRIM(Cable)", fields: ["Cable": "  x  "]), "x")
+    }
+
     /// jsonQuoted must neutralize JS-injection vectors when a value (e.g. a
     /// filename) is spliced into evaluateJavaScript. Regression guard for M4.
     func testJsonQuotedEscaping() {
