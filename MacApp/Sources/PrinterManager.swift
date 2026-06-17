@@ -183,16 +183,41 @@ final class PrinterManager: ObservableObject {
                 // one label at a time as each finishes printing, and — because we send
                 // one at a time and check between them — Cancel actually stops the
                 // remaining labels (anything already sent stays in the printer).
+                let count = jobs.count
                 let perLabelMs = max(150, estLabelMs)
+                let initialRem = BradyUSB.labelsRemaining(handle: handle)   // -1 if unavailable
+                BradyUSB.printDebugLog("job: \(count) labels, \(perLabelMs)ms/label, initialRem=\(initialRem)")
                 for (i, vglJob) in jobs.enumerated() {
                     if job.isCancelled { break }
                     try BradyUSB.sendJob(vglJob, handle: handle)
-                    // Wait roughly one label's print time, staying responsive to
+                    // Pace the bar to ~one label's print time, staying responsive to
                     // cancellation, then count this label as printed.
                     var waited = 0
                     while waited < perLabelMs && !job.isCancelled { usleep(40_000); waited += 40 }
                     if job.isCancelled { break }
                     await MainActor.run { job.completedLabels = i + 1 }
+                }
+                // Keep the job "printing" — status visible and cancellable — until the
+                // printer confirms it physically finished: its labels-remaining counter
+                // drops by the job's label count (a real "done" over the USB
+                // back-channel). Bounded so a supply that doesn't report can't hang it.
+                if !job.isCancelled && initialRem >= 0 {
+                    let startNs = DispatchTime.now().uptimeNanoseconds
+                    let capMs = count * perLabelMs * 2 + 8000
+                    var elapsedMs = 0
+                    while !job.isCancelled {
+                        let rem = BradyUSB.labelsRemaining(handle: handle)
+                        elapsedMs = Int((DispatchTime.now().uptimeNanoseconds &- startNs) / 1_000_000)
+                        if rem >= 0 && (initialRem - rem) >= count {
+                            BradyUSB.printDebugLog("DONE confirmed +\(elapsedMs)ms rem=\(rem) (dropped \(initialRem - rem))")
+                            break
+                        }
+                        if elapsedMs >= capMs {
+                            BradyUSB.printDebugLog("done wait hit cap +\(elapsedMs)ms rem=\(rem) (dropped \(rem >= 0 ? initialRem - rem : -1))")
+                            break
+                        }
+                        usleep(200_000)
+                    }
                 }
             } catch {
                 print("[PrinterManager] Print failed: \(error)")
