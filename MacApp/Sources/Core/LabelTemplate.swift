@@ -76,6 +76,16 @@ public enum LabelRenderer {
             ctx.translateBy(x: -cx, y: -cy)
         }
 
+        // Custom Designer landscape canvas (continuous only): the user authored the
+        // design rotated 90° (length horizontal), so rotate the raster to match. The
+        // context stays the physical width×length; this maps the length×width design
+        // onto it. NOTE: orientation/handedness is set here — verify with a test
+        // print on real tape before production use. #14.
+        if (template.canvasRot ?? 0) == 90 {
+            ctx.translateBy(x: CGFloat(pw), y: 0)
+            ctx.rotate(by: .pi / 2)
+        }
+
         // Per-printer calibration shift (in top-left pixel space).
         ctx.translateBy(x: CGFloat(offset.dx), y: CGFloat(offset.dy))
 

@@ -76,8 +76,22 @@ def glyph_cl(color):
     return c + l + chevron
 
 
+def glyph_label(text, color):
+    # Two-letter tag centred below the chevron (e.g. "CD" / "TD") so the Custom
+    # and Template Designer dock icons are tellable apart at a glance.
+    return (f'<text x="{cx:.1f}" y="962" text-anchor="middle" '
+            f'font-family="Helvetica Neue, Helvetica, Arial, sans-serif" '
+            f'font-weight="800" font-size="170" letter-spacing="4" '
+            f'fill="{color}">{text}</text>')
+
+
 def svg(bg, fg, variant="L"):
-    body = glyph_cl(fg) if variant == "CL" else glyph(fg)
+    if variant == "CL":
+        body = glyph_cl(fg)
+    elif variant in ("TD", "CD"):
+        body = glyph(fg) + glyph_label(variant, fg)
+    else:
+        body = glyph(fg)
     return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{W}" '
             f'viewBox="0 0 {W} {W}"><rect width="{W}" height="{W}" fill="{bg}"/>'
             f'{body}</svg>')

@@ -50,8 +50,9 @@ build_app_icon() {
   echo "  wrote $out"
 }
 
-build_app_icon L  "$SRC/AppIcon.icns"       app
-build_app_icon CL "$SRC/AppIconCustom.icns" appcustom
+build_app_icon L  "$SRC/AppIcon.icns"          app
+build_app_icon TD "$SRC/AppIconTemplate.icns"  apptemplate
+build_app_icon CD "$SRC/AppIconCustom.icns"    appcustom
 
 echo "→ Menu-bar glyph"
 python3 "$HERE/glyph.py" svg-menu "$BUILD/menu.svg"

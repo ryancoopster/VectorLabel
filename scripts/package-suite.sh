@@ -102,17 +102,18 @@ package_one() {
     [ -d "$BINDIR/$BUNDLE" ] && cp -R "$BINDIR/$BUNDLE" "$APP/Contents/Resources/"
   done
 
-  # App icon (Phase 7): the Custom Designer gets the "CL" monogram
-  # (AppIconCustom.icns); the other three get the "L" monogram (AppIcon.icns).
-  # Both ship as Contents/Resources/AppIcon.icns so CFBundleIconFile stays "AppIcon".
-  # If the CL icon couldn't be generated in this environment, fall back to the L
-  # icon so packaging never breaks (TODO: regenerate AppIconCustom.icns on macOS
-  # with Pillow + qlmanage via scripts/icon/build-icon.sh).
+  # App icon (Phase 7 / #10): per-app monograms over the shared chevron mark —
+  #   Custom Designer   → "CD" label (AppIconCustom.icns)
+  #   Template Designer → "TD" label (AppIconTemplate.icns)
+  #   Engine / Auto Print → plain "L" mark (AppIcon.icns)
+  # All ship as Contents/Resources/AppIcon.icns so CFBundleIconFile stays "AppIcon".
+  # Missing variant icons fall back to the L icon so packaging never breaks
+  # (regenerate with scripts/icon/build-icon.sh on macOS: Pillow + qlmanage).
   local ICON_SRC=MacApp/Sources/Core/AppIcon.icns
   if [ "$EXE" = "VectorLabelCustomDesigner" ] && [ -f MacApp/Sources/Core/AppIconCustom.icns ]; then
     ICON_SRC=MacApp/Sources/Core/AppIconCustom.icns
-  elif [ "$EXE" = "VectorLabelCustomDesigner" ]; then
-    echo "WARNING: AppIconCustom.icns missing — Custom Designer falling back to the L icon. TODO: run scripts/icon/build-icon.sh on macOS." >&2
+  elif [ "$EXE" = "VectorLabelTemplateDesigner" ] && [ -f MacApp/Sources/Core/AppIconTemplate.icns ]; then
+    ICON_SRC=MacApp/Sources/Core/AppIconTemplate.icns
   fi
   [ -f "$ICON_SRC" ] && cp "$ICON_SRC" "$APP/Contents/Resources/AppIcon.icns"
 

@@ -1420,9 +1420,17 @@ function sameLabelSize(c,specN){
   if(!c||typeof c.labelWidthMils!=='number'||typeof c.labelHeightMils!=='number')return false;
   const spec=BL.find(l=>l.n===specN)||BL.find(l=>supplyCore(l.n)===supplyCore(specN));
   if(!spec)return false;
-  const tw=spec.tw*1000, th=spec.th*1000, cw=c.labelWidthMils, ch=c.labelHeightMils;
   const tol=100; // mils (~0.1")
   const close=(a,b)=>Math.abs(a-b)<=tol;
+  const cw=c.labelWidthMils, ch=c.labelHeightMils;
+  // Continuous tape has no fixed label height (length is set per job), so match on
+  // WIDTH alone — any material of the same tape width counts as matched (#15).
+  if(spec.ty==="continuous"){
+    if(c.isDieCut===true)return false;
+    const tw=spec.tw*1000;
+    return close(cw,tw)||close(ch,tw);
+  }
+  const tw=spec.tw*1000, th=spec.th*1000;
   return (close(cw,tw)&&close(ch,th))||(close(cw,th)&&close(ch,tw));
 }
 

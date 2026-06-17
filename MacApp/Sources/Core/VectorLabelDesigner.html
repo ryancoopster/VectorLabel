@@ -202,6 +202,9 @@ let S={
   tplName:(window._designerMode==='custom')?'Untitled Custom Design':'Untitled Template',modal:null,
   // Custom Designer print header state (custom mode only).
   activePrinter:null, copies:1,
+  // In-flight print job shown in the header (id + live progress) so the user can
+  // watch and cancel a print from within the Custom Designer (#12b).
+  _activeJobId:null, _jobStatus:null, _jobSeen:false,
   // Cut SETTING for the print job (Phase 6). null ⇒ use the per-stock default
   // (continuous → eachLabel; die-cut → never). One of
   // "afterJobLast" | "eachLabel" | "never", carried in PrintJobFile.cutMode.
@@ -209,6 +212,8 @@ let S={
   // Continuous-supply label length (inches); null ⇒ use the catalog default.
   // Ignored for die-cut supplies.
   labelLen:null,
+  // Continuous-supply canvas rotation: 0 (portrait) or 90 (landscape). #14.
+  canvasRot:0,
   // ── Custom Designer database-pane state (custom mode only) ──────────────────
   // Mirrors the Print window's record browser over window._boundData rows.
   // printRange: "all" | "selected" | "range" (which bound rows print).
@@ -306,7 +311,12 @@ function normSpec(){
   const base=BL.find(l=>l.n===(S.spec&&S.spec.n))||BL[1];
   if(base.ty==="continuous"){
     const len=dEffLen()||base.ph;
-    S.spec=Object.assign({},base,{ph:len,th:len});
+    if(S.canvasRot===90){
+      // Landscape: the length runs horizontally, the tape width vertically.
+      S.spec=Object.assign({},base,{pw:len,tw:len,ph:base.pw,th:base.pw});
+    }else{
+      S.spec=Object.assign({},base,{ph:len,th:len});
+    }
   }else{
     S.spec=base;
   }
@@ -318,6 +328,7 @@ function pickSupply(specN){
   S.labelLen=specIsContinuous(specN)?dDefaultLen(specN):null;
   // Drop any explicit cut override so the new stock's sensible default applies.
   S.cutMode=null;
+  S.canvasRot=0;   // reset orientation when switching supplies (#14)
   R();
 }
 function setLabelLen(v){
@@ -325,16 +336,25 @@ function setLabelLen(v){
   S.labelLen=(isFinite(n)&&n>0)?Math.min(LEN_MAX,Math.max(LEN_MIN,n)):null;
   R();
 }
+// Toggle the continuous-label canvas between portrait (0°) and landscape (90°).
+// #14 — the Swift renderer rotates the printed raster to match (LabelRenderer).
+function rotateCanvas(){
+  if(!dContinuous())return;
+  S.canvasRot=(S.canvasRot===90)?0:90;
+  R();
+}
 // Apply a supply + (optional) continuous length when loading a saved template or
 // document. Die-cut supplies clear the length; continuous supplies adopt the
 // saved labelLengthInches (falling back to the catalog default).
-function applyLoadedSpec(specN,lenInches){
+function applyLoadedSpec(specN,lenInches,rot){
   S.spec=BL.find(l=>l.n===specN)||BL[1];
   if(specIsContinuous(specN)){
     const n=parseFloat(lenInches);
     S.labelLen=(isFinite(n)&&n>0)?Math.min(LEN_MAX,Math.max(LEN_MIN,n)):dDefaultLen(specN);
+    S.canvasRot=(parseInt(rot)===90)?90:0;
   }else{
     S.labelLen=null;
+    S.canvasRot=0;
   }
 }
 function selObjs(){ return (S.selIds||[]).map(id=>gobj(id)).filter(Boolean); }
@@ -734,7 +754,7 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
       const editing=!readOnly&&isStatic&&S.editingId===o.id;
       const editAttrs=editing?`contenteditable="true" onmousedown="event.stopPropagation()" oninput="setStaticText('${o.id}',this.innerText)" onblur="endTextEdit()" onkeydown="if(event.key==='Escape')this.blur()"`:"";
       const pe=editing?"pointer-events:auto;outline:none;cursor:text;":"pointer-events:none;";
-      const curs=readOnly?"default":(isStatic?"text":"move");   // static text hints click-to-edit
+      const curs=readOnly?"default":(editing?"text":"move");   // caret while editing; otherwise grab-to-move
       return `<div data-obj="${o.id}" ${drag} ${dropAttr} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${Math.max(h,12)}px;${rotCss}${ss}border-radius:2px;cursor:${curs};display:flex;align-items:${va};padding:0 2px;box-sizing:border-box">
         <div data-txt="${o.id}" ${editAttrs} style="width:100%;font-family:'${o.font||"Helvetica Neue"}',Arial,sans-serif;font-size:${fz}px;font-weight:${fontWeight};font-style:${fontStyle};text-decoration:${textDecoration};color:${txtColor};white-space:${whiteSpace};word-break:${wordBreak};overflow:hidden;text-overflow:${o.wrapText?"clip":"ellipsis"};line-height:1.15;letter-spacing:${letterSpacing};text-align:${textAlign};transform:scaleX(${scaleX});transform-origin:left center;${pe}">${dispVal}</div>
         ${rotH}${rb}</div>`;
@@ -804,7 +824,7 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
   // the printable area prints. The margin is not visually called out.
   const canvasDrop=readOnly?"":`ondragover="onCanvasDragOver(event)" ondragleave="onCanvasDragLeave(event)" ondrop="onColDropToCanvas(event)"`;
   return `<div style="display:flex;flex-direction:column;align-items:flex-start;flex-shrink:0">
-    <div onmousedown="${readOnly?'':`if(event.target===this)deselect()`}" ${canvasDrop} style="width:${bw}px;height:${bh}px;background:transparent;position:relative;overflow:hidden;flex-shrink:0">
+    <div onmousedown="${readOnly?'':`if(event.target===this){if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();deselect()}`}" ${canvasDrop} style="width:${bw}px;height:${bh}px;background:transparent;position:relative;overflow:hidden;flex-shrink:0">
       <!-- Printable area (only this prints) -->
       <div id="printable-area" style="position:absolute;left:${B}px;top:${B}px;width:${pw}px;height:${ph}px;background:#fff;box-shadow:0 0 0 1.5px var(--accent);pointer-events:none"></div>
       ${wrapZone}
@@ -1200,9 +1220,10 @@ function R(){
       </select>
       ${dContinuous()?`<div style="display:flex;align-items:center;gap:5px" title="Continuous supply — set the printed label length">
         <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Length</span>
-        <input type="number" class="inp" min="${LEN_MIN}" max="${LEN_MAX}" step="0.05" value="${(dEffLen()||dDefaultLen(S.spec.n))}" style="width:64px;padding:4px 6px;font-size:12px" onchange="setLabelLen(this.value)">
+        <input type="number" class="inp" min="${LEN_MIN}" max="${LEN_MAX}" step="0.05" value="${(dEffLen()||dDefaultLen(S.spec.n))}" style="width:64px;padding:4px 6px;font-size:12px" onchange="setLabelLen(this.value)" onblur="setLabelLen(this.value)" onkeydown="if(event.key==='Enter')this.blur()">
         <span style="color:var(--text3);font-size:11px">in</span>
       </div>`:""}
+      ${dContinuous()?`<button class="btn${S.canvasRot===90?" on":""}" onclick="rotateCanvas()" title="Rotate the label canvas 90° for a landscape continuous label" style="padding:4px 9px;font-size:11px">⟳ 90°</button>`:""}
       <button class="btn${S.wrap?" on":""}" onclick="S.wrap=!S.wrap;R()">${S.wrap?"Hide wrap":"Show wrap"}</button>
       <div style="display:flex;align-items:center;gap:4px;background:var(--surface3);border:1px solid var(--bd4);border-radius:4px;padding:2px 6px">
         <button onclick="S.zoom=Math.max(0.25,S.zoom-0.25);R()" title="Zoom out" style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:16px;padding:0 2px;line-height:1">−</button>
@@ -1314,7 +1335,7 @@ function R(){
 
       <!-- Right: properties (horizontally resizable — drag the left-edge splitter) -->
       <div id="props-pane" style="width:${S.propW||PROP_DEFAULT}px;background:var(--surface);border-left:1px solid var(--bd2);padding:12px;overflow-y:auto;flex-shrink:0;position:relative">
-        <div onmousedown="startPropResize(event)" title="Drag to resize the properties panel" style="position:absolute;left:-3px;top:0;bottom:0;width:8px;cursor:ew-resize;z-index:6"></div>
+        <div onmousedown="startPropResize(event)" onmouseenter="this.style.background='rgba(108,142,245,0.35)'" onmouseleave="this.style.background='transparent'" title="Drag to resize the properties panel" style="position:absolute;left:-3px;top:0;bottom:0;width:8px;cursor:ew-resize;z-index:6;background:transparent;transition:background .12s"></div>
         ${buildProps()}
       </div>
     </div>
@@ -1743,12 +1764,23 @@ function positionEl(id){
   else { el.style.top=y+"px"; }
 }
 
+let _txEditClickId=null,_txEditClickT=0; const DBLCLICK_MS=350;
 function startDrag(e,id){
   e.stopPropagation();
   const o=gobj(id);if(!o)return;
   if(S.editingId&&S.editingId!==id)S.editingId=null;
   // Shift-click toggles this object in/out of the multi-selection (no drag).
   if(e.shiftKey){ toggleSel(id); R(); return; }
+  // Double-click a lone static text box → edit inline. A single click only selects
+  // and arms a move, so static text stays draggable (previously a single click
+  // entered edit mode, after which the box could no longer be moved).
+  if(o.t==="tx" && txMode(o)==="static" && (S.selIds||[]).length<=1){
+    const now=Date.now();
+    if(_txEditClickId===id && (now-_txEditClickT)<DBLCLICK_MS){
+      _txEditClickId=null; _txEditClickT=0; startTextEdit(id); return;
+    }
+    _txEditClickId=id; _txEditClickT=now;
+  }
   // Grabbing an object already part of a multi-selection drags the whole group;
   // grabbing anything else selects just it first.
   const inMulti=(S.selIds||[]).length>1 && S.selIds.includes(id);
@@ -1775,8 +1807,8 @@ function startDrag(e,id){
   function mu(){
     S._snapLines=[]; renderSnapGuides(); S._rulerObj=null;
     window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",mu);
-    // A click (no drag) on a lone static text box → edit it inline.
-    if(!moved && o.t==="tx" && txMode(o)==="static" && (S.selIds||[]).length<=1){ startTextEdit(id); return; }
+    // Single click no longer enters edit mode (double-click does, handled above),
+    // so a lone static text box can be selected and dragged.
     R();
   }
   window.addEventListener("mousemove",mv);window.addEventListener("mouseup",mu);
@@ -2175,7 +2207,7 @@ function templateData(){
     objs:JSON.parse(JSON.stringify(S.objs))
   };
   // Continuous supplies persist the chosen label length (inches); die-cut omit it.
-  if(dContinuous()){ const len=dEffLen(); if(len) d.labelLengthInches=len; }
+  if(dContinuous()){ const len=dEffLen(); if(len) d.labelLengthInches=len; if(S.canvasRot===90) d.canvasRot=90; }
   return d;
 }
 
@@ -2215,12 +2247,36 @@ function dSameLabelSize(c,specN){
   if(!dCassetteSizeKnown(c))return false;
   const spec=BL.find(l=>l.n===specN)||BL.find(l=>dSupplyCore(l.n)===dSupplyCore(specN));
   if(!spec)return false;
-  const tw=spec.tw*1000, th=spec.th*1000, cw=c.labelWidthMils, ch=c.labelHeightMils;
   const tol=100, close=(a,b)=>Math.abs(a-b)<=tol;
+  const cw=c.labelWidthMils, ch=c.labelHeightMils;
+  // Continuous tape has no fixed label height (the user sets the length), so a
+  // loaded continuous cassette matches on WIDTH alone — any material of the same
+  // tape width counts as matched (#15). A die-cut cassette never matches a
+  // continuous selection.
+  if(spec.ty==="continuous"){
+    if(c.isDieCut===true)return false;
+    const tw=spec.tw*1000;
+    return close(cw,tw)||close(ch,tw);
+  }
+  const tw=spec.tw*1000, th=spec.th*1000;
   return (close(cw,tw)&&close(ch,th))||(close(cw,th)&&close(ch,tw));
 }
 function dCassetteMatched(){ const c=dLoadedCassette(); return !!(c&&dCassetteSizeKnown(c)&&dSameLabelSize(c,S.spec.n)); }
 function dCassetteMismatch(){ const c=dLoadedCassette(); return !!(c&&dCassetteSizeKnown(c)&&!dSameLabelSize(c,S.spec.n)); }
+// Human label-type descriptor for a supply (#16), derived from catalog fields so
+// it needs no extra data: wrap-around wire labels, continuous vinyl/polyester, etc.
+function dSupplyTypeDesc(l){
+  if(!l)return "";
+  if(l.ty==="continuous"){
+    const m=(l.mt||"").toUpperCase();
+    if(m.indexOf("595")>=0||m.indexOf("439")>=0||m.indexOf("498")>=0)return "Continuous vinyl tape";
+    if(m.indexOf("499")>=0)return "Continuous nylon cloth tape";
+    if(m.indexOf("4")>=0)return "Continuous polyester tape";
+    return "Continuous tape";
+  }
+  if(l.lm)return "Wrap-around wire label (self-laminating)";
+  return "Die-cut label";
+}
 function dRequiredSupply(specN){ const core=dSupplyCore(specN); return core?"BM/M6-"+core:(specN||""); }
 function dFmtIn(v){ return (v==null?"—":(+v).toString())+'"'; }
 function dCanPrint(){
@@ -2243,10 +2299,28 @@ function buyMore(which){
 // Shown in the Custom Designer print header; "" when no buy URL is known.
 function buyMoreControl(){
   const s=BL.find(l=>l.n===S.spec.n); if(!s||!(s.br||s.bb))return "";
-  const bulk=(s.bb&&s.bb!==s.br)?`<button class="btn" onclick="buyMore('bulk')" title="Buy a bulk box of ${s.n}" style="padding:4px 8px;font-size:10px">Bulk ↗</button>`:"";
+  const bulk=(s.bb&&s.bb!==s.br)?`<button class="btn" onclick="buyMore('bulk')" title="Buy a bulk box of ${s.n}" style="padding:4px 8px;font-size:10px">Bulk box ↗</button>`:"";
   return`<div style="display:flex;align-items:center;gap:5px">
-    <button class="btn" onclick="buyMore('roll')" title="Buy ${s.n} on bradyid.com" style="padding:4px 10px;font-size:11px">Buy more ↗</button>
+    <span style="color:var(--text3);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px">Buy More:</span>
+    <button class="btn" onclick="buyMore('roll')" title="Buy ${s.n} on bradyid.com" style="padding:4px 10px;font-size:11px">Roll ↗</button>
     ${bulk}
+  </div>`;
+}
+
+// In-flight job status + Cancel, shown in the print header after the supply (#12b).
+// "" when no job submitted from this designer is active.
+function buildJobStatusControl(){
+  const j=S._jobStatus; if(!isCustomMode()||!j)return "";
+  const total=Math.max(1,j.labelCount||1);
+  const done=Math.max(0,Math.min(total,j.completed||0));
+  const pct=Math.round(done/total*100);
+  const lbl=(j.state==="queued")?"Queued":("Printing "+done+"/"+total);
+  return`<div style="display:flex;align-items:center;gap:8px;padding:3px 10px;border:1px solid var(--accent);border-radius:5px;background:rgba(108,142,245,0.10)">
+    <span style="color:var(--accent);font-size:11px;font-weight:600;white-space:nowrap">${lbl}</span>
+    <div style="width:90px;height:6px;background:var(--surface3);border-radius:3px;overflow:hidden">
+      <div style="width:${pct}%;height:100%;background:var(--accent);transition:width .2s"></div>
+    </div>
+    <button class="btn" onclick="cancelCustomPrint()" title="Cancel this print job" style="padding:3px 10px;font-size:11px;color:var(--red);border-color:var(--red)">Cancel</button>
   </div>`;
 }
 
@@ -2303,10 +2377,13 @@ function buildCustomPrintHeader(){
     <div style="display:flex;align-items:center;gap:7px">
       <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Supply</span>
       <span style="color:var(--text2);font-size:11px;font-family:monospace" title="Required supply for ${S.spec.n}">${dRequiredSupply(S.spec.n)}</span>
+      <span style="color:var(--text3);font-size:10px;white-space:nowrap" title="Label type">${dSupplyTypeDesc(BL.find(l=>l.n===S.spec.n))}</span>
       ${dCassetteMatched()?`<span title="Loaded cassette matches the required supply" style="color:var(--green);font-size:18px;line-height:1;font-weight:800">✓</span>`
         :dCassetteMismatch()?`<span title="Loaded ${escAttr(dLoadedCassette().partNumber)} doesn't match — the label may print misaligned or cropped" style="color:var(--red);font-size:12px;line-height:1;white-space:nowrap">⚠ mismatch</span>`:""}
       ${buyMoreControl()}
     </div>
+
+    ${buildJobStatusControl()}
 
     ${buildPrintRangeControl()}
 
@@ -2410,9 +2487,33 @@ function doCustomPrint(){
     window.webkit.messageHandlers.vectorlabel.postMessage({action:"printCustom",payload});
   }
 }
-// Swift calls this once the job has been submitted to the queue.
-function customPrintSubmitted(copies){
+// Swift calls this once the job has been submitted to the queue, passing the job
+// id so the header can track live progress + offer Cancel (#12b).
+function customPrintSubmitted(copies,jobId){
   showToast("Printing "+copies+" label"+(copies!==1?"s":""));
+  if(isCustomMode()&&jobId){
+    S._activeJobId=jobId; S._jobSeen=false;
+    S._jobStatus={id:jobId,labelCount:copies,completed:0,state:"queued",title:S.tplName||"Custom Label"};
+    R();
+  }
+}
+
+// Swift pushes the Engine's in-flight jobs here (custom mode) on every status
+// change. Track OUR submitted job by id: update progress while present, clear the
+// header once it disappears (finished or cancelled).
+function updateDesignerJobStatus(jobs){
+  if(!isCustomMode())return;
+  const list=Array.isArray(jobs)?jobs:[];
+  if(!S._activeJobId){ if(S._jobStatus){ S._jobStatus=null; R(); } return; }
+  const job=list.find(j=>j&&j.id===S._activeJobId)||null;
+  if(job){ S._jobSeen=true; S._jobStatus=job; R(); return; }
+  if(S._jobSeen){ S._activeJobId=null; S._jobStatus=null; S._jobSeen=false; R(); }
+}
+
+// Ask Swift (→ Engine over IPC) to cancel the tracked in-flight job (#12b).
+function cancelCustomPrint(){
+  if(!S._activeJobId)return;
+  _vlPost("cancelCustomPrint",{jobId:S._activeJobId});
 }
 
 // ── Print-window edit mode ─────────────────────────────────────────────────────
@@ -2442,9 +2543,9 @@ function sanitizeObjs(objs){
 function initPrintEdit(template){
   window._printEdit=true;
   if(template){
-    S.tplName=template.name||"Untitled Template";
+    S.tplName=template.name||defaultDocName();
     S._loadedId=template.id||null;
-    applyLoadedSpec(template.specN,template.labelLengthInches);
+    applyLoadedSpec(template.specN,template.labelLengthInches,template.canvasRot);
     S.objs=sanitizeObjs(template.objs);
     S.selId=null;S._ef=undefined;S.modal=null;
   }
@@ -2502,7 +2603,7 @@ function validateTemplateName(){
 async function saveTemplate(){
   const nameEl=document.getElementById("tpl-name-inp");
   if(nameEl && !validateTemplateName()) return;   // block invalid filenames
-  if(nameEl)S.tplName=nameEl.value.trim()||"Untitled Template";
+  if(nameEl)S.tplName=nameEl.value.trim()||defaultDocName();
   const data=templateData();
   const json=JSON.stringify(data,null,2);
   const filename=(S.tplName.replace(/[^a-z0-9_\- ]/gi,"_")||"template")+".vltmp";
@@ -2680,9 +2781,9 @@ function loadSelectedTemplate(){
   const t=templates[S._openSel];
   if(!t)return;
   snapshot();
-  S.tplName=t.name||"Untitled Template";
+  S.tplName=t.name||defaultDocName();
   S._loadedId=t.id||null;   // preserve id so a later Save overwrites in place
-  applyLoadedSpec(t.specN,t.labelLengthInches);
+  applyLoadedSpec(t.specN,t.labelLengthInches,t.canvasRot);
   S.objs=JSON.parse(JSON.stringify(t.objs));
   S.selId=null;S._ef=undefined;
   S.modal=null;
@@ -2697,9 +2798,9 @@ function initOpenTemplate(t){
   if(!t||!t.objs)return;
   window._printEdit=false;
   S.modal=null;
-  S.tplName=t.name||"Untitled Template";
+  S.tplName=t.name||defaultDocName();
   S._loadedId=t.id||null;
-  applyLoadedSpec(t.specN,t.labelLengthInches);
+  applyLoadedSpec(t.specN,t.labelLengthInches,t.canvasRot);
   S.objs=sanitizeObjs(t.objs);
   S.selId=null;S._ef=undefined;
   R();
@@ -2707,6 +2808,23 @@ function initOpenTemplate(t){
 }
 
 // ── Toast notifications ───────────────────────────────────────────────────────
+// Full-window "Drop to open file" overlay toggled by Swift while a CSV/XLSX is
+// dragged over the Custom Designer window (#19). pointer-events:none so it never
+// blocks interaction; created lazily on first show.
+function setDragOverlay(show){
+  let el=document.getElementById('vlDropOverlay');
+  if(show){
+    if(!el){
+      el=document.createElement('div');
+      el.id='vlDropOverlay';
+      el.style.cssText='position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(20,22,28,0.55);pointer-events:none;font:600 18px -apple-system,Helvetica,Arial,sans-serif;color:#fff';
+      el.innerHTML='<div style="padding:18px 28px;border:2px dashed rgba(255,255,255,0.85);border-radius:12px;background:rgba(108,142,245,0.28)">⬇︎&nbsp; Drop to open file</div>';
+      document.body.appendChild(el);
+    }
+    el.style.display='flex';
+  }else if(el){ el.style.display='none'; }
+}
+
 function showToast(msg){
   let t=document.getElementById("vl-toast");
   if(!t){t=document.createElement("div");t.id="vl-toast";
@@ -2872,7 +2990,7 @@ function initCustomDocument(doc){
   // Canvas
   S.tplName=doc.name||"Custom Label";
   S._loadedId=null;
-  applyLoadedSpec(doc.specN,doc.labelLengthInches);
+  applyLoadedSpec(doc.specN,doc.labelLengthInches,doc.canvasRot);
   S.objs=sanitizeObjs(doc.objs||[]);
   S.selId=null;S._ef=undefined;
   S.copies=Math.max(1,doc.copies||1);

@@ -65,6 +65,10 @@ public struct VLTemplate: Codable, Identifiable, Hashable {
     /// inches (along the feed). nil/0 for die-cut supplies, which use the catalog's
     /// fixed printable height. Optional so older die-cut templates decode unchanged.
     public var labelLengthInches: Double? = nil
+    /// For CONTINUOUS supplies only: 90 if the user rotated the design canvas to
+    /// landscape (the renderer rotates the printed raster to match), else 0/nil.
+    /// Optional so older templates decode unchanged. #14.
+    public var canvasRot: Int? = nil
 
     public var labelSize: BradyLabelSize? { BradyCatalog.size(forPartNumber: specN) }
 

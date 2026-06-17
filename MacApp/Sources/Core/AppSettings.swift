@@ -107,6 +107,13 @@ public final class AppSettings: ObservableObject {
         didSet { UserDefaults.standard.set(designerPropsWidth, forKey: "designerPropsWidth") }
     }
 
+    /// Folder last used in the Custom Designer's "Choose data file" panel, so it
+    /// reopens where the user last picked a CSV/XLSX instead of always at Exports/.
+    /// Empty = none yet (fall back to the Exports folder).
+    @Published public var lastDataSourceFolderPath: String {
+        didSet { UserDefaults.standard.set(lastDataSourceFolderPath, forKey: "lastDataSourceFolderPath") }
+    }
+
     // MARK: – Printer calibration (per printer, keyed by serial number)
 
     /// Print-alignment offset in printer pixels, keyed by the printer's serial
@@ -192,6 +199,13 @@ public final class AppSettings: ObservableObject {
     public var exportsFolderURL: URL { watchFolderURL.appendingPathComponent("Exports") }
     public var templatesFolderURL: URL { URL(fileURLWithPath: templatesFolderPath) }
 
+    /// Last-used Custom Designer data-file folder, or nil if unset / no longer present.
+    public var lastDataSourceFolderURL: URL? {
+        guard !lastDataSourceFolderPath.isEmpty else { return nil }
+        let u = URL(fileURLWithPath: lastDataSourceFolderPath, isDirectory: true)
+        return FileManager.default.fileExists(atPath: u.path) ? u : nil
+    }
+
     // MARK: – Init
 
     private init() {
@@ -222,6 +236,7 @@ public final class AppSettings: ObservableObject {
         designerGridSize    = defaults.object(forKey: "designerGridSize") as? Double ?? 0.05
         designerRecordsHeight = defaults.object(forKey: "designerRecordsHeight") as? Double ?? 160
         designerPropsWidth  = defaults.object(forKey: "designerPropsWidth") as? Double ?? 220
+        lastDataSourceFolderPath = defaults.string(forKey: "lastDataSourceFolderPath") ?? ""
         if let d = defaults.data(forKey: "printerCalibration"),
            let m = try? JSONDecoder().decode([String: [Double]].self, from: d) {
             printerCalibration = m
@@ -255,6 +270,7 @@ public final class AppSettings: ObservableObject {
         designerGridSize     = 0.05
         designerRecordsHeight = 160
         designerPropsWidth   = 220
+        lastDataSourceFolderPath = ""
         filterSortPresetsJSON = "[]"
         appearance           = "dark"
         showInDock           = false

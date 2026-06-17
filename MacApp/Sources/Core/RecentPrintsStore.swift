@@ -136,9 +136,11 @@ public final class RecentPrintsStore: ObservableObject {
 
     @Published public private(set) var prints: [RecentPrint] = []
 
+    // Variant-aware: production → ~/…/VectorLabel, beta → ~/…/VectorLabel Beta.
+    // Previously hardcoded "VectorLabel", so the beta Engine wrote/read recents in
+    // the production folder — recents never populated and Reprint never found jobs.
     private let fileURL: URL = {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = support.appendingPathComponent("VectorLabel")
+        let dir = AppEnvironment.supportRoot
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("recent_prints.json")
     }()

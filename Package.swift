@@ -36,7 +36,7 @@ let package = Package(
             // AppIconCustom.icns is consumed only by scripts/package-suite.sh from the
             // repo path (never via Bundle at runtime), so exclude it from the target to
             // silence SPM's "unhandled file" warning.
-            exclude: ["AppIconCustom.icns"],
+            exclude: ["AppIconCustom.icns", "AppIconTemplate.icns"],
             resources: [
                 .copy("BradyCatalog.json"),
                 .copy("VectorLabelPrint.html"),

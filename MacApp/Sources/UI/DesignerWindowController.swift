@@ -205,7 +205,24 @@ public final class DesignerWindowController: NSObject {
         )
         win.title = (mode == .custom) ? "VectorLabel — Custom Designer"
                                       : "VectorLabel — Template Designer"
-        win.contentView = wv
+        // Custom mode hosts the web view inside a drop container so a CSV/XLSX
+        // dragged from Finder onto the window opens it (#19). The web view's own
+        // dragged types are unregistered so OS file drags fall through to the
+        // container; template mode keeps the web view as the direct content view.
+        if mode == .custom {
+            let drop = DesignerDropView(frame: NSRect(x: 0, y: 0, width: 1200, height: 820))
+            wv.frame = drop.bounds
+            wv.autoresizingMask = [.width, .height]
+            drop.addSubview(wv)
+            wv.unregisterDraggedTypes()
+            drop.registerForDraggedTypes([.fileURL])
+            drop.onDragEnter = { [weak self] in self?.setDragOverlay(true) }
+            drop.onDragExit  = { [weak self] in self?.setDragOverlay(false) }
+            drop.onDropFiles = { [weak self] urls in self?.handleDroppedDataFiles(urls) ?? false }
+            win.contentView = drop
+        } else {
+            win.contentView = wv
+        }
         win.hidesOnDeactivate = false
         win.isReleasedWhenClosed = false
         win.applyVLSizing(autosaveName: (mode == .custom) ? "VLCustomDesignerWindow" : "VLDesignerWindow",
@@ -387,7 +404,7 @@ public final class DesignerWindowController: NSObject {
         if(typeof initCustomDocument==='function')initCustomDocument({\
         name:\(nameJSON),specN:\(specJSON),objs:\(objJSON),copies:\(doc.copies),\
         cutMode:\(doc.cutMode.rawValue.jsonQuoted),\
-        labelLengthInches:\(lenInches),\
+        labelLengthInches:\(lenInches),canvasRot:\(doc.template.canvasRot ?? 0),\
         records:\(recJSON),columns:\(colJSON),filename:\(filename),\
         headerRow:\(doc.dataSourceHeaderRow),isXLSX:\(isXLSX),\
         hasDataSource:\(doc.dataSourceURL != nil)});
@@ -480,13 +497,17 @@ public final class DesignerWindowController: NSObject {
         }
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        panel.directoryURL = AppSettings.shared.exportsFolderURL
+        // Reopen where the user last picked a data file (custom mode); fall back to
+        // the Exports folder the first time, or if that folder no longer exists.
+        panel.directoryURL = (mode == .custom ? AppSettings.shared.lastDataSourceFolderURL : nil)
+                             ?? AppSettings.shared.exportsFolderURL
         panel.level = .modalPanel
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             MainActor.assumeIsolated {
                 guard let self = self else { return }
                 if self.mode == .custom {
+                    AppSettings.shared.lastDataSourceFolderPath = url.deletingLastPathComponent().path
                     self.loadAndBindDataSource(from: url, headerRow: headerRow)
                 } else {
                     // Template mode: original preview-only CSV path.
@@ -587,6 +608,7 @@ public final class DesignerWindowController: NSObject {
             panel.begin { [weak self] response in
                 guard response == .OK, let url = panel.url else { return }
                 MainActor.assumeIsolated {
+                    AppSettings.shared.lastDataSourceFolderPath = url.deletingLastPathComponent().path
                     self?.loadAndBindDataSource(from: url, headerRow: ds.headerRow)
                 }
             }
@@ -648,6 +670,7 @@ public final class DesignerWindowController: NSObject {
                 self.lastStatus = status
                 self.injectPrinters()
                 self.injectCassettes()
+                self.injectActiveJobs()
             }
             printBackend = backend
             backend.start()
@@ -709,6 +732,23 @@ public final class DesignerWindowController: NSObject {
             completionHandler: nil)
     }
 
+    /// The Engine's in-flight (printing/queued) jobs as the array the designer's
+    /// print header consumes for live progress + a Cancel control. Custom mode only.
+    private func activeJobsJSONString() -> String {
+        let jobs = (printBackend as? IPCPrintBackend)?.activeJobs ?? []
+        guard let data = try? JSONEncoder().encode(jobs),
+              let json = String(data: data, encoding: .utf8) else { return "[]" }
+        return json
+    }
+
+    /// Push the active-job list into the designer so the print header can show live
+    /// progress + Cancel after the supply selector (no-ops until the page defines it).
+    private func injectActiveJobs() {
+        webView?.evaluateJavaScript(
+            "if(typeof updateDesignerJobStatus==='function')updateDesignerJobStatus(\(activeJobsJSONString()));",
+            completionHandler: nil)
+    }
+
     /// Render the designer's current canvas to a Brady VGL job and submit it to the
     /// IPC queue. `payload` is {name, specN, objs, copies, printerID?, record?}.
     ///
@@ -739,6 +779,9 @@ public final class DesignerWindowController: NSObject {
         } else if let lenN = payload["labelLengthInches"] as? NSNumber, lenN.doubleValue > 0 {
             tplDict["labelLengthInches"] = lenN.doubleValue
         }
+        // Landscape canvas rotation (continuous only) → renderer rotates the raster. #14.
+        if let rot = payload["canvasRot"] as? Int { tplDict["canvasRot"] = rot }
+        else if let rotN = payload["canvasRot"] as? NSNumber { tplDict["canvasRot"] = rotN.intValue }
         // A template with no objects (or an unknown spec) can't render — bail.
         guard let objs = tplDict["objs"] as? [Any], !objs.isEmpty,
               let data = try? JSONSerialization.data(withJSONObject: tplDict),
@@ -809,8 +852,9 @@ public final class DesignerWindowController: NSObject {
             let estLabelMs = Int(Double(maxLabelPx) / 300.0 * 370.0) + 300
 
             Task { @MainActor in
+                let jobID = UUID().uuidString
                 let job = PrintJobFile(
-                    id: UUID().uuidString,
+                    id: jobID,
                     createdAt: ISO8601DateFormatter().string(from: Date()),
                     sourceApp: "customdesigner",
                     title: templateName.isEmpty ? "Custom Label" : templateName,
@@ -823,9 +867,13 @@ public final class DesignerWindowController: NSObject {
                 )
                 do { try backend.submit(job) }
                 catch { print("[DesignerWindowController] printCustom submit failed: \(error)") }
+                // Hand the page its job id so it can match the Engine's published
+                // status, and push an immediate status so the in-header progress +
+                // Cancel control appear right away (updated live thereafter).
                 self.webView?.evaluateJavaScript(
-                    "if(typeof customPrintSubmitted==='function')customPrintSubmitted(\(labels.count));",
+                    "if(typeof customPrintSubmitted==='function')customPrintSubmitted(\(labels.count),\(jobID.jsonQuoted));",
                     completionHandler: nil)
+                self.injectActiveJobs()
             }
         }
     }
@@ -849,6 +897,9 @@ public final class DesignerWindowController: NSObject {
         } else if let lenN = payload["labelLengthInches"] as? NSNumber, lenN.doubleValue > 0 {
             tplDict["labelLengthInches"] = lenN.doubleValue
         }
+        // Landscape canvas rotation (continuous only) → renderer rotates the raster. #14.
+        if let rot = payload["canvasRot"] as? Int { tplDict["canvasRot"] = rot }
+        else if let rotN = payload["canvasRot"] as? NSNumber { tplDict["canvasRot"] = rotN.intValue }
         guard let data = try? JSONSerialization.data(withJSONObject: tplDict),
               let template = try? JSONDecoder().decode(VLTemplate.self, from: data)
         else { return }
@@ -905,6 +956,26 @@ public final class DesignerWindowController: NSObject {
                 }
             }
         }
+    }
+
+    // MARK: – Custom-mode file drag-and-drop (#19)
+
+    /// Toggle the in-page "Drop to open file" overlay shown while a CSV/XLSX is
+    /// dragged over the Custom Designer window.
+    private func setDragOverlay(_ show: Bool) {
+        webView?.evaluateJavaScript("if(typeof setDragOverlay==='function')setDragOverlay(\(show));",
+                                    completionHandler: nil)
+    }
+
+    /// Bind the first dropped CSV/XLSX as the data source. Returns true if accepted.
+    @discardableResult
+    private func handleDroppedDataFiles(_ urls: [URL]) -> Bool {
+        guard mode == .custom else { return false }
+        let supported = ["csv", "tsv", "xlsx"]
+        guard let url = urls.first(where: { supported.contains($0.pathExtension.lowercased()) })
+        else { return false }
+        AppSettings.shared.lastDataSourceFolderPath = url.deletingLastPathComponent().path
+        return loadAndBindDataSource(from: url, headerRow: true)
     }
 
     // MARK: – Dev HTML loader
@@ -970,9 +1041,12 @@ extension DesignerWindowController: WKNavigationDelegate {
         if mode == .template, let result = findMostRecentCSV(minRecords: 10) {
             injectDesignerRecords(result.records, filename: result.url.lastPathComponent)
         }
-        // Inject the templates-folder list so the designer's Open dialog can list them.
+        // Inject the templates-folder list so the designer's Open dialog can list
+        // them — TEMPLATE MODE ONLY. The Custom Designer has no template picker and
+        // must never receive template state (it would be the only thing that could
+        // surface a template-open prompt in custom mode).
         TemplateStore.shared.reload()
-        injectDesignerTemplates()
+        if mode == .template { injectDesignerTemplates() }
         injectColumnConfig()
         injectDesignerPrefs()
         // Custom mode: seed the print header with the latest printer/cassette state
@@ -980,6 +1054,7 @@ extension DesignerWindowController: WKNavigationDelegate {
         if mode == .custom {
             injectPrinters()
             injectCassettes()
+            injectActiveJobs()
             if dataSource != nil { injectBoundData() }
         }
         if let idx = pendingEditTemplateIndex {
@@ -1068,6 +1143,14 @@ extension DesignerWindowController: WKScriptMessageHandler {
             // and submit it to the IPC print queue.
             handlePrintCustom(body["payload"])
 
+        case "cancelCustomPrint":
+            // Custom Designer only — ask the Engine to cancel the in-flight job by
+            // id (falls back to the last submitted job). Best-effort over IPC.
+            if mode == .custom {
+                let jobId = (body["payload"] as? [String: Any])?["jobId"] as? String
+                (printBackend as? IPCPrintBackend)?.cancel(jobId: jobId)
+            }
+
         case "saveCustomDocument":
             // Custom Designer only — write the current canvas + embedded data as a
             // ".vlcus" document (Finder-openable). Shows a Save panel.
@@ -1123,6 +1206,47 @@ extension DesignerWindowController: WKScriptMessageHandler {
         default:
             break
         }
+    }
+}
+
+// MARK: – Custom-mode file-drop container (#19)
+//
+// Hosts the WKWebView and accepts Finder drops of a CSV/XLSX onto the window so the
+// Custom Designer can open a data file by drag-and-drop. The web view's own dragged
+// types are unregistered in present() so OS file drags fall through to this
+// container; intra-page HTML5 drag-and-drop is unaffected (it never crosses into
+// AppKit's dragging session).
+@MainActor
+final class DesignerDropView: NSView {
+    var onDragEnter: (@MainActor () -> Void)?
+    var onDragExit: (@MainActor () -> Void)?
+    var onDropFiles: (@MainActor ([URL]) -> Bool)?
+
+    private static let accepted: Set<String> = ["csv", "tsv", "xlsx"]
+
+    private func fileURLs(_ info: NSDraggingInfo) -> [URL] {
+        (info.draggingPasteboard.readObjects(forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]) as? [URL]) ?? []
+    }
+    private func hasSupported(_ info: NSDraggingInfo) -> Bool {
+        fileURLs(info).contains { Self.accepted.contains($0.pathExtension.lowercased()) }
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard hasSupported(sender) else { return [] }
+        onDragEnter?()
+        return .copy
+    }
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        hasSupported(sender) ? .copy : []
+    }
+    override func draggingExited(_ sender: NSDraggingInfo?) { onDragExit?() }
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool { hasSupported(sender) }
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        onDragExit?()
+        let good = fileURLs(sender).filter { Self.accepted.contains($0.pathExtension.lowercased()) }
+        guard !good.isEmpty else { return false }
+        return onDropFiles?(good) ?? false
     }
 }
 
