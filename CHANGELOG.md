@@ -7,6 +7,9 @@ shown in the menu-bar footer. Fix commits reference the code-review finding IDs
 
 ## [Unreleased]
 ### Fixed
+- **[H9]** A failed template save on edit-return no longer silently reverts the
+  print window to the old template -- it now alerts and keeps the designer open
+  so the edit is not lost.
 - **[H8b]** A failed print now posts a system notification banner ("Print
   failed -- <job>, <printer>") so the operator is alerted even after the print
   window has closed. Notification permission is requested lazily, only on the

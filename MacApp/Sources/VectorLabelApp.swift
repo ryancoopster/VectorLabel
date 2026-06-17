@@ -645,9 +645,19 @@ extension AppDelegate: WKScriptMessageHandler {
 
         case "editReturn":
             // Save first (if requested) so the print window refreshes with the
-            // updated template, then close the designer and return.
+            // updated template, then close the designer and return. If the save
+            // fails, STOP — alert and keep the designer open, so we never silently
+            // revert the print window to the old template and print the un-edited
+            // layout.
             if let p = body["payload"] as? [String: Any], (p["save"] as? Bool) == true {
-                TemplateStore.shared.save(fromPayload: p["template"])
+                if !TemplateStore.shared.save(fromPayload: p["template"]) {
+                    let alert = NSAlert()
+                    alert.messageText = "Couldn’t save the template"
+                    alert.informativeText = "Your changes have not been applied. Check that the disk isn’t full and that VectorLabel can write to ~/Documents/VectorLabel/Templates/."
+                    alert.alertStyle = .warning
+                    alert.runModal()
+                    return   // keep the designer open so the user can retry / copy their work
+                }
             }
             designerForPrintEdit = false   // handled here; don't double-return on close
             printWindowController.returnFromEdit()
