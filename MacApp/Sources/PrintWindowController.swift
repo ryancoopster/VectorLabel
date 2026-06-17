@@ -663,14 +663,20 @@ extension PrintWindowController: NSWindowDelegate {
 
 // MARK: – JSON helper
 
-private extension String {
-    /// Returns the string wrapped in JSON double-quotes with proper escaping.
+extension String {
+    /// The string wrapped in double-quotes, escaped so it is safe to splice into
+    /// JavaScript source passed to `evaluateJavaScript`. Escapes the backslash,
+    /// quote, and CR/LF, plus U+2028/U+2029 — JS line terminators that would
+    /// otherwise let a crafted filename break out of the string literal and inject
+    /// code into the privileged web view.
     var jsonQuoted: String {
         let escaped = self
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
             .replacingOccurrences(of: "\n", with: "\\n")
             .replacingOccurrences(of: "\r", with: "\\r")
+            .replacingOccurrences(of: "\u{2028}", with: "\\u2028")
+            .replacingOccurrences(of: "\u{2029}", with: "\\u2029")
         return "\"\(escaped)\""
     }
 }

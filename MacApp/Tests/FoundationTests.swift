@@ -27,4 +27,16 @@ final class FoundationTests: XCTestCase {
         XCTAssertEqual(BradyCatalog.labelsPerRoll(forPartNumber: "BM-109-427"), 100)  // via 33-427
         XCTAssertNil(BradyCatalog.labelsPerRoll(forPartNumber: "ZZ-999-000"))
     }
+
+    /// jsonQuoted must neutralize JS-injection vectors when a value (e.g. a
+    /// filename) is spliced into evaluateJavaScript. Regression guard for M4.
+    func testJsonQuotedEscaping() {
+        XCTAssertEqual("a\"b".jsonQuoted, "\"a\\\"b\"")
+        XCTAssertEqual("c\\d".jsonQuoted, "\"c\\\\d\"")
+        XCTAssertEqual("line\none".jsonQuoted, "\"line\\none\"")
+        let sep = "x\u{2028}y\u{2029}z".jsonQuoted
+        XCTAssertTrue(sep.contains("\\u2028") && sep.contains("\\u2029"))
+        XCTAssertFalse(sep.contains("\u{2028}"))   // raw separators must be gone
+        XCTAssertFalse(sep.contains("\u{2029}"))
+    }
 }

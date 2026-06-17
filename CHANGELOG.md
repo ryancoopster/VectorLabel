@@ -7,6 +7,10 @@ shown in the menu-bar footer. Fix commits reference the code-review finding IDs
 
 ## [Unreleased]
 ### Fixed
+- **[M4]** Closed a filename -> JavaScript injection seam: dynamic strings spliced
+  into evaluateJavaScript now route through one escaper that also handles CR/LF and
+  U+2028/U+2029 (JS line terminators), so a crafted filename can no longer break
+  out of the string literal. Guarded by a new test.
 - **[H10]** Fixed a libusb context leak on every printer open (success and
   claim/open-failure paths) by using one shared, app-lifetime context instead of
   initializing/exiting one per call.

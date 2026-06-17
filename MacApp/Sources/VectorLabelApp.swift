@@ -309,8 +309,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         guard let data = try? JSONEncoder().encode(records),
               let json = String(data: data, encoding: .utf8)
         else { return }
-        // JSON-encode the filename string safely
-        let fnJSON = "\"" + filename.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
+        // JSON-encode the filename string safely (escapes CR/LF/U+2028/U+2029 too).
+        let fnJSON = filename.jsonQuoted
         let js = "if(typeof initDesignerRecords==='function')initDesignerRecords(\(json),\(fnJSON));"
         wv.evaluateJavaScript(js, completionHandler: nil)
     }
@@ -416,8 +416,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 else { return }
                 guard let data = try? JSONEncoder().encode(records),
                       let json = String(data: data, encoding: .utf8) else { return }
-                let fn = url.lastPathComponent
-                let fnJSON = "\"" + fn.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
+                let fnJSON = url.lastPathComponent.jsonQuoted
                 wv.evaluateJavaScript("if(typeof initDesignerRecords==='function')initDesignerRecords(\(json),\(fnJSON));", completionHandler: nil)
             }
         }
