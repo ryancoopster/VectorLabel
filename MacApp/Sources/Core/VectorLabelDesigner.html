@@ -1220,7 +1220,7 @@ function R(){
       <span style="color:var(--text3);font-size:11px">${isCustomMode()?'Custom Designer':'Template Designer'}</span>
       <div style="flex:1"></div>
       <select class="inp" style="width:auto" onchange="pickSupply(this.value)">
-        ${BL.map(l=>`<option value="${l.n}"${S.spec.n===l.n?" selected":""}>${l.lb}</option>`).join("")}
+        ${BL.map(l=>`<option value="${l.n}"${S.spec.n===l.n?" selected":""}>${supplyOptionLabel(l)}</option>`).join("")}
       </select>
       ${dContinuous()?`<div style="display:flex;align-items:center;gap:5px" title="Continuous supply — set the printed label length">
         <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Length</span>
@@ -1455,7 +1455,7 @@ function renderModal(){
         <div class="modal-row">
           <label class="lbl">Label size</label>
           <select id="new-tpl-spec" class="inp">
-            ${BL.map(l=>`<option value="${l.n}"${S.spec.n===l.n?" selected":""}>${l.lb}</option>`).join("")}
+            ${BL.map(l=>`<option value="${l.n}"${S.spec.n===l.n?" selected":""}>${supplyOptionLabel(l)}</option>`).join("")}
           </select>
         </div>
         <div class="modal-footer">
@@ -2272,21 +2272,24 @@ function dSameLabelSize(c,specN){
 }
 function dCassetteMatched(){ const c=dLoadedCassette(); return !!(c&&dCassetteSizeKnown(c)&&dSameLabelSize(c,S.spec.n)); }
 function dCassetteMismatch(){ const c=dLoadedCassette(); return !!(c&&dCassetteSizeKnown(c)&&!dSameLabelSize(c,S.spec.n)); }
-// Human label-type descriptor for a supply (#16), derived from catalog fields so
-// it needs no extra data: wrap-around wire labels, continuous vinyl/polyester, etc.
+// Continuous supplies are identified by WIDTH only — any material of that width
+// matches — so the picker + supply indicator show e.g. '0.5" continuous', never a
+// part number or material. Die-cut wire labels keep their descriptor (#16).
+function supplyOptionLabel(l){
+  if(l&&l.ty==="continuous")return dFmtIn(l.tw)+' continuous';
+  return l?l.lb:"";
+}
 function dSupplyTypeDesc(l){
   if(!l)return "";
-  if(l.ty==="continuous"){
-    const m=(l.mt||"").toUpperCase();
-    if(m.indexOf("595")>=0||m.indexOf("439")>=0||m.indexOf("498")>=0)return "Continuous vinyl tape";
-    if(m.indexOf("499")>=0)return "Continuous nylon cloth tape";
-    if(m.indexOf("4")>=0)return "Continuous polyester tape";
-    return "Continuous tape";
-  }
+  if(l.ty==="continuous")return "";   // width says it all; material is irrelevant
   if(l.lm)return "Wrap-around wire label (self-laminating)";
   return "Die-cut label";
 }
-function dRequiredSupply(specN){ const core=dSupplyCore(specN); return core?"BM/M6-"+core:(specN||""); }
+function dRequiredSupply(specN){
+  const l=BL.find(x=>x.n===specN);
+  if(l&&l.ty==="continuous")return dFmtIn(l.tw)+' continuous';
+  const core=dSupplyCore(specN); return core?"BM/M6-"+core:(specN||"");
+}
 function dFmtIn(v){ return (v==null?"—":(+v).toString())+'"'; }
 function dCanPrint(){
   if(!(S.objs.length>0&&dPrinter().status==="ready"))return false;
