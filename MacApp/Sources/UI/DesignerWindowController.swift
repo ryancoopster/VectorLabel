@@ -1,160 +1,97 @@
-import SwiftUI
 import AppKit
 import WebKit
-import UniformTypeIdentifiers
 import Combine
-import ObjectiveC
 import VectorLabelCore
-import VectorLabelEngineKit
-import VectorLabelUI
 
-// MARK: – App entry point
-
-@main
-@MainActor
-struct VectorLabelApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-
-    // NSStatusItem is managed entirely by AppDelegate.
-    // We use an empty scene here — the menu bar icon is set up in
-    // applicationDidFinishLaunching via NSStatusBar.
-    var body: some Scene {
-        Settings { EmptyView() }
-    }
+/// Which flavour of the designer this controller hosts.
+///
+/// `.template` is the classic Template Designer — opens the template picker on
+/// launch, edits/saves `.vlt.json` templates. `.custom` is the Custom Designer
+/// shell: the same canvas, but the DB panel + print header arrive in later
+/// phases. Both share the identical hosting code below.
+public enum DesignerMode {
+    case template
+    case custom
 }
 
-// MARK: – AppDelegate
-
+/// Reusable hosting for the VectorLabel HTML designer (VectorLabelDesigner.html in
+/// a WKWebView). Core-only — it touches TemplateStore / AppSettings but never
+/// EngineKit / libusb — so any front-end app can present it.
+///
+/// It owns:
+///   • the NSWindow + WKWebView that loads VectorLabelDesigner.html,
+///   • the "vectorlabel" WKScriptMessageHandler
+///     (saveTemplate/listTemplates/deleteTemplate/setColumnConfig/setDesignerPrefs/editReturn
+///      + browseTemplate/browseDataSource),
+///   • the inject methods (initDesignerTemplates/initDesignerRecords/applyColumnConfig/setTheme/…),
+///   • light/dark theme observation, and the shared record-column-config sync.
+///
+/// Hosts that want to drive the print-window "edit template" round-trip set
+/// `onEditReturn` and call `openForPrintEdit(templateIndex:)`.
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+public final class DesignerWindowController: NSObject {
 
-    // PrintWindowController is @MainActor; initialised in applicationDidFinishLaunching
-    private var printWindowController: PrintWindowController!
-    // Print backend the window submits through. In the combined app this wraps the
-    // in-process PrinterManager; the window itself only sees the PrintBackend API.
-    private var printBackend: PrintBackend!
-    private var designerWindow: NSWindow?
-    private var designerWebView: WKWebView?
-    private var preferencesWindow: NSWindow?
-    private var designerCloseObserver: NSObjectProtocol?
-    private var preferencesCloseObserver: NSObjectProtocol?
+    public let mode: DesignerMode
 
-    private var statusItem: NSStatusItem?
+    private var window: NSWindow?
+    private var webView: WKWebView?
+    private var closeObserver: NSObjectProtocol?
     private var cancellables: Set<AnyCancellable> = []
 
-    /// Loads an image asset from the Core resource bundle (works in both the dev
-    /// `swift build` and the packaged .app). Returns nil if missing.
-    private static func bundledImage(_ name: String, ext: String) -> NSImage? {
-        CoreResources.image(name, ext)
-    }
-
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        // WKWebView requires a bundle identifier for its sandboxed WebContent process.
-        // When running from SPM/Xcode without INFOPLIST_FILE set, inject it directly.
-        // SPM cannot inject Info.plist. Set INFOPLIST_FILE in Xcode Build Settings
-        // pointing to Info.plist at the repo root to get a proper bundle identifier.
-        // As a dev fallback, register the ID in UserDefaults which WKWebView checks.
-        if Bundle.main.bundleIdentifier == nil || Bundle.main.bundleIdentifier!.isEmpty {
-            UserDefaults.standard.set("com.sai.vectorlabel", forKey: "CFBundleIdentifier")
-        }
-        // Apply the saved light/dark appearance to the whole app at launch.
-        AppSettings.shared.applyNativeAppearance()
-        // Dock icon (also covers the dev binary, which has no bundle Info.plist).
-        if let appIcon = Self.bundledImage("AppIcon", ext: "icns") {
-            NSApp.applicationIconImage = appIcon
-        }
-        printWindowController = PrintWindowController()
-        // Wrap the in-process PrinterManager in a LocalPrintBackend and inject it,
-        // so the print window prints through the PrintBackend abstraction (and never
-        // touches PrinterManager / libusb directly). start() begins publishing the
-        // printer+cassette status the window observes.
-        let backend = LocalPrintBackend()
-        printBackend = backend
-        printWindowController.backend = backend
-        backend.start()
-        // After a print starts, the print window closes itself and asks us to
-        // pop open the menu so the user can watch printer/queue status.
-        printWindowController.onPrintStarted = { [weak self] in self?.showMenuPopover() }
-        // Editing from the print window opens the single Template Designer.
-        printWindowController.onEditTemplate = { [weak self] index in
-            self?.openTemplateDesigner(editTemplateIndex: index)
-        }
-
-        // Keep the designer's column config in sync with the shared setting.
-        AppSettings.shared.$recordColumnOrder.dropFirst().receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.injectColumnConfig() }.store(in: &cancellables)
-        AppSettings.shared.$recordHiddenColumns.dropFirst().receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.injectColumnConfig() }.store(in: &cancellables)
-        AppSettings.shared.$recordColumnWidths.dropFirst().receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.injectColumnConfig() }.store(in: &cancellables)
-
-        // Push the light/dark theme to the designer webview when it changes.
-        AppSettings.shared.$appearance.dropFirst().receive(on: RunLoop.main)
-            .sink { [weak self] mode in
-                self?.designerWebView?.evaluateJavaScript("if(typeof setTheme==='function')setTheme('\(mode)')", completionHandler: nil)
-            }.store(in: &cancellables)
-
-        // Set up the NSStatusItem — reliable for LSUIElement apps, no activation issues
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        if let button = item.button {
-            if let menuIcon = Self.bundledImage("MenuBarIcon", ext: "png") {
-                menuIcon.isTemplate = true   // auto-tints for light/dark menu bars
-                menuIcon.size = NSSize(width: 18, height: 18)
-                button.image = menuIcon
-                button.imagePosition = .imageOnly
-            } else {
-                button.title = "VL"          // fallback if the asset is missing
-                button.font = NSFont.systemFont(ofSize: 11, weight: .bold)
-            }
-            button.action = #selector(toggleMenuBarPopover)
-            button.target = self
-        }
-        statusItem = item
-        NSApp.setActivationPolicy(AppSettings.shared.showInDock ? .regular : .accessory)
-        TemplateStore.shared.reload()
-        PrinterManager.shared.startScan()
-
-        let watcher = ExportWatcher(exportsRootURL: AppSettings.shared.exportsFolderURL)
-        watcher.onNewExport = { [weak self] fileURL, records in
-            Task { @MainActor in
-                guard AppSettings.shared.autoOpenPrintWindow else { return }
-                self?.printWindowController.showForNewExport(fileURL: fileURL, records: records)
-            }
-        }
-        watcher.start()
-        self.watcher = watcher
-    }
-
-    func applicationWillTerminate(_ notification: Notification) {
-        watcher?.stop()
-        PrinterManager.shared.stopScan()
-    }
-
-    // MARK: – Actions called by MenuBarView
-
-    // Template index to load for print-window editing on the next designer load.
+    /// Template index to load on the next designer load (print-window editing).
     private var pendingEditTemplateIndex: Int?
-    // True while the designer is open to edit a template for the print window.
+    /// True while the designer is open to edit a template for the print window.
     private var designerForPrintEdit = false
 
-    func openTemplateDesigner(editTemplateIndex: Int? = nil) {
+    /// Invoked when the print-edit round-trip ends — either the user saved and
+    /// returned, or closed the designer. `saved` is whether a save happened on
+    /// this return; `templateIndex` echoes the index being edited (if known).
+    /// Hosts use this to refocus/refresh the print window.
+    public var onEditReturn: ((_ saved: Bool, _ templateIndex: Int?) -> Void)?
+
+    public init(mode: DesignerMode) {
+        self.mode = mode
+        super.init()
+    }
+
+    /// True while a designer window is on screen.
+    public var isOpen: Bool { window != nil }
+
+    /// The hosted WKWebView, if open (exposed for hosts that need to push extra
+    /// state, e.g. theme on an external change).
+    public var hostedWebView: WKWebView? { webView }
+
+    // MARK: – Show
+
+    /// Open (or focus) the designer in its normal standalone mode.
+    public func open() {
+        present(editTemplateIndex: nil)
+    }
+
+    /// Open (or focus) the designer to edit the template at `templateIndex` for
+    /// the print window; on return/close, `onEditReturn` fires.
+    public func openForPrintEdit(templateIndex: Int) {
+        present(editTemplateIndex: templateIndex)
+    }
+
+    private func present(editTemplateIndex: Int?) {
         pendingEditTemplateIndex = editTemplateIndex
         designerForPrintEdit = (editTemplateIndex != nil)
-        if let win = designerWindow {
+        if let win = window {
             NSApp.activate(ignoringOtherApps: true)
             win.makeKeyAndOrderFront(nil)
-            win.makeFirstResponder(designerWebView)
+            win.makeFirstResponder(webView)
             if let idx = editTemplateIndex {
                 applyPendingEdit(idx)
             } else {
-                designerWebView?.evaluateJavaScript("window._printEdit=false; if(typeof R==='function')R(); if(typeof openTemplate==='function')openTemplate();", completionHandler: nil)
+                webView?.evaluateJavaScript("window._printEdit=false; if(typeof R==='function')R(); if(typeof openTemplate==='function')openTemplate();", completionHandler: nil)
             }
             return
         }
 
-        // The HTML now lives in VectorLabelCore's resource bundle. Prefer a live
-        // repo copy during development (so git pull is reflected without a
-        // rebuild), then fall back to the bundled Core resource.
+        // The HTML lives in VectorLabelCore's resource bundle. Prefer a live repo
+        // copy during development (so git pull is reflected without a rebuild),
+        // then fall back to the bundled Core resource.
         guard let htmlURL = devHTMLURL("VectorLabelDesigner")
                             ?? CoreResources.url("VectorLabelDesigner", "html")
         else { return }
@@ -177,132 +114,74 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         wv.navigationDelegate = self
         wv.uiDelegate = self   // so <input type=file> shows an NSOpenPanel (image picker)
         wv.loadFileURL(htmlURL, allowingReadAccessTo: htmlURL.deletingLastPathComponent())
-        designerWebView = wv
+        webView = wv
 
         // Use NSPanel with .nonactivatingPanel so the window appears without
-        // stealing activation from the menu bar status item.
+        // stealing activation from a host menu bar status item.
         let win = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 1200, height: 820),
             styleMask: [.titled, .closable, .resizable, .miniaturizable, .nonactivatingPanel],
             backing: .buffered, defer: false
         )
-        win.title = "VectorLabel — Template Designer"
+        win.title = (mode == .custom) ? "VectorLabel — Custom Designer"
+                                      : "VectorLabel — Template Designer"
         win.contentView = wv
         win.hidesOnDeactivate = false
         win.isReleasedWhenClosed = false
-        win.applyVLSizing(autosaveName: "VLDesignerWindow",
+        win.applyVLSizing(autosaveName: (mode == .custom) ? "VLCustomDesignerWindow" : "VLDesignerWindow",
                           defaultContentSize: NSSize(width: 1280, height: 860))
         NSApp.activate(ignoringOtherApps: true)
         win.makeKeyAndOrderFront(nil)
         // Make the web view first responder so keyboard shortcuts (arrow-key
         // nudge, delete, undo) reach the designer immediately.
         win.makeFirstResponder(wv)
-        designerWindow = win
+        window = win
 
-        designerCloseObserver = NotificationCenter.default.addObserver(
+        // Keep the designer's column config in sync with the shared setting.
+        AppSettings.shared.$recordColumnOrder.dropFirst().receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.injectColumnConfig() }.store(in: &cancellables)
+        AppSettings.shared.$recordHiddenColumns.dropFirst().receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.injectColumnConfig() }.store(in: &cancellables)
+        AppSettings.shared.$recordColumnWidths.dropFirst().receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.injectColumnConfig() }.store(in: &cancellables)
+        // Push the light/dark theme to the designer webview when it changes.
+        AppSettings.shared.$appearance.dropFirst().receive(on: RunLoop.main)
+            .sink { [weak self] mode in
+                self?.webView?.evaluateJavaScript("if(typeof setTheme==='function')setTheme('\(mode)')", completionHandler: nil)
+            }.store(in: &cancellables)
+
+        closeObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
             object: win, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self = self else { return }
-                self.designerWebView?.navigationDelegate = nil
-                self.designerWebView?.configuration.userContentController
+                self.webView?.navigationDelegate = nil
+                self.webView?.configuration.userContentController
                     .removeScriptMessageHandler(forName: "vectorlabel")
-                self.designerWebView = nil
-                self.designerWindow = nil
-                if let token = self.designerCloseObserver {
+                self.webView = nil
+                self.window = nil
+                self.cancellables.removeAll()
+                if let token = self.closeObserver {
                     NotificationCenter.default.removeObserver(token)
-                    self.designerCloseObserver = nil
+                    self.closeObserver = nil
                 }
                 TemplateStore.shared.reload()
                 // If the designer was closed (e.g. via its close button) while
-                // editing for the print window, bring the print window back.
+                // editing for the print window, tell the host to return.
                 if self.designerForPrintEdit {
+                    let idx = self.pendingEditTemplateIndex
                     self.designerForPrintEdit = false
-                    self.printWindowController.returnFromEdit()
+                    self.onEditReturn?(false, idx)
                 }
             }
         }
     }
 
-    private var menuPopover: NSPopover?
+    // MARK: – Inject helpers
 
-    @objc func toggleMenuBarPopover() {
-        if let popover = menuPopover, popover.isShown {
-            popover.performClose(nil)
-            menuPopover = nil
-            return
-        }
-        showMenuPopover()
-    }
-
-    /// Open the status-item popover (the "toolbar menu"). No-op if already shown.
-    func showMenuPopover() {
-        guard let button = statusItem?.button else { return }
-        if let popover = menuPopover, popover.isShown { return }
-        let popover = NSPopover()
-        let hosting = NSHostingController(
-            rootView: MenuBarView().environmentObject(self)
-        )
-        // Let the popover size its height to the SwiftUI content (width is fixed
-        // at 320 in MenuBarView), so recent-print rows with wrapped, multi-line
-        // filenames are never clipped.
-        hosting.sizingOptions = [.preferredContentSize]
-        popover.contentViewController = hosting
-        // Dark popover chrome so the arrow/background matches the themed content.
-        popover.appearance = NSAppearance(named: .darkAqua)
-        popover.behavior = .transient
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        menuPopover = popover
-    }
-
-    func openPreferences() {
-        if let win = preferencesWindow {
-            NSApp.activate(ignoringOtherApps: true)
-            win.makeKeyAndOrderFront(nil)
-            return
-        }
-        let controller = NSHostingController(rootView: PreferencesView())
-        let win = NSPanel(contentViewController: controller)
-        win.title = "VectorLabel Preferences"
-        win.styleMask = [.titled, .closable, .nonactivatingPanel]
-        win.hidesOnDeactivate = false
-        win.isReleasedWhenClosed = false
-        // The print window floats; keep Preferences just above it so it always
-        // opens in front of any other VectorLabel window.
-        win.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
-        win.applyVLSizing(autosaveName: "VLPreferencesWindow",
-                          defaultContentSize: NSSize(width: 680, height: 560))
-        NSApp.activate(ignoringOtherApps: true)
-        win.makeKeyAndOrderFront(nil)
-        preferencesWindow = win
-        preferencesCloseObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.willCloseNotification,
-            object: win, queue: .main
-        ) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self = self else { return }
-                self.preferencesWindow = nil
-                if let token = self.preferencesCloseObserver {
-                    NotificationCenter.default.removeObserver(token)
-                    self.preferencesCloseObserver = nil
-                }
-            }
-        }
-    }
-
-    func openExportFolder() {
-        let url = AppSettings.shared.exportsFolderURL
-        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        NSWorkspace.shared.open(url)
-    }
-
-    func openReprint(_ recent: RecentPrint) {
-        Task { @MainActor in self.printWindowController.showForReprint(recent) }
-    }
-
-    // MARK: – Auto-load most recent CSV for the designer
-
+    /// Auto-load most recent CSV for the designer.
+    ///
     /// Finds the most recent CSV export with ≥10 records across all project
     /// subfolders under Exports/, sorted by embedded datecode in the filename.
     private func findMostRecentCSV(minRecords: Int = 10) -> (url: URL, records: [WireRecord])? {
@@ -334,7 +213,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 
     private func injectDesignerRecords(_ records: [WireRecord], filename: String) {
-        guard let wv = designerWebView else { return }
+        guard let wv = webView else { return }
         guard let data = try? JSONEncoder().encode(records),
               let json = String(data: data, encoding: .utf8)
         else { return }
@@ -347,7 +226,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     /// Push the current templates-folder contents into the designer so its Open
     /// dialog lists every saved template.
     private func injectDesignerTemplates() {
-        guard let wv = designerWebView,
+        guard let wv = webView,
               let data = try? JSONEncoder().encode(TemplateStore.shared.templates),
               let json = String(data: data, encoding: .utf8)
         else { return }
@@ -362,7 +241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private func applyPendingEdit(_ index: Int) {
         pendingEditTemplateIndex = nil
         let templates = TemplateStore.shared.templates
-        guard let wv = designerWebView, index >= 0, index < templates.count,
+        guard let wv = webView, index >= 0, index < templates.count,
               let data = try? JSONEncoder().encode(templates[index]),
               let json = String(data: data, encoding: .utf8)
         else { return }
@@ -380,7 +259,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         alert.informativeText = "This permanently removes the template file from ~/Documents/VectorLabel/Templates/. This can’t be undone."
         alert.addButton(withTitle: "Delete")
         alert.addButton(withTitle: "Cancel")
-        if let win = designerWindow {
+        if let win = window {
             alert.beginSheetModal(for: win) { [weak self] resp in
                 guard resp == .alertFirstButtonReturn else { return }
                 try? TemplateStore.shared.delete(tpl)
@@ -394,7 +273,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     /// Push persisted snap/grid preferences into the designer.
     private func injectDesignerPrefs() {
-        guard let wv = designerWebView else { return }
+        guard let wv = webView else { return }
         let s = AppSettings.shared
         wv.evaluateJavaScript(
             "if(typeof initDesignerPrefs==='function')initDesignerPrefs({snapGrid:\(s.designerSnapGrid),snapObjects:\(s.designerSnapObjects),gridSize:\(s.designerGridSize),recH:\(s.designerRecordsHeight)});",
@@ -404,7 +283,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     /// Push the shared record-column config (order/hidden/widths) into the designer.
     private func injectColumnConfig() {
-        guard let wv = designerWebView else { return }
+        guard let wv = webView else { return }
         wv.evaluateJavaScript(
             "if(typeof applyColumnConfig==='function')applyColumnConfig(\(AppSettings.shared.columnConfigJSON()));",
             completionHandler: nil
@@ -440,7 +319,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             MainActor.assumeIsolated {
-                guard let self = self, let wv = self.designerWebView,
+                guard let self = self, let wv = self.webView,
                       let records = WireExportParser.parse(fileURL: url)
                 else { return }
                 guard let data = try? JSONEncoder().encode(records),
@@ -452,7 +331,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 
     private func injectBrowsedTemplate(from url: URL) {
-        guard let wv = designerWebView,
+        guard let wv = webView,
               let data = try? Data(contentsOf: url),
               let obj = try? JSONSerialization.jsonObject(with: data),
               let dict = obj as? [String: Any], dict["objs"] != nil,
@@ -465,25 +344,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         )
     }
 
-    // MARK: – Private
-
-    private var watcher: ExportWatcher?
-
-    private func makeWebView() -> WKWebView {
-        let config = WKWebViewConfiguration()
-        config.preferences.setValue(true, forKey: "developerExtrasEnabled")
-        return WKWebView(frame: .zero, configuration: config)
-    }
+    // MARK: – Dev HTML loader
 
     private func devHTMLURL(_ name: String) -> URL? {
         // During development, load HTML directly from the repo so changes
         // are picked up without a full rebuild. Xcode's .copy resource bundling
         // caches files and may not re-copy after a git pull.
-        //
-        // Search order:
-        // 1. ~/Downloads/VectorLabel/MacApp/Sources/Core/<name>.html  (default clone location)
-        // 2. ~/Documents/VectorLabel/MacApp/Sources/Core/<name>.html
-        // 3. #file-relative path (source-build fallback)
         let home = NSHomeDirectory()
         let searchPaths = [
             "Documents/VectorLabel/MacApp/Sources/Core",
@@ -510,11 +376,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
 // MARK: – WKUIDelegate (file picker for the designer's <input type=file>)
 
-extension AppDelegate: WKUIDelegate {
-    func webView(_ webView: WKWebView,
-                 runOpenPanelWith parameters: WKOpenPanelParameters,
-                 initiatedByFrame frame: WKFrameInfo,
-                 completionHandler: @escaping ([URL]?) -> Void) {
+extension DesignerWindowController: WKUIDelegate {
+    public func webView(_ webView: WKWebView,
+                        runOpenPanelWith parameters: WKOpenPanelParameters,
+                        initiatedByFrame frame: WKFrameInfo,
+                        completionHandler: @escaping ([URL]?) -> Void) {
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
@@ -529,10 +395,10 @@ extension AppDelegate: WKUIDelegate {
 
 // MARK: – WKNavigationDelegate (for designer auto-load)
 
-extension AppDelegate: WKNavigationDelegate {
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        // Only handle the designer webview
-        guard webView === designerWebView else { return }
+extension DesignerWindowController: WKNavigationDelegate {
+    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        // Only handle our designer webview
+        guard webView === self.webView else { return }
         // Apply the current light/dark theme.
         webView.evaluateJavaScript("if(typeof setTheme==='function')setTheme('\(AppSettings.shared.appearance)')", completionHandler: nil)
         // Inject the most recent CSV with ≥10 records
@@ -557,9 +423,9 @@ extension AppDelegate: WKNavigationDelegate {
 
 // MARK: – WKScriptMessageHandler (designer save / list / browse)
 
-extension AppDelegate: WKScriptMessageHandler {
-    func userContentController(_ userContentController: WKUserContentController,
-                                didReceive message: WKScriptMessage) {
+extension DesignerWindowController: WKScriptMessageHandler {
+    public func userContentController(_ userContentController: WKUserContentController,
+                                       didReceive message: WKScriptMessage) {
         guard message.name == "vectorlabel",
               let body = message.body as? [String: Any],
               let action = body["action"] as? String
@@ -612,9 +478,10 @@ extension AppDelegate: WKScriptMessageHandler {
                     return   // keep the designer open so the user can retry / copy their work
                 }
             }
+            let idx = pendingEditTemplateIndex
             designerForPrintEdit = false   // handled here; don't double-return on close
-            printWindowController.returnFromEdit()
-            designerWindow?.close()
+            onEditReturn?(true, idx)
+            window?.close()
 
         default:
             break

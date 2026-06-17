@@ -30,14 +30,14 @@ jobs:
       - name: Test
         run: swift test
 
-      # On pushes to main only, build the unsigned .app and publish it as a
-      # downloadable artifact so a test build can be grabbed straight from the
-      # Actions run (no local toolchain needed). PRs skip this to stay fast.
-      # NB: this is ad-hoc signed — Gatekeeper will require right-click → Open on
-      # another Mac. Distributable signed builds come from release.yml on v* tags.
-      - name: Package unsigned .app
+      # On pushes to main only, build the unsigned app SUITE (Engine + Auto Print
+      # + Template Designer + Custom Designer) and publish it as a downloadable
+      # artifact so a test build can be grabbed straight from the Actions run.
+      # PRs skip this to stay fast. NB: ad-hoc signed — Gatekeeper requires
+      # right-click → Open on another Mac. Signed builds come from release.yml.
+      - name: Package unsigned suite
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: ./scripts/package-app.sh   # no SIGN_IDENTITY → ad-hoc signed
+        run: ./scripts/package-suite.sh   # no SIGN_IDENTITY → ad-hoc signed → dist/VectorLabel/
 
       - name: Compute artifact name
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -47,13 +47,13 @@ jobs:
           VERSION=$(tr -d '[:space:]' < VERSION)
           BUILD=$(git rev-list --count HEAD)
           SHA=$(git rev-parse --short HEAD)
-          echo "name=VectorLabel-v${VERSION}-build${BUILD}-${SHA}" >> "$GITHUB_OUTPUT"
+          echo "name=VectorLabel-suite-v${VERSION}-build${BUILD}-${SHA}" >> "$GITHUB_OUTPUT"
 
-      - name: Zip .app (ditto preserves symlinks + executable bit)
+      - name: Zip suite (ditto preserves symlinks + executable bit)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: ditto -c -k --keepParent dist/VectorLabel.app "dist/${{ steps.meta.outputs.name }}.zip"
+        run: ditto -c -k --keepParent "dist/VectorLabel" "dist/${{ steps.meta.outputs.name }}.zip"
 
-      - name: Upload .app artifact
+      - name: Upload suite artifact
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:

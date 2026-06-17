@@ -13,10 +13,10 @@ scripts/icon/build-icon.sh
 
 This rewrites the two committed assets:
 
-- `MacApp/Sources/AppIcon.icns` — Finder/Dock icon (`CFBundleIconFile=AppIcon`)
-- `MacApp/Sources/MenuBarIcon.png` — menu-bar glyph (set `isTemplate` at runtime)
+- `MacApp/Sources/Core/AppIcon.icns` — Finder/Dock icon (`CFBundleIconFile=AppIcon`)
+- `MacApp/Sources/Core/MenuBarIcon.png` — menu-bar glyph (set `isTemplate` at runtime)
 
-Commit them, then run `scripts/package-app.sh` (or `scripts/install.sh`) to bundle
+Commit them, then run `scripts/package-suite.sh` (or `scripts/install.sh`) to bundle
 the new icon into the `.app`. (macOS caches bundle icons — if Finder still shows
 the old one, `touch /Applications/VectorLabel.app` or relaunch.)
 

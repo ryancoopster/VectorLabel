@@ -2,16 +2,16 @@
 # Regenerate the VectorLabel app icon + menu-bar glyph from scripts/icon/glyph.py.
 #
 # Writes:
-#   MacApp/Sources/AppIcon.icns     – Finder/Dock icon (CFBundleIconFile=AppIcon)
-#   MacApp/Sources/MenuBarIcon.png  – menu-bar template glyph (isTemplate at runtime)
-# Commit those, then run scripts/package-app.sh to bundle them into the .app.
+#   MacApp/Sources/Core/AppIcon.icns     – Finder/Dock icon (CFBundleIconFile=AppIcon)
+#   MacApp/Sources/Core/MenuBarIcon.png  – menu-bar template glyph (isTemplate at runtime)
+# Commit those, then run scripts/package-suite.sh to bundle them into the .app.
 #
 # Requires macOS (qlmanage, sips, iconutil — all built in) and Python Pillow
 # (pip3 install pillow).
 set -euo pipefail
 cd "$(dirname "$0")/../.."          # repo root
 HERE=scripts/icon
-SRC=MacApp/Sources
+SRC=MacApp/Sources/Core          # icons live in the VectorLabelCore resource bundle
 BUILD=$(mktemp -d)
 trap 'rm -rf "$BUILD"' EXIT
 
@@ -47,4 +47,4 @@ render "$BUILD/menu.svg" "$BUILD/menu_raw.png" 1024
 python3 "$HERE/glyph.py" menu "$BUILD/menu_raw.png" "$SRC/MenuBarIcon.png"
 echo "  wrote $SRC/MenuBarIcon.png"
 
-echo "Done. Run scripts/package-app.sh (or scripts/install.sh) to pick up the new icon."
+echo "Done. Run scripts/package-suite.sh (or scripts/install.sh) to pick up the new icon."

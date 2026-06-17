@@ -47,10 +47,10 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
           rm -f $RUNNER_TEMP/cert.p12
 
-      - name: Build, package & sign
+      - name: Build, package & sign suite
         env:
           SIGN_IDENTITY: ${{ secrets.DEVELOPER_ID_IDENTITY }}
-        run: ./scripts/package-app.sh
+        run: ./scripts/package-suite.sh   # → dist/VectorLabel/ (4 signed apps)
 
       - name: Notarize & staple
         env:
@@ -60,18 +60,21 @@ jobs:
         run: |
           set -euo pipefail
           echo "$KEY_B64" | base64 --decode > $RUNNER_TEMP/AuthKey.p8
-          ditto -c -k --keepParent dist/VectorLabel.app dist/VectorLabel-notarize.zip
+          # notarytool notarizes every app inside the zip; staple must run per .app.
+          ditto -c -k --keepParent "dist/VectorLabel" dist/VectorLabel-notarize.zip
           xcrun notarytool submit dist/VectorLabel-notarize.zip \
             --key $RUNNER_TEMP/AuthKey.p8 --key-id "$KEY_ID" --issuer "$ISSUER" --wait
-          xcrun stapler staple dist/VectorLabel.app
-          spctl --assess --type execute --verbose=4 dist/VectorLabel.app
+          for app in dist/VectorLabel/*.app; do
+            xcrun stapler staple "$app"
+            spctl --assess --type execute --verbose=4 "$app"
+          done
           rm -f $RUNNER_TEMP/AuthKey.p8
 
       - name: Package zip + DMG
         run: |
           set -euo pipefail
-          ditto -c -k --keepParent dist/VectorLabel.app dist/VectorLabel-${{ github.ref_name }}.zip
-          hdiutil create -volname VectorLabel -srcfolder dist/VectorLabel.app \
+          ditto -c -k --keepParent "dist/VectorLabel" dist/VectorLabel-${{ github.ref_name }}.zip
+          hdiutil create -volname VectorLabel -srcfolder "dist/VectorLabel" \
             -ov -format UDZO dist/VectorLabel-${{ github.ref_name }}.dmg
 
       - name: Create GitHub Release

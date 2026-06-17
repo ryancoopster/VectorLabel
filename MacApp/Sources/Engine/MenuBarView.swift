@@ -109,6 +109,10 @@ struct MenuBarView: View {
             }
             .keyboardShortcut("t", modifiers: .command)
 
+            MenuActionRow(icon: "rectangle.and.pencil.and.ellipsis", title: "Open Custom Designer", shortcut: "") {
+                appDelegate.openCustomDesigner()
+            }
+
             MenuActionRow(icon: "folder", title: "Open Export Folder", shortcut: "⌘E") {
                 appDelegate.openExportFolder()
             }

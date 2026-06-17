@@ -77,19 +77,19 @@ spctl --assess --type execute -vv /Applications/VectorLabel.app   # → "accepte
 ## Building a signed app locally (optional)
 With the certificate installed in your login keychain:
 ```sh
-SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" scripts/package-app.sh
+SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" scripts/package-suite.sh
 # then notarize:
 ditto -c -k --keepParent dist/VectorLabel.app dist/VectorLabel.zip
 xcrun notarytool submit dist/VectorLabel.zip --key AuthKey_XXXX.p8 \
   --key-id ABC123DE45 --issuer <ISSUER-UUID> --wait
 xcrun stapler staple dist/VectorLabel.app
 ```
-A plain `scripts/package-app.sh` (no `SIGN_IDENTITY`) produces an **ad-hoc** signed
+A plain `scripts/package-suite.sh` (no `SIGN_IDENTITY`) produces an **ad-hoc** signed
 bundle that runs on your machine but is **not distributable**.
 
 ## Notes
 - **libusb is bundled** inside the app (`Contents/Frameworks`) and signed with your
-  Developer ID, so the app runs on machines without Homebrew. `package-app.sh`
+  Developer ID, so the app runs on machines without Homebrew. `package-suite.sh`
   rewrites its load path and re-signs (Apple Silicon refuses an unsigned binary).
 - **Hardened runtime** is required for notarization and is enabled at signing time;
   the app is not sandboxed (it needs raw USB + `~/Documents` access).
