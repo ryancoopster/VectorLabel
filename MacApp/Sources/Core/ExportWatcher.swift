@@ -25,7 +25,7 @@ public final class ExportWatcher {
     /// Called on the main queue whenever a new CSV is found and parsed.
     public var onNewExport: ((URL, [WireRecord]) -> Void)?
 
-    private var eventStream: FSEventStreamRef?
+    private var folderWatcher: FolderWatcher?
 
     /// Track which files we have already processed so we don't fire twice.
     private var processedPaths = Set<String>()
@@ -37,73 +37,20 @@ public final class ExportWatcher {
     // MARK: - Start / Stop
 
     public func start() {
-        // Create the Exports root if it doesn't exist yet
-        try? FileManager.default.createDirectory(
-            at: exportsRootURL,
-            withIntermediateDirectories: true
-        )
-
-        let paths = [exportsRootURL.path] as CFArray
-        var ctx = FSEventStreamContext(
-            version: 0,
-            info: Unmanaged.passUnretained(self).toOpaque(),
-            retain: nil, release: nil, copyDescription: nil
-        )
-
-        // kFSEventStreamCreateFlagFileEvents  — fire on individual file changes
-        // kFSEventStreamCreateFlagUseCFTypes  — use CFString paths
-        // kFSEventStreamCreateFlagNoDefer     — deliver events promptly
-        let flags = UInt32(
-            kFSEventStreamCreateFlagFileEvents |
-            kFSEventStreamCreateFlagUseCFTypes |
-            kFSEventStreamCreateFlagNoDefer
-        )
-
-        let stream = FSEventStreamCreate(
-            kCFAllocatorDefault,
-            { _, info, numEvents, eventPaths, eventFlags, _ in
-                guard let info = info else { return }
-                let watcher = Unmanaged<ExportWatcher>.fromOpaque(info).takeUnretainedValue()
-                let paths = unsafeBitCast(eventPaths, to: NSArray.self)
-                let flags = UnsafeBufferPointer(start: eventFlags, count: numEvents)
-
-                for i in 0 ..< numEvents {
-                    guard let path = paths[i] as? String else { continue }
-
-                    // Only care about .csv files being created / modified
-                    guard path.lowercased().hasSuffix(".csv") else { continue }
-
-                    let flag = flags[i]
-                    let created  = flag & UInt32(kFSEventStreamEventFlagItemCreated)  != 0
-                    let modified = flag & UInt32(kFSEventStreamEventFlagItemModified) != 0
-                    let renamed  = flag & UInt32(kFSEventStreamEventFlagItemRenamed)  != 0
-                    guard created || modified || renamed else { continue }
-
-                    watcher.handleNewFile(at: URL(fileURLWithPath: path))
-                }
-            },
-            &ctx,
-            paths,
-            FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-            0.5,    // latency in seconds — coalesce rapid bursts
-            flags
-        )
-
-        guard let stream = stream else { return }
-        FSEventStreamSetDispatchQueue(stream, DispatchQueue.main)
-        FSEventStreamStart(stream)
-        eventStream = stream
-
+        // Watch the Exports root recursively for new .csv files. The 0.5s latency
+        // coalesces the created+modified burst Vectorworks emits while writing.
+        let fw = FolderWatcher(root: exportsRootURL, suffix: ".csv", latency: 0.5) { [weak self] url in
+            self?.handleNewFile(at: url)
+        }
+        fw.start()
+        folderWatcher = fw
         // Note: we intentionally do NOT scan existing files on launch.
         // The print window only opens when Vectorworks exports a new CSV while the app is running.
     }
 
     public func stop() {
-        guard let stream = eventStream else { return }
-        FSEventStreamStop(stream)
-        FSEventStreamInvalidate(stream)
-        FSEventStreamRelease(stream)
-        eventStream = nil
+        folderWatcher?.stop()
+        folderWatcher = nil
     }
 
     // MARK: - File handling

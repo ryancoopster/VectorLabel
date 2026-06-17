@@ -244,4 +244,65 @@ final class FoundationTests: XCTestCase {
         XCTAssertFalse(sep.contains("\u{2028}"))   // raw separators must be gone
         XCTAssertFalse(sep.contains("\u{2029}"))
     }
+
+    // MARK: – IPC layer (Phase 1, Step 2)
+
+    /// A print job must survive JSON encode→decode, with the VGL label buffers
+    /// carried as base64 and the cut mode as a plain string.
+    func testPrintJobFileRoundTrip() throws {
+        let labels = [Data([0x1b, 0x58, 0x00, 0xff]), Data([0x00, 0x01, 0x02])]
+        let job = PrintJobFile(id: "ABC123", createdAt: "2026-06-17T12:00:00Z",
+                               sourceApp: "customdesigner", title: "Test", templateName: "T",
+                               printerID: "p1", copies: 2, cutMode: .eachLabel,
+                               estLabelMs: 850, labels: labels)
+        let data = try JSONEncoder().encode(job)
+        let json = String(data: data, encoding: .utf8)!
+        XCTAssertTrue(json.contains("\"eachLabel\""))   // enum encodes as its string
+        let back = try JSONDecoder().decode(PrintJobFile.self, from: data)
+        XCTAssertEqual(back.id, "ABC123")
+        XCTAssertEqual(back.cutMode, .eachLabel)
+        XCTAssertEqual(back.copies, 2)
+        XCTAssertEqual(back.labels, labels)
+    }
+
+    func testPrinterStatusFileRoundTrip() throws {
+        let cas = CassetteStatus(partNumber: "M6-32-427", labelWidthMils: 1500, labelHeightMils: 1500,
+                                 printableWidthMils: 1500, printableHeightMils: 500, isDieCut: true,
+                                 supplyRemainingPct: 64, labelsPerRoll: 250, pixelWidth: 450, pixelHeight: 450)
+        let status = PrinterStatusFile(updatedAt: "2026-06-17T12:00:00Z", engineRunning: true,
+            printers: [PrinterStatusEntry(id: "p1", name: "Brady M611", model: "M611", serial: "S1",
+                                          status: "ready", cassette: cas, activeJobCount: 0)])
+        let data = try JSONEncoder().encode(status)
+        let back = try JSONDecoder().decode(PrinterStatusFile.self, from: data)
+        XCTAssertEqual(back.printers.first?.model, "M611")
+        XCTAssertEqual(back.printers.first?.cassette?.partNumber, "M6-32-427")
+        XCTAssertEqual(back.printers.first?.cassette?.labelsPerRoll, 250)
+    }
+
+    /// Write → claim (atomic move) → complete, plus status publish/read, against
+    /// a temp directory (never the real Application Support tree).
+    func testPrintQueueWriteClaimComplete() throws {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("vlqueue-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let q = PrintQueue(root: tmp)
+
+        let job = PrintJobFile(id: "JOB1", createdAt: "t", sourceApp: "autoprint",
+                               title: "x", templateName: "y", labels: [Data([1, 2, 3])])
+        let written = try q.write(job)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: written.path))
+        XCTAssertEqual(q.pendingJobURLs().count, 1)
+
+        guard let claimed = q.claim(written) else { return XCTFail("claim failed") }
+        XCTAssertEqual(claimed.job.id, "JOB1")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: written.path))   // moved out of queue
+        XCTAssertNil(q.claim(written))                                          // can't double-claim
+
+        q.complete(claimed.processingURL, success: true)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: q.doneDir.appendingPathComponent("JOB1.json").path))
+
+        let status = PrinterStatusFile(updatedAt: "t", engineRunning: true, printers: [])
+        try q.publishStatus(status)
+        XCTAssertEqual(q.readStatus()?.engineRunning, true)
+    }
 }
