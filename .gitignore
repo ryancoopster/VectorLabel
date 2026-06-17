@@ -11,4 +11,4 @@ __pycache__/
 dist/
 *.dmg
 # Generated at build time by scripts/stamp-version.sh (also regenerated in CI)
-MacApp/Sources/Generated/BuildInfo.swift
+MacApp/Sources/Core/Generated/BuildInfo.swift

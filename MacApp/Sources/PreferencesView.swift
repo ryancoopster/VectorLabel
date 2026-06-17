@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import VectorLabelCore
 
 // Design tokens (Color.vl*) live in Theme.swift, shared with the menu bar.
 

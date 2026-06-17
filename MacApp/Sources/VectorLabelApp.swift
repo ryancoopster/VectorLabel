@@ -4,6 +4,7 @@ import WebKit
 import UniformTypeIdentifiers
 import Combine
 import ObjectiveC
+import VectorLabelCore
 
 // MARK: – App entry point
 
@@ -36,11 +37,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var statusItem: NSStatusItem?
     private var cancellables: Set<AnyCancellable> = []
 
-    /// Loads an image asset from the SPM resource bundle (works in both the dev
+    /// Loads an image asset from the Core resource bundle (works in both the dev
     /// `swift build` and the packaged .app). Returns nil if missing.
     private static func bundledImage(_ name: String, ext: String) -> NSImage? {
-        guard let url = Bundle.module.url(forResource: name, withExtension: ext) else { return nil }
-        return NSImage(contentsOf: url)
+        CoreResources.image(name, ext)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -139,13 +139,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             return
         }
 
-        // SPM places bundled resources in Bundle.module (the generated resource
-        // bundle next to the executable), NOT Bundle.main. Try module first so
-        // the debug `swift build` binary works; fall back to Bundle.main for a
-        // proper .app build, then dev paths.
-        guard let htmlURL = Bundle.module.url(forResource: "VectorLabelDesigner", withExtension: "html")
-                            ?? Bundle.main.url(forResource: "VectorLabelDesigner", withExtension: "html")
-                            ?? devHTMLURL("VectorLabelDesigner")
+        // The HTML now lives in VectorLabelCore's resource bundle. Prefer a live
+        // repo copy during development (so git pull is reflected without a
+        // rebuild), then fall back to the bundled Core resource.
+        guard let htmlURL = devHTMLURL("VectorLabelDesigner")
+                            ?? CoreResources.url("VectorLabelDesigner", "html")
         else { return }
 
         // WKWebView with navigation delegate so we can inject records after load,
@@ -470,14 +468,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // caches files and may not re-copy after a git pull.
         //
         // Search order:
-        // 1. ~/Downloads/VectorLabel/MacApp/Sources/<name>.html  (default clone location)
-        // 2. ~/Documents/VectorLabel/MacApp/Sources/<name>.html
+        // 1. ~/Downloads/VectorLabel/MacApp/Sources/Core/<name>.html  (default clone location)
+        // 2. ~/Documents/VectorLabel/MacApp/Sources/Core/<name>.html
         // 3. #file-relative path (source-build fallback)
         let home = NSHomeDirectory()
         let searchPaths = [
-            "Documents/VectorLabel/MacApp/Sources",
-            "Developer/VectorLabel/MacApp/Sources",
-            "Desktop/VectorLabel/MacApp/Sources",
+            "Documents/VectorLabel/MacApp/Sources/Core",
+            "Developer/VectorLabel/MacApp/Sources/Core",
+            "Desktop/VectorLabel/MacApp/Sources/Core",
         ]
         for rel in searchPaths {
             let candidate = URL(fileURLWithPath: home)
@@ -491,6 +489,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         let src = URL(fileURLWithPath: #file)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
+            .appendingPathComponent("Core")
         let candidate = src.appendingPathComponent("\(name).html")
         return FileManager.default.fileExists(atPath: candidate.path) ? candidate : nil
     }
@@ -686,4 +685,4 @@ extension AppDelegate: WKScriptMessageHandler {
     }
 }
 
-// JSONSerialization.escapeString is defined in PrintWindowController.swift
+// String.jsonQuoted is defined in VectorLabelCore (Core/Bridge.swift)

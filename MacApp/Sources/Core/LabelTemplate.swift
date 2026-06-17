@@ -13,23 +13,23 @@ extension BradyLabelSize {
     /// Printable area in inches, from the catalog (BradyCatalog.json). For
     /// BM-33-427 the printable zone is 1.5×1.5 even though the total label is
     /// 1.5×4.0. Unknown part numbers fall back to the physical size.
-    var printableWidthInches: Double {
+    public var printableWidthInches: Double {
         BradyCatalog.printableWidthInches(forPartNumber: partNumber) ?? widthInches
     }
 
-    var printableHeightInches: Double {
+    public var printableHeightInches: Double {
         BradyCatalog.printableHeightInches(forPartNumber: partNumber) ?? heightInches
     }
 
-    var printablePixelWidth:  Int { Int((printableWidthInches  * Double(dpi)).rounded()) }
-    var printablePixelHeight: Int { Int((printableHeightInches * Double(dpi)).rounded()) }
+    public var printablePixelWidth:  Int { Int((printableWidthInches  * Double(dpi)).rounded()) }
+    public var printablePixelHeight: Int { Int((printableHeightInches * Double(dpi)).rounded()) }
 }
 
 // MARK: – Renderer
 
 /// Renders a VLTemplate + WireRecord to a 1-byte-per-pixel mono buffer
 /// (0xFF = ink/black, 0x00 = white) suitable for BradyVGL.buildPrintJob.
-enum LabelRenderer {
+public enum LabelRenderer {
 
     /// SC is the coordinate scale used by the HTML designer: 185 px per inch-unit.
     /// Template object coordinates are in 0…1 relative to the printable area.
@@ -37,7 +37,7 @@ enum LabelRenderer {
     /// `offset` shifts all drawn content by (dx, dy) printer pixels — the
     /// per-printer calibration offset. dx is along the label width, dy along
     /// the label height (same sense as the designer's x/y).
-    static func render(template: VLTemplate, record: WireRecord,
+    public static func render(template: VLTemplate, record: WireRecord,
                        offset: (dx: Double, dy: Double) = (0, 0)) -> (pixels: [UInt8], width: Int, height: Int)? {
         guard let size = template.labelSize else { return nil }
         let pw  = size.printablePixelWidth
@@ -364,7 +364,7 @@ enum LabelRenderer {
     /// a solid 1/8" square marking the origin corner (so feed direction /
     /// mirroring is obvious). The per-printer `offset` is applied so reprinting
     /// after a tweak shows the shift.
-    static func renderCalibrationGrid(size: BradyLabelSize,
+    public static func renderCalibrationGrid(size: BradyLabelSize,
                                       offset: (dx: Double, dy: Double) = (0, 0))
         -> (pixels: [UInt8], width: Int, height: Int)? {
         let pw  = size.printablePixelWidth

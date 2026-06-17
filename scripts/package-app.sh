@@ -21,7 +21,6 @@ swift build -c "$CONFIG"
 
 BINDIR=".build/$CONFIG"
 EXE="$BINDIR/$APPNAME"
-RESBUNDLE="$BINDIR/${APPNAME}_${APPNAME}.bundle"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
@@ -37,13 +36,15 @@ PB=/usr/libexec/PlistBuddy
 "$PB" -c "Add :VLGitCommit string $COMMIT" "$APP/Contents/Info.plist" 2>/dev/null \
   || "$PB" -c "Set :VLGitCommit $COMMIT" "$APP/Contents/Info.plist"
 
-# Executable + SPM resource bundle (the two HTML UIs).
+# Executable + SPM resource bundles. The HTML UIs, catalog JSON and icons now
+# live in the VectorLabelCore bundle (VectorLabel_VectorLabelCore.bundle); the
+# executable target may also emit an (empty) bundle. Copy every *.bundle.
 cp "$EXE" "$APP/Contents/MacOS/$APPNAME"
-[ -d "$RESBUNDLE" ] && cp -R "$RESBUNDLE" "$APP/Contents/Resources/"
+for b in "$BINDIR"/*.bundle; do [ -d "$b" ] && cp -R "$b" "$APP/Contents/Resources/"; done
 
 # App icon (Finder/Dock). CFBundleIconFile=AppIcon in Info.plist points here.
 # Must live in the app's own Resources, not just the nested SPM resource bundle.
-[ -f MacApp/Sources/AppIcon.icns ] && cp MacApp/Sources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+[ -f MacApp/Sources/Core/AppIcon.icns ] && cp MacApp/Sources/Core/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 # Bundle libusb and make the executable load it from inside the .app.
 LIBUSB_SRC=$(otool -L "$EXE" | awk '/libusb-1\.0.*dylib/{print $1; exit}')

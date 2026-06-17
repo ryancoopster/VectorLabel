@@ -7,14 +7,14 @@ import Foundation
 ///            string literals, & concatenation, <> / = comparisons.
 ///
 /// Example:  =IF(Number<>"",Number&" - "&Cable,Cable)
-enum FormulaEngine {
+public enum FormulaEngine {
 
     // MARK: – Public entry point
 
     /// Evaluate `formula` against `fields`.
     /// - If the formula doesn't start with `=`, returns it as a literal.
     /// - Returns empty string on parse/eval error.
-    static func evaluate(_ formula: String, fields: [String: String]) -> String {
+    public static func evaluate(_ formula: String, fields: [String: String]) -> String {
         guard formula.hasPrefix("=") else { return formula }
         let expr = String(formula.dropFirst())
         let tokens = tokenize(expr)

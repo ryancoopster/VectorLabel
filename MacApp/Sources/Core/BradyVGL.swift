@@ -6,16 +6,16 @@ import Foundation
 /// Input: a 1-bit-per-pixel mono buffer, row-major, 1 byte per pixel
 ///        (0xFF = black/ink, 0x00 = white), width x height matching the
 ///        label's pixel dimensions from BradyCatalog.
-enum BradyVGL {
+public enum BradyVGL {
 
-    enum CutMode: UInt8 {
+    public enum CutMode: UInt8 {
         case afterJob = 0   // single label
         case eachLabel = 1  // batches (not used here - each label is its own job)
         case never = 2
     }
 
     /// Build a complete VGL job for one label image.
-    static func buildPrintJob(pixels: [UInt8], width: Int, height: Int, cutMode: CutMode = .afterJob) -> [UInt8] {
+    public static func buildPrintJob(pixels: [UInt8], width: Int, height: Int, cutMode: CutMode = .afterJob) -> [UInt8] {
         var job: [UInt8] = []
 
         // Job Start
@@ -106,7 +106,7 @@ enum BradyVGL {
     ///
     /// The trailing white run is omitted entirely — the printer treats the unsent
     /// remainder of a line as white.
-    static func compressRLELine(_ line: [UInt8]) -> [UInt8] {
+    public static func compressRLELine(_ line: [UInt8]) -> [UInt8] {
         guard !line.isEmpty else { return [] }
 
         // Expand to pixels, MSB first within each byte (row 0 → bit 7 of byte 0).
@@ -153,7 +153,7 @@ enum BradyVGL {
     /// last, which is "cut after job" (mode 0) — so a die-cut batch feeds as one
     /// strip and is cut once at the end. Pass `cutEachLabel: true` to separate every
     /// label instead (mode 1 on all jobs).
-    static func buildBatch(
+    public static func buildBatch(
         _ labels: [(pixels: [UInt8], width: Int, height: Int)],
         cutEachLabel: Bool = false
     ) -> [[UInt8]] {

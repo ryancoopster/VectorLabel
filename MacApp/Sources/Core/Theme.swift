@@ -9,7 +9,7 @@ private func vl(_ dark: Color, _ light: Color) -> Color {
     AppSettings.shared.appearance == "light" ? light : dark
 }
 
-extension Color {
+public extension Color {
     static var vlBackground: Color { vl(Color(red: 0.08, green: 0.08, blue: 0.12),   // #141420
                                          Color(red: 0.93, green: 0.94, blue: 0.96)) } // #eef0f4
     static var vlSurface: Color    { vl(Color(red: 0.12, green: 0.12, blue: 0.18),   // #1e1e2e

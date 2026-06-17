@@ -1,5 +1,5 @@
 import XCTest
-@testable import VectorLabel
+@testable import VectorLabelCore
 
 /// First tests — establish the harness and pin a couple of pure, high-value
 /// behaviors. The deeper golden-file tests (formula engine cross-checked against
@@ -83,6 +83,7 @@ final class FoundationTests: XCTestCase {
         let sourcesDir = URL(fileURLWithPath: #filePath)   // MacApp/Tests/FoundationTests.swift
             .deletingLastPathComponent().deletingLastPathComponent()
             .appendingPathComponent("Sources")
+            .appendingPathComponent("Core")
         let json = try Data(contentsOf: sourcesDir.appendingPathComponent("BradyCatalog.json"))
         let catalog = try JSONDecoder().decode(FileT.self, from: json)
 

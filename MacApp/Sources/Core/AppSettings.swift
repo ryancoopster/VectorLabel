@@ -4,25 +4,25 @@ import AppKit
 
 /// All user-configurable preferences for VectorLabel.
 /// Values are persisted via UserDefaults through @AppStorage-compatible wrappers.
-final class AppSettings: ObservableObject {
+public final class AppSettings: ObservableObject {
 
-    static let shared = AppSettings()
+    public static let shared = AppSettings()
 
     // MARK: – Export
 
     /// Root watch folder. The app watches Exports/ inside this path.
-    @Published var watchFolderPath: String {
+    @Published public var watchFolderPath: String {
         didSet { UserDefaults.standard.set(watchFolderPath, forKey: "watchFolderPath") }
     }
 
     /// Open the print window automatically when a new CSV is detected.
-    @Published var autoOpenPrintWindow: Bool {
+    @Published public var autoOpenPrintWindow: Bool {
         didSet { UserDefaults.standard.set(autoOpenPrintWindow, forKey: "autoOpenPrintWindow") }
     }
 
     /// Maximum number of export CSVs to retain per project subfolder.
     /// Pruning uses the _export_YYYYMMDD_HHMMSS datecode in the filename.
-    @Published var maxExportsPerProject: Int {
+    @Published public var maxExportsPerProject: Int {
         didSet {
             UserDefaults.standard.set(maxExportsPerProject, forKey: "maxExportsPerProject")
             ExportSettings.maxExportsPerProject = maxExportsPerProject
@@ -32,49 +32,49 @@ final class AppSettings: ObservableObject {
     // MARK: – Templates
 
     /// Folder where .vlt.json template files are stored.
-    @Published var templatesFolderPath: String {
+    @Published public var templatesFolderPath: String {
         didSet { UserDefaults.standard.set(templatesFolderPath, forKey: "templatesFolderPath") }
     }
 
     // MARK: – Printing
 
     /// Milliseconds to wait between sending consecutive label jobs.
-    @Published var interLabelDelayMs: Int {
+    @Published public var interLabelDelayMs: Int {
         didSet { UserDefaults.standard.set(interLabelDelayMs, forKey: "interLabelDelayMs") }
     }
 
     /// Default print range mode: "all", "selected", or "range".
-    @Published var defaultPrintRange: String {
+    @Published public var defaultPrintRange: String {
         didSet { UserDefaults.standard.set(defaultPrintRange, forKey: "defaultPrintRange") }
     }
 
     // MARK: – Recent prints
 
     /// How many recent print jobs to show in the menu bar (user-defined, default 5).
-    @Published var recentPrintsCount: Int {
+    @Published public var recentPrintsCount: Int {
         didSet { UserDefaults.standard.set(recentPrintsCount, forKey: "recentPrintsCount") }
     }
 
     /// Template id pre-selected when the print window opens. Empty = none.
     /// Persists across print-window open/close and app restarts.
-    @Published var defaultTemplateID: String {
+    @Published public var defaultTemplateID: String {
         didSet { UserDefaults.standard.set(defaultTemplateID, forKey: "defaultTemplateID") }
     }
 
     /// User-arranged record-table column order (CSV keys). Shared between the
     /// print window and the template designer, persisted across launches.
     /// Empty = natural order.
-    @Published var recordColumnOrder: [String] {
+    @Published public var recordColumnOrder: [String] {
         didSet { UserDefaults.standard.set(recordColumnOrder, forKey: "recordColumnOrder") }
     }
 
     /// Record-table columns the user has hidden. Shared + persisted.
-    @Published var recordHiddenColumns: [String] {
+    @Published public var recordHiddenColumns: [String] {
         didSet { UserDefaults.standard.set(recordHiddenColumns, forKey: "recordHiddenColumns") }
     }
 
     /// Per-column widths in px (CSV key → width). Shared + persisted.
-    @Published var recordColumnWidths: [String: Double] {
+    @Published public var recordColumnWidths: [String: Double] {
         didSet {
             UserDefaults.standard.set(try? JSONEncoder().encode(recordColumnWidths),
                                       forKey: "recordColumnWidths")
@@ -83,23 +83,23 @@ final class AppSettings: ObservableObject {
 
     /// Saved filter/sort presets for the print window, stored as a JSON array
     /// string ([{id,name,filter,sort}]). Persisted; injected into the print UI.
-    @Published var filterSortPresetsJSON: String {
+    @Published public var filterSortPresetsJSON: String {
         didSet { UserDefaults.standard.set(filterSortPresetsJSON, forKey: "filterSortPresetsJSON") }
     }
 
     // MARK: – Template designer preferences (persisted)
 
-    @Published var designerSnapGrid: Bool {
+    @Published public var designerSnapGrid: Bool {
         didSet { UserDefaults.standard.set(designerSnapGrid, forKey: "designerSnapGrid") }
     }
-    @Published var designerSnapObjects: Bool {
+    @Published public var designerSnapObjects: Bool {
         didSet { UserDefaults.standard.set(designerSnapObjects, forKey: "designerSnapObjects") }
     }
-    @Published var designerGridSize: Double {
+    @Published public var designerGridSize: Double {
         didSet { UserDefaults.standard.set(designerGridSize, forKey: "designerGridSize") }
     }
     /// Height (px) of the designer's records browser panel.
-    @Published var designerRecordsHeight: Double {
+    @Published public var designerRecordsHeight: Double {
         didSet { UserDefaults.standard.set(designerRecordsHeight, forKey: "designerRecordsHeight") }
     }
 
@@ -109,7 +109,7 @@ final class AppSettings: ObservableObject {
     /// number so it persists across disconnect/reconnect and survives relaunch.
     /// Value is [dx, dy]; dx shifts along the tape feed, dy across the tape.
     /// Keyed by serial (not the full USB id) so it follows the physical printer.
-    @Published var printerCalibration: [String: [Double]] {
+    @Published public var printerCalibration: [String: [Double]] {
         didSet {
             UserDefaults.standard.set(try? JSONEncoder().encode(printerCalibration),
                                       forKey: "printerCalibration")
@@ -117,13 +117,13 @@ final class AppSettings: ObservableObject {
     }
 
     /// Calibration offset (in printer pixels) for a printer serial. (0,0) if none.
-    func calibrationOffset(forSerial serial: String) -> (dx: Double, dy: Double) {
+    public func calibrationOffset(forSerial serial: String) -> (dx: Double, dy: Double) {
         let a = printerCalibration[serial] ?? []
         return (a.count > 0 ? a[0] : 0, a.count > 1 ? a[1] : 0)
     }
 
     /// Set the calibration offset (printer pixels) for a printer serial.
-    func setCalibrationOffset(forSerial serial: String, dx: Double, dy: Double) {
+    public func setCalibrationOffset(forSerial serial: String, dx: Double, dy: Double) {
         printerCalibration[serial] = [dx, dy]
     }
 
@@ -131,24 +131,24 @@ final class AppSettings: ObservableObject {
 
     /// UI appearance: "dark" (default) or "light". Applies to the menu, the
     /// Preferences window, and both web UIs (print + designer) simultaneously.
-    @Published var appearance: String {
+    @Published public var appearance: String {
         didSet {
             UserDefaults.standard.set(appearance, forKey: "appearance")
             applyNativeAppearance()
         }
     }
-    var isLight: Bool { appearance == "light" }
+    public var isLight: Bool { appearance == "light" }
 
     /// Match the native macOS appearance (so SwiftUI controls, text fields,
     /// scrollbars, and the menu/preferences chrome render in the chosen mode).
-    func applyNativeAppearance() {
+    public func applyNativeAppearance() {
         DispatchQueue.main.async {
             NSApp.appearance = NSAppearance(named: self.isLight ? .aqua : .darkAqua)
         }
     }
 
     /// Whether to also show VectorLabel in the Dock (menu-bar-only by default).
-    @Published var showInDock: Bool {
+    @Published public var showInDock: Bool {
         didSet {
             UserDefaults.standard.set(showInDock, forKey: "showInDock")
             // NSApp.setActivationPolicy must be called on the main actor.
@@ -159,7 +159,7 @@ final class AppSettings: ObservableObject {
     }
 
     /// Apply a column config payload {order, hidden, widths} posted from a web view.
-    func applyColumnConfigPayload(_ payload: Any?) {
+    public func applyColumnConfigPayload(_ payload: Any?) {
         guard let dict = payload as? [String: Any] else { return }
         if let order = dict["order"] as? [String] { recordColumnOrder = order }
         if let hidden = dict["hidden"] as? [String] { recordHiddenColumns = hidden }
@@ -171,7 +171,7 @@ final class AppSettings: ObservableObject {
     }
 
     /// The shared column config as a JSON object string for injection.
-    func columnConfigJSON() -> String {
+    public func columnConfigJSON() -> String {
         let cfg: [String: Any] = [
             "order": recordColumnOrder,
             "hidden": recordHiddenColumns,
@@ -184,9 +184,9 @@ final class AppSettings: ObservableObject {
 
     // MARK: – Computed helpers
 
-    var watchFolderURL: URL { URL(fileURLWithPath: watchFolderPath) }
-    var exportsFolderURL: URL { watchFolderURL.appendingPathComponent("Exports") }
-    var templatesFolderURL: URL { URL(fileURLWithPath: templatesFolderPath) }
+    public var watchFolderURL: URL { URL(fileURLWithPath: watchFolderPath) }
+    public var exportsFolderURL: URL { watchFolderURL.appendingPathComponent("Exports") }
+    public var templatesFolderURL: URL { URL(fileURLWithPath: templatesFolderPath) }
 
     // MARK: – Init
 
@@ -231,7 +231,7 @@ final class AppSettings: ObservableObject {
         ExportSettings.maxExportsPerProject = maxExportsPerProject
     }
 
-    func resetToDefaults() {
+    public func resetToDefaults() {
         let home = NSHomeDirectory()
         let base = (home as NSString).appendingPathComponent("Documents/VectorLabel")
         watchFolderPath      = base

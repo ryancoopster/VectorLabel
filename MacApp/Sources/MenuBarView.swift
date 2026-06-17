@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import VectorLabelCore
 
 // MARK: – Root menu bar content
 

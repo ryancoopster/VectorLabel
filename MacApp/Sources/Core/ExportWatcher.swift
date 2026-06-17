@@ -17,26 +17,26 @@ import Foundation
 
 // ── ExportWatcher ─────────────────────────────────────────────────────────────
 
-final class ExportWatcher {
+public final class ExportWatcher {
 
     /// Root of the exports tree:  ~/Documents/VectorLabel/Exports/
-    let exportsRootURL: URL
+    public let exportsRootURL: URL
 
     /// Called on the main queue whenever a new CSV is found and parsed.
-    var onNewExport: ((URL, [WireRecord]) -> Void)?
+    public var onNewExport: ((URL, [WireRecord]) -> Void)?
 
     private var eventStream: FSEventStreamRef?
 
     /// Track which files we have already processed so we don't fire twice.
     private var processedPaths = Set<String>()
 
-    init(exportsRootURL: URL) {
+    public init(exportsRootURL: URL) {
         self.exportsRootURL = exportsRootURL
     }
 
     // MARK: - Start / Stop
 
-    func start() {
+    public func start() {
         // Create the Exports root if it doesn't exist yet
         try? FileManager.default.createDirectory(
             at: exportsRootURL,
@@ -98,7 +98,7 @@ final class ExportWatcher {
         // The print window only opens when Vectorworks exports a new CSV while the app is running.
     }
 
-    func stop() {
+    public func stop() {
         guard let stream = eventStream else { return }
         FSEventStreamStop(stream)
         FSEventStreamInvalidate(stream)
@@ -222,7 +222,7 @@ final class ExportWatcher {
 /// The datecode is extracted from the filename itself — never from file-system
 /// metadata — so pruning is correct across copies, cloud sync, and Time Machine.
 
-enum ExportFilenameParser {
+public enum ExportFilenameParser {
 
     private static let pattern = try! NSRegularExpression(
         pattern: #"_export_(\d{8}_\d{6})\.csv$"#,
@@ -230,14 +230,14 @@ enum ExportFilenameParser {
     )
 
     /// Returns true if the filename matches the VectorLabel export pattern.
-    static func isVectorLabelExport(_ filename: String) -> Bool {
+    public static func isVectorLabelExport(_ filename: String) -> Bool {
         let range = NSRange(filename.startIndex..., in: filename)
         return pattern.firstMatch(in: filename, range: range) != nil
     }
 
     /// Extracts the YYYYMMDD_HHMMSS datecode from the filename.
     /// Returns nil if the filename doesn't match the expected pattern.
-    static func datecode(from filename: String) -> String? {
+    public static func datecode(from filename: String) -> String? {
         let range = NSRange(filename.startIndex..., in: filename)
         guard let match = pattern.firstMatch(in: filename, range: range),
               let dcRange = Range(match.range(at: 1), in: filename) else { return nil }
@@ -295,21 +295,27 @@ enum ExportSettings {
 
 // ── Wire record ───────────────────────────────────────────────────────────────
 
-struct WireRecord {
-    let side: String          // "Source" or "Destination"
-    let wireID: String
-    let fields: [String: String]
+public struct WireRecord {
+    public let side: String          // "Source" or "Destination"
+    public let wireID: String
+    public let fields: [String: String]
 
-    subscript(key: String) -> String { fields[key] ?? "" }
+    public init(side: String, wireID: String, fields: [String: String]) {
+        self.side = side
+        self.wireID = wireID
+        self.fields = fields
+    }
+
+    public subscript(key: String) -> String { fields[key] ?? "" }
 }
 
 // ── CSV parser ────────────────────────────────────────────────────────────────
 
-enum WireExportParser {
+public enum WireExportParser {
 
     /// Parse a VectorLabel CSV export into WireRecord pairs.
     /// Returns nil if the file can't be read or is empty.
-    static func parse(fileURL: URL) -> [WireRecord]? {
+    public static func parse(fileURL: URL) -> [WireRecord]? {
         guard let content = try? String(contentsOf: fileURL, encoding: .utf8) else { return nil }
         return parseRecords(from: content, source: fileURL.lastPathComponent)
     }
@@ -318,7 +324,7 @@ enum WireExportParser {
     /// is padded with empty fields and extra fields are ignored — so rows are NEVER
     /// dropped (a dropped row would shift every later absolute index and could print
     /// the wrong label). Rows with an unexpected column count are logged.
-    static func parseRecords(from text: String, source: String = "") -> [WireRecord]? {
+    public static func parseRecords(from text: String, source: String = "") -> [WireRecord]? {
         let rows = parseCSV(text)
         guard rows.count >= 2 else { return nil }
 
@@ -348,7 +354,7 @@ enum WireExportParser {
     /// quoted field is a literal quote, and a newline (`\r\n` or `\n`) ends a record
     /// only when OUTSIDE quotes — so a quoted field may contain commas and newlines.
     /// Blank lines are skipped.
-    static func parseCSV(_ text: String) -> [[String]] {
+    public static func parseCSV(_ text: String) -> [[String]] {
         var rows: [[String]] = []
         var record: [String] = []
         var field = ""
@@ -393,7 +399,7 @@ enum WireExportParser {
     /// Serialize records to RFC-4180 CSV text in the given column order. Fields
     /// containing a comma, quote, or newline are quoted (with `"` doubled). The
     /// inverse of `parseCSV`/`parseRecords`, so a save→reload round-trips exactly.
-    static func csvText(records: [WireRecord], headers: [String]) -> String {
+    public static func csvText(records: [WireRecord], headers: [String]) -> String {
         func field(_ s: String) -> String {
             if s.contains(",") || s.contains("\"") || s.contains("\n") || s.contains("\r") {
                 return "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\""

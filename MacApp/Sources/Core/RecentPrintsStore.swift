@@ -3,31 +3,31 @@ import Foundation
 // MARK: – Model
 
 /// A record of a completed print job, persisted for reprint.
-struct RecentPrint: Codable, Identifiable, Hashable {
-    var id: UUID = UUID()
-    var date: Date
-    var title: String               // e.g. "Kodak Hall — N044–N046"
-    var sourceFileName: String      // original CSV filename
-    var templateName: String
-    var printerName: String
-    var labelCount: Int
-    var printRange: PrintRange
-    var selectedIndices: [Int]      // which record indices were checked
-    var status: Status = .complete  // lifecycle outcome of the job
+public struct RecentPrint: Codable, Identifiable, Hashable {
+    public var id: UUID = UUID()
+    public var date: Date
+    public var title: String               // e.g. "Kodak Hall — N044–N046"
+    public var sourceFileName: String      // original CSV filename
+    public var templateName: String
+    public var printerName: String
+    public var labelCount: Int
+    public var printRange: PrintRange
+    public var selectedIndices: [Int]      // which record indices were checked
+    public var status: Status = .complete  // lifecycle outcome of the job
 
-    enum PrintRange: String, Codable {
+    public enum PrintRange: String, Codable {
         case all, selected, range
     }
 
     /// Lifecycle outcome shown in the Recent Prints menu.
-    enum Status: String, Codable {
+    public enum Status: String, Codable {
         case printing                // submitted, still printing
         case complete                // all labels sent
         case cancelledBeforePrinting // ✕ Cancel before a print started
         case cancelledMidPrint       // job cancelled while printing
         case failed                  // a USB/send error aborted the job
 
-        var displayName: String {
+        public var displayName: String {
             switch self {
             case .printing:                return "Printing…"
             case .complete:                return "Complete"
@@ -38,13 +38,13 @@ struct RecentPrint: Codable, Identifiable, Hashable {
         }
     }
 
-    var rangeFrom: Int?
-    var rangeTo: Int?
+    public var rangeFrom: Int?
+    public var rangeTo: Int?
 
     // The filter/sort that were active for this job, stored as JSON so reprint
     // can restore them (nil = none). Opaque here; parsed by the print web UI.
-    var filterJSON: String?
-    var sortJSON: String?
+    public var filterJSON: String?
+    public var sortJSON: String?
 
     enum CodingKeys: String, CodingKey {
         case id, date, title, sourceFileName, templateName, printerName
@@ -52,8 +52,29 @@ struct RecentPrint: Codable, Identifiable, Hashable {
         case filterJSON, sortJSON
     }
 
+    public init(id: UUID = UUID(), date: Date, title: String, sourceFileName: String,
+                templateName: String, printerName: String, labelCount: Int,
+                printRange: PrintRange, selectedIndices: [Int], status: Status = .complete,
+                rangeFrom: Int? = nil, rangeTo: Int? = nil,
+                filterJSON: String? = nil, sortJSON: String? = nil) {
+        self.id = id
+        self.date = date
+        self.title = title
+        self.sourceFileName = sourceFileName
+        self.templateName = templateName
+        self.printerName = printerName
+        self.labelCount = labelCount
+        self.printRange = printRange
+        self.selectedIndices = selectedIndices
+        self.status = status
+        self.rangeFrom = rangeFrom
+        self.rangeTo = rangeTo
+        self.filterJSON = filterJSON
+        self.sortJSON = sortJSON
+    }
+
     /// Absolute print date and time, e.g. "Jun 15, 2026 at 3:42 PM".
-    var dateTimeString: String {
+    public var dateTimeString: String {
         let f = DateFormatter()
         f.dateStyle = .medium
         f.timeStyle = .short
@@ -61,7 +82,7 @@ struct RecentPrint: Codable, Identifiable, Hashable {
     }
 
     /// Human-readable time since print, e.g. "2 min ago", "1 hr ago".
-    var timeAgo: String {
+    public var timeAgo: String {
         let secs = Int(-date.timeIntervalSinceNow)
         if secs < 60    { return "Just now" }
         if secs < 3600  { return "\(secs / 60) min ago" }
@@ -75,7 +96,7 @@ struct RecentPrint: Codable, Identifiable, Hashable {
 // Decode defensively so adding fields to RecentPrint doesn't make every older
 // recent_prints.json fail to decode (which would silently wipe all history).
 extension RecentPrint {
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id              = (try? c.decode(UUID.self,   forKey: .id)) ?? UUID()
         date            = (try? c.decode(Date.self,   forKey: .date)) ?? Date()
@@ -100,11 +121,11 @@ extension RecentPrint {
 /// Persists recent print jobs to Application Support as JSON.
 /// Thread-safe for reads from the main actor; writes happen synchronously.
 @MainActor
-final class RecentPrintsStore: ObservableObject {
+public final class RecentPrintsStore: ObservableObject {
 
-    static let shared = RecentPrintsStore()
+    public static let shared = RecentPrintsStore()
 
-    @Published private(set) var prints: [RecentPrint] = []
+    @Published public private(set) var prints: [RecentPrint] = []
 
     private let fileURL: URL = {
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -117,7 +138,7 @@ final class RecentPrintsStore: ObservableObject {
 
     // MARK: – Public API
 
-    func add(_ print: RecentPrint) {
+    public func add(_ print: RecentPrint) {
         prints.insert(print, at: 0)
         let maxCount = AppSettings.shared.recentPrintsCount
         if prints.count > maxCount { prints = Array(prints.prefix(maxCount)) }
@@ -125,13 +146,13 @@ final class RecentPrintsStore: ObservableObject {
     }
 
     /// Updates the status of a previously-added record (e.g. printing → complete).
-    func updateStatus(id: UUID, to status: RecentPrint.Status) {
+    public func updateStatus(id: UUID, to status: RecentPrint.Status) {
         guard let idx = prints.firstIndex(where: { $0.id == id }) else { return }
         prints[idx].status = status
         save()
     }
 
-    func clear() { prints = []; save() }
+    public func clear() { prints = []; save() }
 
     // MARK: – Persistence
 

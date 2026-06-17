@@ -1,23 +1,29 @@
 import Foundation
 
 /// A single Brady wrap-around wire label supply.
-struct BradyLabelSize: Identifiable, Codable, Hashable {
-    var id: String { partNumber }
-    let partNumber: String      // e.g. "BM-32-427"
-    let widthInches: Double
-    let heightInches: Double
+public struct BradyLabelSize: Identifiable, Codable, Hashable {
+    public var id: String { partNumber }
+    public let partNumber: String      // e.g. "BM-32-427"
+    public let widthInches: Double
+    public let heightInches: Double
     // dpi is constant — excluded from Codable to avoid "immutable property will not
     // be decoded" warning (Swift can't decode a let with a default into Codable).
-    var dpi: Int { 300 }
+    public var dpi: Int { 300 }
+
+    public init(partNumber: String, widthInches: Double, heightInches: Double) {
+        self.partNumber = partNumber
+        self.widthInches = widthInches
+        self.heightInches = heightInches
+    }
 
     private enum CodingKeys: String, CodingKey {
         case partNumber, widthInches, heightInches
     }
 
-    var pixelWidth: Int { Int((widthInches * Double(dpi)).rounded()) }
-    var pixelHeight: Int { Int((heightInches * Double(dpi)).rounded()) }
+    public var pixelWidth: Int { Int((widthInches * Double(dpi)).rounded()) }
+    public var pixelHeight: Int { Int((heightInches * Double(dpi)).rounded()) }
 
-    var displayName: String {
+    public var displayName: String {
         "\(partNumber) — \(formatInches(widthInches)) x \(formatInches(heightInches))"
     }
 
@@ -33,7 +39,7 @@ struct BradyLabelSize: Identifiable, Codable, Hashable {
 /// HTML UIs are mirrors of that file's `js` projection and are kept in sync by a
 /// unit test. If the resource is missing or corrupt we fall back to an identical
 /// built-in table, so a packaging mistake can never change behavior or crash.
-enum BradyCatalog {
+public enum BradyCatalog {
 
     /// One catalog entry as stored in BradyCatalog.json. (The `js` projection is
     /// consumed only by the HTML UIs / the sync test, so it's omitted here —
@@ -68,7 +74,7 @@ enum BradyCatalog {
 
     /// True when the loaded catalog came from the bundled JSON (not the fallback).
     /// Exposed for tests to confirm the resource path actually works.
-    private(set) static var loadedFromResource = false
+    public private(set) static var loadedFromResource = false
 
     fileprivate static let file: CatalogFile = {
         if let url = Bundle.module.url(forResource: "BradyCatalog", withExtension: "json"),
@@ -80,7 +86,7 @@ enum BradyCatalog {
         return fallback
     }()
 
-    static let sizes: [BradyLabelSize] = file.sizes.map {
+    public static let sizes: [BradyLabelSize] = file.sizes.map {
         BradyLabelSize(partNumber: $0.partNumber, widthInches: $0.widthInches, heightInches: $0.heightInches)
     }
 
@@ -88,7 +94,7 @@ enum BradyCatalog {
         file.sizes.first { $0.partNumber == pn }
     }
 
-    static func size(forPartNumber pn: String) -> BradyLabelSize? {
+    public static func size(forPartNumber pn: String) -> BradyLabelSize? {
         sizes.first { $0.partNumber == pn }
     }
 
@@ -97,7 +103,7 @@ enum BradyCatalog {
     /// cassette's M6-prefixed part matches the BM-prefixed catalog entry.
     /// Bulk-box ↔ cartridge equivalences (e.g. BM-109-427 == M6-33-427) come
     /// from the catalog's `coreEquivalences`.
-    static func core(_ pn: String) -> String {
+    public static func core(_ pn: String) -> String {
         guard let dash = pn.firstIndex(of: "-") else { return pn.uppercased() }
         let c = String(pn[pn.index(after: dash)...]).uppercased()
         return file.coreEquivalences[c] ?? c
@@ -105,7 +111,7 @@ enum BradyCatalog {
 
     /// Labels on one standard M6 cartridge, by part-number core. Returns nil if
     /// unknown. (M6-31-427 & M6-32-427 = 250/roll, M6-33-427 = 100/roll.)
-    static func labelsPerRoll(forPartNumber pn: String) -> Int? {
+    public static func labelsPerRoll(forPartNumber pn: String) -> Int? {
         let c = core(pn)
         return file.sizes.first { core($0.partNumber) == c }?.labelsPerRoll
     }
@@ -113,14 +119,14 @@ enum BradyCatalog {
     /// Printable area in inches for a part number (nil if unknown — callers fall
     /// back to the physical size). For BM-33-427 the printable zone is 1.5×1.5
     /// even though the total label is 1.5×4.0.
-    static func printableWidthInches(forPartNumber pn: String)  -> Double? { spec(forPartNumber: pn)?.printableWidthInches }
-    static func printableHeightInches(forPartNumber pn: String) -> Double? { spec(forPartNumber: pn)?.printableHeightInches }
+    public static func printableWidthInches(forPartNumber pn: String)  -> Double? { spec(forPartNumber: pn)?.printableWidthInches }
+    public static func printableHeightInches(forPartNumber pn: String) -> Double? { spec(forPartNumber: pn)?.printableHeightInches }
 
     /// Degrees the label feeds rotated relative to the designer layout (the
     /// renderer rotates to match). 0 for most; 90 for the 33-427 family. Matched
     /// by core so M6-33-427 / BM-109-427 rotate like BM-33-427 (preserving the
     /// old `core(...)=="33-427"` gate).
-    static func feedRotationDeg(forPartNumber pn: String) -> Double {
+    public static func feedRotationDeg(forPartNumber pn: String) -> Double {
         let c = core(pn)
         return file.sizes.first { core($0.partNumber) == c }?.feedRotationDeg ?? 0
     }

@@ -14,20 +14,31 @@ let package = Package(
             pkgConfig: "libusb-1.0",
             providers: [.brew(["libusb"])]
         ),
-        .executableTarget(
-            name: "VectorLabel",
-            dependencies: ["CLibUSB"],
-            path: "MacApp/Sources",
-            exclude: [
-                "CLibUSB",
-                "Info.plist",
-            ],
+        .target(
+            name: "VectorLabelCore",
+            path: "MacApp/Sources/Core",
             resources: [
+                .copy("BradyCatalog.json"),
                 .copy("VectorLabelPrint.html"),
                 .copy("VectorLabelDesigner.html"),
-                .copy("AppIcon.icns"),
                 .copy("MenuBarIcon.png"),
-                .copy("BradyCatalog.json"),
+                .copy("AppIcon.icns"),
+            ],
+            linkerSettings: [
+                .linkedFramework("AppKit"),
+                .linkedFramework("WebKit"),
+                .linkedFramework("CoreGraphics"),
+                .linkedFramework("CoreText"),
+            ]
+        ),
+        .executableTarget(
+            name: "VectorLabel",
+            dependencies: ["VectorLabelCore", "CLibUSB"],
+            path: "MacApp/Sources",
+            exclude: [
+                "Core",
+                "CLibUSB",
+                "Info.plist",
             ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
@@ -38,7 +49,7 @@ let package = Package(
         ),
         .testTarget(
             name: "VectorLabelTests",
-            dependencies: ["VectorLabel"],
+            dependencies: ["VectorLabelCore"],
             path: "MacApp/Tests"
         ),
     ]

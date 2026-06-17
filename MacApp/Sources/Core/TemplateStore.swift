@@ -4,8 +4,8 @@ import Combine
 // MARK: – Template model (matches .vlt.json format from HTML designer)
 
 /// One object on the label canvas — text box, line, or rectangle.
-struct TemplateObject: Codable, Identifiable, Hashable {
-    var id: String = UUID().uuidString
+public struct TemplateObject: Codable, Identifiable, Hashable {
+    public var id: String = UUID().uuidString
     var t: String           // "tx" | "ln" | "rc"
 
     // Position and size in label-space (0…1 relative to printable area)
@@ -55,25 +55,25 @@ struct TemplateObject: Codable, Identifiable, Hashable {
 }
 
 /// A saved VectorLabel template, matching .vlt.json exactly.
-struct VLTemplate: Codable, Identifiable, Hashable {
-    var id: String = UUID().uuidString  // String so HTML-saved IDs like "st1" decode correctly
-    var version: Int = 1
-    var name: String
-    var specN: String       // Brady part number e.g. "BM-32-427"
-    var objs: [TemplateObject]
+public struct VLTemplate: Codable, Identifiable, Hashable {
+    public var id: String = UUID().uuidString  // String so HTML-saved IDs like "st1" decode correctly
+    public var version: Int = 1
+    public var name: String
+    public var specN: String       // Brady part number e.g. "BM-32-427"
+    public var objs: [TemplateObject]
 
-    var labelSize: BradyLabelSize? { BradyCatalog.size(forPartNumber: specN) }
+    public var labelSize: BradyLabelSize? { BradyCatalog.size(forPartNumber: specN) }
 }
 
 // MARK: – TemplateStore
 
 /// Loads and saves .vlt.json template files from ~/Documents/VectorLabel/Templates/.
 @MainActor
-final class TemplateStore: ObservableObject {
+public final class TemplateStore: ObservableObject {
 
-    static let shared = TemplateStore()
+    public static let shared = TemplateStore()
 
-    @Published private(set) var templates: [VLTemplate] = []
+    @Published public private(set) var templates: [VLTemplate] = []
 
     private var folderURL: URL { AppSettings.shared.templatesFolderURL }
 
@@ -81,7 +81,7 @@ final class TemplateStore: ObservableObject {
 
     // MARK: – Public API
 
-    func reload() {
+    public func reload() {
         let fm = FileManager.default
         guard let contents = try? fm.contentsOfDirectory(
             at: folderURL,
@@ -127,7 +127,7 @@ final class TemplateStore: ObservableObject {
     /// persist it. VLTemplate's synthesized Codable ignores property defaults, so
     /// id/version are filled in when the payload omits them.
     @discardableResult
-    func save(fromPayload payloadAny: Any?) -> Bool {
+    public func save(fromPayload payloadAny: Any?) -> Bool {
         guard var dict = payloadAny as? [String: Any] else { return false }
         if dict["id"] == nil { dict["id"] = UUID().uuidString }
         if dict["version"] == nil { dict["version"] = 1 }
@@ -142,7 +142,7 @@ final class TemplateStore: ObservableObject {
         catch { print("[TemplateStore] save failed: \(error)"); return false }
     }
 
-    func save(_ template: VLTemplate) throws {
+    public func save(_ template: VLTemplate) throws {
         try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
         let safe = template.name
             .components(separatedBy: CharacterSet.alphanumerics.union(.init(charactersIn: " _-")).inverted)
@@ -166,7 +166,7 @@ final class TemplateStore: ObservableObject {
         reload()
     }
 
-    func delete(_ template: VLTemplate) throws {
+    public func delete(_ template: VLTemplate) throws {
         let fm = FileManager.default
         guard let contents = try? fm.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: nil) else { return }
         for url in contents where url.pathExtension.lowercased() == "json" {
