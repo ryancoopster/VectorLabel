@@ -356,4 +356,88 @@ final class FoundationTests: XCTestCase {
         try q.publishStatus(status)
         XCTAssertEqual(q.readStatus()?.engineRunning, true)
     }
+
+    // MARK: – Phase 4 file types (.vltmp / .vlcus)
+
+    /// A custom-label document must survive JSON encode→decode with its canvas,
+    /// embedded data snapshot, source path, and print settings intact.
+    func testCustomLabelDocumentRoundTrip() throws {
+        let tpl = VLTemplate(id: "t1", version: 1, name: "Loop", specN: "BM-32-427",
+                             objs: [TemplateObject(t: "tx")])
+        let doc = CustomLabelDocument(
+            name: "Loop",
+            template: tpl,
+            headers: ["_Side", "Number", "Cable"],
+            rows: [["_Side": "Source", "Number": "N1", "Cable": "RIO"],
+                   ["_Side": "Destination", "Number": "N1", "Cable": "RIO"]],
+            dataSourcePath: "/tmp/data.csv",
+            dataSourceHeaderRow: true,
+            cutMode: .eachLabel,
+            copies: 3)
+        let data = try JSONEncoder().encode(doc)
+        let back = try JSONDecoder().decode(CustomLabelDocument.self, from: data)
+        XCTAssertEqual(back.name, "Loop")
+        XCTAssertEqual(back.specN, "BM-32-427")          // mirrored from the template
+        XCTAssertEqual(back.template.objs.count, 1)
+        XCTAssertEqual(back.headers, ["_Side", "Number", "Cable"])
+        XCTAssertEqual(back.rows.count, 2)
+        XCTAssertEqual(back.dataSourcePath, "/tmp/data.csv")
+        XCTAssertEqual(back.cutMode, .eachLabel)
+        XCTAssertEqual(back.copies, 3)
+        // The embedded rows map back to WireRecords for the print path.
+        XCTAssertEqual(back.records.count, 2)
+        XCTAssertEqual(back.records[0].side, "Source")
+        XCTAssertEqual(back.records[0].wireID, "N1")
+        XCTAssertEqual(back.records[1].fields["Cable"], "RIO")
+        XCTAssertEqual(back.dataSourceURL?.path, "/tmp/data.csv")
+    }
+
+    /// CustomLabelStore.load reads a written .vlcus and takes its name from the file
+    /// stem (so renaming the file renames the label).
+    func testCustomLabelStoreSaveLoad() throws {
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("vlcus-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let tpl = VLTemplate(id: "t1", version: 1, name: "Original", specN: "BM-31-427", objs: [])
+        let doc = CustomLabelDocument(name: "Original", template: tpl)
+        let url = dir.appendingPathComponent("Renamed.vlcus")
+        try CustomLabelStore.save(doc, to: url)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertTrue(CustomLabelStore.isCustomLabelFile(url))
+
+        let loaded = try XCTUnwrap(CustomLabelStore.load(from: url))
+        XCTAssertEqual(loaded.name, "Renamed")             // file stem wins
+        XCTAssertEqual(loaded.template.name, "Renamed")
+        XCTAssertEqual(loaded.specN, "BM-31-427")
+    }
+
+    /// TemplateStore.isTemplateFile recognises the new and legacy extensions.
+    func testTemplateFileExtensionRecognition() {
+        XCTAssertTrue(TemplateStore.isTemplateFile(URL(fileURLWithPath: "/x/Foo.vltmp")))
+        XCTAssertTrue(TemplateStore.isTemplateFile(URL(fileURLWithPath: "/x/Foo.vlt.json")))
+        XCTAssertTrue(TemplateStore.isTemplateFile(URL(fileURLWithPath: "/x/Foo.json")))
+        XCTAssertFalse(TemplateStore.isTemplateFile(URL(fileURLWithPath: "/x/Foo.csv")))
+        XCTAssertFalse(TemplateStore.isTemplateFile(URL(fileURLWithPath: "/x/Foo.vlcus")))
+    }
+
+    /// loadTemplate reads a .vltmp from any path and names it after the file stem.
+    func testLoadTemplateFromVLTMP() throws {
+        let dir = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("vltmp-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let tpl = VLTemplate(id: "abc", version: 1, name: "Stored Name", specN: "BM-32-427",
+                             objs: [TemplateObject(t: "rc")])
+        let url = dir.appendingPathComponent("My Label.vltmp")
+        try JSONEncoder().encode(tpl).write(to: url)
+
+        let loaded = try XCTUnwrap(TemplateStore.loadTemplate(from: url))
+        XCTAssertEqual(loaded.name, "My Label")            // file stem overrides stored name
+        XCTAssertEqual(loaded.specN, "BM-32-427")
+        XCTAssertEqual(loaded.objs.count, 1)
+        XCTAssertEqual(loaded.id, "abc")
+    }
 }

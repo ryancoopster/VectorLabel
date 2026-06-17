@@ -27,6 +27,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var designer: DesignerWindowController!
 
+    /// A ".vlcus" file the OS asked us to open before the designer existed.
+    private var pendingOpenURLs: [URL] = []
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         if Bundle.main.bundleIdentifier == nil || Bundle.main.bundleIdentifier!.isEmpty {
             UserDefaults.standard.set("com.sai.vectorlabel.customdesigner", forKey: "CFBundleIdentifier")
@@ -39,7 +42,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         TemplateStore.shared.reload()
         designer = DesignerWindowController(mode: .custom)
-        designer.open()
+        // If Finder handed us a ".vlcus" before launch finished, open it directly;
+        // otherwise open the empty Custom Designer.
+        if let url = pendingOpenURLs.last {
+            pendingOpenURLs.removeAll()
+            openCustomDocument(at: url)
+        } else {
+            designer.open()
+        }
+    }
+
+    /// Finder double-click / `open` of a ".vlcus". May fire before
+    /// applicationDidFinishLaunching, so stash the URL until the designer exists.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let url = urls.last(where: { CustomLabelStore.isCustomLabelFile($0) }) ?? urls.last
+        else { return }
+        if designer == nil {
+            pendingOpenURLs = [url]
+        } else {
+            openCustomDocument(at: url)
+        }
+    }
+
+    /// Load the ".vlcus" at `url` into the Custom Designer (or report a read failure).
+    private func openCustomDocument(at url: URL) {
+        if let doc = CustomLabelStore.load(from: url) {
+            designer.openCustomDocument(doc)
+        } else {
+            designer.open()
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Couldn’t open “\(url.lastPathComponent)”"
+            alert.informativeText = "The file isn’t a valid VectorLabel custom label."
+            alert.runModal()
+        }
     }
 
     /// Re-open the designer window when the user clicks the Dock icon and no

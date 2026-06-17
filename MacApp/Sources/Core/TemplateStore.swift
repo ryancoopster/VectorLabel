@@ -67,11 +67,21 @@ public struct VLTemplate: Codable, Identifiable, Hashable {
 
 // MARK: – TemplateStore
 
-/// Loads and saves .vlt.json template files from ~/Documents/VectorLabel/Templates/.
+/// Loads and saves VectorLabel template files from ~/Documents/VectorLabel/Templates/.
+///
+/// As of Phase 4 templates are written as ".vltmp" (the registered VectorLabel
+/// template document type — still JSON, the same VLTemplate encoding). Legacy
+/// ".vlt.json" / ".json" files are still READ, and migrated to a ".vltmp" copy on
+/// load so double-clicking and Finder integration work for older saves too.
 @MainActor
 public final class TemplateStore: ObservableObject {
 
     public static let shared = TemplateStore()
+
+    /// The file extension written for new/saved templates (no leading dot).
+    public nonisolated static let templateExtension = "vltmp"
+    /// Extensions read as templates, in priority order (newest format first).
+    nonisolated static let readableTemplateSuffixes = [".vltmp", ".vlt.json", ".json"]
 
     @Published public private(set) var templates: [VLTemplate] = []
 
@@ -94,18 +104,23 @@ public final class TemplateStore: ObservableObject {
         var seenIDs = Set<String>()
         var result: [VLTemplate] = []
 
-        for url in contents
-            .filter({ $0.pathExtension.lowercased() == "json" })
+        let templateFiles = contents.filter { Self.isTemplateFile($0) }
+        // Stems that already have a ".vltmp" file. A legacy file with the same stem
+        // is its migration source — skip it so a migrated template appears once.
+        let vltmpStems = Set(templateFiles.filter { Self.isVLTMP($0) }.map { Self.stem($0) })
+
+        for url in templateFiles
             .sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+            let fnameStem = Self.stem(url)
+            // Skip legacy ".vlt.json"/".json" when a ".vltmp" of the same name
+            // exists (it's the up-to-date copy; the legacy file stays on disk).
+            if !Self.isVLTMP(url), vltmpStems.contains(fnameStem) { continue }
             guard let data = try? Data(contentsOf: url),
                   var tpl = try? decoder.decode(VLTemplate.self, from: data)
             else { continue }
             // The filename is the display name (so renaming a file on disk
-            // updates the name everywhere). Strip ".vlt.json" / ".json".
-            var fname = url.lastPathComponent
-            for ext in [".vlt.json", ".json"] where fname.lowercased().hasSuffix(ext) {
-                fname = String(fname.dropLast(ext.count)); break
-            }
+            // updates the name everywhere). Strip the known template suffixes.
+            let fname = fnameStem
             if !fname.isEmpty { tpl.name = fname }
             else if tpl.name.isEmpty { tpl.name = url.deletingPathExtension().lastPathComponent }
             // De-duplicate ids: legacy "Save As" copies could share an id, which
@@ -118,9 +133,54 @@ public final class TemplateStore: ObservableObject {
                 }
             }
             seenIDs.insert(tpl.id)
+            // Migrate legacy ".vlt.json"/".json" to a ".vltmp" copy so Finder
+            // integration applies to old saves too. Only write the copy if no
+            // ".vltmp" with this stem already exists (don't clobber a newer save).
+            if !Self.isVLTMP(url) {
+                let target = folderURL.appendingPathComponent("\(fname).\(Self.templateExtension)")
+                if !fm.fileExists(atPath: target.path),
+                   let migrated = try? encoder.encode(tpl) {
+                    try? migrated.write(to: target, options: .atomic)
+                }
+            }
             result.append(tpl)
         }
         templates = result
+    }
+
+    /// True if `url` is a readable template file (`.vltmp`, legacy `.vlt.json`, or
+    /// a bare `.json`).
+    public nonisolated static func isTemplateFile(_ url: URL) -> Bool {
+        let name = url.lastPathComponent.lowercased()
+        return readableTemplateSuffixes.contains { name.hasSuffix($0) }
+    }
+
+    /// True if `url` already uses the new ".vltmp" extension.
+    nonisolated static func isVLTMP(_ url: URL) -> Bool {
+        url.pathExtension.lowercased() == templateExtension
+    }
+
+    /// The display stem of a template file: the last path component with the known
+    /// template suffix (`.vltmp` / `.vlt.json` / `.json`) stripped.
+    nonisolated static func stem(_ url: URL) -> String {
+        var fname = url.lastPathComponent
+        for ext in readableTemplateSuffixes where fname.lowercased().hasSuffix(ext) {
+            fname = String(fname.dropLast(ext.count)); break
+        }
+        return fname
+    }
+
+    /// Decode a `VLTemplate` from a file at `url` (e.g. a `.vltmp` double-clicked in
+    /// Finder). The file's stem becomes the template name, matching `reload()`.
+    /// Returns nil if the file can't be read or isn't a valid template.
+    public nonisolated static func loadTemplate(from url: URL) -> VLTemplate? {
+        guard let data = try? Data(contentsOf: url),
+              var tpl = try? JSONDecoder().decode(VLTemplate.self, from: data)
+        else { return nil }
+        let s = stem(url)
+        if !s.isEmpty { tpl.name = s }
+        else if tpl.name.isEmpty { tpl.name = url.deletingPathExtension().lastPathComponent }
+        return tpl
     }
 
     /// Decode a template from a JS editor payload ({id?, name, specN, objs}) and
@@ -151,15 +211,17 @@ public final class TemplateStore: ObservableObject {
         // Different names can sanitize to the same filename (e.g. "A/B" and "A:B"
         // both → "A_B"). Don't silently overwrite a DIFFERENT template — pick a free
         // name. Re-saving the same template (same id) still overwrites its own file.
+        // New saves write ".vltmp" (Phase 4); a legacy ".vlt.json" with the same
+        // stem is its migration source and is left in place.
         var filename = base
-        var url = folderURL.appendingPathComponent("\(filename).vlt.json")
+        var url = folderURL.appendingPathComponent("\(filename).\(Self.templateExtension)")
         var n = 2
         while FileManager.default.fileExists(atPath: url.path),
               let data = try? Data(contentsOf: url),
               let existing = try? JSONDecoder().decode(VLTemplate.self, from: data),
               existing.id != template.id {
             filename = "\(base)-\(n)"; n += 1
-            url = folderURL.appendingPathComponent("\(filename).vlt.json")
+            url = folderURL.appendingPathComponent("\(filename).\(Self.templateExtension)")
         }
         let data = try JSONEncoder().encode(template)
         try data.write(to: url, options: .atomic)
@@ -169,7 +231,10 @@ public final class TemplateStore: ObservableObject {
     public func delete(_ template: VLTemplate) throws {
         let fm = FileManager.default
         guard let contents = try? fm.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: nil) else { return }
-        for url in contents where url.pathExtension.lowercased() == "json" {
+        // Remove every backing file for this template id — the ".vltmp" and any
+        // legacy ".vlt.json"/".json" copy that shares the id — so a deleted
+        // template doesn't reappear from a stale legacy file on the next reload.
+        for url in contents where Self.isTemplateFile(url) {
             if let data = try? Data(contentsOf: url),
                let t = try? JSONDecoder().decode(VLTemplate.self, from: data),
                t.id == template.id {

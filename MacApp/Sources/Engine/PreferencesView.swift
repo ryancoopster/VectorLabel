@@ -208,7 +208,7 @@ struct PreferencesView: View {
             PrefSection(title: "Templates Folder") {
                 PrefRow(
                     label: "Folder",
-                    caption: "Template files (.vlt.json) saved from the designer are stored here."
+                    caption: "Template files (.vltmp) saved from the designer are stored here."
                 ) {
                     HStack(spacing: 8) {
                         Text(abbreviatedPath(settings.templatesFolderPath))

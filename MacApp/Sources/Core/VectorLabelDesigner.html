@@ -1198,6 +1198,12 @@ function R(){
         <button class="btn" onclick="edPrintSaveAs()" style="padding:4px 10px">Save As & Return</button>
         <button class="btn" onclick="edPrintSave()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600;padding:5px 14px">Save & Return</button>
       `;
+    }else if(isCustomMode()){
+      // Custom Designer: save the canvas + embedded data as a ".vlcus" document.
+      tb.innerHTML=`
+        <button class="btn" onclick="showModal('new')" style="padding:4px 10px">New</button>
+        <button class="btn" onclick="saveCustomDocument()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600;padding:5px 14px">Save Label…</button>
+      `;
     }else{
       tb.innerHTML=`
         <button class="btn" onclick="showModal('new')" style="padding:4px 10px">New</button>
@@ -2029,6 +2035,23 @@ function customPrintRecord(){
   return rec?Object.assign({},rec):null;
 }
 
+// Save the current canvas + embedded bound data as a ".vlcus" document. Swift
+// shows a Save panel and writes the file (the bound rows/columns/path come from
+// the in-memory data source on the Swift side, so only the canvas is sent here).
+function saveCustomDocument(){
+  if(!isCustomMode())return;
+  const data=templateData();
+  const payload={
+    name:S.tplName||"Custom Label",
+    specN:data.specN,
+    objs:data.objs,
+    copies:Math.max(1,S.copies||1)
+  };
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"saveCustomDocument",payload});
+  }
+}
+
 // Render the current canvas as a single label and submit it to the print queue
 // via Swift. Single-label this phase; "copies" repeats it.
 function doCustomPrint(){
@@ -2142,7 +2165,7 @@ async function saveTemplate(){
   if(nameEl)S.tplName=nameEl.value.trim()||"Untitled Template";
   const data=templateData();
   const json=JSON.stringify(data,null,2);
-  const filename=(S.tplName.replace(/[^a-z0-9_\- ]/gi,"_")||"template")+".vlt.json";
+  const filename=(S.tplName.replace(/[^a-z0-9_\- ]/gi,"_")||"template")+".vltmp";
 
   // Native app: persist via the Swift bridge to ~/Documents/VectorLabel/Templates/.
   // (WKWebView has no File System Access API, so the browser path below can't run.)
@@ -2169,7 +2192,7 @@ async function saveTemplate(){
       const fh=await window.showSaveFilePicker({
         suggestedName:filename,
         startIn:"documents",
-        types:[{description:"VectorLabel Template",accept:{"application/json":[".json",".vlt.json"]}}]
+        types:[{description:"VectorLabel Template",accept:{"application/json":[".vltmp",".vlt.json",".json"]}}]
       });
       const writable=await fh.createWritable();
       await writable.write(json);
@@ -2255,7 +2278,7 @@ async function pickTemplateFile(){
     try{
       const [fh]=await window.showOpenFilePicker({
         startIn:"documents",
-        types:[{description:"VectorLabel Template",accept:{"application/json":[".json",".vlt.json"]}}],
+        types:[{description:"VectorLabel Template",accept:{"application/json":[".vltmp",".vlt.json",".json"]}}],
         multiple:false
       });
       const file=await fh.getFile();
@@ -2275,7 +2298,7 @@ async function pickTemplateFile(){
   }else{
     // Fallback file input
     const inp=document.createElement("input");
-    inp.type="file";inp.accept=".json,.vlt.json";
+    inp.type="file";inp.accept=".vltmp,.vlt.json,.json";
     inp.onchange=async()=>{
       const file=inp.files[0];if(!file)return;
       const text=await file.text();
@@ -2303,6 +2326,22 @@ function loadSelectedTemplate(){
   S.objs=JSON.parse(JSON.stringify(t.objs));
   S.selId=null;S._ef=undefined;
   S.modal=null;
+  R();
+  showToast("Opened: "+S.tplName);
+}
+
+// Called by Swift when a ".vltmp" is double-clicked in Finder (standalone open,
+// NOT print-edit): load the template straight into the canvas with the normal
+// New/Open/Save toolbar. Mirrors loadSelectedTemplate without the picker.
+function initOpenTemplate(t){
+  if(!t||!t.objs)return;
+  window._printEdit=false;
+  S.modal=null;
+  S.tplName=t.name||"Untitled Template";
+  S._loadedId=t.id||null;
+  S.spec=BL.find(l=>l.n===t.specN)||BL[1];
+  S.objs=sanitizeObjs(t.objs);
+  S.selId=null;S._ef=undefined;
   R();
   showToast("Opened: "+S.tplName);
 }
@@ -2424,6 +2463,32 @@ function initBoundData(records, columns, filename, headerRow, isXLSX){
   showToast("Bound "+(records?records.length:0)+" row"+((records&&records.length===1)?"":"s")+" from "+(filename||"file"));
 }
 function hasBoundData(){ return !!(isCustomMode()&&window._boundData&&window._boundData.records&&window._boundData.records.length); }
+
+// Called by Swift when a ".vlcus" is double-clicked in Finder (Custom Designer).
+// Loads the saved canvas AND the embedded data snapshot in one shot, so the
+// document opens exactly as it was saved even if the source file is gone.
+//   doc = {name, specN, objs, copies, records:[{col:val}], columns:[String],
+//          filename, headerRow, isXLSX, hasDataSource}
+function initCustomDocument(doc){
+  if(!doc)return;
+  window._printEdit=false;
+  S.modal=null;
+  // Canvas
+  S.tplName=doc.name||"Custom Label";
+  S._loadedId=null;
+  S.spec=BL.find(l=>l.n===doc.specN)||BL[1];
+  S.objs=sanitizeObjs(doc.objs||[]);
+  S.selId=null;S._ef=undefined;
+  S.copies=Math.max(1,doc.copies||1);
+  // Embedded data snapshot → bind it like a freshly-loaded source.
+  if(doc.records&&doc.records.length){
+    initBoundData(doc.records, doc.columns||[], doc.filename||"", !!doc.headerRow, !!doc.isXLSX);
+  } else {
+    window._boundData=null; RX=[]; S.recIdx=0; S._csvName="";
+  }
+  R();
+  showToast("Opened: "+S.tplName);
+}
 
 // "Choose data file…" → Swift opens an NSOpenPanel (csv,xlsx), sending the current
 // "first row is headers" toggle so the xlsx read matches the user's intent.

@@ -44,6 +44,13 @@ public final class DesignerWindowController: NSObject {
     /// True while the designer is open to edit a template for the print window.
     private var designerForPrintEdit = false
 
+    /// A template to inject into the designer once it loads (Finder open of a
+    /// ".vltmp" — template mode). Cleared after it's applied.
+    private var pendingOpenTemplate: VLTemplate?
+    /// A custom-label document to load once the designer loads (Finder open of a
+    /// ".vlcus" — custom mode). Cleared after it's applied.
+    private var pendingOpenCustomDoc: CustomLabelDocument?
+
     /// Invoked when the print-edit round-trip ends — either the user saved and
     /// returned, or closed the designer. `saved` is whether a save happened on
     /// this return; `templateIndex` echoes the index being edited (if known).
@@ -109,6 +116,36 @@ public final class DesignerWindowController: NSObject {
     /// the print window; on return/close, `onEditReturn` fires.
     public func openForPrintEdit(templateIndex: Int) {
         present(editTemplateIndex: templateIndex)
+    }
+
+    /// Open (or focus) the designer and load `template` (template mode — used by the
+    /// Template Designer's Finder ".vltmp" open handler). If a window is already on
+    /// screen it's reused and the template injected immediately.
+    public func openTemplate(_ template: VLTemplate) {
+        pendingOpenTemplate = template
+        if window != nil {
+            NSApp.activate(ignoringOtherApps: true)
+            window?.makeKeyAndOrderFront(nil)
+            window?.makeFirstResponder(webView)
+            applyPendingOpenTemplate()
+        } else {
+            present(editTemplateIndex: nil)
+        }
+    }
+
+    /// Open (or focus) the designer and load `doc`'s canvas + embedded data (custom
+    /// mode — used by the Custom Designer's Finder ".vlcus" open handler).
+    public func openCustomDocument(_ doc: CustomLabelDocument) {
+        guard mode == .custom else { return }
+        pendingOpenCustomDoc = doc
+        if window != nil {
+            NSApp.activate(ignoringOtherApps: true)
+            window?.makeKeyAndOrderFront(nil)
+            window?.makeFirstResponder(webView)
+            applyPendingOpenCustomDoc()
+        } else {
+            present(editTemplateIndex: nil)
+        }
     }
 
     private func present(editTemplateIndex: Int?) {
@@ -297,6 +334,59 @@ public final class DesignerWindowController: NSObject {
                               completionHandler: nil)
     }
 
+    /// Inject the pending Finder-opened template (".vltmp", template mode) into the
+    /// canvas with the normal toolbar (not print-edit). No-op if none pending.
+    private func applyPendingOpenTemplate() {
+        guard let tpl = pendingOpenTemplate else { return }
+        pendingOpenTemplate = nil
+        guard let wv = webView,
+              let data = try? JSONEncoder().encode(tpl),
+              let json = String(data: data, encoding: .utf8)
+        else { return }
+        wv.evaluateJavaScript("if(typeof initOpenTemplate==='function')initOpenTemplate(\(json));",
+                              completionHandler: nil)
+    }
+
+    /// Inject the pending Finder-opened custom-label document (".vlcus", custom
+    /// mode): restore the in-memory bound data source (so Refresh works) and push
+    /// the canvas + embedded rows to the page. No-op if none pending.
+    private func applyPendingOpenCustomDoc() {
+        guard mode == .custom, let doc = pendingOpenCustomDoc else { return }
+        pendingOpenCustomDoc = nil
+        // Rebuild the in-memory bound data source from the embedded snapshot so
+        // "Refresh from source" can re-read the live file (if it still exists).
+        let records = doc.records
+        if let url = doc.dataSourceURL, !records.isEmpty {
+            dataSource = BoundDataSource(path: url,
+                                         headerRow: doc.dataSourceHeaderRow,
+                                         records: records,
+                                         columns: doc.headers)
+        } else {
+            dataSource = nil
+        }
+        guard let wv = webView else { return }
+        // Build the JS doc object the page's initCustomDocument expects.
+        guard let objData = try? JSONEncoder().encode(doc.template.objs),
+              let objJSON = String(data: objData, encoding: .utf8),
+              let recData = try? JSONEncoder().encode(records),
+              let recJSON = String(data: recData, encoding: .utf8),
+              let colData = try? JSONSerialization.data(withJSONObject: doc.headers),
+              let colJSON = String(data: colData, encoding: .utf8)
+        else { return }
+        let isXLSX = doc.dataSourceURL?.pathExtension.lowercased() == "xlsx"
+        let filename = (doc.dataSourceURL?.lastPathComponent ?? "").jsonQuoted
+        let nameJSON = doc.name.jsonQuoted
+        let specJSON = doc.specN.jsonQuoted
+        let js = """
+        if(typeof initCustomDocument==='function')initCustomDocument({\
+        name:\(nameJSON),specN:\(specJSON),objs:\(objJSON),copies:\(doc.copies),\
+        records:\(recJSON),columns:\(colJSON),filename:\(filename),\
+        headerRow:\(doc.dataSourceHeaderRow),isXLSX:\(isXLSX),\
+        hasDataSource:\(doc.dataSourceURL != nil)});
+        """
+        wv.evaluateJavaScript(js, completionHandler: nil)
+    }
+
     /// Confirm (native dialog), then delete a template by id and refresh the
     /// designer's Open list.
     private func confirmAndDeleteTemplate(id: String, name: String) {
@@ -342,11 +432,14 @@ public final class DesignerWindowController: NSObject {
     /// then inject the chosen template into the designer.
     private func browseForTemplate() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.json]
+        // Accept the new ".vltmp" type and the legacy ".json"/".vlt.json" forms.
+        var types: [UTType] = [.json]
+        if let vltmp = UTType(filenameExtension: TemplateStore.templateExtension) { types.append(vltmp) }
+        panel.allowedContentTypes = types
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.directoryURL = AppSettings.shared.templatesFolderURL
-        panel.message = "Choose a VectorLabel template (.json) to open"
+        panel.message = "Choose a VectorLabel template (.vltmp) to open"
         panel.level = .modalPanel  // above the floating designer window
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
@@ -697,6 +790,73 @@ public final class DesignerWindowController: NSObject {
         }
     }
 
+    /// Save the current Custom Designer canvas + embedded data as a ".vlcus"
+    /// document via an NSSavePanel. `payload` is {name, specN, objs, copies}.
+    private func handleSaveCustomDocument(_ payloadAny: Any?) {
+        guard mode == .custom, let payload = payloadAny as? [String: Any] else { return }
+
+        // Decode the canvas into a VLTemplate (same {name, specN, objs} shape).
+        let name = (payload["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Custom Label"
+        let tplDict: [String: Any] = [
+            "name": name,
+            "specN": (payload["specN"] as? String) ?? "",
+            "objs": payload["objs"] ?? [],
+            "version": 1,
+            "id": UUID().uuidString,
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: tplDict),
+              let template = try? JSONDecoder().decode(VLTemplate.self, from: data)
+        else { return }
+        let copies = max(1, (payload["copies"] as? Int) ?? 1)
+
+        // Embedded data snapshot from the in-memory bound source (if any).
+        var rows: [[String: String]] = []
+        var headers: [String] = []
+        var srcPath = ""
+        var headerRow = true
+        if let ds = dataSource {
+            headers = ds.columns
+            rows = ds.records.map { $0.fields }
+            srcPath = ds.path.path
+            headerRow = ds.headerRow
+        }
+
+        let doc = CustomLabelDocument(
+            name: name,
+            template: template,
+            headers: headers,
+            rows: rows,
+            dataSourcePath: srcPath,
+            dataSourceHeaderRow: headerRow,
+            copies: copies)
+
+        let panel = NSSavePanel()
+        if let type = UTType(filenameExtension: CustomLabelStore.fileExtension) {
+            panel.allowedContentTypes = [type]
+        }
+        panel.nameFieldStringValue = "\(name).\(CustomLabelStore.fileExtension)"
+        panel.directoryURL = CustomLabelStore.defaultFolderURL
+        panel.message = "Save this custom label (.vlcus)"
+        panel.level = .modalPanel
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            MainActor.assumeIsolated {
+                do {
+                    try CustomLabelStore.save(doc, to: url)
+                    self?.webView?.evaluateJavaScript(
+                        "if(typeof showToast==='function')showToast('Saved: '+\(CustomLabelStore.stem(url).jsonQuoted));",
+                        completionHandler: nil)
+                } catch {
+                    let alert = NSAlert()
+                    alert.alertStyle = .warning
+                    alert.messageText = "Couldn’t save the custom label"
+                    alert.informativeText = "\(error.localizedDescription)"
+                    alert.runModal()
+                }
+            }
+        }
+    }
+
     /// Build the WireRecord to render the custom label against. The page sends the
     /// currently-previewed record as a flat {col:value} object; we map it onto a
     /// WireRecord. Missing/nil ⇒ an empty record (static text only).
@@ -790,6 +950,12 @@ extension DesignerWindowController: WKNavigationDelegate {
         if let idx = pendingEditTemplateIndex {
             // Editing for the print window: load that template, skip the picker.
             applyPendingEdit(idx)
+        } else if pendingOpenCustomDoc != nil {
+            // Finder opened a ".vlcus" (custom mode): load canvas + embedded data.
+            applyPendingOpenCustomDoc()
+        } else if pendingOpenTemplate != nil {
+            // Finder opened a ".vltmp" (template mode): load it into the canvas.
+            applyPendingOpenTemplate()
         } else {
             // Standalone mode: ensure the New/Open/Save toolbar (not the
             // print-edit Return buttons) and open the template picker.
@@ -834,6 +1000,11 @@ extension DesignerWindowController: WKScriptMessageHandler {
             // Custom Designer only — render the current canvas as a single label
             // and submit it to the IPC print queue.
             handlePrintCustom(body["payload"])
+
+        case "saveCustomDocument":
+            // Custom Designer only — write the current canvas + embedded data as a
+            // ".vlcus" document (Finder-openable). Shows a Save panel.
+            handleSaveCustomDocument(body["payload"])
 
         case "deleteTemplate":
             if let p = body["payload"] as? [String: Any], let id = p["id"] as? String {

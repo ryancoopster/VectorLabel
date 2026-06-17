@@ -30,6 +30,15 @@ mkdir -p "$DEST"
 for x in "${APPS[@]}"; do rm -rf "$DEST/$x.app"; cp -R "$SRCDIR/$x.app" "$DEST/$x.app"; done
 touch "$DEST/VectorLabelEngine.app"   # nudge Finder's icon cache
 
+# Register the designers with Launch Services so the .vltmp / .vlcus document
+# associations (declared in their Info.plists) take effect immediately — a
+# double-click in Finder opens the right designer without a logout/reboot.
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+if [ -x "$LSREGISTER" ]; then
+  echo "→ Registering document types with Launch Services…"
+  "$LSREGISTER" -f "$DEST/VectorLabelTemplateDesigner.app" "$DEST/VectorLabelCustomDesigner.app" || true
+fi
+
 echo "→ Launching Engine + Auto Print…"
 open "$DEST/VectorLabelEngine.app"
 open "$DEST/VectorLabelAutoPrint.app"

@@ -33,6 +33,38 @@ if [ "${VARIANT:-}" = "beta" ]; then SUFFIX=".beta"; NAMESUFFIX=" (Beta)"; SUBDI
 DISTDIR="dist/$SUBDIR"
 rm -rf "$DISTDIR"; mkdir -p "$DISTDIR"
 
+# register_doc_type  PLIST  UTI  EXT  DESCRIPTION
+# Add an exported UTI (conforming to public.json + public.data, with the given
+# filename extension) and a matching CFBundleDocumentTypes entry (Editor / Owner,
+# app-icon document icon) to the given Info.plist. Idempotent per plist (the plist
+# is freshly copied from Info.plist in package_one each run).
+register_doc_type() {
+  local PLIST="$1" UTI="$2" EXT="$3" DESC="$4"
+
+  # --- UTExportedTypeDeclarations (array of one declaration) ---
+  "$PB" -c "Add :UTExportedTypeDeclarations array" "$PLIST"
+  "$PB" -c "Add :UTExportedTypeDeclarations:0 dict" "$PLIST"
+  "$PB" -c "Add :UTExportedTypeDeclarations:0:UTTypeIdentifier string $UTI" "$PLIST"
+  "$PB" -c "Add :UTExportedTypeDeclarations:0:UTTypeDescription string $DESC" "$PLIST"
+  "$PB" -c "Add :UTExportedTypeDeclarations:0:UTTypeIconFile string AppIcon" "$PLIST"
+  "$PB" -c "Add :UTExportedTypeDeclarations:0:UTTypeConformsTo array" "$PLIST"
+  "$PB" -c "Add :UTExportedTypeDeclarations:0:UTTypeConformsTo:0 string public.json" "$PLIST"
+  "$PB" -c "Add :UTExportedTypeDeclarations:0:UTTypeConformsTo:1 string public.data" "$PLIST"
+  "$PB" -c "Add :UTExportedTypeDeclarations:0:UTTypeTagSpecification dict" "$PLIST"
+  "$PB" -c "Add :UTExportedTypeDeclarations:0:UTTypeTagSpecification:public.filename-extension array" "$PLIST"
+  "$PB" -c "Add :UTExportedTypeDeclarations:0:UTTypeTagSpecification:public.filename-extension:0 string $EXT" "$PLIST"
+
+  # --- CFBundleDocumentTypes (array of one type, owning the UTI) ---
+  "$PB" -c "Add :CFBundleDocumentTypes array" "$PLIST"
+  "$PB" -c "Add :CFBundleDocumentTypes:0 dict" "$PLIST"
+  "$PB" -c "Add :CFBundleDocumentTypes:0:CFBundleTypeName string $DESC" "$PLIST"
+  "$PB" -c "Add :CFBundleDocumentTypes:0:CFBundleTypeRole string Editor" "$PLIST"
+  "$PB" -c "Add :CFBundleDocumentTypes:0:LSHandlerRank string Owner" "$PLIST"
+  "$PB" -c "Add :CFBundleDocumentTypes:0:CFBundleTypeIconFile string AppIcon" "$PLIST"
+  "$PB" -c "Add :CFBundleDocumentTypes:0:LSItemContentTypes array" "$PLIST"
+  "$PB" -c "Add :CFBundleDocumentTypes:0:LSItemContentTypes:0 string $UTI" "$PLIST"
+}
+
 # package_one  EXE_NAME  BUNDLE_ID  DISPLAY_NAME  LSUIELEMENT(true|false)  LINK_LIBUSB(0|1)
 package_one() {
   local EXE="$1" ID="$2" NAME="$3" LSUI="$4" LIBUSB="$5"
@@ -60,6 +92,20 @@ package_one() {
   cp "$BINDIR/$EXE" "$APP/Contents/MacOS/$EXE"
   for b in "$BINDIR"/*.bundle; do [ -d "$b" ] && cp -R "$b" "$APP/Contents/Resources/"; done
   [ -f MacApp/Sources/Core/AppIcon.icns ] && cp MacApp/Sources/Core/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+
+  # Custom file types (Phase 4): the two designers OWN one document type each so
+  # Finder shows the files and a double-click opens the right app.
+  #   Template Designer → ".vltmp"  (com.sai.vectorlabel.vltmp)
+  #   Custom Designer   → ".vlcus"  (com.sai.vectorlabel.vlcus)
+  # Both are JSON (conform to public.json + public.data). The doc icon is the app
+  # icon for now (Phase 7 finalizes icons). Registered as an exported UTI plus a
+  # CFBundleDocumentTypes entry (Editor role, Owner rank).
+  case "$EXE" in
+    VectorLabelTemplateDesigner) register_doc_type "$APP/Contents/Info.plist" \
+        "com.sai.vectorlabel.vltmp" "vltmp" "VectorLabel Template" ;;
+    VectorLabelCustomDesigner)   register_doc_type "$APP/Contents/Info.plist" \
+        "com.sai.vectorlabel.vlcus" "vlcus" "VectorLabel Custom Label" ;;
+  esac
 
   local DYLIB_PATH=""
   if [ "$LIBUSB" = "1" ]; then

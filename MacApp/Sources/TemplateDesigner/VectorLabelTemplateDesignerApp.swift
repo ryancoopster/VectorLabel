@@ -27,6 +27,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var designer: DesignerWindowController!
 
+    /// A ".vltmp"/".vlt.json" file the OS asked us to open before the designer
+    /// existed (application(_:open:) can fire before applicationDidFinishLaunching).
+    private var pendingOpenURLs: [URL] = []
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         if Bundle.main.bundleIdentifier == nil || Bundle.main.bundleIdentifier!.isEmpty {
             UserDefaults.standard.set("com.sai.vectorlabel.templatedesigner", forKey: "CFBundleIdentifier")
@@ -39,7 +43,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         TemplateStore.shared.reload()
         designer = DesignerWindowController(mode: .template)
-        designer.open()
+        // If Finder handed us a document before launch finished, open it directly;
+        // otherwise show the normal picker.
+        if let url = pendingOpenURLs.last {
+            pendingOpenURLs.removeAll()
+            openTemplate(at: url)
+        } else {
+            designer.open()
+        }
+    }
+
+    /// Finder double-click / `open` of a ".vltmp" (or legacy ".vlt.json"). May fire
+    /// before applicationDidFinishLaunching, so stash the URL until the designer
+    /// exists, then load it into the canvas.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let url = urls.last(where: { TemplateStore.isTemplateFile($0) }) ?? urls.last
+        else { return }
+        if designer == nil {
+            pendingOpenURLs = [url]   // applicationDidFinishLaunching will consume it
+        } else {
+            openTemplate(at: url)
+        }
+    }
+
+    /// Load the template at `url` into the designer (or report a read failure).
+    private func openTemplate(at url: URL) {
+        if let tpl = TemplateStore.loadTemplate(from: url) {
+            designer.openTemplate(tpl)
+        } else {
+            designer.open()
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Couldn’t open “\(url.lastPathComponent)”"
+            alert.informativeText = "The file isn’t a valid VectorLabel template."
+            alert.runModal()
+        }
     }
 
     /// Re-open the designer window when the user clicks the Dock icon and no
