@@ -7,10 +7,13 @@ shown in the menu-bar footer. Fix commits reference the code-review finding IDs
 
 ## [Unreleased]
 ### Fixed
+- **[H3]** Pinned the CSV read/write round-trip: factored the RFC-4180 writer into
+  WireExportParser.csvText and added a golden test proving an inline edit survives
+  save->reload, including values with commas, quotes, and embedded newlines.
 - **[H2]** Inline-edit CSV writeback can no longer corrupt the file: removed the
   sorted-union header fallback (it reordered/dropped columns) -- it now aborts if
   the source header can't be read -- and corrected the false "session-only"
-  comment. (Round-trip safety from H1; writer becomes JSON after migration.)
+  comment. (Read/write round-trip safety comes from the H1 parser.)
 - **[H1]** Replaced the line-based CSV parser with a full-document RFC-4180
   parser: a newline inside a quoted field no longer tears the record (and drops
   every row after it, shifting absolute indices). Ragged rows are padded, never
@@ -19,7 +22,7 @@ shown in the menu-bar footer. Fix commits reference the code-review finding IDs
   unsynchronized from parallel per-printer tasks and dumped raw cassette bytes on
   every read.
 - **[M13]** "Detect supply" now gives feedback: it reports failure ("Couldn't
-  read the cassette…") and busy ("Printer busy…") instead of the toast silently
+  read the cassetteï¿½") and busy ("Printer busyï¿½") instead of the toast silently
   fading, and a forced detect during a print is no longer silently dropped.
 - **[M4]** Closed a filename -> JavaScript injection seam: dynamic strings spliced
   into evaluateJavaScript now route through one escaper that also handles CR/LF and

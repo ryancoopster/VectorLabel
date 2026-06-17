@@ -366,15 +366,8 @@ final class PrintWindowController: NSObject {
             print("[writeRecordsBackToCSV] aborting: could not read the source header from \(url.lastPathComponent)")
             return
         }
-        func field(_ s: String) -> String {
-            if s.contains(",") || s.contains("\"") || s.contains("\n") || s.contains("\r") {
-                return "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\""
-            }
-            return s
-        }
-        var lines = [headers.map(field).joined(separator: ",")]
-        for r in records { lines.append(headers.map { field(r.fields[$0] ?? "") }.joined(separator: ",")) }
-        try? (lines.joined(separator: "\r\n") + "\r\n").write(to: url, atomically: true, encoding: .utf8)
+        let csv = WireExportParser.csvText(records: records, headers: headers)
+        try? csv.write(to: url, atomically: true, encoding: .utf8)
     }
 
     // MARK: – Dev HTML loader

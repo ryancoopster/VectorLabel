@@ -72,6 +72,21 @@ final class FoundationTests: XCTestCase {
         XCTAssertEqual(recs?[1].fields["Cable"], "A")
     }
 
+    /// An inline edit must survive save → reload, including values with commas,
+    /// quotes, and newlines. Pins the writer/parser symmetry (H3).
+    func testCSVWriteReadRoundTrip() {
+        let headers = ["_Side", "Number", "Cable"]
+        let src = "_Side,Number,Cable\nSource,\"N,1\nX\",\"a\"\"b\"\nDestination,N1,LAN\n"
+        let recs = WireExportParser.parseRecords(from: src)!
+        let out = WireExportParser.csvText(records: recs, headers: headers)
+        let recs2 = WireExportParser.parseRecords(from: out)!
+        XCTAssertEqual(recs.count, recs2.count)
+        XCTAssertEqual(recs2[0].fields["Number"], "N,1\nX")   // comma + embedded newline preserved
+        XCTAssertEqual(recs2[0].fields["Cable"], "a\"b")       // doubled-quote preserved
+        XCTAssertEqual(recs2[1].fields["Cable"], "LAN")
+        XCTAssertEqual(recs2[1].side, "Destination")
+    }
+
     /// jsonQuoted must neutralize JS-injection vectors when a value (e.g. a
     /// filename) is spliced into evaluateJavaScript. Regression guard for M4.
     func testJsonQuotedEscaping() {

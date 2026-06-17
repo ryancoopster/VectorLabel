@@ -389,4 +389,19 @@ enum WireExportParser {
         if !field.isEmpty || !record.isEmpty { endRecord() }   // flush a final row with no trailing newline
         return rows
     }
+
+    /// Serialize records to RFC-4180 CSV text in the given column order. Fields
+    /// containing a comma, quote, or newline are quoted (with `"` doubled). The
+    /// inverse of `parseCSV`/`parseRecords`, so a save→reload round-trips exactly.
+    static func csvText(records: [WireRecord], headers: [String]) -> String {
+        func field(_ s: String) -> String {
+            if s.contains(",") || s.contains("\"") || s.contains("\n") || s.contains("\r") {
+                return "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+            }
+            return s
+        }
+        var lines = [headers.map(field).joined(separator: ",")]
+        for r in records { lines.append(headers.map { field(r.fields[$0] ?? "") }.joined(separator: ",")) }
+        return lines.joined(separator: "\r\n") + "\r\n"
+    }
 }
