@@ -2,6 +2,10 @@
 <html>
 <head>
 <meta charset="UTF-8">
+<!-- Defense in depth: restrict images to local/data, block plugins, remote
+     connections (exfil), and base-uri. (No script-src so the app's inline scripts
+     keep working; untrusted template fields are sanitized on import.) -->
+<meta http-equiv="Content-Security-Policy" content="img-src 'self' data:; object-src 'none'; connect-src 'none'; base-uri 'none'">
 <title>VectorLabel Template Designer</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1870,13 +1874,30 @@ function _vlPost(action,payload){
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
     window.webkit.messageHandlers.vectorlabel.postMessage({action,payload:payload===undefined?null:payload});
 }
+// Templates loaded from disk are UNTRUSTED (the user opens arbitrary .vlt.json,
+// and any file dropped in the Templates folder auto-loads). Their object fields
+// are interpolated into HTML attributes / inline handlers in this privileged
+// WKWebView, so sanitize on every import: regenerate the id (so a crafted id can't
+// break out of an attribute/onclick), whitelist the font, allow only an embedded
+// data:image src (no javascript:/remote), and only a known symbol key.
+function sanitizeObjs(objs){
+  return (objs||[]).map(function(o){
+    const c=Object.assign({},o);
+    c.id=mid();
+    if(typeof c.font==='string' && FONTS.indexOf(c.font)<0) c.font='Helvetica Neue';
+    if(c.src!=null && !/^data:image\//i.test(String(c.src))) c.src='';
+    if(c.sym!=null && !(String(c.sym) in SYMBOLS)) c.sym='';
+    return c;
+  });
+}
+
 function initPrintEdit(template){
   window._printEdit=true;
   if(template){
     S.tplName=template.name||"Untitled Template";
     S._loadedId=template.id||null;
     S.spec=BL.find(l=>l.n===template.specN)||BL[1];
-    S.objs=JSON.parse(JSON.stringify(template.objs||[])).map(o=>({...o,id:(o.id&&o.id!=='undefined')?String(o.id):mid()}));
+    S.objs=sanitizeObjs(template.objs);
     S.selId=null;S._ef=undefined;S.modal=null;
   }
   R();
@@ -2019,7 +2040,7 @@ async function openTemplate(){
 // Called by Swift with the contents of ~/Documents/VectorLabel/Templates/.
 function initDesignerTemplates(templates){
   window._folderTemplates=(templates||[]).map(t=>({
-    id:t.id, name:t.name||"Unnamed", specN:t.specN||"BM-32-427", objs:t.objs||[]
+    id:t.id, name:t.name||"Unnamed", specN:t.specN||"BM-32-427", objs:sanitizeObjs(t.objs)
   }));
   if(S.modal==="open"){
     S._loadedTemplates=window._folderTemplates.slice();

@@ -7,6 +7,11 @@ shown in the menu-bar footer. Fix commits reference the code-review finding IDs
 
 ## [Unreleased]
 ### Fixed
+- **[H14/H15]** Treat imported templates as untrusted: both web views now sanitize
+  template objects on import (regenerate ids, whitelist/strip the font, allow only
+  data:image sources), closing the stored-XSS sinks where object fields were
+  spliced into attributes/onclick/<img>. Added a restrictive Content-Security-
+  Policy (img-src self/data:, object-src/connect-src none).
 - **[H4/H5/H6/M1/M2/L1]** Formula engine now agrees across the designer preview,
   print preview, and Swift print renderer: Swift matches the JS comparison grammar
   (string equality after a bare identifier), JS truthiness ("0" is truthy),

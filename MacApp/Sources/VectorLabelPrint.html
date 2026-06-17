@@ -2,6 +2,10 @@
 <html>
 <head>
 <meta charset="UTF-8">
+<!-- Defense in depth: restrict images to local/data, block plugins, remote
+     connections (exfil), and base-uri. (No script-src so inline scripts keep
+     working; untrusted template fields are sanitized on import.) -->
+<meta http-equiv="Content-Security-Policy" content="img-src 'self' data:; object-src 'none'; connect-src 'none'; base-uri 'none'">
 <title>VectorLabel — Print</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -2006,6 +2010,20 @@ function openEditor(){
   }
 }
 
+// Templates are loaded from arbitrary .vlt.json files in the Templates folder, so
+// treat them as untrusted: give each object a fresh id, strip anything but
+// alphanumerics from the font (it's spliced into a CSS font-family), and allow
+// only an embedded data:image src (so a crafted src can't inject via <img onerror>).
+function sanitizeObjs(objs){
+  return (objs||[]).map(function(o){
+    const c=Object.assign({},o);
+    c.id='t'+Math.random().toString(36).slice(2,8);
+    if(typeof c.font==='string') c.font=c.font.replace(/[^A-Za-z0-9 \-]/g,'');
+    if(c.src!=null && !/^data:image\//i.test(String(c.src))) c.src='';
+    return c;
+  });
+}
+
 // Called by Swift after the user saves/cancels in the designer: refresh the
 // template list without disturbing the current selection or print task.
 function refreshTemplates(templates){
@@ -2013,7 +2031,7 @@ function refreshTemplates(templates){
   const prevName=P.templates[P.activeTpl]&&P.templates[P.activeTpl].name;
   P.templates=templates.map(t=>({
     id:t.id||t.name, name:t.name||"Unnamed", specN:t.specN||"BM-32-427",
-    objs:(t.objs||[]).map(o=>({...o, id:(o.id&&o.id!=='undefined')?String(o.id):('t'+Math.random().toString(36).slice(2,8))}))
+    objs:sanitizeObjs(t.objs)
   }));
   const idx=P.templates.findIndex(t=>t.name===prevName);
   P.activeTpl=idx>=0?idx:Math.max(0,Math.min(P.activeTpl,P.templates.length-1));
@@ -2057,7 +2075,7 @@ function initPrintWindow(opts){
       id: t.id||t.name,
       name: t.name||"Unnamed",
       specN: t.specN||"BM-32-427",
-      objs: (t.objs||[]).map(o=>({...o, id:(o.id&&o.id!=='undefined')?String(o.id):('t'+Math.random().toString(36).slice(2,8))}))
+      objs: sanitizeObjs(t.objs)
     }));
     P.activeTpl=0;
   }
