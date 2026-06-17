@@ -93,7 +93,7 @@ struct MenuBarView: View {
             } else {
                 ForEach(recentPrints.prints.prefix(settings.recentPrintsCount)) { recent in
                     RecentPrintRow(recent: recent) {
-                        appDelegate.openReprint(recent)
+                        appDelegate.reprint(recent)
                     }
                 }
             }

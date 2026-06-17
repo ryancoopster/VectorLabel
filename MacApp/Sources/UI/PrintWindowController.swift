@@ -48,13 +48,6 @@ public final class PrintWindowController: NSObject {
     // reflects edits made anywhere (standalone designer or edit-return).
     private var templatesObserver: AnyCancellable?
 
-    // Recent-print record for the job submitted this session. nil until Print is
-    // clicked; while nil, a ✕ Cancel records a "cancelled before printing" entry.
-    // Once a job is submitted to the backend it is recorded as `.printing`; live
-    // outcome tracking (complete / cancelled-mid-print / failed) now lives in the
-    // Engine's menu bar, not this window.
-    private var currentRecentPrintID: UUID?
-
     // The app that was frontmost before the print window appeared, so we can
     // return the user to it after the print starts.
     private var previousApp: NSRunningApplication?
@@ -98,7 +91,6 @@ public final class PrintWindowController: NSObject {
         self.sourceFileURL = fileURL
         self.csvWritebackURL = fileURL
         self.reprinting = nil
-        self.currentRecentPrintID = nil
         openWindowIfNeeded()
         sendInitialState()
     }
@@ -126,7 +118,6 @@ public final class PrintWindowController: NSObject {
             return
         }
         self.reprinting = recent
-        self.currentRecentPrintID = nil
         // Clear any stale export URL so the recorded source filename comes from
         // the reprint record, not a previously-opened export.
         self.sourceFileURL = nil
@@ -500,19 +491,12 @@ extension PrintWindowController: WKScriptMessageHandler {
             }
 
         case "close":
-            // The ✕ Cancel button sends the configured job flagged cancelled so
-            // it's still saved to Recent Prints (for reprint), even though it was
-            // never printed. Skip when there's nothing printable, or when a print
-            // was already submitted this session (that record tracks its own
-            // status via observePrintJob, so don't add a duplicate).
-            if currentRecentPrintID == nil,
-               let payload = body["payload"] as? [String: Any],
-               payload["cancelled"] as? Bool == true,
-               let indices = payload["recordIndices"] as? [Int], !indices.isEmpty,
-               let recent = makeRecentPrint(from: payload, labelCount: indices.count,
-                                            status: .cancelledBeforePrinting) {
-                RecentPrintsStore.shared.add(recent)
-            }
+            // Recent Prints are owned and recorded entirely by the Engine (the only
+            // process that prints) — see VectorLabelEngineApp.consumeResolved. A
+            // ✕ Cancel before submitting therefore records nothing here: the job
+            // never reached the Engine, and writing to this process's own
+            // RecentPrintsStore would not appear in the menu bar (a separate
+            // process's store) and could clobber the Engine's history file.
             close()
 
         case "ready":
@@ -567,10 +551,10 @@ extension PrintWindowController: WKScriptMessageHandler {
         // into each label's VGL via BradyVGL.vglCutMode.
         let cutMode = CutMode(rawValue: (payload["cutMode"] as? String) ?? "") ?? .afterJobLast
 
-        // Build the Recent Print record up front (on the main actor — it reads
-        // window state). Then render the (potentially large) batch OFF the main
-        // thread so the UI doesn't freeze, and submit back on the main actor.
-        let recent = makeRecentPrint(from: payload, labelCount: selectedRecords.count, status: .printing)
+        // Recent Prints are recorded by the Engine (the only process that prints),
+        // not here — see VectorLabelEngineApp.consumeResolved. Render the
+        // (potentially large) batch OFF the main thread so the UI doesn't freeze,
+        // and submit back on the main actor.
         DispatchQueue.global(qos: .userInitiated).async {
             // Render first, dropping any record that produces no raster. The cut
             // index MUST be keyed over the labels actually EMITTED — if we keyed it
@@ -620,10 +604,6 @@ extension PrintWindowController: WKScriptMessageHandler {
                 } catch {
                     print("[PrintWindowController] submit failed: \(error)")
                 }
-                if let recent = recent {
-                    self.currentRecentPrintID = recent.id
-                    RecentPrintsStore.shared.add(recent)
-                }
                 // The print has started: close the window, return to the prior app,
                 // and pop the menu so the user can watch the queue. Live job outcome
                 // (complete / cancelled / failed) is now tracked by the Engine's menu
@@ -636,48 +616,6 @@ extension PrintWindowController: WKScriptMessageHandler {
                 started?()
             }
         }
-    }
-
-    /// Builds a RecentPrint from a print/cancel payload, or nil if required
-    /// fields are missing. Shared by the print and the cancel-records paths.
-    private func makeRecentPrint(from payload: [String: Any], labelCount: Int,
-                                 status: RecentPrint.Status) -> RecentPrint? {
-        guard let printerID     = payload["printerID"]     as? String,
-              let title         = payload["title"]         as? String,
-              let templateName  = payload["templateName"]  as? String,
-              let recordIndices = payload["recordIndices"] as? [Int]
-        else { return nil }
-
-        let printRange: RecentPrint.PrintRange
-        if let rangeStr = payload["printRange"] as? String {
-            printRange = RecentPrint.PrintRange(rawValue: rangeStr) ?? .selected
-        } else {
-            printRange = .selected
-        }
-
-        // Capture the active filter/sort (objects) as JSON so reprint restores them.
-        func jsonString(_ v: Any?) -> String? {
-            guard let v = v, !(v is NSNull),
-                  let data = try? JSONSerialization.data(withJSONObject: v),
-                  let s = String(data: data, encoding: .utf8) else { return nil }
-            return s
-        }
-
-        return RecentPrint(
-            date: Date(),
-            title: title,
-            sourceFileName: sourceFileURL?.lastPathComponent ?? reprinting?.sourceFileName ?? "",
-            templateName: templateName,
-            printerName: lastStatus?.printers.first { $0.id == printerID }?.name ?? printerID,
-            labelCount: labelCount,
-            printRange: printRange,
-            selectedIndices: recordIndices,
-            status: status,
-            rangeFrom: payload["rangeFrom"] as? Int,
-            rangeTo: payload["rangeTo"] as? Int,
-            filterJSON: jsonString(payload["filter"]),
-            sortJSON: jsonString(payload["sort"])
-        )
     }
 
     private func evalJS(_ js: String) {

@@ -48,6 +48,29 @@ public struct PrinterStatusEntry: Codable {
     }
 }
 
+/// One in-flight (printing or queued) job in the Engine's published status, so a
+/// front-end can show live progress and offer a Cancel control without owning the
+/// USB device. The Engine fills this from its in-flight `PrintJob`(s).
+public struct ActiveJobStatus: Codable, Identifiable, Hashable {
+    public var id: String          // the PrintJobFile id (== queue filename stem)
+    public var title: String       // display name (→ PrintJob.title)
+    public var sourceApp: String   // "autoprint" | "customdesigner" | …
+    public var labelCount: Int     // total labels in the job
+    public var completed: Int      // labels finished so far
+    public var state: State        // printing | queued
+
+    public enum State: String, Codable {
+        case printing
+        case queued
+    }
+
+    public init(id: String, title: String, sourceApp: String,
+                labelCount: Int, completed: Int, state: State) {
+        self.id = id; self.title = title; self.sourceApp = sourceApp
+        self.labelCount = labelCount; self.completed = completed; self.state = state
+    }
+}
+
 /// Snapshot of printer + cassette state the Engine writes to the IPC status file
 /// (printers.json) whenever it changes; front-ends watch the file to stay in sync.
 public struct PrinterStatusFile: Codable {
@@ -55,11 +78,32 @@ public struct PrinterStatusFile: Codable {
     public var updatedAt: String
     public var engineRunning: Bool
     public var printers: [PrinterStatusEntry]
+    /// In-flight jobs across all printers (printing or queued), for cross-process
+    /// progress + cancel. Defaults to empty so older readers/writers still work.
+    public var activeJobs: [ActiveJobStatus]
 
-    public init(updatedAt: String, engineRunning: Bool, printers: [PrinterStatusEntry]) {
+    public init(updatedAt: String, engineRunning: Bool,
+                printers: [PrinterStatusEntry],
+                activeJobs: [ActiveJobStatus] = []) {
         self.schema = 1
         self.updatedAt = updatedAt
         self.engineRunning = engineRunning
         self.printers = printers
+        self.activeJobs = activeJobs
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case schema, updatedAt, engineRunning, printers, activeJobs
+    }
+
+    // Tolerant decode so a status file written before `activeJobs` existed still
+    // decodes (older Engine ↔ newer front-end during a partial update).
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        schema        = (try? c.decode(Int.self, forKey: .schema)) ?? 1
+        updatedAt     = (try? c.decode(String.self, forKey: .updatedAt)) ?? ""
+        engineRunning = (try? c.decode(Bool.self, forKey: .engineRunning)) ?? false
+        printers      = (try? c.decode([PrinterStatusEntry].self, forKey: .printers)) ?? []
+        activeJobs    = (try? c.decode([ActiveJobStatus].self, forKey: .activeJobs)) ?? []
     }
 }

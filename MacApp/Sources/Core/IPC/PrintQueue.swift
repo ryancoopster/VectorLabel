@@ -1,5 +1,25 @@
 import Foundation
 
+/// A control message a front-end writes for the Engine (which owns the device):
+/// today only `cancel` of an in-flight job. The Engine watches `control/`, acts
+/// on each request, and deletes the file.
+public struct ControlRequest: Codable {
+    public enum Action: String, Codable {
+        case cancel
+    }
+    public var schema: Int
+    public var requestId: String   // unique; also the control filename stem
+    public var action: Action
+    public var jobId: String       // the PrintJobFile id to act on
+
+    public init(requestId: String = UUID().uuidString, action: Action, jobId: String) {
+        self.schema = 1
+        self.requestId = requestId
+        self.action = action
+        self.jobId = jobId
+    }
+}
+
 /// File-based print queue shared between the front-end apps (submitters) and the
 /// Engine (consumer). Reuses the FSEvents pattern the export flow already relies
 /// on. Layout under `root` (default: ~/Library/Application Support/VectorLabel[ Beta]/ipc):
@@ -8,6 +28,7 @@ import Foundation
 ///   processing/  <id>.json      — claimed by the Engine (atomic move = the lock)
 ///   done/        <id>.json      — finished
 ///   failed/      <id>.json      — errored / undecodable
+///   control/     <reqid>.json   — front-end → Engine control requests (cancel)
 ///   status/      printers.json  — Engine-published printer+cassette status
 ///
 /// `root` is injectable so tests can point at a temp directory.
@@ -20,12 +41,13 @@ public struct PrintQueue {
     public var processingDir: URL { root.appendingPathComponent("processing", isDirectory: true) }
     public var doneDir: URL       { root.appendingPathComponent("done", isDirectory: true) }
     public var failedDir: URL     { root.appendingPathComponent("failed", isDirectory: true) }
+    public var controlDir: URL    { root.appendingPathComponent("control", isDirectory: true) }
     public var statusDir: URL     { root.appendingPathComponent("status", isDirectory: true) }
     public var statusFile: URL    { statusDir.appendingPathComponent("printers.json") }
 
     public func ensureDirs() {
         let fm = FileManager.default
-        for d in [queueDir, processingDir, doneDir, failedDir, statusDir] {
+        for d in [queueDir, processingDir, doneDir, failedDir, controlDir, statusDir] {
             try? fm.createDirectory(at: d, withIntermediateDirectories: true)
         }
     }
@@ -114,6 +136,54 @@ public struct PrintQueue {
             try? FileManager.default.removeItem(at: dest)
             try? FileManager.default.moveItem(at: url, to: dest)
         }
+    }
+
+    // MARK: – Reprint (read a finished job's rendered labels back)
+
+    /// Read a finished job's `PrintJobFile` from done/ (by its id == filename
+    /// stem). Returns nil if the file is missing or undecodable. Used by reprint
+    /// to re-submit the same rendered VGL labels as a fresh job.
+    public func readDoneJob(id: String) -> PrintJobFile? {
+        let url = doneDir.appendingPathComponent("\(id).json")
+        guard let data = try? Data(contentsOf: url),
+              let job = try? JSONDecoder().decode(PrintJobFile.self, from: data) else { return nil }
+        return job
+    }
+
+    // MARK: – Control channel (front-ends request, Engine acts)
+
+    /// Write a control request atomically (temp → rename), so the Engine's watcher
+    /// — which only matches `.json` — never sees a partial file.
+    @discardableResult
+    public func writeControl(_ request: ControlRequest) throws -> URL {
+        ensureDirs()
+        let data = try JSONEncoder().encode(request)
+        let finalURL = controlDir.appendingPathComponent("\(request.requestId).json")
+        let tmpURL = controlDir.appendingPathComponent("\(request.requestId).json.tmp")
+        try data.write(to: tmpURL, options: .atomic)
+        try? FileManager.default.removeItem(at: finalURL)
+        try FileManager.default.moveItem(at: tmpURL, to: finalURL)
+        return finalURL
+    }
+
+    /// All pending control request files (Engine-side backlog drain at startup).
+    public func pendingControlURLs() -> [URL] {
+        let items = (try? FileManager.default.contentsOfDirectory(
+            at: controlDir, includingPropertiesForKeys: nil)) ?? []
+        return items.filter { $0.pathExtension == "json" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    }
+
+    /// Decode a control request file (Engine side). Returns nil if unreadable.
+    public func readControl(_ url: URL) -> ControlRequest? {
+        guard let data = try? Data(contentsOf: url),
+              let req = try? JSONDecoder().decode(ControlRequest.self, from: data) else { return nil }
+        return req
+    }
+
+    /// Delete a handled control request file (Engine side).
+    public func deleteControl(_ url: URL) {
+        try? FileManager.default.removeItem(at: url)
     }
 
     // MARK: – Status (Engine publishes, front-ends read)

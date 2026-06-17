@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import Combine
+@preconcurrency import UserNotifications
 import VectorLabelCore
 import VectorLabelEngineKit
 import VectorLabelUI
@@ -37,10 +38,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     // Print-queue consumer.
     private var queueWatcher: PrintQueueWatcher?
-    // Maps an in-flight PrintJob.id → the queue's processing/ file URL, so a job's
-    // completion can be routed back to PrintQueue.complete(). Also retains the
-    // per-job Combine subscription until completion.
-    private var inFlight: [UUID: (processingURL: URL, sub: AnyCancellable)] = [:]
+    // Watches ipc/control/ for front-end control requests (cancel).
+    private var controlWatcher: FolderWatcher?
+    // Maps an in-flight PrintJob.id → the queue's processing/ file URL, the IPC job
+    // id (queue filename stem, for cancel matching), the Recent-Prints record id (to
+    // update its lifecycle status on completion), and the per-job Combine
+    // subscriptions (progress + completion), retained until the job finishes.
+    private var inFlight: [UUID: InFlightEntry] = [:]
+
+    private struct InFlightEntry {
+        let processingURL: URL
+        let ipcJobID: String
+        let recentID: UUID
+        var subs: Set<AnyCancellable>
+    }
+
+    private let recents = RecentPrintsStore.shared
 
     // Debounces status publishing so a burst of @Published changes coalesces.
     private var statusPublishWork: DispatchWorkItem?
@@ -61,11 +74,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         PrinterManager.shared.startScan()
 
         startQueueConsumer()
+        startControlWatcher()
         startStatusPublisher()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         queueWatcher?.stop()
+        controlWatcher?.stop()
         PrinterManager.shared.stopScan()
         // Best-effort: publish that the engine is no longer running so front-ends
         // can show "engine offline".
@@ -124,9 +139,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     /// Launch the standalone Custom Designer app (packaged suite only).
     func openCustomDesigner() { DesignerAppLauncher.launch(.custom) }
 
-    /// Reprint lives in the Auto Print app (which owns the print window). Launch
-    /// it; per-record reprint wiring over IPC arrives in a later phase.
-    func openReprint(_ recent: RecentPrint) { DesignerAppLauncher.launch(.autoPrint) }
+    /// Reprint a finished job: read its rendered VGL labels back from
+    /// ipc/done/<jobId>.json and re-submit them as a NEW job (fresh id, same
+    /// labels/title/templateName/printerID/cutMode/estLabelMs). The Engine prints
+    /// it like any other queued job — recording its own fresh Recent-Prints entry
+    /// via consumeResolved. If the done file is gone, notify + log and no-op.
+    func reprint(_ recent: RecentPrint) {
+        let queue = PrintQueue()
+        guard !recent.jobId.isEmpty, let original = queue.readDoneJob(id: recent.jobId) else {
+            print("[Engine] reprint: done file for jobId=\(recent.jobId) not found — cannot reprint")
+            notify(title: "Can’t reprint",
+                   body: "The original print data for “\(recent.title)” is no longer available.")
+            return
+        }
+        let fresh = PrintJobFile(
+            id: UUID().uuidString,
+            createdAt: ISO8601DateFormatter().string(from: Date()),
+            sourceApp: original.sourceApp,
+            title: original.title,
+            templateName: original.templateName,
+            printerID: original.printerID,
+            copies: original.copies,
+            cutMode: original.cutMode,
+            estLabelMs: original.estLabelMs,
+            labels: original.labels
+        )
+        do {
+            try queue.write(fresh)
+            // Drain immediately so it prints even if the FSEvent is coalesced/missed.
+            queueWatcher?.drainBacklog()
+        } catch {
+            print("[Engine] reprint: failed to enqueue: \(error)")
+            notify(title: "Reprint failed",
+                   body: "Couldn’t queue “\(recent.title)” for reprinting.")
+        }
+    }
+
+    /// Post a local user notification (best-effort; silently ignored if the user
+    /// hasn't granted notification permission).
+    private func notify(title: String, body: String) {
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert]) { granted, _ in
+            guard granted else { return }
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = body
+            let request = UNNotificationRequest(identifier: UUID().uuidString,
+                                                content: content, trigger: nil)
+            center.add(request)
+        }
+    }
 
     func openExportFolder() {
         let url = AppSettings.shared.exportsFolderURL
@@ -240,8 +302,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             templateName: job.templateName,
             printerID: printerID,
             cutMode: job.cutMode,
-            estLabelMs: job.estLabelMs
+            estLabelMs: job.estLabelMs,
+            ipcJobID: job.id,
+            sourceApp: job.sourceApp
         )
+
+        // RECENTS OWNERSHIP: the Engine is the only process that prints, so it is
+        // the single source of truth for Recent Prints. Record a `.printing` entry
+        // now (carrying the IPC job id so Reprint can re-read ipc/done/<id>.json),
+        // and update its status to the terminal outcome on completion.
+        let printerName = PrinterManager.shared.printers.first { $0.id == printerID }?.name ?? printerID
+        let recent = RecentPrint(
+            date: Date(),
+            title: job.title,
+            sourceFileName: "",
+            templateName: job.templateName,
+            printerName: printerName,
+            labelCount: job.labels.count,
+            printRange: .all,
+            selectedIndices: [],
+            status: .printing,
+            jobId: job.id
+        )
+        recents.add(recent)
+
+        // MENU-POP-ON-PRINT: open the menu-bar popover so the user can watch
+        // progress. This is the cross-process replacement for the old front-end
+        // onPrintStarted → popover (now dead across separate processes).
+        showMenuPopover()
+
+        var subs = Set<AnyCancellable>()
+
+        // Republish status whenever this job's progress advances, so a front-end
+        // watching printers.json sees live `completed` counts (debounced publish).
+        printJob.$completedLabels
+            .dropFirst()
+            .sink { [weak self] _ in self?.schedulePublishStatus() }
+            .store(in: &subs)
+        printJob.$isPrinting
+            .dropFirst()
+            .sink { [weak self] _ in self?.schedulePublishStatus() }
+            .store(in: &subs)
 
         // Observe completion: when isComplete flips true (success path) OR didFail
         // is set, finalize the queue file exactly once and drop the subscription.
@@ -249,20 +350,69 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // the check off $isComplete — PrinterManager sets isComplete=true on every
         // terminal outcome (success, cancel, fail), at which point didFail is
         // already settled.
-        let sub = printJob.$isComplete
+        printJob.$isComplete
             .filter { $0 }
             .first()
             .sink { [weak self] _ in
                 guard let self = self else { return }
-                self.finishInFlight(printJob, success: !printJob.didFail)
+                self.finishInFlight(printJob)
             }
-        inFlight[printJob.id] = (processingURL, sub)
+            .store(in: &subs)
+
+        inFlight[printJob.id] = InFlightEntry(
+            processingURL: processingURL,
+            ipcJobID: job.id,
+            recentID: recent.id,
+            subs: subs
+        )
     }
 
-    private func finishInFlight(_ job: PrintJob, success: Bool) {
+    private func finishInFlight(_ job: PrintJob) {
         guard let entry = inFlight.removeValue(forKey: job.id) else { return }
-        entry.sub.cancel()
-        PrintQueue().complete(entry.processingURL, success: success)
+        entry.subs.forEach { $0.cancel() }
+        // Update the Recent-Prints record to its terminal lifecycle state.
+        let status: RecentPrint.Status
+        if job.didFail            { status = .failed }
+        else if job.isCancelled   { status = .cancelledMidPrint }
+        else                      { status = .complete }
+        recents.updateStatus(id: entry.recentID, to: status)
+        // A cancelled job's processing/ file still moves to done/ (its rendered
+        // labels are retained there so it can still be reprinted); only a true
+        // device failure routes to failed/.
+        PrintQueue().complete(entry.processingURL, success: !job.didFail)
+    }
+
+    // MARK: – Control channel (cancel an in-flight job)
+
+    private func startControlWatcher() {
+        let queue = PrintQueue()
+        queue.ensureDirs()
+        let fw = FolderWatcher(root: queue.controlDir, suffix: ".json", latency: 0.1) { [weak self] url in
+            Task { @MainActor in self?.handleControl(url) }
+        }
+        fw.start()
+        controlWatcher = fw
+        // Drain any control requests already waiting (written before we started).
+        for url in queue.pendingControlURLs() { handleControl(url) }
+    }
+
+    private func handleControl(_ url: URL) {
+        let queue = PrintQueue()
+        guard let req = queue.readControl(url) else {
+            queue.deleteControl(url)   // undecodable — drop it
+            return
+        }
+        switch req.action {
+        case .cancel:
+            // Find the matching in-flight PrintJob by its IPC id and cancel it.
+            // PrinterManager.cancel marks it cancelled; the existing $isComplete
+            // observer then runs finishInFlight (completing the queue file).
+            if let pair = inFlight.first(where: { $0.value.ipcJobID == req.jobId }),
+               let printJob = PrinterManager.shared.activeJobs.first(where: { $0.id == pair.key }) {
+                PrinterManager.shared.cancel(printJob)
+            }
+        }
+        queue.deleteControl(url)
     }
 
     // MARK: – Status publisher

@@ -54,10 +54,26 @@ public extension PrinterManager {
                 activeJobCount: activeJobs.filter { $0.printerID == dev.id && !$0.isComplete }.count
             )
         }
+        // Publish each in-flight (cross-process) job so a front-end can show live
+        // progress and offer Cancel. Only jobs that carry an IPC id are published
+        // (in-process jobs like the calibration grid have none). The id is the
+        // PrintJobFile id, which the front-end uses to cancel via the control channel.
+        let jobs: [ActiveJobStatus] = activeJobs.compactMap { j in
+            guard !j.isComplete, !j.ipcJobID.isEmpty else { return nil }
+            return ActiveJobStatus(
+                id: j.ipcJobID,
+                title: j.title,
+                sourceApp: j.sourceApp,
+                labelCount: j.labelCount,
+                completed: j.completedLabels,
+                state: j.isPrinting ? .printing : .queued
+            )
+        }
         return PrinterStatusFile(
             updatedAt: ISO8601DateFormatter().string(from: Date()),
             engineRunning: true,
-            printers: entries
+            printers: entries,
+            activeJobs: jobs
         )
     }
 }

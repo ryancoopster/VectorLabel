@@ -34,6 +34,14 @@ public final class PrintJob: ObservableObject, Identifiable {
     public let templateName: String
     public let printerID: String
 
+    /// The originating IPC PrintJobFile id (queue filename stem), when this job
+    /// came from the cross-process queue. Lets the Engine publish a stable id in
+    /// the status's activeJobs so a front-end can cancel by that id. Empty for
+    /// in-process jobs (calibration grid).
+    public let ipcJobID: String
+    /// Originating app ("autoprint" | "customdesigner" | …), for status display.
+    public let sourceApp: String
+
     @Published public var completedLabels: Int = 0
     @Published public var isComplete: Bool = false
     @Published public var isPrinting: Bool = false   // false while queued, true once printing
@@ -49,9 +57,11 @@ public final class PrintJob: ObservableObject, Identifiable {
 
     public var progress: Double { labelCount > 0 ? Double(completedLabels) / Double(labelCount) : 0 }
 
-    public init(title: String, labelCount: Int, templateName: String, printerID: String) {
+    public init(title: String, labelCount: Int, templateName: String, printerID: String,
+                ipcJobID: String = "", sourceApp: String = "") {
         self.title = title; self.labelCount = labelCount
         self.templateName = templateName; self.printerID = printerID
+        self.ipcJobID = ipcJobID; self.sourceApp = sourceApp
     }
 
     public func requestCancel() {
@@ -176,6 +186,8 @@ public final class PrinterManager: ObservableObject {
         printerID: String,
         cutMode: CutMode = .afterJobLast,
         estLabelMs: Int = 1000,
+        ipcJobID: String = "",
+        sourceApp: String = "",
         delayMs: Int = AppSettings.shared.interLabelDelayMs
     ) -> PrintJob {
         // The cut command is baked into each label's VGL by the front-end renderer;
@@ -185,7 +197,9 @@ public final class PrinterManager: ObservableObject {
             title: title,
             labelCount: jobs.count,
             templateName: templateName,
-            printerID: printerID
+            printerID: printerID,
+            ipcJobID: ipcJobID,
+            sourceApp: sourceApp
         )
         activeJobs.append(job)
         setPrinterBusy(printerID, busy: true)

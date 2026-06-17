@@ -602,3 +602,115 @@ final class FoundationTests: XCTestCase {
         XCTAssertEqual(loaded.id, "abc")
     }
 }
+
+// MARK: – Group 1: cross-process recents + reprint + progress/cancel IPC
+
+/// The IPC plumbing that makes the Engine the single owner of recent prints,
+/// reprint (re-read done/<id>.json), live job progress, and the cancel control
+/// channel. All Core-only, so they run in the test target without EngineKit.
+final class IPCGroup1Tests: XCTestCase {
+
+    /// A fresh temp ipc root per test so nothing leaks into the real support dir.
+    private func tempQueue() -> PrintQueue {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("vl-ipc-\(UUID().uuidString)", isDirectory: true)
+        let q = PrintQueue(root: root)
+        q.ensureDirs()
+        return q
+    }
+
+    // MARK: RecentPrint.jobId round-trips and tolerates older files.
+
+    func testRecentPrintJobIDRoundTrip() throws {
+        let r = RecentPrint(date: Date(), title: "T", sourceFileName: "",
+                            templateName: "Tmpl", printerName: "M610",
+                            labelCount: 3, printRange: .all, selectedIndices: [],
+                            status: .printing, jobId: "abc-123")
+        let data = try JSONEncoder().encode(r)
+        let back = try JSONDecoder().decode(RecentPrint.self, from: data)
+        XCTAssertEqual(back.jobId, "abc-123")
+        XCTAssertEqual(back.status, .printing)
+    }
+
+    func testRecentPrintDecodesWithoutJobID() throws {
+        // A recent_prints.json written before the jobId field must still decode
+        // (defaulting jobId to "") rather than wiping all history.
+        let legacy = """
+        [{"id":"\(UUID().uuidString)","date":0,"title":"Old","sourceFileName":"x.csv",
+          "templateName":"T","printerName":"M610","labelCount":2,
+          "printRange":"all","selectedIndices":[],"status":"complete"}]
+        """
+        let arr = try JSONDecoder().decode([RecentPrint].self, from: Data(legacy.utf8))
+        XCTAssertEqual(arr.count, 1)
+        XCTAssertEqual(arr[0].jobId, "")           // missing → empty, not a decode failure
+        XCTAssertEqual(arr[0].title, "Old")
+    }
+
+    // MARK: PrinterStatusFile.activeJobs round-trips and tolerates older files.
+
+    func testStatusFileActiveJobsRoundTrip() throws {
+        let job = ActiveJobStatus(id: "j1", title: "Run", sourceApp: "customdesigner",
+                                  labelCount: 10, completed: 4, state: .printing)
+        let status = PrinterStatusFile(updatedAt: "now", engineRunning: true,
+                                       printers: [], activeJobs: [job])
+        let data = try JSONEncoder().encode(status)
+        let back = try JSONDecoder().decode(PrinterStatusFile.self, from: data)
+        XCTAssertEqual(back.activeJobs.count, 1)
+        XCTAssertEqual(back.activeJobs[0].id, "j1")
+        XCTAssertEqual(back.activeJobs[0].completed, 4)
+        XCTAssertEqual(back.activeJobs[0].state, .printing)
+    }
+
+    func testStatusFileDecodesWithoutActiveJobs() throws {
+        // A printers.json from before activeJobs existed must still decode.
+        let legacy = #"{"schema":1,"updatedAt":"now","engineRunning":true,"printers":[]}"#
+        let back = try JSONDecoder().decode(PrinterStatusFile.self, from: Data(legacy.utf8))
+        XCTAssertTrue(back.engineRunning)
+        XCTAssertEqual(back.activeJobs, [])        // missing → empty
+    }
+
+    // MARK: Reprint reads a finished job's labels back from done/.
+
+    func testReadDoneJobReturnsOriginalLabels() throws {
+        let q = tempQueue()
+        let original = PrintJobFile(
+            id: "done-1", createdAt: "now", sourceApp: "autoprint",
+            title: "Reprint me", templateName: "T", printerID: "v:p:s",
+            copies: 1, cutMode: .afterJobLast, estLabelMs: 700,
+            labels: [Data([1, 2, 3]), Data([4, 5, 6])])
+        // Simulate a finished job by writing it straight into done/.
+        let data = try JSONEncoder().encode(original)
+        try data.write(to: q.doneDir.appendingPathComponent("done-1.json"))
+
+        let read = try XCTUnwrap(q.readDoneJob(id: "done-1"))
+        XCTAssertEqual(read.title, "Reprint me")
+        XCTAssertEqual(read.labels, [Data([1, 2, 3]), Data([4, 5, 6])])
+        XCTAssertEqual(read.cutMode, .afterJobLast)
+        XCTAssertNil(q.readDoneJob(id: "missing"))   // no file → nil, no throw
+    }
+
+    // MARK: Control channel: write → drain → decode → delete.
+
+    func testControlRequestRoundTripAndDrain() throws {
+        let q = tempQueue()
+        XCTAssertTrue(q.pendingControlURLs().isEmpty)
+
+        let url = try q.writeControl(ControlRequest(action: .cancel, jobId: "job-9"))
+        let pending = q.pendingControlURLs()
+        XCTAssertEqual(pending.count, 1)
+
+        let req = try XCTUnwrap(q.readControl(pending[0]))
+        XCTAssertEqual(req.action, .cancel)
+        XCTAssertEqual(req.jobId, "job-9")
+
+        q.deleteControl(url)
+        XCTAssertTrue(q.pendingControlURLs().isEmpty)  // handled requests are removed
+    }
+
+    /// The control dir is created by ensureDirs() and lives alongside the others.
+    func testControlDirCreated() {
+        let q = tempQueue()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: q.controlDir.path))
+        XCTAssertEqual(q.controlDir.lastPathComponent, "control")
+    }
+}

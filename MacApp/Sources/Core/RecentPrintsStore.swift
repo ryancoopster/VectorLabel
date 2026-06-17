@@ -15,6 +15,12 @@ public struct RecentPrint: Codable, Identifiable, Hashable {
     public var selectedIndices: [Int]      // which record indices were checked
     public var status: Status = .complete  // lifecycle outcome of the job
 
+    /// The IPC PrintJobFile id (filename stem) this record was printed from. The
+    /// Engine records it so Reprint can re-read the finished job's rendered VGL
+    /// labels from ipc/done/<jobId>.json and re-submit them. Empty for records
+    /// that predate the Engine-owned recents (no done file to reprint from).
+    public var jobId: String = ""
+
     public enum PrintRange: String, Codable {
         case all, selected, range
     }
@@ -49,14 +55,15 @@ public struct RecentPrint: Codable, Identifiable, Hashable {
     enum CodingKeys: String, CodingKey {
         case id, date, title, sourceFileName, templateName, printerName
         case labelCount, printRange, selectedIndices, status, rangeFrom, rangeTo
-        case filterJSON, sortJSON
+        case filterJSON, sortJSON, jobId
     }
 
     public init(id: UUID = UUID(), date: Date, title: String, sourceFileName: String,
                 templateName: String, printerName: String, labelCount: Int,
                 printRange: PrintRange, selectedIndices: [Int], status: Status = .complete,
                 rangeFrom: Int? = nil, rangeTo: Int? = nil,
-                filterJSON: String? = nil, sortJSON: String? = nil) {
+                filterJSON: String? = nil, sortJSON: String? = nil,
+                jobId: String = "") {
         self.id = id
         self.date = date
         self.title = title
@@ -71,6 +78,7 @@ public struct RecentPrint: Codable, Identifiable, Hashable {
         self.rangeTo = rangeTo
         self.filterJSON = filterJSON
         self.sortJSON = sortJSON
+        self.jobId = jobId
     }
 
     /// Absolute print date and time, e.g. "Jun 15, 2026 at 3:42 PM".
@@ -113,6 +121,7 @@ extension RecentPrint {
         rangeTo         = try? c.decode(Int.self, forKey: .rangeTo)
         filterJSON      = try? c.decode(String.self, forKey: .filterJSON)
         sortJSON        = try? c.decode(String.self, forKey: .sortJSON)
+        jobId           = (try? c.decode(String.self, forKey: .jobId)) ?? ""
     }
 }
 

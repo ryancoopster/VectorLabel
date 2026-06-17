@@ -18,6 +18,15 @@ public final class IPCPrintBackend: PrintBackend {
     public private(set) var status: PrinterStatusFile?
     public var onStatusChange: ((PrinterStatusFile) -> Void)?
 
+    /// The id of the most recently submitted job, so a UI that doesn't capture the
+    /// id `submit` returns can still address it (e.g. for a Cancel button).
+    public private(set) var lastSubmittedJobID: String?
+
+    /// The in-flight jobs from the Engine's latest published status (printing or
+    /// queued), so a front-end can render progress + a Cancel control without
+    /// owning the USB device. Empty when no status / no active jobs.
+    public var activeJobs: [ActiveJobStatus] { status?.activeJobs ?? [] }
+
     public init(queue: PrintQueue = PrintQueue()) {
         self.queue = queue
     }
@@ -53,6 +62,15 @@ public final class IPCPrintBackend: PrintBackend {
 
     public func submit(_ job: PrintJobFile) throws {
         try queue.write(job)
+        lastSubmittedJobID = job.id
+    }
+
+    /// Request the Engine cancel an in-flight job (by its PrintJobFile id) via the
+    /// IPC control channel. Best-effort: the Engine acts on the request when it
+    /// reads the control file. Defaults to the last submitted job's id.
+    public func cancel(jobId: String? = nil) {
+        guard let id = jobId ?? lastSubmittedJobID, !id.isEmpty else { return }
+        try? queue.writeControl(ControlRequest(action: .cancel, jobId: id))
     }
 
     public func requestCassetteRefresh(printerID: String?) {
