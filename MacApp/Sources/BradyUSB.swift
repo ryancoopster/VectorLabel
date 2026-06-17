@@ -70,13 +70,23 @@ enum BradyUSB {
 
     // MARK: – Enumeration
 
+    #if canImport(CLibUSB)
+    /// One libusb context for the whole app lifetime (freed implicitly at process
+    /// exit). Reusing a single context avoids leaking a context — each with its own
+    /// event thread/fd set — on every printer open, which previously happened on the
+    /// success and claim/open-failure paths of `openPrinterByID` (every print,
+    /// calibration, and cassette read). Lazy `static let` init is thread-safe.
+    static let sharedContext: OpaquePointer? = {
+        var c: OpaquePointer?
+        return libusb_init(&c) == 0 ? c : nil
+    }()
+    #endif
+
     /// Returns all connected Brady printers.
     static func enumeratePrinters() -> [PrinterDevice] {
         var results: [PrinterDevice] = []
         #if canImport(CLibUSB)
-        var ctx: OpaquePointer?
-        guard libusb_init(&ctx) == 0, let context = ctx else { return [] }
-        defer { libusb_exit(context) }
+        guard let context = sharedContext else { return [] }
 
         var list: UnsafeMutablePointer<OpaquePointer?>?
         let count = libusb_get_device_list(context, &list)
@@ -118,15 +128,13 @@ enum BradyUSB {
     /// Open a specific printer by its composite ID.
     static func openPrinterByID(_ deviceID: String) throws -> OpaquePointer {
         #if canImport(CLibUSB)
-        var ctx: OpaquePointer?
-        guard libusb_init(&ctx) == 0, let context = ctx else { throw USBError.initFailed }
+        guard let context = sharedContext else { throw USBError.initFailed }
 
         var list: UnsafeMutablePointer<OpaquePointer?>?
         let count = libusb_get_device_list(context, &list)
         defer { libusb_free_device_list(list, 1) }
 
         guard count > 0, let devices = list else {
-            libusb_exit(context)
             throw USBError.deviceNotFound(deviceID)
         }
 
@@ -160,7 +168,6 @@ enum BradyUSB {
             return h
         }
 
-        libusb_exit(context)
         throw USBError.deviceNotFound(deviceID)
         #else
         throw USBError.initFailed

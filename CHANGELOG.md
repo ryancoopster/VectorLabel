@@ -7,6 +7,9 @@ shown in the menu-bar footer. Fix commits reference the code-review finding IDs
 
 ## [Unreleased]
 ### Fixed
+- **[H10]** Fixed a libusb context leak on every printer open (success and
+  claim/open-failure paths) by using one shared, app-lifetime context instead of
+  initializing/exiting one per call.
 - **[H9]** A failed template save on edit-return no longer silently reverts the
   print window to the old template -- it now alerts and keeps the designer open
   so the edit is not lost.
