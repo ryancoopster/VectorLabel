@@ -304,6 +304,7 @@ struct RecentPrintRow: View {
         case .printing:                return "printer.fill"
         case .cancelledBeforePrinting,
              .cancelledMidPrint:        return "xmark.circle.fill"
+        case .failed:                  return "exclamationmark.triangle.fill"
         }
     }
 
@@ -313,6 +314,7 @@ struct RecentPrintRow: View {
         case .printing:                return .vlAccent
         case .cancelledBeforePrinting,
              .cancelledMidPrint:        return .vlOrange
+        case .failed:                  return .vlRed
         }
     }
 

@@ -611,10 +611,9 @@ extension PrintWindowController: WKScriptMessageHandler {
         cancellable = job.$isComplete.sink { [weak self] complete in
             guard complete else { return }
             Task { @MainActor in
-                RecentPrintsStore.shared.updateStatus(
-                    id: recentID,
-                    to: job.isCancelled ? .cancelledMidPrint : .complete
-                )
+                let outcome: RecentPrint.Status = job.didFail ? .failed
+                    : (job.isCancelled ? .cancelledMidPrint : .complete)
+                RecentPrintsStore.shared.updateStatus(id: recentID, to: outcome)
                 if let c = cancellable { self?.printStatusObservers.remove(c) }
             }
         }

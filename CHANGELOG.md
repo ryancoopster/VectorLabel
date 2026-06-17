@@ -7,6 +7,9 @@ shown in the menu-bar footer. Fix commits reference the code-review finding IDs
 
 ## [Unreleased]
 ### Fixed
+- **[H8]** USB print failures are no longer recorded as a successful "Complete"
+  print -- added a `.failed` job/recent-print status (shown in red in the menu)
+  set when a send throws mid-batch.
 - **[H13]** Print window no longer rebuilt its entire DOM every 5s on idle — the
   USB scan now publishes the printer/cassette lists only when they actually
   change, eliminating the idle CPU/battery drain and scroll/focus disruption.

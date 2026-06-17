@@ -51,6 +51,17 @@ final class PrintJob: ObservableObject, Identifiable {
     func requestCancel() {
         cancelLock.lock(); _isCancelled = true; cancelLock.unlock()
     }
+
+    // Set from the background print task on a send error, read on the main thread
+    // when the job finishes — shares the cancel lock for thread safety.
+    private var _didFail = false
+    var didFail: Bool {
+        cancelLock.lock(); defer { cancelLock.unlock() }
+        return _didFail
+    }
+    func markFailed() {
+        cancelLock.lock(); _didFail = true; cancelLock.unlock()
+    }
 }
 
 // MARK: – PrinterManager
@@ -225,6 +236,7 @@ final class PrinterManager: ObservableObject {
                 }
             } catch {
                 print("[PrinterManager] Print failed: \(error)")
+                job.markFailed()
             }
             lock.signal()
             await finish()

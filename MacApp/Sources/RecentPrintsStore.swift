@@ -25,6 +25,7 @@ struct RecentPrint: Codable, Identifiable, Hashable {
         case complete                // all labels sent
         case cancelledBeforePrinting // ✕ Cancel before a print started
         case cancelledMidPrint       // job cancelled while printing
+        case failed                  // a USB/send error aborted the job
 
         var displayName: String {
             switch self {
@@ -32,6 +33,7 @@ struct RecentPrint: Codable, Identifiable, Hashable {
             case .complete:                return "Complete"
             case .cancelledBeforePrinting: return "Cancelled before printing"
             case .cancelledMidPrint:       return "Cancelled mid-print"
+            case .failed:                  return "Failed"
             }
         }
     }
