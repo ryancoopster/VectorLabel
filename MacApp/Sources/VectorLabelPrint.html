@@ -1292,16 +1292,31 @@ function loadedCassette(){ return (window._cassettes||{})[P.activePrinter]||null
 // BM-109-427 is the bulk box for M6-33-427, so treat them as the same supply.
 function supplyCore(pn){ let c=(pn||"").replace(/^[A-Za-z0-9]+-/,"").toUpperCase(); if(c==="109-427")c="33-427"; return c; }
 
-function cassetteMismatch(){
-  const c=loadedCassette(), t=tpl();
-  if(!c||!t||!c.partNumber)return false;
-  return supplyCore(c.partNumber)!==supplyCore(t.specN);
+// Whether the loaded cassette's actual label dimensions equal the template's
+// required label size. The SmartCell reports the real loaded label size, which is
+// the ground truth — a part number can differ while the physical label is the
+// same size (e.g. a 1.5"×1.5" supply that reports a 33-427 part number). Compares
+// both orientations, since the printer may report W/H swapped vs the template.
+function sameLabelSize(c,specN){
+  if(!c||typeof c.labelWidthMils!=='number'||typeof c.labelHeightMils!=='number')return false;
+  const spec=BL.find(l=>l.n===specN)||BL.find(l=>supplyCore(l.n)===supplyCore(specN));
+  if(!spec)return false;
+  const tw=spec.tw*1000, th=spec.th*1000, cw=c.labelWidthMils, ch=c.labelHeightMils;
+  const tol=100; // mils (~0.1")
+  const close=(a,b)=>Math.abs(a-b)<=tol;
+  return (close(cw,tw)&&close(ch,th))||(close(cw,th)&&close(ch,tw));
 }
 
 function cassetteMatched(){
   const c=loadedCassette(), t=tpl();
   if(!c||!t||!c.partNumber)return false;
-  return supplyCore(c.partNumber)===supplyCore(t.specN);
+  return supplyCore(c.partNumber)===supplyCore(t.specN) || sameLabelSize(c,t.specN);
+}
+
+function cassetteMismatch(){
+  const c=loadedCassette(), t=tpl();
+  if(!c||!t||!c.partNumber)return false;
+  return !cassetteMatched();
 }
 
 // Estimated labels remaining on the loaded roll = labelsPerRoll × supply%/100.
