@@ -201,7 +201,6 @@ final class PrinterManager: ObservableObject {
                 let count = jobs.count
                 let perLabelMs = max(150, estLabelMs)
                 let initialRem = BradyUSB.labelsRemaining(handle: handle)   // -1 if unavailable
-                BradyUSB.printDebugLog("job: \(count) labels, \(perLabelMs)ms/label, initialRem=\(initialRem)")
                 for (i, vglJob) in jobs.enumerated() {
                     if job.isCancelled { break }
                     try BradyUSB.sendJob(vglJob, handle: handle)
@@ -223,14 +222,8 @@ final class PrinterManager: ObservableObject {
                     while !job.isCancelled {
                         let rem = BradyUSB.labelsRemaining(handle: handle)
                         elapsedMs = Int((DispatchTime.now().uptimeNanoseconds &- startNs) / 1_000_000)
-                        if rem >= 0 && (initialRem - rem) >= count {
-                            BradyUSB.printDebugLog("DONE confirmed +\(elapsedMs)ms rem=\(rem) (dropped \(initialRem - rem))")
-                            break
-                        }
-                        if elapsedMs >= capMs {
-                            BradyUSB.printDebugLog("done wait hit cap +\(elapsedMs)ms rem=\(rem) (dropped \(rem >= 0 ? initialRem - rem : -1))")
-                            break
-                        }
+                        if rem >= 0 && (initialRem - rem) >= count { break }   // truly finished
+                        if elapsedMs >= capMs { break }                        // safety cap
                         usleep(200_000)
                     }
                 }

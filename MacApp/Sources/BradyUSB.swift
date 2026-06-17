@@ -205,16 +205,6 @@ enum BradyUSB {
         #endif
     }
 
-    /// DIAGNOSTIC: append a flushed line to /tmp/vectorlabel-print.log.
-    static func printDebugLog(_ msg: String) {
-        let line = "[print] \(msg)\n"
-        let url = URL(fileURLWithPath: "/tmp/vectorlabel-print.log")
-        if let data = line.data(using: .utf8) {
-            if let fh = try? FileHandle(forWritingTo: url) { fh.seekToEndOfFile(); fh.write(data); try? fh.close() }
-            else { try? data.write(to: url) }
-        }
-    }
-
     /// Read the cassette's "labels remaining" counter, which decrements by the
     /// job's label count when a print physically completes — a reliable "done"
     /// signal over the USB back-channel. Returns -1 if unavailable. Located relative
@@ -300,33 +290,13 @@ enum BradyUSB {
                                      Int32(buf.count), &readCount, 500)
             }
             if rc == 0, readCount >= 108 {
-                let raw = Array(readBuf.prefix(Int(readCount)))
-                let parsed = parseSmartCell(raw)
-                // Temporary diagnostics → /tmp/vectorlabel-smartcell.log (flushed).
-                let hex = raw.map { String(format: "%02X", $0) }.joined(separator: " ")
-                debugLog("OK \(raw.count) bytes  part=\(parsed?.partNumber ?? "?")  ribbon=\(parsed?.ribbonCode ?? "?")  supply=\(parsed?.supplyRemainingPct ?? -1)%  label=\(parsed?.labelWidthMils ?? -1)x\(parsed?.labelHeightMils ?? -1)mil\n      raw: \(hex)")
-                return parsed
+                return parseSmartCell(Array(readBuf.prefix(Int(readCount))))
             }
         }
-        debugLog("read FAILED after \(maxAttempts) attempts (no ≥108-byte response)")
         return nil
         #else
         return nil
         #endif
-    }
-
-    /// Temporary diagnostic logger — appends a flushed line to a dedicated file
-    /// so SmartCell reads are visible even when stdout is block-buffered.
-    static func debugLog(_ msg: String) {
-        let line = "[SmartCell] \(msg)\n"
-        let url = URL(fileURLWithPath: "/tmp/vectorlabel-smartcell.log")
-        if let data = line.data(using: .utf8) {
-            if let fh = try? FileHandle(forWritingTo: url) {
-                fh.seekToEndOfFile(); fh.write(data); try? fh.close()
-            } else {
-                try? data.write(to: url)
-            }
-        }
     }
 
     /// Parse a SmartCell response (all integers little-endian, §8).

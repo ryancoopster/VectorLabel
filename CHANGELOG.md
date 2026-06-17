@@ -7,6 +7,9 @@ shown in the menu-bar footer. Fix commits reference the code-review finding IDs
 
 ## [Unreleased]
 ### Fixed
+- **[L2]** Removed the temporary /tmp debug logs (SmartCell + print) that wrote
+  unsynchronized from parallel per-printer tasks and dumped raw cassette bytes on
+  every read.
 - **[M13]** "Detect supply" now gives feedback: it reports failure ("Couldn't
   read the cassette…") and busy ("Printer busy…") instead of the toast silently
   fading, and a forced detect during a print is no longer silently dropped.
