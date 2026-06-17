@@ -1,0 +1,21 @@
+# Changelog
+
+All notable changes to VectorLabel. Versions are `MAJOR.MINOR.PATCH` (in `/VERSION`);
+each build also carries a monotonic build number (git commit count) and short SHA,
+shown in the menu-bar footer. Fix commits reference the code-review finding IDs
+(H#, M#, L#) from the review report on the Desktop.
+
+## [Unreleased]
+### Added
+- Build versioning: every build is stamped with semver + build number + commit SHA
+  (`scripts/stamp-version.sh` → `BuildInfo`), shown in the menu-bar footer.
+- Test target (`swift test`) with first regression guards (Brady part-number
+  equivalences, labels-per-roll).
+- GitHub Actions CI: build + test on every push/PR.
+- Release pipeline scaffolding: `.app` packaging with bundled libusb, Developer ID
+  signing, and notarization (`scripts/package-app.sh`, `.github/workflows/release.yml`,
+  `docs/SIGNING.md`).
+
+## [1.0.0] — baseline
+- Pre-review baseline (tagged `v1.0-baseline`). Functional app: Vectorworks CSV →
+  print window, template designer, Brady USB printing, recent prints, presets.

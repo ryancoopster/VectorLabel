@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      VectorLabel is distributed with Developer ID (outside the App Store), so it
+      is NOT sandboxed; it needs raw USB access (libusb) and watches ~/Documents.
+      Hardened runtime is enabled at signing time via `codesign --options runtime`.
+      The bundled libusb dylib is signed with the same Developer ID, so no
+      library-validation exception is required. WKWebView's JIT runs in the system
+      WebContent process, so no JIT entitlement is needed here.
+    -->
+</dict>
+</plist>

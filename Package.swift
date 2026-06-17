@@ -33,5 +33,10 @@ let package = Package(
                 .linkedFramework("CoreText"),
             ]
         ),
+        .testTarget(
+            name: "VectorLabelTests",
+            dependencies: ["VectorLabel"],
+            path: "MacApp/Tests"
+        ),
     ]
 )

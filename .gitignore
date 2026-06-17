@@ -7,3 +7,6 @@ DerivedData/
 .swiftpm/
 __pycache__/
 *.pyc
+# Packaging output
+dist/
+*.dmg
