@@ -28,6 +28,50 @@ final class FoundationTests: XCTestCase {
         XCTAssertNil(BradyCatalog.labelsPerRoll(forPartNumber: "ZZ-999-000"))
     }
 
+    // MARK: – CSV parser (H1)
+
+    func testCSVBasic() {
+        let rows = WireExportParser.parseCSV("a,b,c\n1,2,3\n")
+        XCTAssertEqual(rows, [["a","b","c"], ["1","2","3"]])
+    }
+
+    func testCSVQuotedCommaAndEscapedQuote() {
+        let rows = WireExportParser.parseCSV("name,note\n\"Smith, J\",\"a \"\"quote\"\" here\"\n")
+        XCTAssertEqual(rows, [["name","note"], ["Smith, J", "a \"quote\" here"]])
+    }
+
+    func testCSVEmbeddedNewlineDoesNotDropRows() {
+        // A newline inside a quoted field must stay in the field, not split the row.
+        let text = "Number,Cable\n\"A\nB\",RIO\nN045,LAN\n"
+        let rows = WireExportParser.parseCSV(text)
+        XCTAssertEqual(rows.count, 3)                 // header + 2 data rows (not 4)
+        XCTAssertEqual(rows[1], ["A\nB", "RIO"])
+        XCTAssertEqual(rows[2], ["N045", "LAN"])
+    }
+
+    func testCSVCRLFEndings() {
+        let rows = WireExportParser.parseCSV("a,b\r\n1,2\r\n")
+        XCTAssertEqual(rows, [["a","b"], ["1","2"]])
+    }
+
+    func testParseRecordsEmbeddedNewlineKeepsAllRows() {
+        // The end-to-end record build: the embedded newline must not drop the
+        // following record (which would shift absolute indices).
+        let text = "_Side,Number,Cable\nSource,\"N1\nX\",A\nDestination,N1,A\n"
+        let recs = WireExportParser.parseRecords(from: text)
+        XCTAssertEqual(recs?.count, 2)
+        XCTAssertEqual(recs?[0].fields["Cable"], "A")
+        XCTAssertEqual(recs?[1].side, "Destination")
+    }
+
+    func testParseRecordsPadsShortRow() {
+        // A ragged (short) row is padded, never dropped — index order preserved.
+        let recs = WireExportParser.parseRecords(from: "_Side,Number,Cable\nSource,N1\nDestination,N1,A\n")
+        XCTAssertEqual(recs?.count, 2)
+        XCTAssertEqual(recs?[0].fields["Cable"], "")   // padded
+        XCTAssertEqual(recs?[1].fields["Cable"], "A")
+    }
+
     /// jsonQuoted must neutralize JS-injection vectors when a value (e.g. a
     /// filename) is spliced into evaluateJavaScript. Regression guard for M4.
     func testJsonQuotedEscaping() {

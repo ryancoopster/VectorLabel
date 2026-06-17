@@ -7,6 +7,10 @@ shown in the menu-bar footer. Fix commits reference the code-review finding IDs
 
 ## [Unreleased]
 ### Fixed
+- **[H1]** Replaced the line-based CSV parser with a full-document RFC-4180
+  parser: a newline inside a quoted field no longer tears the record (and drops
+  every row after it, shifting absolute indices). Ragged rows are padded, never
+  dropped, and logged. Covered by golden tests.
 - **[L2]** Removed the temporary /tmp debug logs (SmartCell + print) that wrote
   unsynchronized from parallel per-printer tasks and dumped raw cassette bytes on
   every read.

@@ -311,24 +311,83 @@ enum WireExportParser {
     /// Returns nil if the file can't be read or is empty.
     static func parse(fileURL: URL) -> [WireRecord]? {
         guard let content = try? String(contentsOf: fileURL, encoding: .utf8) else { return nil }
-        var lines = content.components(separatedBy: .newlines).filter { !$0.isEmpty }
-        guard lines.count >= 2 else { return nil }
+        return parseRecords(from: content, source: fileURL.lastPathComponent)
+    }
 
-        let headers = parseCSVLine(lines.removeFirst())
+    /// Build records from CSV text. Every data row becomes a record — a short row
+    /// is padded with empty fields and extra fields are ignored — so rows are NEVER
+    /// dropped (a dropped row would shift every later absolute index and could print
+    /// the wrong label). Rows with an unexpected column count are logged.
+    static func parseRecords(from text: String, source: String = "") -> [WireRecord]? {
+        let rows = parseCSV(text)
+        guard rows.count >= 2 else { return nil }
+
+        let headers = rows[0]
         var records: [WireRecord] = []
+        var irregular = 0
 
-        for line in lines {
-            let values = parseCSVLine(line)
-            guard values.count == headers.count else { continue }
+        for values in rows.dropFirst() {
+            if values.count != headers.count { irregular += 1 }
             var row: [String: String] = [:]
-            for (i, header) in headers.enumerated() { row[header] = values[i] }
-
-            let wireID   = row["Number"] ?? UUID().uuidString
-            let side     = row["_Side"]  ?? "Source"
+            for (i, header) in headers.enumerated() {
+                row[header] = i < values.count ? values[i] : ""   // pad short rows
+            }
+            let wireID = row["Number"] ?? UUID().uuidString
+            let side   = row["_Side"]  ?? "Source"
             records.append(WireRecord(side: side, wireID: wireID, fields: row))
         }
 
+        if irregular > 0 {
+            print("[WireExportParser] \(irregular) row(s) had an unexpected column count" +
+                  (source.isEmpty ? "" : " in \(source)") + " — kept (padded) to preserve record order.")
+        }
         return records.isEmpty ? nil : records
+    }
+
+    /// RFC-4180 parser over the WHOLE document: a `"` toggles quoting, `""` inside a
+    /// quoted field is a literal quote, and a newline (`\r\n` or `\n`) ends a record
+    /// only when OUTSIDE quotes — so a quoted field may contain commas and newlines.
+    /// Blank lines are skipped.
+    static func parseCSV(_ text: String) -> [[String]] {
+        var rows: [[String]] = []
+        var record: [String] = []
+        var field = ""
+        var inQuotes = false
+        let chars = Array(text)
+        let n = chars.count
+        var i = 0
+
+        func endField() { record.append(field); field = "" }
+        func endRecord() {
+            endField()
+            // Skip an empty line (a single empty field), e.g. a trailing newline.
+            if !(record.count == 1 && record[0].isEmpty) { rows.append(record) }
+            record.removeAll(keepingCapacity: true)
+        }
+
+        while i < n {
+            let c = chars[i]
+            if inQuotes {
+                if c == "\"" {
+                    if i + 1 < n && chars[i + 1] == "\"" { field.append("\""); i += 1 }  // escaped quote
+                    else { inQuotes = false }
+                } else {
+                    field.append(c)
+                }
+            } else {
+                switch c {
+                case "\"": inQuotes = true
+                case ",":  endField()
+                // In Swift's Character model "\r\n" is a single grapheme, so match it
+                // alongside lone LF/CR — no byte lookahead needed.
+                case "\n", "\r\n", "\r": endRecord()
+                default:   field.append(c)
+                }
+            }
+            i += 1
+        }
+        if !field.isEmpty || !record.isEmpty { endRecord() }   // flush a final row with no trailing newline
+        return rows
     }
 
     /// RFC-4180 compliant CSV line parser.
