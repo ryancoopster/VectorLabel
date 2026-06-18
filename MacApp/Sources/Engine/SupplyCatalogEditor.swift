@@ -192,15 +192,24 @@ struct SupplyCatalogEditorView: View {
     // MARK: Categories + supplies
 
     private var categoriesPane: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                ForEach(Array(group.categories.enumerated()), id: \.element.id) { ci, cat in
-                    categorySection(ci: ci, cat: cat)
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(Array(group.categories.enumerated()), id: \.element.id) { ci, cat in
+                        categorySection(ci: ci, cat: cat)
+                    }
                 }
-                Button { addCategory() } label: { Label("Add category", systemImage: "plus") }
-                    .buttonStyle(.borderless).padding(.top, 4)
+                .padding(12)
             }
-            .padding(12)
+            // Pinned to the bottom of the pane so it's always reachable regardless
+            // of scroll position.
+            Divider()
+            HStack {
+                Button { addCategory() } label: { Label("Add category", systemImage: "plus") }
+                    .buttonStyle(.borderless)
+                Spacer()
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
         }
     }
 
@@ -347,7 +356,7 @@ struct SupplyCatalogEditorView: View {
             HStack(spacing: 6) {
                 TextField("Part #", text: pB.partNumber).frame(width: 130).font(.system(size: 12, design: .monospaced))
                 if cont {
-                    TextField("Material", text: pB.materialLabel).frame(width: 90)
+                    TextField("Material", text: pB.materialLabel).frame(width: 140)
                     Text("len"); numFieldOptD(pB.rollLengthFeet, width: 50); Text("ft").foregroundStyle(.secondary)
                 } else {
                     Text("qty"); numFieldOptI(pB.quantityPerRoll, width: 56); Text("/roll").foregroundStyle(.secondary)

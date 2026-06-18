@@ -100,9 +100,10 @@ extension SupplyCatalog {
             Row(CLEAR, .dieCut, material: "B-430", 1.25, 2.75, 1.25, 2.75, "M6-198-430"),
             Row(CLEAR, .dieCut, material: "B-430", 3.0, 1.9, 3.0, 1.9, "M6-37-430"),
 
-            // ── Raised panel die-cut labels (B-593; flat, printable = full). ──
-            Row(PANEL, .dieCut, material: "B-593", 1.0, 3.0, 1.0, 3.0, "M6-176-593", qty: 100),
-            Row(PANEL, .dieCut, material: "B-593", 1.77, 0.59, 1.77, 0.59, "M6-172-593"),
+            // ── Raised panel die-cut labels (B-593; flat, printable = full). Per the
+            //    Brady page, only the 3"×1" M6-176-593 is M610/M611-compatible (the
+            //    0.59"×1.77" M7-172-593 is M710/BMP71-only). Box of 50. ──
+            Row(PANEL, .dieCut, material: "B-593", 1.0, 3.0, 1.0, 3.0, "M6-176-593", qty: 50),
 
             // ── Continuous tapes — grouped by WIDTH; each material is a buy option.
             //    Length is user-set ("width × definable"); 50 ft rolls. ──
