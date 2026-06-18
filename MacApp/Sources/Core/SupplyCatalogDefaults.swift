@@ -50,14 +50,18 @@ extension SupplyCatalog {
         let rows: [Row] = [
             // ── Self-laminating vinyl wraps (B-427) — geometry preserved from the old
             //    catalog; same-size cartridge / bulk-box parts consolidated per size. ──
+            // 1"×1.5" wrap: M6 cartridge (250/roll) + BM bulk box (2500/box).
             Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.0, 1.5, 1.0, 0.5, "M6-31-427", qty: 250),
-            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.0, 1.5, 1.0, 0.5, "M6-21-427", qty: 250),
-            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.0, 1.5, 1.0, 0.5, "BM-31-427", qty: 250),
+            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.0, 1.5, 1.0, 0.5, "BM-31-427", qty: 2500),
+            // 1"×2.5" wrap (distinct size — was wrongly merged with 1"×1.5").
+            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.0, 2.5, 1.0, 0.75, "M6-21-427", qty: 250),
+            // 1.5"×1.5" wrap: M6 cartridge (250/roll) + BM bulk box (1000/box).
             Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.5, 1.5, 1.5, 0.5, "M6-32-427", qty: 250),
-            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.5, 1.5, 1.5, 0.5, "BM-32-427", qty: 250),
+            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.5, 1.5, 1.5, 0.5, "BM-32-427", qty: 1000),
+            // 1.5"×4" wrap (feeds rotated 90°): M6 cartridge (100/roll) + BM bulk box.
+            // (M6-109-427 dropped — it was derived from the M710-only M7-109-427.)
             Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.5, 4.0, 1.5, 1.5, "M6-33-427", qty: 100, rot: true),
-            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.5, 4.0, 1.5, 1.5, "BM-33-427", qty: 100, rot: true),
-            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.5, 4.0, 1.5, 1.5, "M6-109-427", rot: true),
+            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.5, 4.0, 1.5, 1.5, "BM-33-427", rot: true),
             Row(WRAP, .dieCut, selfLam: true, material: "B-427", 0.5, 1.0, 0.5, 0.25, "M6-11-427", qty: 250),
             Row(WRAP, .dieCut, selfLam: true, material: "B-427", 0.75, 1.0, 0.75, 0.25, "M6-17-427", qty: 250),
             Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.0, 1.0, 1.0, 0.375, "M6-19-427", qty: 250),

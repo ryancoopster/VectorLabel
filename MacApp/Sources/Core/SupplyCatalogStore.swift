@@ -23,14 +23,20 @@ public final class SupplyCatalogStore: ObservableObject {
         didSet { Self.setSnapshot(catalog); scheduleAutosave() }
     }
 
-    /// Coalesce rapid edits (typing) into one disk write shortly after.
+    /// Coalesce rapid edits (typing) into one disk write shortly after. Non-nil ONLY
+    /// while a write is pending, so callers can tell whether there's an unsaved edit.
     private var autosaveWork: DispatchWorkItem?
     private func scheduleAutosave() {
         autosaveWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.writeToDisk() }
+        let work = DispatchWorkItem { [weak self] in self?.writeToDisk(); self?.autosaveWork = nil }
         autosaveWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
     }
+
+    /// Flush a pending edit to disk now — but ONLY if one is pending. Used when the
+    /// editor window closes, so merely opening + closing the editor (no edits) never
+    /// writes a file and freezes the factory defaults onto disk.
+    public func flushPendingSaveIfNeeded() { if autosaveWork != nil { save() } }
 
     private static var fileURL: URL {
         let dir = AppEnvironment.supportRoot
@@ -68,7 +74,7 @@ public final class SupplyCatalogStore: ObservableObject {
     }
 
     /// Persist the current catalog to disk now (and refresh the snapshot).
-    public func save() { autosaveWork?.cancel(); writeToDisk() }
+    public func save() { autosaveWork?.cancel(); autosaveWork = nil; writeToDisk() }
 
     private func writeToDisk() {
         Self.setSnapshot(catalog)

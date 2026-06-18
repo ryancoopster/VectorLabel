@@ -1277,9 +1277,9 @@ function R(){
       <span style="color:var(--accent);font-weight:700;font-size:15px;letter-spacing:-.3px">VectorLabel</span>
       <span style="color:var(--text3);font-size:11px">${isCustomMode()?'Custom Designer':'Template Designer'}</span>
       <div style="flex:1"></div>
-      <button class="btn" onclick="openSupplyPicker()" title="Choose a label supply" style="display:flex;align-items:center;gap:6px;padding:5px 10px">
+      <button class="btn" onclick="openSupplyPicker()" title="Choose a label supply" style="display:flex;align-items:center;gap:10px;padding:4px 10px">
         <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Supply</span>
-        <span>${supplyOptionLabel(blBy(S.spec.n))}</span>
+        ${supplyButtonDims(blBy(S.spec.n))}
         <span style="color:var(--text3);font-size:9px">▾</span>
       </button>
       ${dContinuous()?`<div style="display:flex;align-items:center;gap:5px" title="Continuous supply — set the printed label length">
@@ -2452,6 +2452,20 @@ function supplyOptionLabel(l){
   // Cable-wrap (die-cut) labels show the PRINTABLE dimension (W × H), not the full
   // label height, so the dropdown reflects the usable print area.
   return (l.name?l.name:l.n)+' — '+dFmtIn(l.pw)+' × '+dFmtIn(l.ph);
+}
+// Contents of the toolbar Supply button: the label size and the print area, each
+// under its own header — but only when they differ; if they're identical (or the
+// supply is continuous) just show the single value.
+function supplyButtonDims(l){
+  if(!l)return "";
+  const hd='color:var(--text3);font-size:8px;text-transform:uppercase;letter-spacing:.4px;line-height:1';
+  const vl='font-size:12px;line-height:1.15';
+  const col=(h,v)=>`<div style="display:flex;flex-direction:column;gap:1px;align-items:flex-start"><span style="${hd}">${h}</span><span style="${vl}">${v}</span></div>`;
+  if(l.ty==="continuous")return col('Size', dFmtIn(l.tw)+' × definable');
+  const labelSz=dFmtIn(l.tw)+' × '+dFmtIn(l.th);
+  const printSz=dFmtIn(l.pw)+' × '+dFmtIn(l.ph);
+  if(l.tw===l.pw && l.th===l.ph)return col('Size', labelSz);
+  return `<div style="display:flex;gap:12px;align-items:center">${col('Label size',labelSz)}${col('Print area',printSz)}</div>`;
 }
 function dSupplyTypeDesc(l){
   if(!l)return "";

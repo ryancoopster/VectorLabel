@@ -32,8 +32,9 @@ final class SupplyCatalogEditorWindow {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self = self else { return }
-                // Flush any debounced edits immediately when the editor closes.
-                SupplyCatalogStore.shared.save()
+                // Flush a pending edit (if any) when the editor closes. Does nothing
+                // when there were no edits, so opening/closing never freezes defaults.
+                SupplyCatalogStore.shared.flushPendingSaveIfNeeded()
                 if let t = self.closeObserver { NotificationCenter.default.removeObserver(t) }
                 self.closeObserver = nil
                 self.window = nil
