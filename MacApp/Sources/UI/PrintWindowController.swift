@@ -48,6 +48,10 @@ public final class PrintWindowController: NSObject {
     // reflects edits made anywhere (standalone designer or edit-return).
     private var templatesObserver: AnyCancellable?
 
+    // AutoPrint hosts this controller in its own process (no in-app catalog editor),
+    // so it polls the Engine's on-disk catalog rather than the in-process store.
+    private var catalogPollTimer: Timer?
+
     // The app that was frontmost before the print window appeared, so we can
     // return the user to it after the print starts.
     private var previousApp: NSRunningApplication?
@@ -188,10 +192,22 @@ public final class PrintWindowController: NSObject {
             .sink { [weak self] _ in self?.evalJS("if(typeof setTheme==='function')setTheme('\(AppSettings.shared.effectiveTheme)')") }
             .store(in: &columnObservers)
 
-        // Live-sync the supply catalog: the editor lives in this process, so observe
-        // the store directly and push the latest catalog into the web UI.
+        // Live-sync the supply catalog. In the Engine process the editor lives
+        // in-process, so observing the store catches edits immediately.
         SupplyCatalogStore.shared.$catalog.dropFirst().receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.reinjectCatalog() }.store(in: &columnObservers)
+        // In AutoPrint (a separate process with no editor) the observation above never
+        // fires, so poll the on-disk catalog like the designers do. The Engine must
+        // NOT poll — its in-process snapshot is authoritative, and a poll could read
+        // the file mid-write and revert a fresh edit; it relies on the observation.
+        if Bundle.main.bundleIdentifier?.contains("autoprint") == true {
+            catalogPollTimer?.invalidate()
+            catalogPollTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    if SupplyCatalogStore.reloadSnapshotFromDisk() { self?.reinjectCatalog() }
+                }
+            }
+        }
 
         // Keep the column config in sync with the designer / persisted setting.
         AppSettings.shared.$recordColumnOrder.dropFirst().receive(on: RunLoop.main)
