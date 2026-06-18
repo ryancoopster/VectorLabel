@@ -121,7 +121,10 @@ struct PreferencesView: View {
         }
         .frame(width: 600, height: 480)
         .background(Color.vlBackground)
-        .preferredColorScheme(.dark)
+        // Respect the chosen appearance (was hardcoded .preferredColorScheme(.dark),
+        // which kept Preferences dark in light mode). Tie identity to the appearance
+        // so the whole window re-themes on a flip (the vl* tokens are global reads).
+        .id("\(settings.appearance)-\(settings.systemAppearanceTick)")
     }
 
     // MARK: – Export
@@ -189,7 +192,7 @@ struct PreferencesView: View {
                     caption: "Pause between consecutive label jobs sent to the printer. Increase this if labels are dropped or misprinted."
                 ) {
                     HStack(spacing: 6) {
-                        Stepper("", value: $settings.interLabelDelayMs, in: 0...2000, step: 10)
+                        Stepper("", value: $settings.interLabelDelayMs, in: 0...2000, step: 5)
                             .labelsHidden()
                         Text("\(settings.interLabelDelayMs) ms")
                             .font(.system(size: 12, design: .monospaced))
@@ -319,7 +322,7 @@ struct PreferencesView: View {
         HStack(spacing: 6) {
             Text(label).foregroundColor(.vlSecondary).font(.system(size: 12))
             TextField("0", value: binding, formatter: Self.pxFormatter)
-                .frame(width: 52).textFieldStyle(.roundedBorder).colorScheme(.dark)
+                .frame(width: 52).textFieldStyle(.roundedBorder)
                 .font(.system(size: 12, design: .monospaced))
             Stepper("", value: binding, step: 1).labelsHidden()
             Text("px").foregroundColor(.vlDim).font(.system(size: 11))
@@ -368,27 +371,9 @@ struct PreferencesView: View {
 PrefSection(title: "App Behaviour") {
                 PrefRow(
                     label: "Appearance",
-                    caption: "Switch the menu, Preferences, print, and designer windows between dark and light."
+                    caption: "Switch the menu, Preferences, print, and designer windows between dark, light, or following the system."
                 ) {
-                    Picker("", selection: Binding(
-                        get: { settings.appearance },
-                        set: { settings.appearance = $0 }
-                    )) {
-                        Text("Dark").tag("dark")
-                        Text("Light").tag("light")
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .frame(width: 140)
-                }
-                PrefDivider()
-                PrefRow(
-                    label: "Show VectorLabel in Dock",
-                    caption: "By default VectorLabel runs as a menu-bar-only app. Enable this to also show an icon in the Dock."
-                ) {
-                    Toggle("", isOn: $settings.showInDock)
-                        .toggleStyle(.switch)
-                        .labelsHidden()
+                    AppearanceSlider().frame(width: 230)
                 }
             }
 
@@ -450,7 +435,7 @@ struct VLButtonStyle: ButtonStyle {
             .foregroundColor(.vlLabel)
             .padding(.horizontal, 12)
             .padding(.vertical, 5)
-            .background(configuration.isPressed ? Color.white.opacity(0.1) : Color.white.opacity(0.06))
+            .background(configuration.isPressed ? Color.vlHoverStrong : Color.vlHover)
             .overlay(RoundedRectangle(cornerRadius: 5).stroke(Color.vlBorder, lineWidth: 1))
             .cornerRadius(5)
     }

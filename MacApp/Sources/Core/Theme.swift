@@ -6,7 +6,7 @@ import SwiftUI
 // their bodies re-evaluate when the appearance flips.
 
 private func vl(_ dark: Color, _ light: Color) -> Color {
-    AppSettings.shared.appearance == "light" ? light : dark
+    AppSettings.shared.isLight ? light : dark
 }
 
 public extension Color {
@@ -32,4 +32,8 @@ public extension Color {
                                          Color(red: 0.71, green: 0.47, blue: 0.04)) } // #b5790a
     static var vlRed: Color        { vl(Color(red: 0.96, green: 0.42, blue: 0.42),   // #f56c6c
                                          Color(red: 0.84, green: 0.23, blue: 0.23)) } // #d63b3b
+    // Hover / pressed tints — adapt so they stay visible in BOTH modes (a white
+    // tint on dark, a black tint on light). Replaces hardcoded Color.white.opacity.
+    static var vlHover: Color       { vl(Color.white.opacity(0.07), Color.black.opacity(0.06)) }
+    static var vlHoverStrong: Color { vl(Color.white.opacity(0.12), Color.black.opacity(0.10)) }
 }

@@ -175,9 +175,13 @@ public final class PrintWindowController: NSObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.pushTemplates() }
 
-        // Push the light/dark theme live whenever it changes.
+        // Push the EFFECTIVE light/dark theme live on any appearance change,
+        // including the OS flipping while in "system" mode.
         AppSettings.shared.$appearance.dropFirst().receive(on: RunLoop.main)
-            .sink { [weak self] mode in self?.evalJS("if(typeof setTheme==='function')setTheme('\(mode)')") }
+            .sink { [weak self] _ in self?.evalJS("if(typeof setTheme==='function')setTheme('\(AppSettings.shared.effectiveTheme)')") }
+            .store(in: &columnObservers)
+        AppSettings.shared.$systemAppearanceTick.dropFirst().receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.evalJS("if(typeof setTheme==='function')setTheme('\(AppSettings.shared.effectiveTheme)')") }
             .store(in: &columnObservers)
 
         // Keep the column config in sync with the designer / persisted setting.
@@ -341,7 +345,7 @@ public final class PrintWindowController: NSObject {
               reprint: \(reprintJSON)
             });
           }
-          if (typeof setTheme === 'function') setTheme('\(AppSettings.shared.appearance)');
+          if (typeof setTheme === 'function') setTheme('\(AppSettings.shared.effectiveTheme)');
         })();
         """
         wv.evaluateJavaScript(js, completionHandler: nil)

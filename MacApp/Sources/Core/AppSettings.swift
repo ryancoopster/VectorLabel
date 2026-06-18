@@ -153,13 +153,31 @@ public final class AppSettings: ObservableObject {
             applyNativeAppearance()
         }
     }
-    public var isLight: Bool { appearance == "light" }
+    /// Bumped when the OS appearance changes while in "system" mode, so views that
+    /// key their identity on it rebuild with the new effective colours.
+    @Published public private(set) var systemAppearanceTick: Int = 0
+
+    /// Whether the EFFECTIVE appearance is light. "system" follows the OS.
+    public var isLight: Bool {
+        switch appearance {
+        case "light": return true
+        case "dark":  return false
+        default:      return NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua
+        }
+    }
+    /// The effective light/dark theme to push to the web views ("light" | "dark").
+    public var effectiveTheme: String { isLight ? "light" : "dark" }
 
     /// Match the native macOS appearance (so SwiftUI controls, text fields,
     /// scrollbars, and the menu/preferences chrome render in the chosen mode).
+    /// "system" leaves NSApp.appearance nil so the OS drives it.
     public func applyNativeAppearance() {
         DispatchQueue.main.async {
-            NSApp.appearance = NSAppearance(named: self.isLight ? .aqua : .darkAqua)
+            switch self.appearance {
+            case "light": NSApp.appearance = NSAppearance(named: .aqua)
+            case "dark":  NSApp.appearance = NSAppearance(named: .darkAqua)
+            default:      NSApp.appearance = nil
+            }
         }
     }
 
@@ -255,6 +273,17 @@ public final class AppSettings: ObservableObject {
 
         // Sync ExportSettings singleton
         ExportSettings.maxExportsPerProject = maxExportsPerProject
+
+        // Follow the OS light/dark switch while in "system" mode: re-apply the
+        // native appearance and nudge views/web UIs to re-theme.
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("AppleInterfaceThemeChangedNotification"),
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            guard let self = self, self.appearance == "system" else { return }
+            self.systemAppearanceTick &+= 1
+            self.applyNativeAppearance()
+        }
     }
 
     public func resetToDefaults() {

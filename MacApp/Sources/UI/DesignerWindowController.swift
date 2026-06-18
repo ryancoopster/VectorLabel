@@ -229,9 +229,15 @@ public final class DesignerWindowController: NSObject {
         AppSettings.shared.$recordColumnWidths.dropFirst().receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.injectColumnConfig() }.store(in: &cancellables)
         // Push the light/dark theme to the designer webview when it changes.
+        // Re-theme the web view on any appearance change, including the OS flipping
+        // while in "system" mode. Push the EFFECTIVE light/dark, not the raw mode.
         AppSettings.shared.$appearance.dropFirst().receive(on: RunLoop.main)
-            .sink { [weak self] mode in
-                self?.webView?.evaluateJavaScript("if(typeof setTheme==='function')setTheme('\(mode)')", completionHandler: nil)
+            .sink { [weak self] _ in
+                self?.webView?.evaluateJavaScript("if(typeof setTheme==='function')setTheme('\(AppSettings.shared.effectiveTheme)')", completionHandler: nil)
+            }.store(in: &cancellables)
+        AppSettings.shared.$systemAppearanceTick.dropFirst().receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.webView?.evaluateJavaScript("if(typeof setTheme==='function')setTheme('\(AppSettings.shared.effectiveTheme)')", completionHandler: nil)
             }.store(in: &cancellables)
 
         closeObserver = NotificationCenter.default.addObserver(
@@ -1004,7 +1010,7 @@ extension DesignerWindowController: WKNavigationDelegate {
         // Only handle our designer webview
         guard webView === self.webView else { return }
         // Apply the current light/dark theme.
-        webView.evaluateJavaScript("if(typeof setTheme==='function')setTheme('\(AppSettings.shared.appearance)')", completionHandler: nil)
+        webView.evaluateJavaScript("if(typeof setTheme==='function')setTheme('\(AppSettings.shared.effectiveTheme)')", completionHandler: nil)
         // Inject the most recent CSV with ≥10 records — TEMPLATE MODE ONLY. The
         // Custom Designer opens with NO bound data (empty database pane, single
         // label), so it must never auto-load an Exports CSV.

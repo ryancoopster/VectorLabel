@@ -39,7 +39,7 @@ struct MenuBarView: View {
         // re-evaluate them on an appearance flip — text keeps the old colour until
         // hover forces a redraw. Tie the whole tree's identity to the appearance so
         // flipping it rebuilds every row with the right colours.
-        .id(settings.appearance)
+        .id("\(settings.appearance)-\(settings.systemAppearanceTick)")
     }
 
     // MARK: – Shared building blocks
@@ -124,10 +124,9 @@ struct MenuBarView: View {
             }
             .keyboardShortcut("e", modifiers: .command)
 
-            MenuActionRow(icon: settings.isLight ? "moon.fill" : "sun.max.fill",
-                          title: settings.isLight ? "Dark Mode" : "Light Mode", shortcut: "") {
-                settings.appearance = settings.isLight ? "dark" : "light"
-            }
+            AppearanceSlider()
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
 
             MenuActionRow(icon: "gearshape", title: "Preferences…", shortcut: "⌘,") {
                 appDelegate.openPreferences()
@@ -186,7 +185,7 @@ struct MenuActionRow: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 7)
             .contentShape(Rectangle())
-            .background(hovering ? Color.white.opacity(0.06) : Color.clear)
+            .background(hovering ? Color.vlHover : Color.clear)
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
@@ -305,6 +304,41 @@ struct JobRow: View {
     }
 }
 
+/// A 3-way Dark / Auto / Light segmented control with high contrast in both themes
+/// (selected = white on accent blue; unselected = secondary text). Used in the menu
+/// bar and Preferences. "Auto" follows the system appearance.
+struct AppearanceSlider: View {
+    @ObservedObject var settings = AppSettings.shared
+    private let opts: [(value: String, label: String, icon: String)] = [
+        ("dark", "Dark", "moon.fill"),
+        ("system", "Auto", "circle.lefthalf.filled"),
+        ("light", "Light", "sun.max.fill"),
+    ]
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(opts, id: \.value) { o in
+                let on = settings.appearance == o.value
+                Button { settings.appearance = o.value } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: o.icon).font(.system(size: 10))
+                        Text(o.label).font(.system(size: 11, weight: on ? .semibold : .regular))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 5)
+                    .foregroundColor(on ? .white : .vlSecondary)
+                    .background(on ? Color.vlAccent : Color.clear)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(2)
+        .background(Color.vlSurface2)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
 struct RecentPrintRow: View {
     let recent: RecentPrint
     let onReprint: () -> Void
@@ -371,7 +405,7 @@ struct RecentPrintRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 6)
-        .background(hovering ? Color.white.opacity(0.04) : Color.clear)
+        .background(hovering ? Color.vlHover : Color.clear)
         .onHover { hovering = $0 }
     }
 }

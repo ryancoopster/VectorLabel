@@ -77,11 +77,11 @@ def glyph_cl(color):
 
 
 def glyph_label(text, color):
-    # Two-letter tag centred below the chevron (e.g. "CD" / "TD") so the Custom
-    # and Template Designer dock icons are tellable apart at a glance.
-    return (f'<text x="{cx:.1f}" y="962" text-anchor="middle" '
+    # Two-letter tag to the RIGHT of the L mark, at the L's height (e.g. "CD"/"TD"),
+    # so the Custom and Template Designer dock icons are clearly distinct ("L CD").
+    return (f'<text x="690" y="392" text-anchor="start" '
             f'font-family="Helvetica Neue, Helvetica, Arial, sans-serif" '
-            f'font-weight="800" font-size="170" letter-spacing="4" '
+            f'font-weight="800" font-size="210" letter-spacing="-6" '
             f'fill="{color}">{text}</text>')
 
 
