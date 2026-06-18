@@ -38,6 +38,13 @@ label.lbl{font-size:10px;color:var(--text2);display:block;margin-bottom:3px}
 .modal-title{font-size:15px;font-weight:600;color:var(--text);margin-bottom:16px;letter-spacing:-.2px}
 .modal-row{margin-bottom:14px}
 .modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:20px;border-top:1px solid var(--bd2);padding-top:16px}
+.sup-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.sup-tbl th{padding:8px 10px;text-align:left;color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.5px;position:sticky;top:0;background:var(--surface2);z-index:1}
+.sup-tbl td{padding:7px 10px;border-top:1px solid var(--bd1);color:var(--text);vertical-align:middle}
+.sup-tbl tr.sup-row{cursor:pointer}
+.sup-tbl tr.sup-row:hover td{background:rgba(108,142,245,0.10)}
+.sup-tbl tr.sup-sel td{background:rgba(108,142,245,0.16)}
+.sup-tbl tr.sup-grp td{background:var(--surface3);color:var(--text2);font-weight:600;font-size:11px}
 .tpl-card{background:var(--surface2);border:1px solid var(--bd3);border-radius:6px;padding:12px 14px;cursor:pointer;display:flex;align-items:center;gap:12px;margin-bottom:8px}
 .tpl-card:hover{background:var(--surface3);border-color:var(--accent)}
 .tpl-card.active{border-color:var(--accent);background:var(--surface3)}
@@ -1221,9 +1228,11 @@ function R(){
       <span style="color:var(--accent);font-weight:700;font-size:15px;letter-spacing:-.3px">VectorLabel</span>
       <span style="color:var(--text3);font-size:11px">${isCustomMode()?'Custom Designer':'Template Designer'}</span>
       <div style="flex:1"></div>
-      <select class="inp" style="width:auto" onchange="pickSupply(this.value)">
-        ${BL.map(l=>`<option value="${l.n}"${S.spec.n===l.n?" selected":""}>${supplyOptionLabel(l)}</option>`).join("")}
-      </select>
+      <button class="btn" onclick="openSupplyPicker()" title="Choose a label supply" style="display:flex;align-items:center;gap:6px;padding:5px 10px">
+        <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Supply</span>
+        <span>${supplyOptionLabel(BL.find(l=>l.n===S.spec.n))}</span>
+        <span style="color:var(--text3);font-size:9px">▾</span>
+      </button>
       ${dContinuous()?`<div style="display:flex;align-items:center;gap:5px" title="Continuous supply — set the printed label length">
         <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Length</span>
         <input type="number" class="inp" min="${LEN_MIN}" max="${LEN_MAX}" step="0.05" value="${(dEffLen()||dDefaultLen(S.spec.n))}" style="width:64px;padding:4px 6px;font-size:12px" onchange="setLabelLen(this.value)" onblur="setLabelLen(this.value)" onkeydown="if(event.key==='Enter')this.blur()">
@@ -1532,6 +1541,37 @@ function renderModal(){
           <button class="btn" onclick="S.modal=null;S._largeJobForce=true;doCustomPrint()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Print ${n} labels</button>
         </div>
       </div>`;
+  }
+
+  if(S.modal==="supply"){
+    const fi=v=>dFmtIn(v);
+    const rowHtml=l=>{
+      const sel=S.spec.n===l.n;
+      return `<tr class="sup-row${sel?' sup-sel':''}" onclick="pickSupply('${l.n}');closeModal()">
+        <td style="font-family:monospace;white-space:nowrap">${sel?'● ':''}${l.n}</td>
+        <td>${supplyTypeFull(l)}</td>
+        <td style="white-space:nowrap">${fi(l.tw)} × ${fi(l.th)}</td>
+        <td style="white-space:nowrap">${fi(l.pw)} × ${fi(l.ph)}</td>
+        <td onclick="event.stopPropagation()"><button class="btn" onclick="event.stopPropagation();buyPart('${l.n}')" title="Find ${l.n} on Brady" style="padding:3px 9px;font-size:11px">Buy ↗</button></td>
+      </tr>`;
+    };
+    const diecut=BL.filter(l=>l.ty!=="continuous");
+    const cont=BL.filter(l=>l.ty==="continuous");
+    overlay.innerHTML=`<div class="modal" style="width:800px;max-width:92vw;max-height:82vh;display:flex;flex-direction:column">
+      <div class="modal-title">Choose a label supply</div>
+      <div style="overflow:auto;flex:1;border:1px solid var(--bd2);border-radius:6px">
+        <table class="sup-tbl">
+          <thead><tr><th>Part #</th><th>Type</th><th>Label size</th><th>Printable</th><th>Buy</th></tr></thead>
+          <tbody>
+            <tr class="sup-grp"><td colspan="5">Wrap-around wire labels (die-cut)</td></tr>
+            ${diecut.map(rowHtml).join("")}
+            <tr class="sup-grp"><td colspan="5">Continuous tapes — any material of the listed width matches</td></tr>
+            ${cont.map(rowHtml).join("")}
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer"><button class="btn" onclick="closeModal()">Close</button></div>
+    </div>`;
   }
 
   document.body.appendChild(overlay);
@@ -2307,6 +2347,20 @@ function dSupplyTypeDesc(l){
   if(l.lm)return "Wrap-around wire label (self-laminating)";
   return "Die-cut label";
 }
+// Fuller type descriptor for the supply picker table (continuous includes the
+// material since there's room there, unlike the compact header indicator).
+function supplyTypeFull(l){
+  if(!l)return "";
+  if(l.ty==="continuous"){
+    const m=(l.mt||"").toUpperCase();
+    if(m.indexOf("595")>=0||m.indexOf("439")>=0||m.indexOf("498")>=0)return "Continuous vinyl tape";
+    if(m.indexOf("499")>=0)return "Continuous nylon cloth tape";
+    if(m.indexOf("4")>=0)return "Continuous polyester tape";
+    return "Continuous tape";
+  }
+  if(l.lm)return "Wrap-around wire label (self-laminating)";
+  return "Die-cut label";
+}
 function dRequiredSupply(specN){
   const l=BL.find(x=>x.n===specN);
   if(l&&l.ty==="continuous")return dFmtIn(l.tw)+' continuous';
@@ -2323,22 +2377,24 @@ function dCanPrint(){
 
 // ── "Buy more" — open the supplier page for the selected supply ─────────────────
 // Posts an openURL action; Swift opens the (http/https) URL in the system browser.
-function buyMore(which){
-  const s=BL.find(l=>l.n===S.spec.n); if(!s)return;
-  const url=(which==="bulk"?(s.bb||s.br):(s.br||s.bb))||"";
-  if(!url)return;
+// Open a reliable purchase link for a part number. Brady restructures its product
+// URLs over time (the old per-product pages 404), so we search by part number,
+// which always resolves to the current product/buy page. Routed via Swift openURL.
+function buyPart(n){
+  if(!n)return;
+  const url='https://www.google.com/search?q='+encodeURIComponent('Brady '+n+' label');
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
     window.webkit.messageHandlers.vectorlabel.postMessage({action:"openURL",payload:{url}});
 }
-// "Buy more ↗" control for the selected supply (roll + optional bulk link).
-// Shown in the Custom Designer print header; "" when no buy URL is known.
+// Open the supply picker window — a spacious table of every supply with its type,
+// sizes and a buy link. Shared by both the Custom and Template Designer.
+function openSupplyPicker(){ S.modal="supply"; renderModal(); }
+// "Buy ↗" control for the selected supply, shown in the Custom Designer print header.
 function buyMoreControl(){
-  const s=BL.find(l=>l.n===S.spec.n); if(!s||!(s.br||s.bb))return "";
-  const bulk=(s.bb&&s.bb!==s.br)?`<button class="btn" onclick="buyMore('bulk')" title="Buy a bulk box of ${s.n}" style="padding:4px 8px;font-size:10px">Bulk box ↗</button>`:"";
+  const s=BL.find(l=>l.n===S.spec.n); if(!s)return "";
   return`<div style="display:flex;align-items:center;gap:5px">
-    <span style="color:var(--text3);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px">Buy More:</span>
-    <button class="btn" onclick="buyMore('roll')" title="Buy ${s.n} on bradyid.com" style="padding:4px 10px;font-size:11px">Roll ↗</button>
-    ${bulk}
+    <span style="color:var(--text3);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px">Buy:</span>
+    <button class="btn" onclick="buyPart('${s.n}')" title="Find ${s.n} on Brady" style="padding:4px 10px;font-size:11px">Buy ↗</button>
   </div>`;
 }
 
@@ -2393,7 +2449,7 @@ function buildCustomPrintHeader(){
   const jobLabelCount=dJobLabelCount();
   const dot=pr.status==="ready"?"var(--green)":pr.status==="busy"?"var(--warn)":"var(--red)";
   const statusLbl=pr.status==="ready"?"Ready":pr.status==="busy"?"Busy":"Offline";
-  return`<div style="background:var(--surface);border-bottom:1px solid var(--bd2);padding:0 14px;display:flex;align-items:center;gap:12px;height:42px;flex-shrink:0">
+  return`<div style="background:var(--surface);border-bottom:1px solid var(--bd2);padding:6px 14px;display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;min-height:42px;flex-shrink:0">
     <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Print</span>
 
     <!-- Printer picker -->
@@ -2412,7 +2468,7 @@ function buildCustomPrintHeader(){
     <div style="display:flex;align-items:center;gap:7px">
       <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Supply</span>
       <span style="color:var(--text2);font-size:11px;font-family:monospace" title="Required supply for ${S.spec.n}">${dRequiredSupply(S.spec.n)}</span>
-      <span style="color:var(--text3);font-size:10px;white-space:nowrap" title="Label type">${dSupplyTypeDesc(BL.find(l=>l.n===S.spec.n))}</span>
+      <span style="color:var(--text3);font-size:10px;max-width:160px;line-height:1.25" title="Label type">${dSupplyTypeDesc(BL.find(l=>l.n===S.spec.n))}</span>
       ${dCassetteMatched()?`<span title="Loaded cassette matches the required supply" style="color:var(--green);font-size:18px;line-height:1;font-weight:800">✓</span>`
         :dCassetteMismatch()?`<span title="Loaded ${escAttr(dLoadedCassette().partNumber)} doesn't match — the label may print misaligned or cropped" style="color:var(--red);font-size:12px;line-height:1;white-space:nowrap">⚠ mismatch</span>`:""}
       ${buyMoreControl()}
