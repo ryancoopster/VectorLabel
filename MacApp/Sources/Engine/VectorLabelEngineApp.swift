@@ -125,7 +125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         let hosting = NSHostingController(rootView: MenuBarView().environmentObject(self))
         hosting.sizingOptions = [.preferredContentSize]
         popover.contentViewController = hosting
-        popover.appearance = NSAppearance(named: .darkAqua)
+        popover.appearance = NSAppearance(named: AppSettings.shared.isLight ? .aqua : .darkAqua)
         popover.behavior = .transient
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         menuPopover = popover

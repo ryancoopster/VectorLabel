@@ -34,6 +34,12 @@ struct MenuBarView: View {
         // height grow to fit wrapped content so rows are never clipped.
         .fixedSize(horizontal: false, vertical: true)
         .background(Color.vlBackground)
+        // The theme colors are plain global reads (AppSettings.shared.appearance)
+        // inside child rows that don't observe AppSettings, so SwiftUI won't
+        // re-evaluate them on an appearance flip — text keeps the old colour until
+        // hover forces a redraw. Tie the whole tree's identity to the appearance so
+        // flipping it rebuilds every row with the right colours.
+        .id(settings.appearance)
     }
 
     // MARK: – Shared building blocks
