@@ -11,7 +11,15 @@ import VectorLabelUI
 struct PrinterModelEditorView: View {
     @ObservedObject private var store = PrinterModelStore.shared
     @State private var draft: PrinterModelList
+    @State private var pendingDelete: PendingDelete?
     let onClose: () -> Void
+
+    /// A model deletion awaiting confirmation.
+    struct PendingDelete: Identifiable {
+        let modelID: UUID
+        let name: String
+        var id: UUID { modelID }
+    }
 
     init(onClose: @escaping () -> Void) {
         self.onClose = onClose
@@ -46,6 +54,14 @@ struct PrinterModelEditorView: View {
             }.padding(12)
         }
         .frame(minWidth: 540, minHeight: 440)
+        .alert(item: $pendingDelete) { d in
+            Alert(title: Text("Delete the “\(d.name)” printer model?"),
+                  message: Text("This can’t be undone. The supply catalog will no longer be able to link supplies to it."),
+                  primaryButton: .destructive(Text("Delete")) {
+                      draft.models.removeAll { $0.id == d.modelID }
+                  },
+                  secondaryButton: .cancel())
+        }
     }
 
     private func modelCard(_ mid: UUID) -> some View {
@@ -55,7 +71,10 @@ struct PrinterModelEditorView: View {
                 Text("Model").font(.system(size: 11)).foregroundStyle(.secondary)
                 TextField("e.g. M611", text: modelName(mid)).frame(width: 140)
                 Spacer()
-                Button(role: .destructive) { draft.models.removeAll { $0.id == mid } } label: { Label("Delete", systemImage: "trash") }
+                Button(role: .destructive) {
+                    let nm = (m?.name).map { $0.isEmpty ? "this model" : $0 } ?? "this model"
+                    pendingDelete = PendingDelete(modelID: mid, name: nm)
+                } label: { Label("Delete", systemImage: "trash") }
                     .buttonStyle(.borderless)
             }
             ForEach(m?.usbIDs ?? []) { u in
