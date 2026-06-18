@@ -549,7 +549,9 @@ function cancelAndClose(){
   // later, then close. Swift skips recording when nothing is printable.
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
     const body=buildPrintPayloadBody(printIndices());
-    body.cancelled=true;
+    // Only record a cancelled job if the user actually configured something —
+    // a plain open-then-close of the auto-popped window records nothing.
+    body.cancelled = (printConfigSig() !== (P._initialSig||""));
     window.webkit.messageHandlers.vectorlabel.postMessage({action:"close",payload:body});
   }else{
     // Browser demo: just show a toast
@@ -1713,6 +1715,15 @@ function buildPrintPayloadBody(indices){
   };
 }
 
+// A stable signature of the user-configurable job state (excludes printer/title),
+// so ✕ Cancel can tell whether the user actually configured anything vs. just
+// opened-then-dismissed the auto-popped window.
+function printConfigSig(){
+  const b=buildPrintPayloadBody(printIndices());
+  return JSON.stringify({sel:(b.recordIndices||[]).slice().sort((a,c)=>a-c),
+    pr:b.printRange, rf:b.rangeFrom, rt:b.rangeTo, t:b.templateID, f:b.filter, s:b.sort});
+}
+
 // Confirmation shown when Print is pressed with a label-size mismatch. Cancel
 // just dismisses (back to the print window); "Print anyway" forces the print.
 function buildMismatchConfirmModal(){
@@ -2137,13 +2148,15 @@ function R(){
     <!-- Top bar -->
     <div style="background:var(--surface);border-bottom:1px solid var(--bd2);padding:0 16px;display:flex;align-items:center;gap:12px;height:44px;flex-shrink:0">
       <span style="color:var(--accent);font-weight:700;font-size:15px;letter-spacing:-.3px">VectorLabel</span>
-      <span style="color:var(--text3);font-size:11px">Print</span>
+      <div style="display:flex;flex-direction:column;line-height:1.1">
+        <span style="color:var(--text3);font-size:11px">Print</span>
+        <span style="color:var(--text3);font-size:9px;opacity:.55;letter-spacing:.2px" title="VectorLabel build ${(window.__VL_BUILD__||"?")}">build ${(window.__VL_BUILD__||"?")}</span>
+      </div>
       <div style="width:1px;height:20px;background:var(--bd2)"></div>
       <span style="color:var(--text2);font-size:11px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${P.sourceFile}">${P.sourceFile}</span>
       <div style="flex:1"></div>
       <button class="btn" onclick="loadCSV()" style="font-size:11px">Load CSV…</button>
       <button class="btn" onclick="cancelAndClose()" style="color:var(--red);border-color:rgba(245,108,108,0.3);font-size:11px">✕ Cancel</button>
-      <span style="color:var(--text3);font-size:10px;opacity:.6;letter-spacing:.2px;white-space:nowrap;margin-left:2px" title="VectorLabel build ${(window.__VL_BUILD__||"?")}">build ${(window.__VL_BUILD__||"?")}</span>
     </div>
 
     <!-- Template bar -->
@@ -2396,6 +2409,9 @@ function initPrintWindow(opts){
     P.filter=null; P.sort=null;
   }
 
+  // Baseline for "did the user actually configure this?" — so ✕ Cancel on an
+  // opened-then-dismissed window doesn't manufacture a cancelled Recent Print.
+  P._initialSig = printConfigSig();
   R();
 }
 

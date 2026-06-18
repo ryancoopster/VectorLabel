@@ -39,6 +39,10 @@ public final class PrintWindowController: NSObject {
     // Tracked separately from sourceFileURL (which is cleared on reprint).
     private var csvWritebackURL: URL?
     private var reprinting: RecentPrint?
+    /// True while a template is being edited in the in-process designer (the print
+    /// window is hidden). Guards a mid-edit export/reprint from re-showing it over
+    /// the editor; cleared on return.
+    private var isEditing = false
 
     // Pushes the shared record-column config (order/hidden/widths) into the web
     // view when it changes (e.g. the user reorders columns in the designer).
@@ -90,6 +94,8 @@ public final class PrintWindowController: NSObject {
     // MARK: – Show / hide
 
     public func showForNewExport(fileURL: URL, records: [WireRecord]) {
+        guard !isEditing else { return }   // don't interrupt an open template edit
+        flushWriteback()                   // persist any pending inline edit first
         capturePreviousApp()
         self.records = records
         self.sourceFileURL = fileURL
@@ -110,17 +116,44 @@ public final class PrintWindowController: NSObject {
     }
 
     public func showForReprint(_ recent: RecentPrint) {
+        // Don't yank the window out from under an open template edit.
+        guard !isEditing else { return }
+        // Debounce duplicate Reprint taps: if we're already showing this record,
+        // just refocus instead of rebuilding the window.
+        if window != nil, reprinting?.id == recent.id {
+            NSApp.activate(ignoringOtherApps: true); window?.makeKeyAndOrderFront(nil); return
+        }
         capturePreviousApp()
         // Load the source CSV first; exports are pruned (recent prints are not), so
         // the file may be gone. Alert and abort rather than open an empty window.
         guard let (csv, url) = loadCSVForReprint(recent) else {
             let alert = NSAlert()
-            alert.messageText = "Can’t reprint — source file not found"
-            alert.informativeText = "The export “\(recent.sourceFileName)” is no longer in the Exports folder (it may have been pruned or moved)."
             alert.alertStyle = .warning
-            alert.runModal()
+            // A cancelled-before-printing record (jobId=="") was never rendered, so
+            // there is no done/<id>.json to fall back to — don't offer "Reprint
+            // Without Editing", which could only fail.
+            if recent.jobId.isEmpty {
+                alert.messageText = "Can’t reprint"
+                alert.informativeText = "This print was cancelled before any labels were rendered, and its source file “\(recent.sourceFileName)” is no longer available."
+                alert.runModal()
+                return
+            }
+            alert.messageText = "Source file not found"
+            alert.informativeText = "The export “\(recent.sourceFileName)” is no longer in the Exports folder (it may have been pruned or moved). You can reprint the original labels without editing, or cancel."
+            alert.addButton(withTitle: "Reprint Without Editing")
+            alert.addButton(withTitle: "Cancel")
+            if alert.runModal() == .alertFirstButtonReturn {
+                if !PrintQueue().resubmitDoneJob(id: recent.jobId) {
+                    let e = NSAlert()
+                    e.messageText = "Can’t reprint"
+                    e.informativeText = "The original print data for “\(recent.title)” is no longer available."
+                    e.alertStyle = .warning
+                    e.runModal()
+                }
+            }
             return
         }
+        flushWriteback()   // persist any pending inline edit before swapping records
         self.reprinting = recent
         // Clear any stale export URL so the recorded source filename comes from
         // the reprint record, not a previously-opened export.
@@ -133,6 +166,7 @@ public final class PrintWindowController: NSObject {
 
     public func close() {
         flushWriteback()   // persist any debounced inline edit before tearing down
+        catalogPollTimer?.invalidate(); catalogPollTimer = nil   // stop the 2s disk poll
         columnObservers.removeAll()
         templatesObserver = nil
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "vectorlabel")
@@ -250,10 +284,22 @@ public final class PrintWindowController: NSObject {
     /// Called when the designer finishes editing for the print window: refocus
     /// the print window and refresh its template list (selection/task preserved).
     public func returnFromEdit() {
+        isEditing = false
         guard window != nil else { return }
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
         pushTemplates()
+    }
+
+    /// "Cancel All" from the editor's unsaved-changes prompt: abandon the edit AND
+    /// cancel the underlying print exactly as if the user had pressed ✕ Cancel in
+    /// the print window — record it to Recent Prints (cancelled) and close. The
+    /// window is hidden during edit but its JS state is intact, so trigger its own
+    /// cancel flow.
+    public func cancelFromEdit() {
+        isEditing = false
+        guard window != nil else { return }
+        evalJS("if(typeof cancelAndClose==='function')cancelAndClose();")
     }
 
     /// Re-inject the current template list into the print window.
@@ -511,6 +557,7 @@ extension PrintWindowController: WKScriptMessageHandler {
         case "editTemplate":
             if let index = (body["payload"] as? [String: Any])?["index"] as? Int {
                 // Hide the print window while editing; returnFromEdit() reshows it.
+                isEditing = true
                 window?.orderOut(nil)
                 onEditTemplate?(index)
             }
@@ -525,12 +572,15 @@ extension PrintWindowController: WKScriptMessageHandler {
             }
 
         case "close":
-            // Recent Prints are owned and recorded entirely by the Engine (the only
-            // process that prints) — see VectorLabelEngineApp.consumeResolved. A
-            // ✕ Cancel before submitting therefore records nothing here: the job
-            // never reached the Engine, and writing to this process's own
-            // RecentPrintsStore would not appear in the menu bar (a separate
-            // process's store) and could clobber the Engine's history file.
+            // ✕ Cancel sends cancelled=true plus the configured selection. Record it
+            // as a CANCELLED Recent Print via the Engine (the recents owner), so it
+            // shows in the menu and can be reopened/reprinted exactly like a print
+            // that was sent. Skip when nothing was printable.
+            if let payload = body["payload"] as? [String: Any],
+               (payload["cancelled"] as? Bool) == true,
+               let recordIndices = payload["recordIndices"] as? [Int], !recordIndices.isEmpty {
+                recordCancelledPrint(payload: payload, recordIndices: recordIndices)
+            }
             close()
 
         case "ready":
@@ -538,6 +588,40 @@ extension PrintWindowController: WKScriptMessageHandler {
 
         default:
             break
+        }
+    }
+
+    /// Record a pre-submit cancellation as a cancelled Recent Print via the IPC
+    /// cancelled channel (the Engine owns recents). Carries the same print-time
+    /// state as a real print so Reprint re-opens this window in that state.
+    private func recordCancelledPrint(payload: [String: Any], recordIndices: [Int]) {
+        func jsonStr(_ v: Any?) -> String? {
+            guard let v = v, JSONSerialization.isValidJSONObject(v),
+                  let d = try? JSONSerialization.data(withJSONObject: v) else { return nil }
+            return String(data: d, encoding: .utf8)
+        }
+        let source = sourceFileURL?.lastPathComponent ?? reprinting?.sourceFileName ?? ""
+        let recent = RecentPrint(
+            date: Date(),
+            title: (payload["title"] as? String) ?? (source.isEmpty ? "Cancelled print" : source),
+            sourceFileName: source,
+            templateName: (payload["templateName"] as? String) ?? "",
+            printerName: "",
+            labelCount: recordIndices.count,
+            printRange: RecentPrint.PrintRange(rawValue: (payload["printRange"] as? String) ?? "") ?? .selected,
+            selectedIndices: recordIndices,
+            status: .cancelledBeforePrinting,
+            rangeFrom: payload["rangeFrom"] as? Int,
+            rangeTo: payload["rangeTo"] as? Int,
+            filterJSON: jsonStr(payload["filter"]),
+            sortJSON: jsonStr(payload["sort"]),
+            jobId: "",
+            sourceApp: "autoprint"
+        )
+        do {
+            try PrintQueue().writeCancelledRecent(recent)
+        } catch {
+            print("[PrintWindow] couldn't record cancellation: \(error)")
         }
     }
 
@@ -588,6 +672,23 @@ extension PrintWindowController: WKScriptMessageHandler {
         // into each label's VGL via BradyVGL.vglCutMode.
         let cutMode = CutMode(rawValue: (payload["cutMode"] as? String) ?? "") ?? .afterJobLast
 
+        // Capture the print-time state (main actor) so a later Reprint can re-open
+        // this window with the same source, selection, and filter/sort.
+        func jsonStr(_ v: Any?) -> String? {
+            guard let v = v, JSONSerialization.isValidJSONObject(v),
+                  let d = try? JSONSerialization.data(withJSONObject: v) else { return nil }
+            return String(data: d, encoding: .utf8)
+        }
+        let reprintInfo = ReprintInfo(
+            sourceFileName: sourceFileURL?.lastPathComponent ?? reprinting?.sourceFileName ?? "",
+            selectedIndices: recordIndices,
+            printRange: (payload["printRange"] as? String) ?? "selected",
+            rangeFrom: payload["rangeFrom"] as? Int,
+            rangeTo: payload["rangeTo"] as? Int,
+            filterJSON: jsonStr(payload["filter"]),
+            sortJSON: jsonStr(payload["sort"])
+        )
+
         // Recent Prints are recorded by the Engine (the only process that prints),
         // not here — see VectorLabelEngineApp.consumeResolved. Render the
         // (potentially large) batch OFF the main thread so the UI doesn't freeze,
@@ -634,7 +735,8 @@ extension PrintWindowController: WKScriptMessageHandler {
                     copies: 1,
                     cutMode: cutMode,
                     estLabelMs: estLabelMs,
-                    labels: jobs.map { Data($0) }
+                    labels: jobs.map { Data($0) },
+                    reprint: reprintInfo
                 )
                 do {
                     try self.backend?.submit(job)
@@ -671,6 +773,7 @@ extension PrintWindowController: WKScriptMessageHandler {
 extension PrintWindowController: NSWindowDelegate {
     public func windowWillClose(_ notification: Notification) {
         flushWriteback()   // persist any debounced inline edit
+        catalogPollTimer?.invalidate(); catalogPollTimer = nil   // stop the 2s disk poll
         columnObservers.removeAll()
         templatesObserver = nil
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "vectorlabel")

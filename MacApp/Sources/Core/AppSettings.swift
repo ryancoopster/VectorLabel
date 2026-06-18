@@ -48,12 +48,6 @@ public final class AppSettings: ObservableObject {
         didSet { UserDefaults.standard.set(defaultPrintRange, forKey: "defaultPrintRange") }
     }
 
-    // MARK: – Recent prints
-
-    /// How many recent print jobs to show in the menu bar (user-defined, default 5).
-    @Published public var recentPrintsCount: Int {
-        didSet { UserDefaults.standard.set(recentPrintsCount, forKey: "recentPrintsCount") }
-    }
 
     /// Template id pre-selected when the print window opens. Empty = none.
     /// Persists across print-window open/close and app restarts.
@@ -244,7 +238,6 @@ public final class AppSettings: ObservableObject {
                            ?? ((base as NSString).appendingPathComponent("Templates"))
         interLabelDelayMs = defaults.object(forKey: "interLabelDelayMs") as? Int ?? 50
         defaultPrintRange = defaults.string(forKey: "defaultPrintRange") ?? "all"
-        recentPrintsCount = defaults.object(forKey: "recentPrintsCount") as? Int ?? 5
         defaultTemplateID = defaults.string(forKey: "defaultTemplateID") ?? ""
         recordColumnOrder = (defaults.array(forKey: "recordColumnOrder") as? [String]) ?? []
         recordHiddenColumns = (defaults.array(forKey: "recordHiddenColumns") as? [String]) ?? []
@@ -295,7 +288,6 @@ public final class AppSettings: ObservableObject {
         templatesFolderPath  = (base as NSString).appendingPathComponent("Templates")
         interLabelDelayMs    = 50
         defaultPrintRange    = "all"
-        recentPrintsCount    = 5
         defaultTemplateID    = ""
         recordColumnOrder    = []
         recordHiddenColumns  = []

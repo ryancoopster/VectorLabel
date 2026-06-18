@@ -57,6 +57,11 @@ public final class DesignerWindowController: NSObject {
     /// Hosts use this to refocus/refresh the print window.
     public var onEditReturn: ((_ saved: Bool, _ templateIndex: Int?) -> Void)?
 
+    /// Fired when the user chooses "Cancel All" in the print-edit unsaved-changes
+    /// prompt: abandon the edit AND cancel the underlying print (the host records it
+    /// to Recent Prints as cancelled and closes the print window).
+    public var onEditCancelAll: (() -> Void)?
+
     // MARK: – Custom-mode print path (Phase 2)
     //
     // Only the Custom Designer (`mode == .custom`) prints. It owns a Core-only
@@ -181,7 +186,18 @@ public final class DesignerWindowController: NSObject {
         // then fall back to the bundled Core resource.
         guard let htmlURL = devHTMLURL("VectorLabelDesigner")
                             ?? CoreResources.url("VectorLabelDesigner", "html")
-        else { return }
+        else {
+            // Couldn't load the designer HTML. In print-edit mode the print window
+            // was orderOut'd and only onEditReturn re-shows it — fire it so a
+            // headless host (Auto Print) isn't left with no visible window.
+            if designerForPrintEdit {
+                let idx = pendingEditTemplateIndex
+                designerForPrintEdit = false
+                pendingEditTemplateIndex = nil
+                onEditReturn?(false, idx)
+            }
+            return
+        }
 
         // WKWebView with navigation delegate so we can inject records after load,
         // plus a message handler so the designer can save/list/browse templates
@@ -276,6 +292,7 @@ public final class DesignerWindowController: NSObject {
                     .removeScriptMessageHandler(forName: "vectorlabel")
                 self.webView = nil
                 self.window = nil
+                self.catalogPollTimer?.invalidate(); self.catalogPollTimer = nil   // stop the 2s disk poll
                 self.cancellables.removeAll()
                 // Custom mode: tear down the print backend's status watcher.
                 self.printBackend?.stop()
@@ -1099,7 +1116,33 @@ public final class DesignerWindowController: NSObject {
 
 extension DesignerWindowController: NSWindowDelegate {
     public func windowShouldClose(_ sender: NSWindow) -> Bool {
-        if designerForPrintEdit { return true }   // print-edit close uses editReturn
+        // Editing a template for the print window: the title-bar close offers the
+        // same Return choices as the toolbar, plus "Cancel All" (abandon the edit
+        // AND cancel the underlying print). Never silently discard edits.
+        if designerForPrintEdit {
+            let alert = NSAlert()
+            alert.messageText = "Finish editing this template?"
+            alert.informativeText = "Save your changes and return to the print window, return without saving, or cancel the whole print."
+            alert.addButton(withTitle: "Save & Return")       // .alertFirstButtonReturn
+            alert.addButton(withTitle: "Save As & Return")    // .alertSecondButtonReturn
+            alert.addButton(withTitle: "Cancel & Return")     // .alertThirdButtonReturn — discard, back to print window
+            alert.addButton(withTitle: "Cancel All")          // abandon + cancel the print
+            switch alert.runModal() {
+            case .alertFirstButtonReturn:
+                webView?.evaluateJavaScript("if(typeof edPrintSave==='function')edPrintSave()", completionHandler: nil)
+                return false   // edPrintSave → editReturn{save} → save + close + onEditReturn → returnFromEdit
+            case .alertSecondButtonReturn:
+                webView?.evaluateJavaScript("if(typeof edPrintSaveAs==='function')edPrintSaveAs()", completionHandler: nil)
+                return false   // opens the save-name modal; editReturn fires after saving
+            case .alertThirdButtonReturn:
+                webView?.evaluateJavaScript("if(typeof edPrintCancel==='function')edPrintCancel()", completionHandler: nil)
+                return false   // editReturn{save:false} → onEditReturn → returnFromEdit
+            default:           // Cancel All
+                designerForPrintEdit = false   // suppress the willClose onEditReturn path
+                onEditCancelAll?()
+                return true                    // close the designer now
+            }
+        }
         if !isDirty { return true }
         return promptUnsaved(allowCancel: true, then: .close)
     }

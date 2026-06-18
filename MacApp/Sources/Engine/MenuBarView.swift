@@ -13,6 +13,8 @@ struct MenuBarView: View {
     @ObservedObject var recentPrints    = RecentPrintsStore.shared
     @ObservedObject var settings        = AppSettings.shared
     @EnvironmentObject var appDelegate: AppDelegate
+    /// Persisted: hide cancelled prints in the Recent Prints list.
+    @AppStorage("hideCancelledPrints") private var hideCancelled = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -90,20 +92,79 @@ struct MenuBarView: View {
 
     // MARK: – Recent prints
 
-    private var recentPrintsSection: some View {
-        Group {
-            sectionHeader("Recent Prints")
+    /// The recent prints shown in the menu, honoring the "hide cancelled" toggle.
+    private var displayedRecents: [RecentPrint] {
+        guard hideCancelled else { return recentPrints.prints }
+        return recentPrints.prints.filter {
+            $0.status != .cancelledBeforePrinting && $0.status != .cancelledMidPrint
+        }
+    }
 
-            if recentPrints.prints.isEmpty {
-                emptyState("No recent prints")
-            } else {
-                ForEach(recentPrints.prints.prefix(settings.recentPrintsCount)) { recent in
-                    RecentPrintRow(recent: recent) {
-                        appDelegate.reprint(recent)
+    private var recentPrintsSection: some View {
+        ScrollViewReader { proxy in
+            VStack(alignment: .leading, spacing: 0) {
+                recentPrintsHeader(proxy: proxy)
+
+                if displayedRecents.isEmpty {
+                    emptyState(recentPrints.prints.isEmpty ? "No recent prints" : "No prints to show")
+                } else {
+                    // Full scrollable history (bounded height); the header buttons
+                    // jump to top/bottom and clear.
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            Color.clear.frame(height: 1).id("vlRecentsTop")
+                            ForEach(displayedRecents) { recent in
+                                RecentPrintRow(recent: recent) { appDelegate.reprint(recent) }
+                            }
+                            Color.clear.frame(height: 1).id("vlRecentsBottom")
+                        }
                     }
+                    .frame(maxHeight: 300)
                 }
             }
         }
+    }
+
+    private func recentPrintsHeader(proxy: ScrollViewProxy) -> some View {
+        HStack(spacing: 2) {
+            Text("Recent Prints".uppercased())
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(.vlDim)
+            Spacer()
+            headerIcon(hideCancelled ? "eye.slash" : "eye",
+                       help: hideCancelled ? "Show cancelled prints" : "Hide cancelled prints") {
+                hideCancelled.toggle()
+            }
+            if !displayedRecents.isEmpty {
+                headerIcon("arrow.up.to.line", help: "Scroll to top") {
+                    withAnimation { proxy.scrollTo("vlRecentsTop", anchor: .top) }
+                }
+                headerIcon("arrow.down.to.line", help: "Scroll to bottom") {
+                    withAnimation { proxy.scrollTo("vlRecentsBottom", anchor: .bottom) }
+                }
+            }
+            if !recentPrints.prints.isEmpty {
+                headerIcon("trash", help: "Clear recent prints", tint: .vlRed) {
+                    appDelegate.confirmClearRecents()
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 12)
+        .padding(.bottom, 4)
+    }
+
+    private func headerIcon(_ name: String, help: String, tint: Color = .vlSecondary,
+                            _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: name)
+                .font(.system(size: 11))
+                .foregroundColor(tint)
+                .frame(width: 22, height: 18)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
     }
 
     // MARK: – Actions

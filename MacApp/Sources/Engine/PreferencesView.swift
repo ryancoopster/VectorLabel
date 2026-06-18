@@ -233,15 +233,9 @@ struct PreferencesView: View {
     private var recentTab: some View {
         VStack(alignment: .leading, spacing: 0) {
             PrefSection(title: "History") {
-                PrefRow(label: "Recent print jobs to show in menu bar",
-                        caption: "Number of recent prints listed in the menu bar dropdown.") {
-                    Stepper(value: $settings.recentPrintsCount, in: 1...25) {
-                        Text("\(settings.recentPrintsCount)")
-                            .font(.system(size: 13, weight: .medium))
-                            .frame(minWidth: 24, alignment: .trailing)
-                            .monospacedDigit()
-                    }
-                    .fixedSize()
+                PrefRow(label: "Recent prints",
+                        caption: "The full print history is kept and shown — scrollable — in the menu bar, with buttons to jump to the top/bottom and clear it.") {
+                    EmptyView()
                 }
             }
 

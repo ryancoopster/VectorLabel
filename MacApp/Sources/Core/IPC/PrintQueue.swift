@@ -44,12 +44,42 @@ public struct PrintQueue {
     public var controlDir: URL    { root.appendingPathComponent("control", isDirectory: true) }
     public var statusDir: URL     { root.appendingPathComponent("status", isDirectory: true) }
     public var statusFile: URL    { statusDir.appendingPathComponent("printers.json") }
+    public var reprintDir: URL    { root.appendingPathComponent("reprint", isDirectory: true) }
+    public var cancelledDir: URL  { root.appendingPathComponent("cancelled", isDirectory: true) }
 
     public func ensureDirs() {
         let fm = FileManager.default
-        for d in [queueDir, processingDir, doneDir, failedDir, controlDir, statusDir] {
+        for d in [queueDir, processingDir, doneDir, failedDir, controlDir, statusDir, reprintDir, cancelledDir] {
             try? fm.createDirectory(at: d, withIntermediateDirectories: true)
         }
+    }
+
+    // MARK: – Shared file primitives (atomic publish / list / decode)
+
+    /// Encode + publish atomically (temp `.json.tmp` → rename `.json`) so a watcher
+    /// filtering on `.json` never sees a partial file.
+    @discardableResult
+    private func atomicWrite<T: Encodable>(_ value: T, to dir: URL, id: String) throws -> URL {
+        ensureDirs()
+        let data = try JSONEncoder().encode(value)
+        let finalURL = dir.appendingPathComponent("\(id).json")
+        let tmpURL = dir.appendingPathComponent("\(id).json.tmp")
+        try data.write(to: tmpURL, options: .atomic)
+        try? FileManager.default.removeItem(at: finalURL)
+        try FileManager.default.moveItem(at: tmpURL, to: finalURL)
+        return finalURL
+    }
+
+    /// All `.json` files in `dir`, name-sorted (stable backlog-drain order).
+    private func pendingJSON(in dir: URL) -> [URL] {
+        let items = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+        return items.filter { $0.pathExtension == "json" }.sorted { $0.lastPathComponent < $1.lastPathComponent }
+    }
+
+    /// Decode a JSON file, or nil if missing/undecodable.
+    private func decodeJSON<T: Decodable>(_ url: URL) -> T? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(T.self, from: data)
     }
 
     // MARK: – Submitter side
@@ -58,26 +88,14 @@ public struct PrintQueue {
     /// — which only matches `.json` — never sees a partially written file.
     @discardableResult
     public func write(_ job: PrintJobFile) throws -> URL {
-        ensureDirs()
-        let data = try JSONEncoder().encode(job)
-        let finalURL = queueDir.appendingPathComponent("\(job.id).json")
-        let tmpURL = queueDir.appendingPathComponent("\(job.id).json.tmp")
-        try data.write(to: tmpURL, options: .atomic)
-        try? FileManager.default.removeItem(at: finalURL)
-        try FileManager.default.moveItem(at: tmpURL, to: finalURL)
-        return finalURL
+        try atomicWrite(job, to: queueDir, id: job.id)
     }
 
     // MARK: – Engine side
 
     /// All ready job files currently in the queue (used to drain a backlog at
     /// Engine startup, before the watcher takes over).
-    public func pendingJobURLs() -> [URL] {
-        let items = (try? FileManager.default.contentsOfDirectory(
-            at: queueDir, includingPropertiesForKeys: nil)) ?? []
-        return items.filter { $0.pathExtension == "json" }
-            .sorted { $0.lastPathComponent < $1.lastPathComponent }
-    }
+    public func pendingJobURLs() -> [URL] { pendingJSON(in: queueDir) }
 
     /// Atomically claim a queued job by moving it to processing/ (the move IS the
     /// lock — if it fails the job is gone or already claimed) and decode it.
@@ -144,10 +162,66 @@ public struct PrintQueue {
     /// stem). Returns nil if the file is missing or undecodable. Used by reprint
     /// to re-submit the same rendered VGL labels as a fresh job.
     public func readDoneJob(id: String) -> PrintJobFile? {
-        let url = doneDir.appendingPathComponent("\(id).json")
-        guard let data = try? Data(contentsOf: url),
-              let job = try? JSONDecoder().decode(PrintJobFile.self, from: data) else { return nil }
-        return job
+        decodeJSON(doneDir.appendingPathComponent("\(id).json"))
+    }
+
+    /// Re-submit a finished job's already-rendered VGL labels as a fresh queue job
+    /// (new id/date, same labels/printer/cut). Used by the "Reprint without editing"
+    /// fallback when the original source is gone. Returns false if the done file is
+    /// missing or the write failed.
+    @discardableResult
+    public func resubmitDoneJob(id: String) -> Bool {
+        guard let original = readDoneJob(id: id) else { return false }
+        let fresh = PrintJobFile(
+            id: UUID().uuidString,
+            createdAt: ISO8601DateFormatter().string(from: Date()),
+            sourceApp: original.sourceApp,
+            title: original.title,
+            templateName: original.templateName,
+            printerID: original.printerID,
+            copies: original.copies,
+            cutMode: original.cutMode,
+            estLabelMs: original.estLabelMs,
+            labels: original.labels,
+            reprint: original.reprint
+        )
+        return (try? write(fresh)) != nil
+    }
+
+    // MARK: – Reprint channel (Engine → front-end: "re-open this job's window")
+
+    /// Engine asks a front-end (Auto Print / Custom Designer) to RE-OPEN the source
+    /// window in this job's print-time state. Written atomically; the front-end's
+    /// watcher reads, acts, and deletes it.
+    @discardableResult
+    public func writeReprintRequest(_ recent: RecentPrint) throws -> URL {
+        try atomicWrite(recent, to: reprintDir, id: recent.id.uuidString)
+    }
+
+    public func pendingReprintURLs() -> [URL] { pendingJSON(in: reprintDir) }
+
+    public func readReprintRequest(_ url: URL) -> RecentPrint? { decodeJSON(url) }
+
+    public func deleteReprint(_ url: URL) {
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    // MARK: – Cancelled channel (front-end → Engine: "record this as cancelled")
+
+    /// A front-end records a pre-submit cancellation so it lands in the
+    /// Engine-owned Recent Prints as cancelled and can be reopened/reprinted just
+    /// like a printed job. Written atomically; the Engine reads, adds, deletes.
+    @discardableResult
+    public func writeCancelledRecent(_ recent: RecentPrint) throws -> URL {
+        try atomicWrite(recent, to: cancelledDir, id: recent.id.uuidString)
+    }
+
+    public func pendingCancelledURLs() -> [URL] { pendingJSON(in: cancelledDir) }
+
+    public func readCancelledRecent(_ url: URL) -> RecentPrint? { decodeJSON(url) }
+
+    public func deleteCancelled(_ url: URL) {
+        try? FileManager.default.removeItem(at: url)
     }
 
     // MARK: – Control channel (front-ends request, Engine acts)
@@ -156,30 +230,14 @@ public struct PrintQueue {
     /// — which only matches `.json` — never sees a partial file.
     @discardableResult
     public func writeControl(_ request: ControlRequest) throws -> URL {
-        ensureDirs()
-        let data = try JSONEncoder().encode(request)
-        let finalURL = controlDir.appendingPathComponent("\(request.requestId).json")
-        let tmpURL = controlDir.appendingPathComponent("\(request.requestId).json.tmp")
-        try data.write(to: tmpURL, options: .atomic)
-        try? FileManager.default.removeItem(at: finalURL)
-        try FileManager.default.moveItem(at: tmpURL, to: finalURL)
-        return finalURL
+        try atomicWrite(request, to: controlDir, id: request.requestId)
     }
 
     /// All pending control request files (Engine-side backlog drain at startup).
-    public func pendingControlURLs() -> [URL] {
-        let items = (try? FileManager.default.contentsOfDirectory(
-            at: controlDir, includingPropertiesForKeys: nil)) ?? []
-        return items.filter { $0.pathExtension == "json" }
-            .sorted { $0.lastPathComponent < $1.lastPathComponent }
-    }
+    public func pendingControlURLs() -> [URL] { pendingJSON(in: controlDir) }
 
     /// Decode a control request file (Engine side). Returns nil if unreadable.
-    public func readControl(_ url: URL) -> ControlRequest? {
-        guard let data = try? Data(contentsOf: url),
-              let req = try? JSONDecoder().decode(ControlRequest.self, from: data) else { return nil }
-        return req
-    }
+    public func readControl(_ url: URL) -> ControlRequest? { decodeJSON(url) }
 
     /// Delete a handled control request file (Engine side).
     public func deleteControl(_ url: URL) {
@@ -189,18 +247,10 @@ public struct PrintQueue {
     // MARK: – Status (Engine publishes, front-ends read)
 
     public func publishStatus(_ status: PrinterStatusFile) throws {
-        ensureDirs()
-        let data = try JSONEncoder().encode(status)
-        let tmp = statusFile.appendingPathExtension("tmp")
-        try data.write(to: tmp, options: .atomic)
-        try? FileManager.default.removeItem(at: statusFile)
-        try FileManager.default.moveItem(at: tmp, to: statusFile)
+        try atomicWrite(status, to: statusDir, id: "printers")   // → status/printers.json
     }
 
-    public func readStatus() -> PrinterStatusFile? {
-        guard let data = try? Data(contentsOf: statusFile) else { return nil }
-        return try? JSONDecoder().decode(PrinterStatusFile.self, from: data)
-    }
+    public func readStatus() -> PrinterStatusFile? { decodeJSON(statusFile) }
 }
 
 /// Engine-side watcher: fires `onJob` for each job dropped into the queue

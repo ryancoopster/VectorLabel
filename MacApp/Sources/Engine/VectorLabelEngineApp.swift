@@ -40,6 +40,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var queueWatcher: PrintQueueWatcher?
     // Watches ipc/control/ for front-end control requests (cancel).
     private var controlWatcher: FolderWatcher?
+    // Watches ipc/cancelled/ for front-end pre-submit cancellations to record.
+    private var cancelledWatcher: FolderWatcher?
     // Maps an in-flight PrintJob.id → the queue's processing/ file URL, the IPC job
     // id (queue filename stem, for cancel matching), the Recent-Prints record id (to
     // update its lifecycle status on completion), and the per-job Combine
@@ -75,12 +77,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
         startQueueConsumer()
         startControlWatcher()
+        startCancelledWatcher()
         startStatusPublisher()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         queueWatcher?.stop()
         controlWatcher?.stop()
+        cancelledWatcher?.stop()
         PrinterManager.shared.stopScan()
         // Best-effort: publish that the engine is no longer running so front-ends
         // can show "engine offline".
@@ -139,39 +143,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     /// Launch the standalone Custom Designer app (packaged suite only).
     func openCustomDesigner() { DesignerAppLauncher.launch(.custom) }
 
-    /// Reprint a finished job: read its rendered VGL labels back from
-    /// ipc/done/<jobId>.json and re-submit them as a NEW job (fresh id, same
-    /// labels/title/templateName/printerID/cutMode/estLabelMs). The Engine prints
-    /// it like any other queued job — recording its own fresh Recent-Prints entry
-    /// via consumeResolved. If the done file is gone, notify + log and no-op.
+    /// Reprint: RE-OPEN the source window (print window today; Custom Designer in a
+    /// later phase) in the job's print-time state so the user can choose what to
+    /// reprint — instead of blindly re-submitting. The front-end watches the IPC
+    /// `reprint/` channel and reopens; if the source file is gone it offers a
+    /// "reprint without editing" that re-submits the rendered labels. Falls back to
+    /// a direct re-submit if we can't hand off (no source app / write failure).
     func reprint(_ recent: RecentPrint) {
         let queue = PrintQueue()
-        guard !recent.jobId.isEmpty, let original = queue.readDoneJob(id: recent.jobId) else {
+        // Route off the key persisted on the record; consult the done file only as
+        // a legacy fallback for records written before sourceApp existed.
+        let sourceApp = recent.sourceApp.isEmpty
+            ? (queue.readDoneJob(id: recent.jobId)?.sourceApp ?? "")
+            : recent.sourceApp
+        // Only the print window (AutoPrint) has a reopen front end today. Custom
+        // Designer reopen isn't wired yet, and an unknown source has nowhere to
+        // reopen — re-submit the rendered labels directly (which fails cleanly with
+        // one notification if the done file is gone) rather than mis-routing.
+        guard sourceApp == "autoprint" else { reprintImmediately(recent); return }
+        do {
+            try queue.writeReprintRequest(recent)         // Auto Print reopens the print window
+            DesignerAppLauncher.ensureRunning(.autoPrint) // wake the headless host if it's down
+        } catch {
+            print("[Engine] reprint: couldn't post reprint request: \(error) — re-submitting directly")
+            reprintImmediately(recent)
+        }
+    }
+
+    /// Re-submit a finished job's already-rendered VGL labels as a fresh job (no
+    /// window). Used for sources without a reopen path and as the "can't hand off"
+    /// fallback. If the done file is gone, notify + no-op.
+    private func reprintImmediately(_ recent: RecentPrint) {
+        let queue = PrintQueue()
+        guard !recent.jobId.isEmpty, queue.resubmitDoneJob(id: recent.jobId) else {
             print("[Engine] reprint: done file for jobId=\(recent.jobId) not found — cannot reprint")
             notify(title: "Can’t reprint",
                    body: "The original print data for “\(recent.title)” is no longer available.")
             return
         }
-        let fresh = PrintJobFile(
-            id: UUID().uuidString,
-            createdAt: ISO8601DateFormatter().string(from: Date()),
-            sourceApp: original.sourceApp,
-            title: original.title,
-            templateName: original.templateName,
-            printerID: original.printerID,
-            copies: original.copies,
-            cutMode: original.cutMode,
-            estLabelMs: original.estLabelMs,
-            labels: original.labels
-        )
-        do {
-            try queue.write(fresh)
-            // Drain immediately so it prints even if the FSEvent is coalesced/missed.
-            queueWatcher?.drainBacklog()
-        } catch {
-            print("[Engine] reprint: failed to enqueue: \(error)")
-            notify(title: "Reprint failed",
-                   body: "Couldn’t queue “\(recent.title)” for reprinting.")
+        // Drain immediately so it prints even if the FSEvent is coalesced/missed.
+        queueWatcher?.drainBacklog()
+    }
+
+    /// Confirm, then clear the Recent Prints history. Irreversible, so warn first.
+    func confirmClearRecents() {
+        let alert = NSAlert()
+        alert.messageText = "Clear Recent Prints?"
+        alert.informativeText = "This permanently removes all recent print history. This can’t be undone."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Clear")
+        alert.addButton(withTitle: "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn {
+            RecentPrintsStore.shared.clear()
         }
     }
 
@@ -315,17 +338,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // now (carrying the IPC job id so Reprint can re-read ipc/done/<id>.json),
         // and update its status to the terminal outcome on completion.
         let printerName = PrinterManager.shared.printers.first { $0.id == printerID }?.name ?? printerID
+        // Preserve the front-end's print-time state (source/selection/filter/sort)
+        // so Reprint can RE-OPEN the source window in that state, not blindly print.
+        let rp = job.reprint
         let recent = RecentPrint(
             date: Date(),
             title: job.title,
-            sourceFileName: "",
+            sourceFileName: rp?.sourceFileName ?? "",
             templateName: job.templateName,
             printerName: printerName,
             labelCount: job.labels.count,
-            printRange: .all,
-            selectedIndices: [],
+            printRange: RecentPrint.PrintRange(rawValue: rp?.printRange ?? "") ?? .all,
+            selectedIndices: rp?.selectedIndices ?? [],
             status: .printing,
-            jobId: job.id
+            rangeFrom: rp?.rangeFrom,
+            rangeTo: rp?.rangeTo,
+            filterJSON: rp?.filterJSON,
+            sortJSON: rp?.sortJSON,
+            jobId: job.id,
+            sourceApp: job.sourceApp
         )
         recents.add(recent)
 
@@ -421,6 +452,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             }
         }
         queue.deleteControl(url)
+    }
+
+    // MARK: – Cancelled-record channel (front-end records a pre-submit cancel)
+
+    private func startCancelledWatcher() {
+        let queue = PrintQueue()
+        queue.ensureDirs()
+        let fw = FolderWatcher(root: queue.cancelledDir, suffix: ".json", latency: 0.1) { [weak self] url in
+            Task { @MainActor in self?.handleCancelled(url) }
+        }
+        fw.start()
+        cancelledWatcher = fw
+        // Drain any cancellations recorded before we started watching.
+        for url in queue.pendingCancelledURLs() { handleCancelled(url) }
+    }
+
+    private func handleCancelled(_ url: URL) {
+        let queue = PrintQueue()
+        // The front-end already built a RecentPrint with status .cancelledBeforePrinting
+        // and the print-time state; record it so it shows in the menu and reprints
+        // (re-opens the print window) like any other recent.
+        if let recent = queue.readCancelledRecent(url) { recents.add(recent) }
+        queue.deleteCancelled(url)
     }
 
     // MARK: – Status publisher

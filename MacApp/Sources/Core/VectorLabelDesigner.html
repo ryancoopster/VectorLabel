@@ -1298,7 +1298,10 @@ function R(){
     <!-- Top bar -->
     <div style="background:var(--surface);border-bottom:1px solid var(--bd2);padding:0 14px;display:flex;align-items:center;gap:10px;height:44px;flex-shrink:0">
       <span style="color:var(--accent);font-weight:700;font-size:15px;letter-spacing:-.3px">VectorLabel</span>
-      <span style="color:var(--text3);font-size:11px">${isCustomMode()?'Custom Designer':'Template Designer'}</span>
+      <div style="display:flex;flex-direction:column;line-height:1.1">
+        <span style="color:var(--text3);font-size:11px">${isCustomMode()?'Custom Designer':'Template Designer'}</span>
+        <span style="color:var(--text3);font-size:9px;opacity:.55;letter-spacing:.2px" title="VectorLabel build ${(window.__VL_BUILD__||"?")}">build ${(window.__VL_BUILD__||"?")}</span>
+      </div>
       <div style="flex:1"></div>
       <button class="btn" onclick="openSupplyPicker()" title="Choose a label supply" style="display:flex;align-items:center;gap:10px;padding:4px 10px">
         <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Supply</span>
@@ -1327,7 +1330,6 @@ function R(){
         ${S._csvName?'📄 '+S._csvName.replace(/_export_\d{8}_\d{6}\.csv$/i,'').replace(/_/g,' ').slice(-24):'Load CSV…'}
       </button>`}
       <span id="ed-toolbar-btns"></span>
-      <span style="color:var(--text3);font-size:10px;opacity:.6;letter-spacing:.2px;white-space:nowrap;margin-left:2px" title="VectorLabel build ${(window.__VL_BUILD__||"?")}">build ${(window.__VL_BUILD__||"?")}</span>
     </div>
 
     ${buildCustomPrintHeader()}
@@ -2375,6 +2377,9 @@ document.addEventListener("keydown",function(e){
 
 function showModal(name){S.modal=name;renderModal();}
 function closeModal(){S.modal=null;renderModal();
+  // Save As cancelled during a print-edit: restore the original loaded id so a
+  // later "Save & Return" overwrites in place instead of duplicating the template.
+  if(window._printEdit&&window._printReturnAfterSave){ S._loadedId=window._preEditLoadedId||null; window._printReturnAfterSave=false; }
   // Apply any catalog update that arrived while the modal was open (deferred).
   if(window._vlCatalogPending){const c=window._vlCatalogPending;window._vlCatalogPending=null;if(typeof applyCatalog==="function")applyCatalog(c);}
 }
@@ -2849,6 +2854,7 @@ function initPrintEdit(template){
   if(template){
     S.tplName=template.name||defaultDocName();
     S._loadedId=template.id||null;
+    window._preEditLoadedId=template.id||null;   // restored if a Save As is cancelled
     applyLoadedSpec(template.specN,template.labelLengthInches,template.canvasRot,template.supplyID,template.supplyGeometry);
     S.objs=sanitizeObjs(template.objs);
     S.selId=null;S._ef=undefined;S.modal=null;

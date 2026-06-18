@@ -21,6 +21,11 @@ public struct RecentPrint: Codable, Identifiable, Hashable {
     /// that predate the Engine-owned recents (no done file to reprint from).
     public var jobId: String = ""
 
+    /// Which front-end submitted the job ("autoprint" | "customdesigner" | …).
+    /// Persisted so Reprint routes off the record itself rather than re-deriving
+    /// it from the (prunable) done file. Empty for records that predate this field.
+    public var sourceApp: String = ""
+
     public enum PrintRange: String, Codable {
         case all, selected, range
     }
@@ -55,7 +60,7 @@ public struct RecentPrint: Codable, Identifiable, Hashable {
     enum CodingKeys: String, CodingKey {
         case id, date, title, sourceFileName, templateName, printerName
         case labelCount, printRange, selectedIndices, status, rangeFrom, rangeTo
-        case filterJSON, sortJSON, jobId
+        case filterJSON, sortJSON, jobId, sourceApp
     }
 
     public init(id: UUID = UUID(), date: Date, title: String, sourceFileName: String,
@@ -63,7 +68,7 @@ public struct RecentPrint: Codable, Identifiable, Hashable {
                 printRange: PrintRange, selectedIndices: [Int], status: Status = .complete,
                 rangeFrom: Int? = nil, rangeTo: Int? = nil,
                 filterJSON: String? = nil, sortJSON: String? = nil,
-                jobId: String = "") {
+                jobId: String = "", sourceApp: String = "") {
         self.id = id
         self.date = date
         self.title = title
@@ -79,6 +84,7 @@ public struct RecentPrint: Codable, Identifiable, Hashable {
         self.filterJSON = filterJSON
         self.sortJSON = sortJSON
         self.jobId = jobId
+        self.sourceApp = sourceApp
     }
 
     /// Absolute print date and time, e.g. "Jun 15, 2026 at 3:42 PM".
@@ -122,6 +128,7 @@ extension RecentPrint {
         filterJSON      = try? c.decode(String.self, forKey: .filterJSON)
         sortJSON        = try? c.decode(String.self, forKey: .sortJSON)
         jobId           = (try? c.decode(String.self, forKey: .jobId)) ?? ""
+        sourceApp       = (try? c.decode(String.self, forKey: .sourceApp)) ?? ""
     }
 }
 
@@ -149,10 +156,14 @@ public final class RecentPrintsStore: ObservableObject {
 
     // MARK: – Public API
 
+    /// Upper bound on retained history — the menu shows the full scrollable list
+    /// and offers Clear, so this only guards the persisted file against unbounded
+    /// growth over a very long session.
+    public static let maxHistory = 500
+
     public func add(_ print: RecentPrint) {
         prints.insert(print, at: 0)
-        let maxCount = AppSettings.shared.recentPrintsCount
-        if prints.count > maxCount { prints = Array(prints.prefix(maxCount)) }
+        if prints.count > Self.maxHistory { prints = Array(prints.prefix(Self.maxHistory)) }
         save()
     }
 
