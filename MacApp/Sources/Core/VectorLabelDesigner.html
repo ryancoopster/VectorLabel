@@ -1216,6 +1216,14 @@ function scheduleCanvas(){
   _rafCanvas=true;
   requestAnimationFrame(function(){ _rafCanvas=false; renderCanvasOnly(); });
 }
+// Center the label in the canvas viewport: scroll the canvas-scroll container to
+// the middle of its overflow. When the canvas fits the viewport it's already
+// flex-centered, so this is a no-op.
+function centerCanvas(){
+  const el=document.getElementById('canvas-scroll'); if(!el)return;
+  el.scrollLeft=Math.max(0,(el.scrollWidth-el.clientWidth)/2);
+  el.scrollTop=Math.max(0,(el.scrollHeight-el.clientHeight)/2);
+}
 
 function R(){
   normSel();
@@ -1247,6 +1255,7 @@ function R(){
         <button onclick="S.zoom=Math.min(4,S.zoom+0.25);R()" title="Zoom in" style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:16px;padding:0 2px;line-height:1">+</button>
       </div>
       <button onclick="S.zoom=1;R()" class="btn" style="padding:4px 7px;font-size:10px">Reset</button>
+      <button onclick="centerCanvas()" class="btn" title="Center the label in the view" style="padding:4px 7px;font-size:10px">⌖ Center</button>
       <div style="display:flex;align-items:center;gap:6px;margin-left:4px">
         <span style="color:var(--text2);font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${S.tplName}">${S.tplName}</span>
       </div>
@@ -1553,7 +1562,7 @@ function renderModal(){
         <td>${supplyTypeFull(l)}</td>
         <td style="white-space:nowrap">${fi(l.tw)} × ${fi(l.th)}</td>
         <td style="white-space:nowrap">${fi(l.pw)} × ${fi(l.ph)}</td>
-        <td onclick="event.stopPropagation()"><button class="btn" onclick="event.stopPropagation();buyPart('${l.n}')" title="Find ${l.n} on Brady" style="padding:3px 9px;font-size:11px">Buy ↗</button></td>
+        <td onclick="event.stopPropagation()"><div style="display:flex;gap:4px;flex-wrap:wrap">${buyButtons(l)}</div></td>
       </tr>`;
     };
     const diecut=BL.filter(l=>l.ty!=="continuous");
@@ -2395,21 +2404,36 @@ function dCanPrint(){
 // Open a reliable purchase link for a part number. Brady restructures its product
 // URLs over time (the old per-product pages 404), so we search by part number,
 // which always resolves to the current product/buy page. Routed via Swift openURL.
-function buyPart(n){
-  if(!n)return;
-  const url='https://www.google.com/search?q='+encodeURIComponent('Brady '+n+' label');
+function buyTerm(term){
+  if(!term)return;
+  const url='https://www.bradyid.com/searchresults?Ntt='+encodeURIComponent(term);
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
     window.webkit.messageHandlers.vectorlabel.postMessage({action:"openURL",payload:{url}});
 }
+// Buy buttons for a supply: die-cut → Roll (+ Bulk box when one exists); continuous
+// → material options (Vinyl / Polyester) at the supply's width. Each opens a Brady
+// storefront search for the matching part number (their per-product URLs change, a
+// search always resolves to the current product/buy page).
+function buyButtons(l){
+  if(!l)return "";
+  const bs='class="btn" style="padding:3px 9px;font-size:11px;white-space:nowrap"';
+  if(l.ty==="continuous"){
+    const mils=Math.round((l.tw||0)*1000);
+    return `<button ${bs} onclick="event.stopPropagation();buyTerm('M6C-${mils}-595')" title="Buy ${l.tw}&quot; continuous vinyl on Brady">Vinyl ↗</button>`
+      +`<button ${bs} onclick="event.stopPropagation();buyTerm('M6C-${mils}-422')" title="Buy ${l.tw}&quot; continuous polyester on Brady">Polyester ↗</button>`;
+  }
+  const bulk=l.bb?`<button ${bs} onclick="event.stopPropagation();buyTerm('${l.n} bulk box')" title="Buy a bulk box of ${l.n} on Brady">Bulk box ↗</button>`:"";
+  return `<button ${bs} onclick="event.stopPropagation();buyTerm('${l.n}')" title="Buy ${l.n} on Brady">Roll ↗</button>`+bulk;
+}
 // Open the supply picker window — a spacious table of every supply with its type,
-// sizes and a buy link. Shared by both the Custom and Template Designer.
+// sizes and buy links. Shared by both the Custom and Template Designer.
 function openSupplyPicker(){ S.modal="supply"; renderModal(); }
-// "Buy ↗" control for the selected supply, shown in the Custom Designer print header.
+// "Buy" control for the selected supply, shown in the Custom Designer print header.
 function buyMoreControl(){
   const s=BL.find(l=>l.n===S.spec.n); if(!s)return "";
-  return`<div style="display:flex;align-items:center;gap:5px">
+  return`<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
     <span style="color:var(--text3);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px">Buy:</span>
-    <button class="btn" onclick="buyPart('${s.n}')" title="Find ${s.n} on Brady" style="padding:4px 10px;font-size:11px">Buy ↗</button>
+    ${buyButtons(s)}
   </div>`;
 }
 
