@@ -132,7 +132,8 @@ struct MenuBarView: View {
                 .foregroundColor(.vlDim)
             Spacer()
             headerIcon(hideCancelled ? "eye.slash" : "eye",
-                       help: hideCancelled ? "Show cancelled prints" : "Hide cancelled prints") {
+                       help: hideCancelled ? "Show cancelled prints in the list"
+                                           : "Hide cancelled prints from the list") {
                 hideCancelled.toggle()
             }
             if !displayedRecents.isEmpty {
@@ -164,7 +165,8 @@ struct MenuBarView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(help)
+        .help(help)            // SwiftUI tooltip
+        .vlToolTip(help)       // AppKit-backed fallback (reliable inside the popover)
     }
 
     // MARK: – Actions
@@ -465,4 +467,26 @@ struct RecentPrintRow: View {
         .background(hovering ? Color.vlHover : Color.clear)
         .onHover { hovering = $0 }
     }
+}
+
+// MARK: – AppKit-backed tooltip
+//
+// SwiftUI's .help() is unreliable inside a menu-bar NSPopover; this sets the
+// underlying NSView's toolTip directly so it always shows on hover. It sits in
+// the background and is click-through (hitTest returns nil), so it never blocks
+// the control it annotates.
+private struct VLToolTip: NSViewRepresentable {
+    let text: String
+    func makeNSView(context: Context) -> NSView { TipView(text: text) }
+    func updateNSView(_ view: NSView, context: Context) { view.toolTip = text }
+    final class TipView: NSView {
+        init(text: String) { super.init(frame: .zero); toolTip = text }
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }   // pass clicks through
+    }
+}
+
+extension View {
+    /// Attach an AppKit toolTip that reliably shows inside an NSPopover.
+    func vlToolTip(_ text: String) -> some View { background(VLToolTip(text: text)) }
 }
