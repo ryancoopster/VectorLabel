@@ -256,12 +256,13 @@ function initDesignerPrefs(p){
   if(typeof p.snapObjects==='boolean')S.snapObjects=p.snapObjects;
   if(typeof p.gridSize==='number')S.gridSize=p.gridSize;
   if(typeof p.recH==='number'&&p.recH>0)S.recH=p.recH;
+  if(typeof p.dbH==='number'&&p.dbH>0)S.dbH=p.dbH;
   if(typeof p.propW==='number'&&p.propW>0)S.propW=Math.max(PROP_MIN,Math.min(PROP_MAX,p.propW));
   R();
 }
 function saveDesignerPrefs(){
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
-    window.webkit.messageHandlers.vectorlabel.postMessage({action:"setDesignerPrefs",payload:{snapGrid:S.snapGrid,snapObjects:S.snapObjects,gridSize:S.gridSize,recH:S.recH||160,propW:S.propW||PROP_DEFAULT}});
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"setDesignerPrefs",payload:{snapGrid:S.snapGrid,snapObjects:S.snapObjects,gridSize:S.gridSize,recH:S.recH||160,propW:S.propW||PROP_DEFAULT,dbH:S.dbH||240}});
 }
 function gobj(id){return S.objs.find(o=>o.id===id);}
 function uobj(id,p){S.objs=S.objs.map(o=>o.id===id?Object.assign({},o,p):o);}
@@ -1758,6 +1759,20 @@ function startRecResize(e){
   function mu(){window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",mu);saveDesignerPrefs();}
   window.addEventListener("mousemove",mv);
   window.addEventListener("mouseup",mu);
+}
+
+// Resize the Custom Designer's bottom database pane by dragging its top edge;
+// persisted via S.dbH (designerDatabaseHeight). Drag up → taller.
+function startDbResize(e){
+  e.preventDefault();
+  const startY=e.clientY, startH=Math.max(110,S.dbH||240);
+  function mv(ev){
+    S.dbH=Math.max(110,Math.min(window.innerHeight-180, startH+(startY-ev.clientY)));
+    const panel=document.getElementById("db-panel");
+    if(panel)panel.style.height=S.dbH+"px";
+  }
+  function mu(){ window.removeEventListener("mousemove",mv); window.removeEventListener("mouseup",mu); saveDesignerPrefs(); }
+  window.addEventListener("mousemove",mv); window.addEventListener("mouseup",mu);
 }
 
 // Drag the splitter on the properties panel's LEFT edge to resize it; persist on
@@ -3305,7 +3320,8 @@ function buildDatabasePanel(){
     ? `<span style="color:var(--text3);font-size:10px">·</span><span style="color:var(--text2);font-size:11px">${dbSelCount()} of ${recs.length} selected</span>`
     : "";
 
-  return `<div style="background:var(--surface);border-top:1px solid var(--bd2);flex-shrink:0;display:flex;flex-direction:column;max-height:240px">
+  return `<div id="db-panel" style="background:var(--surface);border-top:1px solid var(--bd2);flex-shrink:0;display:flex;flex-direction:column;height:${Math.max(110,S.dbH||240)}px;max-height:75vh">
+    <div id="db-resizer" title="Drag to resize the database pane" onmousedown="startDbResize(event)" onmouseenter="this.style.background='rgba(108,142,245,0.25)'" onmouseleave="this.style.background='rgba(108,142,245,0)'" style="height:6px;cursor:row-resize;flex-shrink:0;background:rgba(108,142,245,0);transition:background .12s"></div>
     <div style="display:flex;align-items:center;gap:10px;padding:5px 14px;border-bottom:1px solid var(--bd1);flex-shrink:0">
       <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Database</span>
       ${fileLbl}

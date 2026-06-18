@@ -102,6 +102,11 @@ public final class AppSettings: ObservableObject {
     @Published public var designerRecordsHeight: Double {
         didSet { UserDefaults.standard.set(designerRecordsHeight, forKey: "designerRecordsHeight") }
     }
+    /// Height (px) of the Custom Designer's bottom database pane (persisted; the
+    /// records browser is hidden in custom mode, so this is its own value).
+    @Published public var designerDatabaseHeight: Double {
+        didSet { UserDefaults.standard.set(designerDatabaseHeight, forKey: "designerDatabaseHeight") }
+    }
     /// Width (px) of the designer's right-hand properties (inspector) panel.
     @Published public var designerPropsWidth: Double {
         didSet { UserDefaults.standard.set(designerPropsWidth, forKey: "designerPropsWidth") }
@@ -235,6 +240,7 @@ public final class AppSettings: ObservableObject {
         designerSnapObjects = defaults.object(forKey: "designerSnapObjects") as? Bool ?? true
         designerGridSize    = defaults.object(forKey: "designerGridSize") as? Double ?? 0.05
         designerRecordsHeight = defaults.object(forKey: "designerRecordsHeight") as? Double ?? 160
+        designerDatabaseHeight = defaults.object(forKey: "designerDatabaseHeight") as? Double ?? 240
         designerPropsWidth  = defaults.object(forKey: "designerPropsWidth") as? Double ?? 220
         lastDataSourceFolderPath = defaults.string(forKey: "lastDataSourceFolderPath") ?? ""
         if let d = defaults.data(forKey: "printerCalibration"),
@@ -269,6 +275,7 @@ public final class AppSettings: ObservableObject {
         designerSnapObjects  = true
         designerGridSize     = 0.05
         designerRecordsHeight = 160
+        designerDatabaseHeight = 240
         designerPropsWidth   = 220
         lastDataSourceFolderPath = ""
         filterSortPresetsJSON = "[]"
