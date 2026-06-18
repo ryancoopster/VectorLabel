@@ -186,14 +186,22 @@ const _BL_FALLBACK=[
 ];
 // `let` so the live-sync poll can swap in the Engine's latest catalog.
 let BL=(_VL_CAT&&Array.isArray(_VL_CAT.bl)&&_VL_CAT.bl.length)?_VL_CAT.bl:_BL_FALLBACK;
-// Resolve a supply by part number: its primary n, else any of its parts' SKUs.
-function blBy(pn){ if(pn==null)return undefined; return BL.find(l=>l.n===pn)||BL.find(l=>(l.parts||[]).some(p=>p.pn===pn)); }
-// Default/fallback supply: the 2nd entry historically, but safe for a 1-entry catalog.
-function blDefault(){ return BL[BL.length>1?1:0]; }
+let VL_GROUPS=(_VL_CAT&&Array.isArray(_VL_CAT.groups)&&_VL_CAT.groups.length)?_VL_CAT.groups:[{name:(_VL_CAT&&_VL_CAT.activeGroup)||"Supplies",bl:BL}];
+const VL_SAFE_SPEC={id:"",n:"",name:"(no supply)",cat:"",ty:"dieCut",tw:1,th:1,pw:1,ph:1,mt:"",lm:false,parts:[]};
+function blAllEntries(){ let out=[]; (VL_GROUPS||[]).forEach(g=>{ if(Array.isArray(g.bl))out=out.concat(g.bl); }); return out.length?out:BL; }
+// Resolve a supply by part number — active BL first, then EVERY group (the template's
+// supply may live in a non-active group).
+function blBy(pn){ if(pn==null||pn==="")return undefined;
+  const hit=l=>l.n===pn||(l.parts||[]).some(p=>p.pn===pn);
+  return BL.find(hit)||blAllEntries().find(hit); }
+// Default/fallback supply — NEVER undefined.
+function blDefault(){ return BL[BL.length>1?1:0]||BL[0]||blAllEntries()[0]||VL_SAFE_SPEC; }
 // Live catalog update — Swift pushes the Engine's latest catalog here (polling).
 function applyCatalog(cat){
-  if(!cat||!Array.isArray(cat.bl)||!cat.bl.length)return;
-  window.__VL_CATALOG__=cat; BL=cat.bl;
+  if(!cat||(!Array.isArray(cat.groups)&&!Array.isArray(cat.bl)))return;
+  window.__VL_CATALOG__=cat;
+  if(Array.isArray(cat.groups)&&cat.groups.length)VL_GROUPS=cat.groups;
+  if(Array.isArray(cat.bl)&&cat.bl.length)BL=cat.bl;
   if(typeof R==="function")R();
 }
 const SC=185;

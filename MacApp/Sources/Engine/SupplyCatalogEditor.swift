@@ -342,6 +342,17 @@ struct SupplyCatalogEditorView: View {
         Binding(get: { supplyValue(sid)?.parts.first(where: { $0.id == pid }) ?? SupplyPartNumber(partNumber: "") },
                 set: { v in mutateSupply(sid) { s in if let pi = s.parts.firstIndex(where: { $0.id == pid }) { s.parts[pi] = v } } })
     }
+    // Continuous supplies: keep the tape width (width == printable width) and the
+    // default length (printable height == height) in sync with the values the
+    // designer/renderer actually read.
+    private func contWidthBinding(_ sid: UUID) -> Binding<Double> {
+        Binding(get: { supplyValue(sid)?.widthInches ?? 1 },
+                set: { v in mutateSupply(sid) { $0.widthInches = v; $0.printableWidthInches = v } })
+    }
+    private func contLenBinding(_ sid: UUID) -> Binding<Double> {
+        Binding(get: { supplyValue(sid)?.printableHeightInches ?? 1 },
+                set: { v in mutateSupply(sid) { $0.printableHeightInches = v; $0.heightInches = v } })
+    }
 
     // MARK: Categories + supplies
 
@@ -475,18 +486,31 @@ struct SupplyCatalogEditorView: View {
                         Text("Continuous").tag(SupplyKind.continuous)
                     }.labelsHidden().pickerStyle(.segmented).frame(width: 220)
                 }
-                GridRow {
-                    Text(cont ? "Width / default len" : "Label W × H")
-                    HStack(spacing: 6) {
-                        numField(sB.widthInches); Text("×").foregroundStyle(.secondary); numField(sB.heightInches)
-                        Text("in").foregroundStyle(.secondary)
+                if cont {
+                    // Continuous: the designer uses printableWidth (width) + printableHeight
+                    // (default length). Bind those directly and mirror width/height so the
+                    // edited values are the ones the canvas + renderer actually read.
+                    GridRow {
+                        Text("Width × Default length")
+                        HStack(spacing: 6) {
+                            numField(contWidthBinding(sid)); Text("×").foregroundStyle(.secondary); numField(contLenBinding(sid))
+                            Text("in").foregroundStyle(.secondary)
+                        }
                     }
-                }
-                GridRow {
-                    Text(cont ? "Printable width" : "Printable W × H")
-                    HStack(spacing: 6) {
-                        numField(sB.printableWidthInches); Text("×").foregroundStyle(.secondary); numField(sB.printableHeightInches)
-                        Text("in").foregroundStyle(.secondary)
+                } else {
+                    GridRow {
+                        Text("Label W × H")
+                        HStack(spacing: 6) {
+                            numField(sB.widthInches); Text("×").foregroundStyle(.secondary); numField(sB.heightInches)
+                            Text("in").foregroundStyle(.secondary)
+                        }
+                    }
+                    GridRow {
+                        Text("Printable W × H")
+                        HStack(spacing: 6) {
+                            numField(sB.printableWidthInches); Text("×").foregroundStyle(.secondary); numField(sB.printableHeightInches)
+                            Text("in").foregroundStyle(.secondary)
+                        }
                     }
                 }
                 if !cont {
@@ -552,7 +576,11 @@ struct SupplyCatalogEditorView: View {
     // MARK: Number fields
 
     private func numField(_ b: Binding<Double>) -> some View {
-        TextField("", value: b, format: .number).frame(width: 54).multilineTextAlignment(.trailing)
+        // Clamp on commit so a supply can never get a zero / negative / NaN dimension
+        // (which yields a degenerate canvas and a 0-pixel render that silently fails).
+        let clamped = Binding<Double>(get: { b.wrappedValue },
+                                      set: { b.wrappedValue = ($0.isFinite && $0 > 0) ? $0 : 0.05 })
+        return TextField("", value: clamped, format: .number).frame(width: 54).multilineTextAlignment(.trailing)
     }
     private func numFieldOptI(_ b: Binding<Int?>, width: CGFloat) -> some View {
         TextField("", value: Binding(get: { b.wrappedValue ?? 0 }, set: { b.wrappedValue = $0 <= 0 ? nil : $0 }), format: .number)
