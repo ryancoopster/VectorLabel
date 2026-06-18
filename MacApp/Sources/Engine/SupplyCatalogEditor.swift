@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 import VectorLabelCore
+import VectorLabelUI
 
 // MARK: – Editor window
 
@@ -21,8 +22,8 @@ final class SupplyCatalogEditorWindow {
         // It's opened FROM the Preferences panel (which floats at .floating+1), so sit
         // one level above it — otherwise the floating Preferences window covers it.
         win.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 2)
-        win.setContentSize(NSSize(width: 880, height: 640))
-        win.center()
+        // Default size + persist the window frame across opens.
+        win.applyVLSizing(autosaveName: "VLSupplyCatalogWindow", defaultContentSize: NSSize(width: 880, height: 640))
         NSApp.activate(ignoringOtherApps: true)
         win.makeKeyAndOrderFront(nil)
         window = win
@@ -55,16 +56,17 @@ struct SupplyCatalogEditorView: View {
     @State private var selectedSupply: UUID?
     @State private var dropTarget: UUID?
     @State private var confirmRestore = false
+    /// Left (categories) pane width as a fraction of the window — default 1/3, the
+    /// detail pane gets 2/3. Persisted across opens (draggable divider below).
+    @AppStorage("vlSupplyCatalogSplit") private var splitFraction: Double = 1.0 / 3.0
+    @State private var dragStartLeft: CGFloat?
 
     var body: some View {
         VStack(spacing: 0) {
             groupBar.padding(12)
             Divider()
             if store.catalog.groups.indices.contains(groupIndex) {
-                HSplitView {
-                    categoriesPane.frame(minWidth: 330, idealWidth: 380)
-                    detailPane.frame(minWidth: 340)
-                }
+                splitPanes
             } else {
                 Spacer(); Text("No supply group selected.").foregroundStyle(.secondary); Spacer()
             }
@@ -78,6 +80,39 @@ struct SupplyCatalogEditorView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This replaces every group, category, supply and part number with the built-in Brady defaults. Your customisations will be lost.")
+        }
+    }
+
+    // MARK: Resizable 1/3 ÷ 2/3 split (persisted divider position)
+
+    private var splitPanes: some View {
+        GeometryReader { geo in
+            let total = geo.size.width
+            let minLeft: CGFloat = 220, minRight: CGFloat = 300, handle: CGFloat = 10
+            let maxLeft = max(minLeft, total - minRight - handle)
+            let leftW = min(max(total * splitFraction, minLeft), maxLeft)
+            HStack(spacing: 0) {
+                categoriesPane.frame(width: leftW)
+                ZStack {
+                    Rectangle().fill(Color.gray.opacity(0.08))
+                    Divider()
+                }
+                .frame(width: handle)
+                .contentShape(Rectangle())
+                .onHover { inside in
+                    if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+                }
+                .gesture(
+                    DragGesture()
+                        .onChanged { v in
+                            if dragStartLeft == nil { dragStartLeft = leftW }
+                            let newLeft = min(max((dragStartLeft ?? leftW) + v.translation.width, minLeft), maxLeft)
+                            splitFraction = Double(newLeft / max(total, 1))
+                        }
+                        .onEnded { _ in dragStartLeft = nil }
+                )
+                detailPane.frame(maxWidth: .infinity)
+            }
         }
     }
 
