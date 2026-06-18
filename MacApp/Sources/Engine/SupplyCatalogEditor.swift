@@ -61,6 +61,31 @@ struct SupplyCatalogEditorView: View {
     /// detail pane gets 2/3. Persisted across opens (draggable divider below).
     @AppStorage("vlSupplyCatalogSplit") private var splitFraction: Double = 1.0 / 3.0
     @State private var dragStartLeft: CGFloat?
+    /// The printer-model registry (Preferences ▸ Printers ▸ Printer Models), so a
+    /// group's printer models link to that list instead of being free text.
+    @ObservedObject private var printerStore = PrinterModelStore.shared
+    @State private var pendingDelete: PendingDelete?
+    @State private var duplicating: DuplicateState?
+
+    /// A delete the user must confirm; carries the target's name for a smart prompt.
+    enum PendingDelete: Identifiable {
+        case group(UUID, String), category(UUID, String), supply(UUID, String), part(UUID, UUID, String)
+        var id: String {
+            switch self {
+            case .group(let g, _): return "g\(g)"
+            case .category(let c, _): return "c\(c)"
+            case .supply(let s, _): return "s\(s)"
+            case .part(let s, let p, _): return "p\(s)\(p)"
+            }
+        }
+        var name: String { switch self { case .group(_, let n), .category(_, let n), .supply(_, let n), .part(_, _, let n): return n } }
+        var kind: String {
+            switch self { case .group: return "supply group"; case .category: return "category"
+            case .supply: return "supply"; case .part: return "part number" }
+        }
+    }
+    /// In-flight "duplicate group" prompt.
+    struct DuplicateState: Identifiable { let id = UUID(); let sourceID: UUID; let sourceName: String; var newName: String }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -82,6 +107,39 @@ struct SupplyCatalogEditorView: View {
         } message: {
             Text("This replaces every group, category, supply and part number with the built-in Brady defaults. Your customisations will be lost.")
         }
+        .alert(item: $pendingDelete) { d in
+            Alert(title: Text("Delete the “\(d.name)” \(d.kind)?"),
+                  message: Text("This can’t be undone."),
+                  primaryButton: .destructive(Text("Delete")) { performDelete(d) },
+                  secondaryButton: .cancel())
+        }
+        .sheet(item: $duplicating) { dup in duplicateSheet(dup) }
+    }
+
+    // MARK: Duplicate-group sheet
+
+    private func duplicateSheet(_ dup: DuplicateState) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Duplicate “\(dup.sourceName)”").font(.system(size: 14, weight: .semibold))
+            Text("Enter a new, different name for the copied group.").font(.system(size: 12)).foregroundStyle(.secondary)
+            TextField("New group name", text: Binding(
+                get: { duplicating?.newName ?? "" },
+                set: { duplicating?.newName = $0 }))
+            HStack {
+                Spacer()
+                Button("Cancel") { duplicating = nil }
+                Button("Duplicate") {
+                    if let d = duplicating { performDuplicate(d.sourceID, newName: d.newName.trimmingCharacters(in: .whitespaces)) }
+                    duplicating = nil
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled({
+                    let n = (duplicating?.newName ?? "").trimmingCharacters(in: .whitespaces)
+                    return n.isEmpty || n == dup.sourceName   // must be changed
+                }())
+            }
+        }
+        .padding(18).frame(width: 340)
     }
 
     // MARK: Resizable 1/3 ÷ 2/3 split (persisted divider position)
@@ -130,7 +188,12 @@ struct SupplyCatalogEditorView: View {
                 }.labelsHidden().frame(width: 220)
                 Button { addGroup() } label: { Image(systemName: "plus") }
                     .help("Add a supply group")
-                Button { deleteGroup() } label: { Image(systemName: "trash") }
+                Button {
+                    let g = group
+                    duplicating = DuplicateState(sourceID: g.id, sourceName: g.name, newName: g.name + " copy")
+                } label: { Image(systemName: "plus.square.on.square") }
+                    .help("Duplicate this supply group")
+                Button { pendingDelete = .group(group.id, group.name) } label: { Image(systemName: "trash") }
                     .help("Delete this supply group")
                     .disabled(store.catalog.groups.count <= 1)
                 Spacer()
@@ -141,11 +204,81 @@ struct SupplyCatalogEditorView: View {
                     Text("Group name").font(.system(size: 11)).foregroundStyle(.secondary)
                     TextField("Group name", text: groupBinding(group.id).name).frame(width: 200)
                     Text("Printer models").font(.system(size: 11)).foregroundStyle(.secondary).padding(.leading, 8)
-                    TextField("e.g. M610, M611", text: modelsBinding(group.id)).frame(width: 200)
-                    Text("comma-separated").font(.system(size: 10)).foregroundStyle(.tertiary)
+                    printerModelsMenu(group.id)
                 }
             }
         }
+    }
+
+    // Printer models for a group — a multi-select linked to the printer-model
+    // registry (Preferences ▸ Printers ▸ Printer Models), not free text.
+    private func printerModelsMenu(_ gid: UUID) -> some View {
+        let selected = store.catalog.groups.first { $0.id == gid }?.printerModels ?? []
+        return Menu {
+            if printerStore.list.models.isEmpty {
+                Text("No printer models — add them in Printer Models…")
+            }
+            ForEach(printerStore.list.models) { m in
+                Button { toggleModel(m.name, for: gid) } label: {
+                    Label(m.name, systemImage: selected.contains(m.name) ? "checkmark" : "")
+                }
+            }
+        } label: {
+            Text(selected.isEmpty ? "Select models…" : selected.joined(separator: ", "))
+        }
+        .frame(width: 210)
+    }
+    private func toggleModel(_ name: String, for gid: UUID) {
+        guard let i = store.catalog.groups.firstIndex(where: { $0.id == gid }) else { return }
+        if let j = store.catalog.groups[i].printerModels.firstIndex(of: name) {
+            store.catalog.groups[i].printerModels.remove(at: j)
+        } else {
+            store.catalog.groups[i].printerModels.append(name)
+        }
+    }
+
+    // Confirmed deletes + duplicate.
+    private func performDelete(_ d: PendingDelete) {
+        switch d {
+        case .group(let g, _): deleteGroupByID(g)
+        case .category(let c, _): deleteCategoryByID(c)
+        case .supply(let s, _): deleteSupply(s)
+        case .part(let s, let p, _): deletePart(s, p)
+        }
+    }
+    private func deleteGroupByID(_ gid: UUID) {
+        guard store.catalog.groups.count > 1, let i = store.catalog.groups.firstIndex(where: { $0.id == gid }) else { return }
+        store.catalog.groups.remove(at: i)
+        groupIndex = min(groupIndex, store.catalog.groups.count - 1)
+        selectedSupply = nil
+    }
+    private func deleteCategoryByID(_ cid: UUID) {
+        for gi in store.catalog.groups.indices {
+            guard store.catalog.groups[gi].categories.count > 1 else { continue }
+            if let ci = store.catalog.groups[gi].categories.firstIndex(where: { $0.id == cid }) {
+                store.catalog.groups[gi].categories.remove(at: ci); return
+            }
+        }
+    }
+    private func performDuplicate(_ sourceID: UUID, newName: String) {
+        guard !newName.isEmpty, let src = store.catalog.groups.first(where: { $0.id == sourceID }) else { return }
+        // Deep copy with fresh ids so the copy is independent.
+        let copy = SupplyGroup(name: newName, printerModels: src.printerModels,
+            categories: src.categories.map { cat in
+                SupplyCategory(name: cat.name, supplies: cat.supplies.map { s in
+                    Supply(name: s.name, kind: s.kind, selfLaminating: s.selfLaminating, materialFamily: s.materialFamily,
+                           widthInches: s.widthInches, heightInches: s.heightInches,
+                           printableWidthInches: s.printableWidthInches, printableHeightInches: s.printableHeightInches,
+                           parts: s.parts.map { p in
+                               SupplyPartNumber(partNumber: p.partNumber, quantityPerRoll: p.quantityPerRoll,
+                                                rollLengthFeet: p.rollLengthFeet, rotate90: p.rotate90,
+                                                materialLabel: p.materialLabel, overrideURL: p.overrideURL)
+                           })
+                })
+            })
+        store.catalog.groups.append(copy)
+        groupIndex = store.catalog.groups.count - 1
+        selectedSupply = nil
     }
 
     // Id-keyed bindings — safe against SwiftUI committing an in-flight TextField
@@ -221,18 +354,19 @@ struct SupplyCatalogEditorView: View {
                 TextField("Category name", text: categoryNameBinding(cat.id))
                     .font(.system(size: 12, weight: .semibold)).textFieldStyle(.plain)
                 Spacer()
-                Button { addSupply(ci: ci) } label: { Image(systemName: "plus.circle") }
-                    .buttonStyle(.borderless).help("Add a supply to this category")
-                Button { deleteCategory(ci: ci) } label: { Image(systemName: "trash") }
+                Button { pendingDelete = .category(cat.id, cat.name) } label: { Image(systemName: "trash") }
                     .buttonStyle(.borderless).help("Delete this category").disabled(group.categories.count <= 1)
             }
             ForEach(Array(cat.supplies.enumerated()), id: \.element.id) { si, s in
                 supplyRow(ci: ci, si: si, s: s)
             }
             if cat.supplies.isEmpty {
-                Text("Drag supplies here, or add one.").font(.system(size: 11))
+                Text("Drag supplies here, or use “Add supply” below.").font(.system(size: 11))
                     .foregroundStyle(.tertiary).padding(.vertical, 6).padding(.leading, 22)
             }
+            // Add-supply pinned to the bottom of the category box (not next to delete).
+            Button { addSupply(ci: ci) } label: { Label("Add supply", systemImage: "plus.circle") }
+                .buttonStyle(.borderless).font(.system(size: 11)).padding(.top, 2).padding(.leading, 20)
         }
         .padding(8)
         .background(RoundedRectangle(cornerRadius: 8).fill(dropTarget == cat.id ? Color.accentColor.opacity(0.12) : Color.gray.opacity(0.06)))
@@ -267,7 +401,7 @@ struct SupplyCatalogEditorView: View {
                     }
                 }
             }
-            Button("Delete supply", role: .destructive) { deleteSupply(s.id) }
+            Button("Delete supply", role: .destructive) { pendingDelete = .supply(s.id, s.name.isEmpty ? s.primaryPartNumber : s.name) }
         }
     }
 
@@ -290,7 +424,7 @@ struct SupplyCatalogEditorView: View {
             HStack {
                 Text("Supply").font(.system(size: 13, weight: .semibold))
                 Spacer()
-                Button(role: .destructive) { deleteSupply(sid) } label: { Label("Delete", systemImage: "trash") }
+                Button(role: .destructive) { pendingDelete = .supply(sid, s.name.isEmpty ? s.primaryPartNumber : s.name) } label: { Label("Delete", systemImage: "trash") }
                     .buttonStyle(.borderless)
             }
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
@@ -364,7 +498,7 @@ struct SupplyCatalogEditorView: View {
                     Toggle("Rotate 90°", isOn: pB.rotate90).toggleStyle(.checkbox).font(.system(size: 11))
                 }
                 Spacer()
-                Button { deletePart(sid, pid) } label: { Image(systemName: "minus.circle") }.buttonStyle(.borderless)
+                Button { pendingDelete = .part(sid, pid, pB.partNumber.wrappedValue.isEmpty ? "this part" : pB.partNumber.wrappedValue) } label: { Image(systemName: "minus.circle") }.buttonStyle(.borderless)
             }
             HStack(spacing: 6) {
                 Text("URL").font(.system(size: 10)).foregroundStyle(.secondary)

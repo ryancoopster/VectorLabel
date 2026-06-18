@@ -1,4 +1,5 @@
 import Foundation
+import VectorLabelCore
 #if canImport(CLibUSB)
 import CLibUSB
 #endif
@@ -48,6 +49,9 @@ public enum BradyUSB {
     /// likely current Brady wire-label printer, with the PID appended so the
     /// operator can report it for the TODO above.
     static func modelFor(productID: UInt16) -> String {
+        // Prefer the user-editable registry (Preferences ▸ Printers ▸ Printer Models),
+        // so registering a model + PID makes a connected printer report that name.
+        if let m = PrinterModelStore.modelName(forProductID: String(format: "%04X", productID)) { return m }
         if let m = knownModels.first(where: { $0.pid == productID })?.model { return m }
         // Best-effort default for an unrecognised Brady device. We keep it as a
         // valid model string ("M611") so status/UI stay happy, and the generic
