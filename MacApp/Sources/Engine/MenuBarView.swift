@@ -157,16 +157,16 @@ struct MenuBarView: View {
 
     private func headerIcon(_ name: String, help: String, tint: Color = .vlSecondary,
                             _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: name)
-                .font(.system(size: 11))
-                .foregroundColor(tint)
-                .frame(width: 22, height: 18)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(help)            // SwiftUI tooltip
-        .vlToolTip(help)       // AppKit-backed fallback (reliable inside the popover)
+        // An overlaid NSView owns BOTH the tooltip and the click. AppKit shows a
+        // toolTip only for the top-most view under the cursor, so the tooltip must
+        // live on the front layer — a SwiftUI Button in front (or a behind view)
+        // masks it, which is why .help()/.background tooltips didn't appear here.
+        Image(systemName: name)
+            .font(.system(size: 11))
+            .foregroundColor(tint)
+            .frame(width: 22, height: 18)
+            .overlay(IconHitView(toolTip: help, action: action))
+            .help(help)   // harmless extra
     }
 
     // MARK: – Actions
@@ -191,6 +191,12 @@ struct MenuBarView: View {
                 appDelegate.openPreferences()
             }
             .keyboardShortcut(",", modifiers: .command)
+
+            // Dark / Auto / Light appearance control, directly under Preferences
+            // (it also remains in Preferences).
+            AppearanceSlider()
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
 
             vlDivider
 
@@ -469,24 +475,30 @@ struct RecentPrintRow: View {
     }
 }
 
-// MARK: – AppKit-backed tooltip
+// MARK: – AppKit-backed icon button (front-layer tooltip + click)
 //
-// SwiftUI's .help() is unreliable inside a menu-bar NSPopover; this sets the
-// underlying NSView's toolTip directly so it always shows on hover. It sits in
-// the background and is click-through (hitTest returns nil), so it never blocks
-// the control it annotates.
-private struct VLToolTip: NSViewRepresentable {
-    let text: String
-    func makeNSView(context: Context) -> NSView { TipView(text: text) }
-    func updateNSView(_ view: NSView, context: Context) { view.toolTip = text }
-    final class TipView: NSView {
-        init(text: String) { super.init(frame: .zero); toolTip = text }
-        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }   // pass clicks through
+// A top-most NSView that owns the toolTip (so it reliably shows inside the
+// menu-bar NSPopover, where SwiftUI's .help() is flaky) AND handles the click,
+// since the front layer must be the tooltip owner. The SwiftUI Image behind it
+// is purely visual.
+private struct IconHitView: NSViewRepresentable {
+    let toolTip: String
+    let action: () -> Void
+    func makeNSView(context: Context) -> NSView {
+        let v = HitView(); v.toolTip = toolTip; v.onClick = action; return v
     }
-}
-
-extension View {
-    /// Attach an AppKit toolTip that reliably shows inside an NSPopover.
-    func vlToolTip(_ text: String) -> some View { background(VLToolTip(text: text)) }
+    func updateNSView(_ view: NSView, context: Context) {
+        view.toolTip = toolTip
+        (view as? HitView)?.onClick = action
+    }
+    final class HitView: NSView {
+        var onClick: (() -> Void)?
+        private var pressed = false
+        override func resetCursorRects() { addCursorRect(bounds, cursor: .pointingHand) }
+        override func mouseDown(with event: NSEvent) { pressed = true }
+        override func mouseUp(with event: NSEvent) {
+            defer { pressed = false }
+            if pressed, bounds.contains(convert(event.locationInWindow, from: nil)) { onClick?() }
+        }
+    }
 }

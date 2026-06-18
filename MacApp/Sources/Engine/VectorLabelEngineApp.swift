@@ -64,6 +64,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         if Bundle.main.bundleIdentifier == nil || Bundle.main.bundleIdentifier!.isEmpty {
             UserDefaults.standard.set("com.sai.vectorlabel.engine", forKey: "CFBundleIdentifier")
         }
+        // Unsigned builds don't reliably leave a crash report, so capture uncaught
+        // Obj-C/AppKit exceptions (the common class for a Preferences/menu crash) to
+        // a log we can read after the fact.
+        NSSetUncaughtExceptionHandler { ex in
+            let text = "\(Date()) [VL-CRASH] \(ex.name.rawValue): \(ex.reason ?? "")\n"
+                     + ex.callStackSymbols.joined(separator: "\n") + "\n\n"
+            let path = (NSHomeDirectory() as NSString).appendingPathComponent("Library/Logs/VectorLabel-crash.log")
+            guard let data = text.data(using: .utf8) else { return }
+            if let h = FileHandle(forWritingAtPath: path) { h.seekToEndOfFile(); h.write(data); try? h.close() }
+            else { FileManager.default.createFile(atPath: path, contents: data) }
+        }
         AppSettings.shared.applyNativeAppearance()
         if let appIcon = CoreResources.appIcon() {
             NSApp.applicationIconImage = appIcon

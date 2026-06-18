@@ -243,8 +243,21 @@ public final class PrinterManager: ObservableObject {
                 for (i, vglJob) in jobs.enumerated() {
                     if job.isCancelled { break }
                     try BradyUSB.sendJob(vglJob, handle: handle)
+                    // Pace to the printer's REAL rate: advance as soon as the supply
+                    // counter confirms this label printed (polled gently), instead of
+                    // always burning the full time estimate. `perLabelMs` is now just
+                    // a fallback cap so a non-reporting supply can't stall. This
+                    // removes the idle gap when the printer prints faster than the
+                    // estimate, while keeping one-at-a-time sends (cancellable) and
+                    // accurate per-label progress.
                     var waited = 0
-                    while waited < perLabelMs && !job.isCancelled { usleep(40_000); waited += 40 }
+                    while waited < perLabelMs && !job.isCancelled {
+                        if initialRem >= 0, waited % 120 == 0 {
+                            let rem = BradyUSB.labelsRemaining(handle: handle)
+                            if rem >= 0 && (initialRem - rem) >= (i + 1) { break }   // this label printed
+                        }
+                        usleep(40_000); waited += 40
+                    }
                     if job.isCancelled { break }
                     Task { @MainActor in job.completedLabels = i + 1 }
                 }
