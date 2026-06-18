@@ -443,6 +443,11 @@ extension PrintWindowController: WKNavigationDelegate {
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         sendInitialState()
     }
+    /// Recover from a WebKit content-process crash instead of leaving a blank window.
+    public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        NSLog("[PrintWindowController] web content process terminated — reloading")
+        webView.reload()
+    }
 }
 
 // MARK: – WKScriptMessageHandler (JS → Swift messages)

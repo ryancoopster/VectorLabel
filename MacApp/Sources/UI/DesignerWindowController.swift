@@ -1127,6 +1127,14 @@ extension DesignerWindowController: WKUIDelegate {
 // MARK: – WKNavigationDelegate (for designer auto-load)
 
 extension DesignerWindowController: WKNavigationDelegate {
+    /// Recover from a WebKit content-process crash — otherwise the designer is left a
+    /// blank, dead window, which reads as "the app crashed". Reloading restores a
+    /// working designer (the document-start scripts re-inject the theme + catalog).
+    public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        NSLog("[DesignerWindowController] web content process terminated — reloading")
+        webView.reload()
+    }
+
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         // Only handle our designer webview
         guard webView === self.webView else { return }
