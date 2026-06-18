@@ -125,36 +125,45 @@ public final class SupplyCatalogStore: ObservableObject {
     /// field names the JS already uses (tw/th/pw/ph/n/ty/mt/lm).
     public static func webCatalogJSON(forModel model: String) -> String {
         let cat = snapshot
-        guard let group = cat.group(forModel: model) ?? cat.groups.first else { return "null" }
+        guard !cat.groups.isEmpty else { return "null" }
         // JSONSerialization throws (and we'd crash on `!`) on a non-finite Double,
         // which the editor's numeric fields can produce — clamp to a finite value.
         func fin(_ v: Double) -> Double { v.isFinite ? v : 0 }
-        var bl: [[String: Any]] = []
-        var categories: [String] = []
-        for category in group.categories {
-            categories.append(category.name)
-            for s in category.supplies {
-                let parts: [[String: Any]] = s.parts.map { p in
-                    var d: [String: Any] = ["pn": p.partNumber, "rot": p.rotate90,
-                                            "mat": p.materialLabel, "url": p.overrideURL]
-                    if let q = p.quantityPerRoll { d["qty"] = q }
-                    if let l = p.rollLengthFeet { d["lenFt"] = fin(l) }
-                    return d
+        func project(_ group: SupplyGroup) -> [String: Any] {
+            var bl: [[String: Any]] = []
+            var categories: [String] = []
+            for category in group.categories {
+                categories.append(category.name)
+                for s in category.supplies {
+                    let parts: [[String: Any]] = s.parts.map { p in
+                        var d: [String: Any] = ["pn": p.partNumber, "rot": p.rotate90,
+                                                "mat": p.materialLabel, "url": p.overrideURL]
+                        if let q = p.quantityPerRoll { d["qty"] = q }
+                        if let l = p.rollLengthFeet { d["lenFt"] = fin(l) }
+                        return d
+                    }
+                    bl.append([
+                        "id": s.id.uuidString, "n": s.primaryPartNumber, "name": s.name, "cat": category.name,
+                        "ty": s.kind == .continuous ? "continuous" : "dieCut",
+                        "tw": fin(s.widthInches), "th": fin(s.heightInches),
+                        "pw": fin(s.printableWidthInches), "ph": fin(s.printableHeightInches),
+                        "mt": s.materialFamily, "lm": s.selfLaminating, "parts": parts,
+                    ])
                 }
-                bl.append([
-                    "id": s.id.uuidString,
-                    "n": s.primaryPartNumber,
-                    "name": s.name,
-                    "cat": category.name,
-                    "ty": s.kind == .continuous ? "continuous" : "dieCut",
-                    "tw": fin(s.widthInches), "th": fin(s.heightInches),
-                    "pw": fin(s.printableWidthInches), "ph": fin(s.printableHeightInches),
-                    "mt": s.materialFamily, "lm": s.selfLaminating,
-                    "parts": parts,
-                ])
             }
+            return ["name": group.name, "categories": categories, "bl": bl]
         }
-        let obj: [String: Any] = ["groupName": group.name, "categories": categories, "bl": bl]
+        let active = cat.group(forModel: model) ?? cat.groups.first!
+        let activeProj = project(active)
+        // Send EVERY group (for the supply picker's group dropdown), plus the active
+        // group flattened at top level (bl/categories) for backward-compatible reads.
+        let obj: [String: Any] = [
+            "groups": cat.groups.map { project($0) },
+            "activeGroup": active.name,
+            "groupName": active.name,
+            "categories": activeProj["categories"] ?? [],
+            "bl": activeProj["bl"] ?? [],
+        ]
         guard let data = try? JSONSerialization.data(withJSONObject: obj),
               let str = String(data: data, encoding: .utf8) else { return "null" }
         return str
