@@ -203,7 +203,7 @@ public final class DesignerWindowController: NSObject {
         // so the designer builds its BL table from it before first render. "" ⇒ the
         // default group (one group today; keyed by printer model once more exist).
         contentController.addUserScript(WKUserScript(
-            source: "window.__VL_CATALOG__=\(SupplyCatalogStore.webCatalogJSON(forModel: ""));",
+            source: "window.__VL_BUILD__='\(BuildInfo.build)'; window.__VL_CATALOG__=\(SupplyCatalogStore.webCatalogJSON(forModel: ""));",
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController = contentController
         let wv = WKWebView(frame: .zero, configuration: config)
@@ -1103,6 +1103,13 @@ extension DesignerWindowController: NSWindowDelegate {
         if !isDirty { return true }
         return promptUnsaved(allowCancel: true, then: .close)
     }
+
+    /// True while the designer has an on-screen window. The window is an NSPanel,
+    /// which AppKit excludes from its "terminate after last window closed" count,
+    /// so the app delegate consults this to avoid quitting when a transient
+    /// WKWebView popup (e.g. a `<select>` dropdown) closes while the designer is
+    /// still open.
+    public var hasVisibleWindow: Bool { window?.isVisible ?? false }
 }
 
 // MARK: – WKUIDelegate (file picker for the designer's <input type=file>)

@@ -62,7 +62,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Quit fully when the (only) designer window closes — don't linger in the Dock.
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        // The designer's window is an NSPanel, which AppKit does NOT count for
+        // this check. A transient WKWebView helper window (e.g. the native popup
+        // backing the supply-group <select> dropdown) closing therefore trips a
+        // spurious "last window closed" and would quit the app while the designer
+        // is still open. Only quit when the designer window is genuinely gone.
+        if designer?.hasVisibleWindow == true { return false }
+        return true
+    }
 
     /// When the Engine quits, close this designer (prompting to save first, no
     /// Cancel) and quit, so the whole suite shuts down together.

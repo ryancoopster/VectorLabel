@@ -62,8 +62,8 @@ public struct BradyLabelSize: Identifiable, Codable, Hashable {
         buyUrlBulk  = (try? c.decode(String.self, forKey: .buyUrlBulk)) ?? ""
     }
 
-    public var pixelWidth: Int { Int((widthInches * Double(dpi)).rounded()) }
-    public var pixelHeight: Int { Int((heightInches * Double(dpi)).rounded()) }
+    public var pixelWidth: Int { vlInchesToPixels(widthInches, dpi: dpi) }
+    public var pixelHeight: Int { vlInchesToPixels(heightInches, dpi: dpi) }
 
     public var displayName: String {
         "\(partNumber) — \(formatInches(widthInches)) x \(formatInches(heightInches))"

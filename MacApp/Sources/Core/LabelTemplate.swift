@@ -7,6 +7,20 @@ import AppKit
 // VLTemplate and TemplateObject are defined in TemplateStore.swift.
 // This file contains only the renderer.
 
+// MARK: – Safe geometry conversion
+
+/// Convert inches → device pixels without ever trapping. A catalog supply or a
+/// template can carry a non-finite or absurdly large dimension (a mistyped
+/// width, a corrupt on-disk value), and the raw `Int(Double)` conversion would
+/// overflow `Int` and crash the synchronous render path (SIGTRAP). Clamp to a
+/// sane, allocatable pixel range instead.
+@inline(__always)
+func vlInchesToPixels(_ inches: Double, dpi: Int) -> Int {
+    let v = (inches * Double(dpi)).rounded()
+    guard v.isFinite else { return 1 }
+    return Int(min(max(v, 1), 20_000))
+}
+
 // MARK: – Brady label geometry
 
 extension BradyLabelSize {
@@ -21,8 +35,8 @@ extension BradyLabelSize {
         BradyCatalog.printableHeightInches(forPartNumber: partNumber) ?? heightInches
     }
 
-    public var printablePixelWidth:  Int { Int((printableWidthInches  * Double(dpi)).rounded()) }
-    public var printablePixelHeight: Int { Int((printableHeightInches * Double(dpi)).rounded()) }
+    public var printablePixelWidth:  Int { vlInchesToPixels(printableWidthInches,  dpi: dpi) }
+    public var printablePixelHeight: Int { vlInchesToPixels(printableHeightInches, dpi: dpi) }
 }
 
 // MARK: – Renderer
@@ -47,7 +61,7 @@ public enum LabelRenderer {
         // user-chosen label length (effectivePrintableHeightInches); die-cut
         // supplies keep the catalog's fixed printable height.
         let phInches = template.effectivePrintableHeightInches ?? size.printableHeightInches
-        let ph  = max(1, Int((phInches * Double(dpi)).rounded()))
+        let ph  = vlInchesToPixels(phInches, dpi: dpi)
 
         let colorSpace = CGColorSpaceCreateDeviceGray()
         guard let ctx = CGContext(

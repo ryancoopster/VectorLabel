@@ -164,7 +164,7 @@ public final class PrintWindowController: NSObject {
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
         // Inject the editable supply catalog before the page's BL table is built.
         contentController.addUserScript(WKUserScript(
-            source: "window.__VL_CATALOG__=\(SupplyCatalogStore.webCatalogJSON(forModel: ""));",
+            source: "window.__VL_BUILD__='\(BuildInfo.build)'; window.__VL_CATALOG__=\(SupplyCatalogStore.webCatalogJSON(forModel: ""));",
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController = contentController
         config.preferences.setValue(true, forKey: "developerExtrasEnabled")

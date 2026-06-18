@@ -214,10 +214,21 @@ public enum FormulaEngine {
         func str(_ v: Any?) -> String { jsString(v) }
         func num(_ v: Any?) -> Int {
             // Numeric literals tokenise as Double, so "3.0" would fail Int(_:).
-            if let d = v as? Double { return Int(d) }
+            // Clamp rather than force-convert: a huge literal such as
+            // =LEFT("x",9999999999999999999) overflows Int and would trap at
+            // print time (the JS preview clamps it silently via String.slice).
+            func clampToInt(_ d: Double) -> Int {
+                guard d.isFinite else { return 0 }
+                if d >= Double(Int.max) { return Int.max }
+                if d <= Double(Int.min) { return Int.min }
+                return Int(d)
+            }
+            if let d = v as? Double { return clampToInt(d) }
             if let i = v as? Int    { return i }
             let s = str(v)
-            return Int(s) ?? Int(Double(s) ?? 0)
+            if let i = Int(s) { return i }
+            guard let d2 = Double(s), d2.isFinite else { return 0 }
+            return clampToInt(d2)
         }
         // JS truthiness (so IF() branches the same in preview and print): a bool is
         // itself; a number is true when non-zero; ANY non-empty string is true —

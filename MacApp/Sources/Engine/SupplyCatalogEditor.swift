@@ -577,9 +577,11 @@ struct SupplyCatalogEditorView: View {
 
     private func numField(_ b: Binding<Double>) -> some View {
         // Clamp on commit so a supply can never get a zero / negative / NaN dimension
-        // (which yields a degenerate canvas and a 0-pixel render that silently fails).
+        // (which yields a degenerate canvas and a 0-pixel render that silently fails),
+        // nor an absurdly large one (which used to overflow Int at pixel-conversion
+        // time and crash the renderer). 60in is well beyond any real Brady label.
         let clamped = Binding<Double>(get: { b.wrappedValue },
-                                      set: { b.wrappedValue = ($0.isFinite && $0 > 0) ? $0 : 0.05 })
+                                      set: { b.wrappedValue = ($0.isFinite && $0 > 0) ? min($0, 60.0) : 0.05 })
         return TextField("", value: clamped, format: .number).frame(width: 54).multilineTextAlignment(.trailing)
     }
     private func numFieldOptI(_ b: Binding<Int?>, width: CGFloat) -> some View {
