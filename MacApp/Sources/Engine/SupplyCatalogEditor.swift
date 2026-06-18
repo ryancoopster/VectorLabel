@@ -18,6 +18,9 @@ final class SupplyCatalogEditorWindow {
         win.title = "Supply Catalog"
         win.styleMask = [.titled, .closable, .resizable, .miniaturizable]
         win.isReleasedWhenClosed = false
+        // It's opened FROM the Preferences panel (which floats at .floating+1), so sit
+        // one level above it — otherwise the floating Preferences window covers it.
+        win.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 2)
         win.setContentSize(NSSize(width: 880, height: 640))
         win.center()
         NSApp.activate(ignoringOtherApps: true)
