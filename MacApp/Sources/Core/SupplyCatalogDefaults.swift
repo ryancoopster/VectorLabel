@@ -41,11 +41,11 @@ extension SupplyCatalog {
     }
 
     public static func makeDefault() -> SupplyCatalog {
-        let WRAP = "Wire & cable wraps (self-laminating)"
-        let POLY = "Multi-purpose polyester labels"
-        let CLEAR = "Clear polyester labels"
-        let PANEL = "Raised panel labels"
-        let CONT = "Continuous tapes"
+        let WRAP = "Wire & Cable Wraps (Self-Laminating)"
+        let POLY = "Multi-Purpose Polyester Labels"
+        let CLEAR = "Clear Polyester Labels"
+        let PANEL = "Raised Panel Labels"
+        let CONT = "Continuous Tapes"
 
         let rows: [Row] = [
             // ── Self-laminating vinyl wraps (B-427) — geometry preserved from the old
@@ -104,10 +104,11 @@ extension SupplyCatalog {
             Row(CLEAR, .dieCut, material: "B-430", 1.25, 2.75, 1.25, 2.75, "M6-198-430"),
             Row(CLEAR, .dieCut, material: "B-430", 3.0, 1.9, 3.0, 1.9, "M6-37-430"),
 
-            // ── Raised panel die-cut labels (B-593; flat, printable = full). Per the
-            //    Brady page, only the 3"×1" M6-176-593 is M610/M611-compatible (the
-            //    0.59"×1.77" M7-172-593 is M710/BMP71-only). Box of 50. ──
-            Row(PANEL, .dieCut, material: "B-593", 1.0, 3.0, 1.0, 3.0, "M6-176-593", qty: 50),
+            // ── Raised panel die-cut labels (B-593; flat, printable = full). The two
+            //    M610/M611-compatible sizes (the M7-…-593 variants are M710-only).
+            //    Box of 100. ──
+            Row(PANEL, .dieCut, material: "B-593", 1.0, 2.0, 1.0, 2.0, "M6-173-593", qty: 100),
+            Row(PANEL, .dieCut, material: "B-593", 1.0, 4.0, 1.0, 4.0, "M6-174-593", qty: 100),
 
             // ── Continuous tapes — grouped by WIDTH; each material is a buy option.
             //    Length is user-set ("width × definable"); 50 ft rolls. ──
@@ -156,7 +157,7 @@ extension SupplyCatalog {
             categories.append(SupplyCategory(name: catName, supplies: supplies))
         }
 
-        let group = SupplyGroup(name: "Brady M6 / M7", printerModels: ["M610", "M611"],
+        let group = SupplyGroup(name: "Brady M6", printerModels: ["M610", "M611"],
                                 categories: categories)
         return SupplyCatalog(version: 1, groups: [group],
                              coreEquivalences: ["109-427": "33-427"])
