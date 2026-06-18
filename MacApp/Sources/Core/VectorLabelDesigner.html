@@ -73,23 +73,46 @@ label.lbl{font-size:10px;color:var(--text2);display:block;margin-bottom:3px}
 <div id="app" style="display:flex;flex-direction:column;height:100vh"></div>
 <script>
 const FONTS=["Helvetica Neue","Arial","Arial Narrow","Verdana","Tahoma","Courier New","Georgia","Impact"];
-const BL=[
-  {n:"BM-31-427",tw:1,th:1.5,pw:1,ph:.5,lb:'BM-31-427 — 1"×1.5"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/bradymarker-xc-plus-self-laminating-wire-cable-labels-cps-1037890",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
-  {n:"BM-32-427",tw:1.5,th:1.5,pw:1.5,ph:.5,lb:'BM-32-427 — 1.5"×1.5"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/bradymarker-xc-plus-self-laminating-wire-cable-labels-cps-1037890",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
-  {n:"BM-33-427",tw:4,th:1.5,pw:1.5,ph:1.5,lb:'BM-33-427 — 4"×1.5" (1.5" printable)',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/bradymarker-xc-plus-self-laminating-wire-cable-labels-cps-1037890",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
-  {n:"M6-11-427",tw:.5,th:1,pw:.5,ph:.25,lb:'M6-11-427 — 0.5"×1"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
-  {n:"M6-17-427",tw:.75,th:1,pw:.75,ph:.25,lb:'M6-17-427 — 0.75"×1"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
-  {n:"M6-19-427",tw:1,th:1,pw:1,ph:.375,lb:'M6-19-427 — 1"×1"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
-  {n:"M6-21-427",tw:1,th:1.5,pw:1,ph:.5,lb:'M6-21-427 — 1"×1.5"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
-  {n:"M6-31-427",tw:1,th:1.5,pw:1,ph:.5,lb:'M6-31-427 — 1"×1.5"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
-  {n:"M6-32-427",tw:1.5,th:1.5,pw:1.5,ph:.5,lb:'M6-32-427 — 1.5"×1.5"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
-  {n:"M6-33-427",tw:4,th:1.5,pw:1.5,ph:1.5,lb:'M6-33-427 — 4"×1.5" (1.5" printable)',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
-  {n:"M6-34-427",tw:2,th:2,pw:2,ph:1,lb:'M6-34-427 — 2"×2"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
-  {n:"M6C-500-422",tw:.5,th:1,pw:.5,ph:1,lb:'M6C-500-422 — 0.5" continuous (polyester)',mt:"B-422",ty:"continuous",lm:false,br:"https://www.bradyid.com/labels/m6-m7-continuous-tapes-cps-1107906",bb:""},
-  {n:"M6C-1000-422",tw:1,th:1,pw:1,ph:1,lb:'M6C-1000-422 — 1" continuous (polyester)',mt:"B-422",ty:"continuous",lm:false,br:"https://www.bradyid.com/labels/m6-m7-continuous-tapes-cps-1107906",bb:""},
-  {n:"M6C-1900-430",tw:1.9,th:1,pw:1.9,ph:1,lb:'M6C-1900-430 — 1.9" continuous (clear polyester)',mt:"B-430",ty:"continuous",lm:false,br:"https://www.bradyid.com/labels/m6-m7-continuous-tapes-cps-1107906",bb:""},
-  {n:"M6C-2000-595",tw:2,th:1,pw:2,ph:1,lb:'M6C-2000-595 — 2" continuous (vinyl)',mt:"B-595",ty:"continuous",lm:false,br:"https://www.bradyid.com/labels/m6-m7-continuous-tapes-cps-1107906",bb:""}
+// ── Supply catalog ──────────────────────────────────────────────────────────
+// Injected from Swift at document start as window.__VL_CATALOG__ (the supply group
+// for the connected printer model — see SupplyCatalogStore.webCatalogJSON). Each BL
+// entry is one selectable supply (n = its primary part number) with a `cat`
+// (category name) and a `parts` array of purchasable SKUs:
+//   parts:[{pn, qty?(die-cut count), lenFt?(continuous roll length), rot, mat, url}]
+// A small built-in fallback keeps the designer usable when opened standalone (dev).
+const _VL_CAT=(typeof window!=='undefined'&&window.__VL_CATALOG__)?window.__VL_CATALOG__:null;
+const _BL_FALLBACK=[
+  {n:"M6-31-427",cat:"Wire & cable wraps (self-laminating)",ty:"dieCut",tw:1,th:1.5,pw:1,ph:.5,mt:"B-427",lm:true,parts:[{pn:"M6-31-427",qty:250,rot:false,mat:"",url:""},{pn:"BM-31-427",qty:250,rot:false,mat:"",url:""}]},
+  {n:"M6-32-427",cat:"Wire & cable wraps (self-laminating)",ty:"dieCut",tw:1.5,th:1.5,pw:1.5,ph:.5,mt:"B-427",lm:true,parts:[{pn:"M6-32-427",qty:250,rot:false,mat:"",url:""},{pn:"BM-32-427",qty:250,rot:false,mat:"",url:""}]},
+  {n:"M6-33-427",cat:"Wire & cable wraps (self-laminating)",ty:"dieCut",tw:1.5,th:4,pw:1.5,ph:1.5,mt:"B-427",lm:true,parts:[{pn:"M6-33-427",qty:100,rot:true,mat:"",url:""},{pn:"BM-33-427",qty:100,rot:true,mat:"",url:""}]},
+  {n:"M6C-500-422",cat:"Continuous tapes",ty:"continuous",tw:.5,th:1,pw:.5,ph:1,mt:"B-422",lm:false,parts:[{pn:"M6C-500-422",lenFt:50,rot:false,mat:"Polyester",url:""},{pn:"M6C-500-595",lenFt:50,rot:false,mat:"Vinyl",url:""}]},
+  {n:"M6C-2000-595",cat:"Continuous tapes",ty:"continuous",tw:2,th:1,pw:2,ph:1,mt:"B-595",lm:false,parts:[{pn:"M6C-2000-595",lenFt:50,rot:false,mat:"Vinyl",url:""}]}
 ];
+// `let` (not const) so the live-sync poll can swap in the Engine's latest catalog.
+let BL=(_VL_CAT&&Array.isArray(_VL_CAT.bl)&&_VL_CAT.bl.length)?_VL_CAT.bl:_BL_FALLBACK;
+// Ordered category names for the supply picker (falls back to BL's listing order).
+function _catsFromBL(){const seen=[];BL.forEach(l=>{if(l.cat&&seen.indexOf(l.cat)<0)seen.push(l.cat);});return seen.length?seen:["Supplies"];}
+let SUPPLY_CATS=(_VL_CAT&&Array.isArray(_VL_CAT.categories)&&_VL_CAT.categories.length)?_VL_CAT.categories:_catsFromBL();
+// Resolve a supply by part number: the primary n, else any of its parts' SKUs (so a
+// design saved against a non-primary part number still loads its supply).
+function blBy(pn){ if(pn==null)return undefined; return BL.find(l=>l.n===pn)||BL.find(l=>(l.parts||[]).some(p=>p.pn===pn)); }
+// Default/fallback supply: the 2nd entry historically (1.5×1.5), but safe for a
+// single-entry catalog.
+function blDefault(){ return BL[BL.length>1?1:0]; }
+// Live catalog update — Swift pushes the Engine's latest catalog here (polling). Swap
+// in the new BL + categories and re-resolve the current supply by id (so geometry
+// edits apply); if it was removed, keep the current geometry (ghost) so the canvas
+// size doesn't jump.
+function applyCatalog(cat){
+  if(!cat||!Array.isArray(cat.bl)||!cat.bl.length)return;
+  window.__VL_CATALOG__=cat;
+  BL=cat.bl;
+  SUPPLY_CATS=(cat.categories&&cat.categories.length)?cat.categories:_catsFromBL();
+  const cur=S.spec||{};
+  const re=(cur.id&&blById(cur.id))||blBy(cur.n);
+  if(re)S.spec=re;   // gone ⇒ keep the current (ghost) spec, so the size stays put
+  if(typeof R==="function")R();
+}
 const FD=[
   {f:"Number",c:"Number"},{f:"Cable Name",c:"Cable"},{f:"Signal",c:"Signal"},
   {f:"Connector",c:"Connector"},{f:"Device Name",c:"Device_Name"},{f:"Device Tag",c:"Device_Tag"},
@@ -205,7 +228,7 @@ function autoFitPx(text,o,basePx,boxW,pad){
 const PROP_MIN=170, PROP_MAX=560, PROP_DEFAULT=220;
 let nid=1;const mid=()=>`o${nid++}`;
 let S={
-  spec:BL[1],selId:null,selIds:[],recIdx:0,wrap:true,showFields:false,zoom:1.0,
+  spec:blDefault(),selId:null,selIds:[],recIdx:0,wrap:true,showFields:false,zoom:1.0,
   snapGrid:true,snapObjects:true,gridSize:0.05,
   // Width (px) of the right-hand properties (inspector) panel. Drag its left-edge
   // splitter to resize; persisted via setDesignerPrefs (mirrors recH). Swift
@@ -294,12 +317,12 @@ function normSel(){
 // label LENGTH (inches) along the feed. We expose a length field for them and
 // carry the value into rendering, printing and saving. Die-cut supplies ignore
 // it (fixed catalog height).
-function specIsContinuous(specN){ const s=BL.find(l=>l.n===specN); return !!(s&&s.ty==="continuous"); }
+function specIsContinuous(specN){ const s=blBy(specN); return !!(s&&s.ty==="continuous"); }
 function dContinuous(){ return specIsContinuous(S.spec.n); }
 // Default cut mode for a supply: continuous tape cuts after every label; die-cut
 // stock is pre-cut so the cutter never fires (Phase 6).
 function dDefaultCutMode(specN){
-  const s=BL.find(l=>l.n===specN);
+  const s=blBy(specN);
   if(s&&s.ty==="continuous")return "eachLabel";
   if(s&&s.ty==="dieCut")return "never";
   return "afterJobLast";
@@ -308,7 +331,7 @@ function dDefaultCutMode(specN){
 function dEffCutMode(){ return S.cutMode||dDefaultCutMode(S.spec&&S.spec.n); }
 // Bounds for the chosen length (inches). Generous range; default to the catalog ph.
 const LEN_MIN=0.25, LEN_MAX=24;
-function dDefaultLen(specN){ const s=BL.find(l=>l.n===specN); return s?s.ph:1; }
+function dDefaultLen(specN){ const s=blBy(specN); return s?s.ph:1; }
 // The effective chosen length for the current supply (inches). null/0 ⇒ default.
 function dEffLen(){
   if(!dContinuous())return null;
@@ -322,7 +345,9 @@ function dEffLen(){
 // supplies pass through unchanged. Idempotent — always re-derived from the BL
 // base entry by part number.
 function normSpec(){
-  const base=BL.find(l=>l.n===(S.spec&&S.spec.n))||BL[1];
+  // Fall back to the current S.spec (not the default) so a ghost supply — one whose
+  // catalog entry was removed — keeps its saved canvas size instead of resizing.
+  const base=blBy(S.spec&&S.spec.n)||S.spec||blDefault();
   if(base.ty==="continuous"){
     const len=dEffLen()||base.ph;
     if(S.canvasRot===90){
@@ -338,7 +363,7 @@ function normSpec(){
 // Change the selected supply. Reset the continuous length to the new supply's
 // default so a stale length never carries across supplies (die-cut clears it).
 function pickSupply(specN){
-  S.spec=BL.find(l=>l.n===specN)||BL[1];
+  S.spec=blBy(specN)||blDefault();
   S.labelLen=specIsContinuous(specN)?dDefaultLen(specN):null;
   // Drop any explicit cut override so the new stock's sensible default applies.
   S.cutMode=null;
@@ -362,11 +387,24 @@ function rotateCanvas(){
 // Apply a supply + (optional) continuous length when loading a saved template or
 // document. Die-cut supplies clear the length; continuous supplies adopt the
 // saved labelLengthInches (falling back to the catalog default).
-function applyLoadedSpec(specN,lenInches,rot){
-  S.spec=BL.find(l=>l.n===specN)||BL[1];
-  if(specIsContinuous(specN)){
+function blById(id){ if(!id)return undefined; return BL.find(l=>l.id===id); }
+// A stand-in supply built from a saved geometry snapshot, used when the real supply
+// was removed from the catalog — keeps the canvas size until a new supply is chosen.
+function ghostSupply(specN,g){
+  if(!g||typeof g.widthInches!=="number")return null;
+  return {id:"",n:specN||"(removed)",name:(specN?specN+" ":"")+"(supply unavailable)",cat:"",
+    ty:g.isContinuous?"continuous":"dieCut",tw:g.widthInches,th:g.heightInches,
+    pw:g.printableWidthInches,ph:g.printableHeightInches,mt:"",lm:false,parts:[]};
+}
+function applyLoadedSpec(specN,lenInches,rot,supplyId,supplyGeom){
+  // Prefer the stable supply id, then the part number; if neither resolves, the
+  // supply was removed from the catalog — keep the saved geometry (ghost) so the
+  // canvas size doesn't change until the user selects a new supply.
+  const sp=(supplyId&&blById(supplyId))||blBy(specN)||ghostSupply(specN,supplyGeom)||blDefault();
+  S.spec=sp;
+  if(sp.ty==="continuous"){
     const n=parseFloat(lenInches);
-    S.labelLen=(isFinite(n)&&n>0)?Math.min(LEN_MAX,Math.max(LEN_MIN,n)):dDefaultLen(specN);
+    S.labelLen=(isFinite(n)&&n>0)?Math.min(LEN_MAX,Math.max(LEN_MIN,n)):(sp.ph||1);
     S.canvasRot=(parseInt(rot)===90)?90:0;
   }else{
     S.labelLen=null;
@@ -1241,7 +1279,7 @@ function R(){
       <div style="flex:1"></div>
       <button class="btn" onclick="openSupplyPicker()" title="Choose a label supply" style="display:flex;align-items:center;gap:6px;padding:5px 10px">
         <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Supply</span>
-        <span>${supplyOptionLabel(BL.find(l=>l.n===S.spec.n))}</span>
+        <span>${supplyOptionLabel(blBy(S.spec.n))}</span>
         <span style="color:var(--text3);font-size:9px">▾</span>
       </button>
       ${dContinuous()?`<div style="display:flex;align-items:center;gap:5px" title="Continuous supply — set the printed label length">
@@ -1445,7 +1483,7 @@ function renderModal(){
         </div>
         <div class="modal-row">
           <label class="lbl">Label size</label>
-          <div style="background:var(--surface3);border:1px solid var(--bd3);border-radius:4px;padding:8px 12px;color:var(--text);font-size:12px">${S.spec.lb}</div>
+          <div style="background:var(--surface3);border:1px solid var(--bd3);border-radius:4px;padding:8px 12px;color:var(--text);font-size:12px">${esc(supplyName(S.spec))}</div>
         </div>
         <div class="modal-row">
           <label class="lbl">Objects</label>
@@ -1500,7 +1538,7 @@ function renderModal(){
               <div style="flex:1;min-width:0">
                 <div style="color:var(--text);font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.name}</div>
                 <div style="color:var(--text2);font-size:11px;margin-top:2px">${t.specN} · ${t.objs.length} object${t.objs.length!==1?"s":""}</div>
-                ${(()=>{const L=BL.find(l=>l.n===t.specN);const fin=v=>(v===Math.round(v)?v:(+v.toFixed(2)))+'"';
+                ${(()=>{const L=blBy(t.specN);const fin=v=>(v===Math.round(v)?v:(+v.toFixed(2)))+'"';
                   return L?`<div style="color:var(--text2);font-size:10px;margin-top:2px">${fin(L.tw)}×${fin(L.th)} supply · ${fin(L.pw)}×${fin(L.ph)} printable</div>`:'';})()}
               </div>
               <button onclick="event.stopPropagation();deleteTemplateCard(${i})" title="Delete this template" style="flex-shrink:0;background:rgba(245,108,108,0.12);border:1px solid rgba(245,108,108,0.3);color:var(--red);border-radius:5px;padding:4px 9px;cursor:pointer;font-size:13px">🗑</button>
@@ -1523,7 +1561,7 @@ function renderModal(){
   if(S.modal==="confirmMismatch"){
     const c=dLoadedCassette();
     const loaded=dCassetteSizeKnown(c)?`${dFmtIn(c.labelWidthMils/1000)} × ${dFmtIn(c.labelHeightMils/1000)}`:"unknown";
-    const spec=BL.find(l=>l.n===S.spec.n);
+    const spec=blBy(S.spec.n);
     const tmpl=spec?`${dFmtIn(spec.tw)} × ${dFmtIn(spec.th)}`:"unknown";
     overlay.innerHTML=`
       <div class="modal" style="width:430px">
@@ -1557,29 +1595,39 @@ function renderModal(){
 
   if(S.modal==="supply"){
     const fi=v=>dFmtIn(v);
+    // Continuous tapes have no fixed length — the user sets it — so show "W × definable".
+    const sizeCell=l=> l.ty==="continuous" ? (fi(l.tw)+" × definable") : (fi(l.tw)+" × "+fi(l.th));
+    const printCell=l=> l.ty==="continuous" ? (fi(l.pw)+" × definable") : (fi(l.pw)+" × "+fi(l.ph));
     const rowHtml=l=>{
       const sel=S.spec.n===l.n;
-      return `<tr class="sup-row${sel?' sup-sel':''}" onclick="pickSupply('${l.n}');closeModal()">
-        <td style="font-family:monospace;white-space:nowrap">${sel?'● ':''}${l.n}</td>
-        <td>${supplyTypeFull(l)}</td>
-        <td style="white-space:nowrap">${fi(l.tw)} × ${fi(l.th)}</td>
-        <td style="white-space:nowrap">${fi(l.pw)} × ${fi(l.ph)}</td>
+      return `<tr class="sup-row${sel?' sup-sel':''}" onclick="pickSupply('${jesc(l.n)}');closeModal()">
+        <td style="white-space:nowrap">${sel?'● ':''}${esc(supplyName(l))}</td>
+        <td>${esc(supplyTypeFull(l))}</td>
+        <td style="white-space:nowrap">${sizeCell(l)}</td>
+        <td style="white-space:nowrap">${printCell(l)}</td>
         <td onclick="event.stopPropagation()"><div style="display:flex;gap:4px;flex-wrap:wrap">${buyButtons(l)}</div></td>
       </tr>`;
     };
-    const diecut=BL.filter(l=>l.ty!=="continuous");
-    const cont=BL.filter(l=>l.ty==="continuous");
-    overlay.innerHTML=`<div class="modal" style="width:800px;max-width:92vw;max-height:82vh;display:flex;flex-direction:column">
+    // Group supplies under their category in the injected order; any categories not
+    // listed (or supplies with none) fall through to an "Other" group at the end.
+    const cats=SUPPLY_CATS.slice();
+    BL.forEach(l=>{ if(l.cat&&cats.indexOf(l.cat)<0)cats.push(l.cat); });
+    const used={}; let body="";
+    cats.forEach(c=>{
+      const rows=BL.filter(l=>(l.cat||"")===c);
+      if(!rows.length)return;
+      rows.forEach(l=>used[l.n]=1);
+      const note=rows.every(l=>l.ty==="continuous")?" — any material of the listed width matches":"";
+      body+=`<tr class="sup-grp"><td colspan="5">${esc(c)}${note}</td></tr>`+rows.map(rowHtml).join("");
+    });
+    const orphans=BL.filter(l=>!used[l.n]);
+    if(orphans.length) body+=`<tr class="sup-grp"><td colspan="5">Other</td></tr>`+orphans.map(rowHtml).join("");
+    overlay.innerHTML=`<div class="modal" style="width:840px;max-width:92vw;max-height:82vh;display:flex;flex-direction:column">
       <div class="modal-title">Choose a label supply</div>
       <div style="overflow:auto;flex:1;border:1px solid var(--bd2);border-radius:6px">
         <table class="sup-tbl">
-          <thead><tr><th>Part #</th><th>Type</th><th>Label size</th><th>Printable</th><th>Buy</th></tr></thead>
-          <tbody>
-            <tr class="sup-grp"><td colspan="5">Wrap-around wire labels (die-cut)</td></tr>
-            ${diecut.map(rowHtml).join("")}
-            <tr class="sup-grp"><td colspan="5">Continuous tapes — any material of the listed width matches</td></tr>
-            ${cont.map(rowHtml).join("")}
-          </tbody>
+          <thead><tr><th>Supply</th><th>Type</th><th>Label size</th><th>Printable</th><th>Buy</th></tr></thead>
+          <tbody>${body}</tbody>
         </table>
       </div>
       <div class="modal-footer"><button class="btn" onclick="closeModal()">Close</button></div>
@@ -2296,6 +2344,12 @@ function templateData(){
     specN:S.spec.n,
     objs:JSON.parse(JSON.stringify(S.objs))
   };
+  // Save the supply's stable catalog id + a geometry snapshot (BASE geometry, not
+  // the live continuous length) so the design re-resolves its supply on load and
+  // keeps its canvas size even if the supply is later removed from the catalog.
+  const base=blBy(S.spec.n)||S.spec;
+  d.supplyID=(S.spec&&S.spec.id)||base.id||"";
+  d.supplyGeometry={widthInches:base.tw,heightInches:base.th,printableWidthInches:base.pw,printableHeightInches:base.ph,isContinuous:base.ty==="continuous"};
   // Continuous supplies persist the chosen label length (inches); die-cut omit it.
   if(dContinuous()){ const len=dEffLen(); if(len) d.labelLengthInches=len; if(S.canvasRot===90) d.canvasRot=90; }
   return d;
@@ -2345,7 +2399,7 @@ function dCassetteSizeKnown(c){ return !!(c && typeof c.labelWidthMils==='number
 // in either orientation (within ~0.1"). Mirrors the print window's sameLabelSize.
 function dSameLabelSize(c,specN){
   if(!dCassetteSizeKnown(c))return false;
-  const spec=BL.find(l=>l.n===specN)||BL.find(l=>dSupplyCore(l.n)===dSupplyCore(specN));
+  const spec=blBy(specN)||BL.find(l=>dSupplyCore(l.n)===dSupplyCore(specN));
   if(!spec)return false;
   const tol=100, close=(a,b)=>Math.abs(a-b)<=tol;
   const cw=c.labelWidthMils, ch=c.labelHeightMils;
@@ -2361,40 +2415,60 @@ function dSameLabelSize(c,specN){
   const tw=spec.tw*1000, th=spec.th*1000;
   return (close(cw,tw)&&close(ch,th))||(close(cw,th)&&close(ch,tw));
 }
-function dCassetteMatched(){ const c=dLoadedCassette(); return !!(c&&dCassetteSizeKnown(c)&&dSameLabelSize(c,S.spec.n)); }
-function dCassetteMismatch(){ const c=dLoadedCassette(); return !!(c&&dCassetteSizeKnown(c)&&!dSameLabelSize(c,S.spec.n)); }
+// Matching is now by PART NUMBER membership: a loaded cassette matches the selected
+// supply when its part number is one of that supply's part numbers (exact, or by the
+// bulk-box↔cartridge core). Falls back to the old size match only when the cassette
+// reports no part number (older SmartCell reads).
+function dPartEq(a,b){ if(!a||!b)return false; return a.toUpperCase()===b.toUpperCase()||dSupplyCore(a)===dSupplyCore(b); }
+function dCassetteMatchesSupply(c,specN){
+  const spec=blBy(specN); if(!spec||!c)return false;
+  const cpn=c.partNumber||"";
+  if(cpn){
+    const parts=(spec.parts&&spec.parts.length)?spec.parts:[{pn:spec.n}];
+    return parts.some(p=>dPartEq(p.pn,cpn));
+  }
+  return dCassetteSizeKnown(c)&&dSameLabelSize(c,specN);   // fallback: no part # reported
+}
+function dCassetteMatched(){ const c=dLoadedCassette(); return !!(c&&dCassetteMatchesSupply(c,S.spec.n)); }
+function dCassetteMismatch(){ const c=dLoadedCassette(); if(!c)return false; const known=!!c.partNumber||dCassetteSizeKnown(c); return known&&!dCassetteMatchesSupply(c,S.spec.n); }
 // Continuous supplies are identified by WIDTH only — any material of that width
 // matches — so the picker + supply indicator show e.g. '0.5" continuous', never a
 // part number or material. Die-cut wire labels keep their descriptor (#16).
+// A supply's display name (injected from Swift; falls back to its size).
+function supplyName(l){
+  if(!l)return "";
+  if(l.name)return l.name;
+  if(l.ty==="continuous")return dFmtIn(l.tw)+' continuous';
+  return dFmtIn(l.tw)+' × '+dFmtIn(l.th);
+}
+// Distinct material names across a supply's parts (continuous → Vinyl, Polyester…).
+function supplyMaterials(l){
+  const mats=[]; ((l&&l.parts)||[]).forEach(p=>{const m=(p.mat||"").trim();if(m&&mats.indexOf(m)<0)mats.push(m);});
+  return mats;
+}
 function supplyOptionLabel(l){
   if(!l)return "";
   if(l.ty==="continuous")return dFmtIn(l.tw)+' continuous';
   // Cable-wrap (die-cut) labels show the PRINTABLE dimension (W × H), not the full
   // label height, so the dropdown reflects the usable print area.
-  return l.n+' — '+dFmtIn(l.pw)+' × '+dFmtIn(l.ph);
+  return (l.name?l.name:l.n)+' — '+dFmtIn(l.pw)+' × '+dFmtIn(l.ph);
 }
 function dSupplyTypeDesc(l){
   if(!l)return "";
-  if(l.ty==="continuous")return "";   // width says it all; material is irrelevant
-  if(l.lm)return "Wrap-around wire label (self-laminating)";
+  if(l.ty==="continuous"){ const m=supplyMaterials(l); return m.length?("available as "+m.join(", ")):""; }
+  if(l.lm)return "Self-laminating wire wrap";
   return "Die-cut label";
 }
-// Fuller type descriptor for the supply picker table (continuous includes the
-// material since there's room there, unlike the compact header indicator).
+// Fuller type descriptor for the supply picker table. Continuous lists the materials
+// it's available in (any material of the listed width matches the loaded cassette).
 function supplyTypeFull(l){
   if(!l)return "";
-  if(l.ty==="continuous"){
-    const m=(l.mt||"").toUpperCase();
-    if(m.indexOf("595")>=0||m.indexOf("439")>=0||m.indexOf("498")>=0)return "Continuous vinyl tape";
-    if(m.indexOf("499")>=0)return "Continuous nylon cloth tape";
-    if(m.indexOf("4")>=0)return "Continuous polyester tape";
-    return "Continuous tape";
-  }
-  if(l.lm)return "Wrap-around wire label (self-laminating)";
+  if(l.ty==="continuous"){ const m=supplyMaterials(l); return m.length?("Continuous tape available as: "+m.join(", ")):"Continuous tape"; }
+  if(l.lm)return "Self-laminating wire wrap";
   return "Die-cut label";
 }
 function dRequiredSupply(specN){
-  const l=BL.find(x=>x.n===specN);
+  const l=blBy(specN);
   if(l&&l.ty==="continuous")return dFmtIn(l.tw)+' continuous';
   const core=dSupplyCore(specN); return core?"BM/M6-"+core:(specN||"");
 }
@@ -2412,33 +2486,43 @@ function dCanPrint(){
 // Open a reliable purchase link for a part number. Brady restructures its product
 // URLs over time (the old per-product pages 404), so we search by part number,
 // which always resolves to the current product/buy page. Routed via Swift openURL.
-function buyTerm(term){
-  if(!term)return;
-  const url='https://www.bradyid.com/searchresults?Ntt='+encodeURIComponent(term);
+function buyTerm(term){ buyPart(term,""); }
+// Escape a string for a single-quoted JS literal inside a double-quoted HTML
+// attribute (onclick="…buyPart('…','…')").
+function jesc(s){ return String(s==null?"":s).replace(/\\/g,"\\\\").replace(/&/g,"&amp;").replace(/'/g,"\\'").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+// Open a part number's purchase page: its override URL when set, else a Brady
+// part-number search (Brady's per-product URLs change; a search always resolves to
+// the current product/buy page). Routed via Swift openURL.
+function buyPart(pn,url){
+  const dest=(url&&(""+url).trim())?(""+url).trim():('https://www.bradyid.com/searchresults?Ntt='+encodeURIComponent(pn));
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
-    window.webkit.messageHandlers.vectorlabel.postMessage({action:"openURL",payload:{url}});
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"openURL",payload:{url:dest}});
 }
-// Buy buttons for a supply: die-cut → Roll (+ Bulk box when one exists); continuous
-// → material options (Vinyl / Polyester) at the supply's width. Each opens a Brady
-// storefront search for the matching part number (their per-product URLs change, a
-// search always resolves to the current product/buy page).
+// The label on a part's buy button: die-cut → "PN/250" (part number + qty/roll);
+// continuous → "Vinyl PN/50'" (material + part number + roll length).
+function partBuyLabel(l,p){
+  if(l.ty==="continuous"){
+    const mat=(p.mat||"").trim();
+    const len=(p.lenFt!=null&&+p.lenFt>0)?("/"+(+p.lenFt)+"'"):"";
+    return (mat?mat+" ":"")+p.pn+len;
+  }
+  const qty=(p.qty!=null&&+p.qty>0)?("/"+p.qty):"";
+  return p.pn+qty;
+}
+// One buy button per part number of a supply, each combining the part number with
+// its quantity / roll length (so roll + bulk box of a size sit side by side).
 function buyButtons(l){
   if(!l)return "";
+  const parts=(l.parts&&l.parts.length)?l.parts:[{pn:l.n}];
   const bs='class="btn" style="padding:3px 9px;font-size:11px;white-space:nowrap"';
-  if(l.ty==="continuous"){
-    const mils=Math.round((l.tw||0)*1000);
-    return `<button ${bs} onclick="event.stopPropagation();buyTerm('M6C-${mils}-595')" title="Buy ${l.tw}&quot; continuous vinyl on Brady">Vinyl ↗</button>`
-      +`<button ${bs} onclick="event.stopPropagation();buyTerm('M6C-${mils}-422')" title="Buy ${l.tw}&quot; continuous polyester on Brady">Polyester ↗</button>`;
-  }
-  const bulk=l.bb?`<button ${bs} onclick="event.stopPropagation();buyTerm('${l.n} bulk box')" title="Buy a bulk box of ${l.n} on Brady">Bulk box ↗</button>`:"";
-  return `<button ${bs} onclick="event.stopPropagation();buyTerm('${l.n}')" title="Buy ${l.n} on Brady">Roll ↗</button>`+bulk;
+  return parts.map(p=>`<button ${bs} onclick="event.stopPropagation();buyPart('${jesc(p.pn)}','${jesc(p.url||"")}')" title="Buy ${escAttr(p.pn)} on Brady">${esc(partBuyLabel(l,p))} ↗</button>`).join("");
 }
 // Open the supply picker window — a spacious table of every supply with its type,
 // sizes and buy links. Shared by both the Custom and Template Designer.
 function openSupplyPicker(){ S.modal="supply"; renderModal(); }
 // "Buy" control for the selected supply, shown in the Custom Designer print header.
 function buyMoreControl(){
-  const s=BL.find(l=>l.n===S.spec.n); if(!s)return "";
+  const s=blBy(S.spec.n); if(!s)return "";
   return`<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
     <span style="color:var(--text3);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px">Buy:</span>
     ${buyButtons(s)}
@@ -2515,7 +2599,7 @@ function buildCustomPrintHeader(){
     <div style="display:flex;align-items:center;gap:7px">
       <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Supply</span>
       <span style="color:var(--text2);font-size:11px;font-family:monospace" title="Required supply for ${S.spec.n}">${dRequiredSupply(S.spec.n)}</span>
-      <span style="color:var(--text3);font-size:10px;max-width:160px;line-height:1.25" title="Label type">${dSupplyTypeDesc(BL.find(l=>l.n===S.spec.n))}</span>
+      <span style="color:var(--text3);font-size:10px;max-width:160px;line-height:1.25" title="Label type">${dSupplyTypeDesc(blBy(S.spec.n))}</span>
       ${dCassetteMatched()?`<span title="Loaded cassette matches the required supply" style="color:var(--green);font-size:18px;line-height:1;font-weight:800">✓</span>`
         :dCassetteMismatch()?`<span title="Loaded ${escAttr(dLoadedCassette().partNumber)} doesn't match — the label may print misaligned or cropped" style="color:var(--red);font-size:12px;line-height:1;white-space:nowrap">⚠ mismatch</span>`:""}
       ${buyMoreControl()}
@@ -2579,7 +2663,9 @@ function saveCustomDocument(){
     specN:data.specN,
     objs:data.objs,
     copies:Math.max(1,S.copies||1),
-    cutMode:dEffCutMode()   // persist the effective cut mode so it round-trips in .vlcus
+    cutMode:dEffCutMode(),   // persist the effective cut mode so it round-trips in .vlcus
+    supplyID:data.supplyID,
+    supplyGeometry:data.supplyGeometry
   };
   if(data.labelLengthInches) payload.labelLengthInches=data.labelLengthInches;
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
@@ -2698,7 +2784,7 @@ function initPrintEdit(template){
   if(template){
     S.tplName=template.name||defaultDocName();
     S._loadedId=template.id||null;
-    applyLoadedSpec(template.specN,template.labelLengthInches,template.canvasRot);
+    applyLoadedSpec(template.specN,template.labelLengthInches,template.canvasRot,template.supplyID,template.supplyGeometry);
     S.objs=sanitizeObjs(template.objs);
     S.selId=null;S._ef=undefined;S.modal=null;
   }
@@ -2707,7 +2793,7 @@ function initPrintEdit(template){
 function edPrintCancel(){ _vlPost("editReturn",{save:false}); }
 function edPrintSave(){
   const data=templateData();
-  const payload={name:S.tplName,specN:data.specN,objs:data.objs};
+  const payload={name:S.tplName,specN:data.specN,objs:data.objs,supplyID:data.supplyID,supplyGeometry:data.supplyGeometry};
   if(data.labelLengthInches) payload.labelLengthInches=data.labelLengthInches;
   if(S._loadedId)payload.id=S._loadedId;
   // Single message: Swift saves THEN refreshes the print window (ordered).
@@ -2817,7 +2903,7 @@ function newTemplate(){
   const nameEl=document.getElementById("new-tpl-name");
   const specEl=document.getElementById("new-tpl-spec");
   const name=nameEl?nameEl.value.trim()||defaultDocName():defaultDocName();
-  const specN=specEl?specEl.value:BL[1].n;
+  const specN=specEl?specEl.value:blDefault().n;
   snapshot();
   S.tplName=name;
   S._loadedId=null;   // new template → new file on save
@@ -2938,7 +3024,7 @@ function loadSelectedTemplate(){
   snapshot();
   S.tplName=t.name||defaultDocName();
   S._loadedId=t.id||null;   // preserve id so a later Save overwrites in place
-  applyLoadedSpec(t.specN,t.labelLengthInches,t.canvasRot);
+  applyLoadedSpec(t.specN,t.labelLengthInches,t.canvasRot,t.supplyID,t.supplyGeometry);
   S.objs=JSON.parse(JSON.stringify(t.objs));
   S.selId=null;S._ef=undefined;
   S.modal=null;
@@ -2955,7 +3041,7 @@ function initOpenTemplate(t){
   S.modal=null;
   S.tplName=t.name||defaultDocName();
   S._loadedId=t.id||null;
-  applyLoadedSpec(t.specN,t.labelLengthInches,t.canvasRot);
+  applyLoadedSpec(t.specN,t.labelLengthInches,t.canvasRot,t.supplyID,t.supplyGeometry);
   S.objs=sanitizeObjs(t.objs);
   S.selId=null;S._ef=undefined;
   R();
@@ -3160,7 +3246,7 @@ function initCustomDocument(doc){
   // Canvas
   S.tplName=doc.name||"Custom Label";
   S._loadedId=null;
-  applyLoadedSpec(doc.specN,doc.labelLengthInches,doc.canvasRot);
+  applyLoadedSpec(doc.specN,doc.labelLengthInches,doc.canvasRot,doc.supplyID,doc.supplyGeometry);
   S.objs=sanitizeObjs(doc.objs||[]);
   S.selId=null;S._ef=undefined;
   S.copies=Math.max(1,doc.copies||1);

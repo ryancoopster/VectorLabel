@@ -173,23 +173,29 @@ function textValue(o,rec){
 }
 
 // ── Label preview renderer ────────────────────────────────────────────────────
-const BL=[
-  {n:"BM-31-427",tw:1,th:1.5,pw:1,ph:.5,lb:'BM-31-427 — 1"×1.5"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/bradymarker-xc-plus-self-laminating-wire-cable-labels-cps-1037890",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
-  {n:"BM-32-427",tw:1.5,th:1.5,pw:1.5,ph:.5,lb:'BM-32-427 — 1.5"×1.5"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/bradymarker-xc-plus-self-laminating-wire-cable-labels-cps-1037890",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
-  {n:"BM-33-427",tw:4,th:1.5,pw:1.5,ph:1.5,lb:'BM-33-427 — 4"×1.5" (1.5" printable)',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/bradymarker-xc-plus-self-laminating-wire-cable-labels-cps-1037890",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
-  {n:"M6-11-427",tw:.5,th:1,pw:.5,ph:.25,lb:'M6-11-427 — 0.5"×1"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
-  {n:"M6-17-427",tw:.75,th:1,pw:.75,ph:.25,lb:'M6-17-427 — 0.75"×1"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
-  {n:"M6-19-427",tw:1,th:1,pw:1,ph:.375,lb:'M6-19-427 — 1"×1"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
-  {n:"M6-21-427",tw:1,th:1.5,pw:1,ph:.5,lb:'M6-21-427 — 1"×1.5"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
-  {n:"M6-31-427",tw:1,th:1.5,pw:1,ph:.5,lb:'M6-31-427 — 1"×1.5"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
-  {n:"M6-32-427",tw:1.5,th:1.5,pw:1.5,ph:.5,lb:'M6-32-427 — 1.5"×1.5"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
-  {n:"M6-33-427",tw:4,th:1.5,pw:1.5,ph:1.5,lb:'M6-33-427 — 4"×1.5" (1.5" printable)',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
-  {n:"M6-34-427",tw:2,th:2,pw:2,ph:1,lb:'M6-34-427 — 2"×2"',mt:"B-427",ty:"dieCut",lm:true,br:"https://www.bradyid.com/wire-cable-labels/m6-m7-self-laminating-vinyl-wire-cable-labels-cps-1107905",bb:"https://www.bradyid.com/wire-cable-labels/self-laminating-vinyl-wire-cable-labels-cps-1010255"},
-  {n:"M6C-500-422",tw:.5,th:1,pw:.5,ph:1,lb:'M6C-500-422 — 0.5" continuous (polyester)',mt:"B-422",ty:"continuous",lm:false,br:"https://www.bradyid.com/labels/m6-m7-continuous-tapes-cps-1107906",bb:""},
-  {n:"M6C-1000-422",tw:1,th:1,pw:1,ph:1,lb:'M6C-1000-422 — 1" continuous (polyester)',mt:"B-422",ty:"continuous",lm:false,br:"https://www.bradyid.com/labels/m6-m7-continuous-tapes-cps-1107906",bb:""},
-  {n:"M6C-1900-430",tw:1.9,th:1,pw:1.9,ph:1,lb:'M6C-1900-430 — 1.9" continuous (clear polyester)',mt:"B-430",ty:"continuous",lm:false,br:"https://www.bradyid.com/labels/m6-m7-continuous-tapes-cps-1107906",bb:""},
-  {n:"M6C-2000-595",tw:2,th:1,pw:2,ph:1,lb:'M6C-2000-595 — 2" continuous (vinyl)',mt:"B-595",ty:"continuous",lm:false,br:"https://www.bradyid.com/labels/m6-m7-continuous-tapes-cps-1107906",bb:""}
+// Supply catalog — injected from Swift (window.__VL_CATALOG__) for the connected
+// printer model; mirrors the designer. Used here for size lookups + the buy control.
+// A small fallback keeps the print window usable standalone (dev).
+const _VL_CAT=(typeof window!=='undefined'&&window.__VL_CATALOG__)?window.__VL_CATALOG__:null;
+const _BL_FALLBACK=[
+  {n:"M6-31-427",cat:"Wire & cable wraps (self-laminating)",ty:"dieCut",tw:1,th:1.5,pw:1,ph:.5,mt:"B-427",lm:true,parts:[{pn:"M6-31-427",qty:250,rot:false,mat:"",url:""},{pn:"BM-31-427",qty:250,rot:false,mat:"",url:""}]},
+  {n:"M6-32-427",cat:"Wire & cable wraps (self-laminating)",ty:"dieCut",tw:1.5,th:1.5,pw:1.5,ph:.5,mt:"B-427",lm:true,parts:[{pn:"M6-32-427",qty:250,rot:false,mat:"",url:""},{pn:"BM-32-427",qty:250,rot:false,mat:"",url:""}]},
+  {n:"M6-33-427",cat:"Wire & cable wraps (self-laminating)",ty:"dieCut",tw:1.5,th:4,pw:1.5,ph:1.5,mt:"B-427",lm:true,parts:[{pn:"M6-33-427",qty:100,rot:true,mat:"",url:""},{pn:"BM-33-427",qty:100,rot:true,mat:"",url:""}]},
+  {n:"M6C-500-422",cat:"Continuous tapes",ty:"continuous",tw:.5,th:1,pw:.5,ph:1,mt:"B-422",lm:false,parts:[{pn:"M6C-500-422",lenFt:50,rot:false,mat:"Polyester",url:""},{pn:"M6C-500-595",lenFt:50,rot:false,mat:"Vinyl",url:""}]},
+  {n:"M6C-2000-595",cat:"Continuous tapes",ty:"continuous",tw:2,th:1,pw:2,ph:1,mt:"B-595",lm:false,parts:[{pn:"M6C-2000-595",lenFt:50,rot:false,mat:"Vinyl",url:""}]}
 ];
+// `let` so the live-sync poll can swap in the Engine's latest catalog.
+let BL=(_VL_CAT&&Array.isArray(_VL_CAT.bl)&&_VL_CAT.bl.length)?_VL_CAT.bl:_BL_FALLBACK;
+// Resolve a supply by part number: its primary n, else any of its parts' SKUs.
+function blBy(pn){ if(pn==null)return undefined; return BL.find(l=>l.n===pn)||BL.find(l=>(l.parts||[]).some(p=>p.pn===pn)); }
+// Default/fallback supply: the 2nd entry historically, but safe for a 1-entry catalog.
+function blDefault(){ return BL[BL.length>1?1:0]; }
+// Live catalog update — Swift pushes the Engine's latest catalog here (polling).
+function applyCatalog(cat){
+  if(!cat||!Array.isArray(cat.bl)||!cat.bl.length)return;
+  window.__VL_CATALOG__=cat; BL=cat.bl;
+  if(typeof R==="function")R();
+}
 const SC=185;
 // Objects may be positioned up to this many inches beyond the printable area on
 // any side; only the printable area prints. (Mirrors the standalone designer.)
@@ -209,7 +215,7 @@ function autoFitPx(text,o,basePx,boxW,pad){
 }
 
 function renderLabel(tpl,rec,scale=1){
-  const spec=BL.find(l=>l.n===tpl.specN)||BL[1];
+  const spec=blBy(tpl.specN)||blDefault();
   // Continuous supplies have a user-set printed length (tpl.labelLengthInches);
   // die-cut supplies use the catalog's fixed printable height.
   const phIn=(spec.ty==="continuous"&&tpl.labelLengthInches>0)?tpl.labelLengthInches:spec.ph;
@@ -511,7 +517,7 @@ let P={
 // after every label (so each printed length is separated); die-cut stock is
 // pre-cut so the cutter never fires. Anything else cuts once at end of job.
 function defaultCutMode(specN){
-  const s=BL.find(l=>l.n===specN);
+  const s=blBy(specN);
   if(s&&s.ty==="continuous")return "eachLabel";
   if(s&&s.ty==="dieCut")return "never";
   return "afterJobLast";
@@ -1265,7 +1271,7 @@ function buildPreviewPanel(){
   const prevIdx=vpos>0?vis[vpos-1]:P.previewIdx;
   const nextIdx=vpos>=0&&vpos<total-1?vis[vpos+1]:P.previewIdx;
   if(!t||!rec)return`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:12px">No template selected</div>`;
-  const spec=BL.find(l=>l.n===t.specN)||BL[1];
+  const spec=blBy(t.specN)||blDefault();
   // The label is rendered at scale 1 and fitted to the sidebar width by
   // fitPreviewLabel() (after render and while dragging the resize splitter), so
   // it grows/shrinks as the sidebar is resized.
@@ -1296,7 +1302,7 @@ function buildPreviewPanel(){
       </div>
       <div style="display:flex;justify-content:space-between;gap:8px;margin-top:7px;font-size:11px">
         <span style="color:var(--text2)">Label size</span>
-        <span style="color:var(--text);font-family:monospace">${fmtIn(spec.tw)} × ${fmtIn(spec.th)}</span>
+        <span style="color:var(--text);font-family:monospace">${spec.ty==="continuous"?fmtIn(spec.tw)+" × definable":fmtIn(spec.tw)+" × "+fmtIn(spec.th)}</span>
       </div>
       <div style="display:flex;justify-content:space-between;gap:8px;margin-top:2px;font-size:11px">
         <span style="color:var(--text2)">Printable area</span>
@@ -1418,7 +1424,7 @@ function supplyCore(pn){ let c=(pn||"").replace(/^[A-Za-z0-9]+-/,"").toUpperCase
 // both orientations, since the printer may report W/H swapped vs the template.
 function sameLabelSize(c,specN){
   if(!c||typeof c.labelWidthMils!=='number'||typeof c.labelHeightMils!=='number')return false;
-  const spec=BL.find(l=>l.n===specN)||BL.find(l=>supplyCore(l.n)===supplyCore(specN));
+  const spec=blBy(specN)||BL.find(l=>supplyCore(l.n)===supplyCore(specN));
   if(!spec)return false;
   const tol=100; // mils (~0.1")
   const close=(a,b)=>Math.abs(a-b)<=tol;
@@ -1439,16 +1445,31 @@ function sameLabelSize(c,specN){
 // report its size, treat it as unknown: neither matched nor mismatched.)
 function cassetteSizeKnown(c){ return !!(c && typeof c.labelWidthMils==='number' && typeof c.labelHeightMils==='number'); }
 
+// Matching is by PART NUMBER membership: the loaded cassette matches the template's
+// supply when its part number is one of that supply's part numbers (exact or by
+// bulk-box↔cartridge core). Falls back to the size match only when the cassette
+// reports no part number.
+function partEq(a,b){ if(!a||!b)return false; return a.toUpperCase()===b.toUpperCase()||supplyCore(a)===supplyCore(b); }
+function cassetteMatchesSupply(c,specN){
+  const spec=blBy(specN); if(!spec||!c)return false;
+  const cpn=c.partNumber||"";
+  if(cpn){
+    const parts=(spec.parts&&spec.parts.length)?spec.parts:[{pn:spec.n}];
+    return parts.some(p=>partEq(p.pn,cpn));
+  }
+  return cassetteSizeKnown(c)&&sameLabelSize(c,specN);
+}
 function cassetteMatched(){
   const c=loadedCassette(), t=tpl();
-  if(!c||!t||!cassetteSizeKnown(c))return false;
-  return sameLabelSize(c,t.specN);
+  if(!c||!t)return false;
+  return cassetteMatchesSupply(c,t.specN);
 }
 
 function cassetteMismatch(){
   const c=loadedCassette(), t=tpl();
-  if(!c||!t||!cassetteSizeKnown(c))return false;
-  return !sameLabelSize(c,t.specN);
+  if(!c||!t)return false;
+  const known=!!c.partNumber||cassetteSizeKnown(c);
+  return known&&!cassetteMatchesSupply(c,t.specN);
 }
 
 // Estimated labels remaining on the loaded roll = labelsPerRoll × supply%/100.
@@ -1470,23 +1491,34 @@ function requiredSupplyDisplay(specN){
 // Format an inch value, e.g. 1.5 -> 1.5", 1 -> 1".
 function fmtIn(v){ return (v==null?"—":(+v).toString())+'"'; }
 
-// ── "Buy more" — open the supplier page for a supply ───────────────────────────
-// Posts an openURL action; Swift opens the (http/https) URL in the system browser.
-function buyMore(specN,which){
-  const s=BL.find(l=>l.n===specN); if(!s)return;
-  const url=(which==="bulk"?(s.bb||s.br):(s.br||s.bb))||"";
-  if(!url)return;
+// ── "Buy" — open the Brady page for the selected supply's part numbers ──────────
+// Escape for a single-quoted JS literal inside a double-quoted HTML attribute.
+function jesc(s){ return String(s==null?"":s).replace(/\\/g,"\\\\").replace(/&/g,"&amp;").replace(/'/g,"\\'").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+// Open a part number's purchase page: its override URL when set, else a Brady
+// part-number search (their per-product URLs change; a search always resolves).
+function buyPart(pn,url){
+  const dest=(url&&(""+url).trim())?(""+url).trim():('https://www.bradyid.com/searchresults?Ntt='+encodeURIComponent(pn));
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
-    window.webkit.messageHandlers.vectorlabel.postMessage({action:"openURL",payload:{url}});
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"openURL",payload:{url:dest}});
 }
-// "Buy more ↗" control (roll + optional bulk link) for a supply. "" if no URL.
+// The label on a part's buy button: die-cut "PN/250", continuous "Vinyl PN/50'".
+function partBuyLabel(l,p){
+  if(l.ty==="continuous"){
+    const mat=(p.mat||"").trim();
+    const len=(p.lenFt!=null&&+p.lenFt>0)?("/"+(+p.lenFt)+"'"):"";
+    return (mat?mat+" ":"")+p.pn+len;
+  }
+  const qty=(p.qty!=null&&+p.qty>0)?("/"+p.qty):"";
+  return p.pn+qty;
+}
+// Buy buttons (one per part number) for the selected template's supply — matches the
+// designer: roll + bulk box side by side, each combining the part number + quantity.
 function buyMoreControl(specN){
-  const s=BL.find(l=>l.n===specN); if(!s||!(s.br||s.bb))return "";
-  const bulk=(s.bb&&s.bb!==s.br)?`<button class="btn" onclick="buyMore('${s.n}','bulk')" title="Buy a bulk box of ${s.n}" style="padding:3px 8px;font-size:10px">Bulk ↗</button>`:"";
-  return`<div style="display:flex;align-items:center;gap:5px;margin-top:7px">
-    <button class="btn" onclick="buyMore('${s.n}','roll')" title="Buy ${s.n} on bradyid.com" style="padding:3px 10px;font-size:11px">Buy more ↗</button>
-    ${bulk}
-  </div>`;
+  const s=blBy(specN); if(!s)return "";
+  const parts=(s.parts&&s.parts.length)?s.parts:[{pn:s.n}];
+  const bs='class="btn" style="padding:3px 9px;font-size:11px;white-space:nowrap"';
+  const btns=parts.map(p=>`<button ${bs} onclick="buyPart('${jesc(p.pn)}','${jesc(p.url||"")}')" title="Buy ${escAttr(p.pn)} on Brady">${esc(partBuyLabel(s,p))} ↗</button>`).join("");
+  return`<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:7px">${btns}</div>`;
 }
 
 // Called by Swift when detected cassette info changes (auto-detect or manual).
@@ -1678,7 +1710,7 @@ function buildPrintPayloadBody(indices){
 function buildMismatchConfirmModal(){
   const c=loadedCassette(), t=tpl();
   const loaded=cassetteSizeKnown(c)?`${fmtIn(c.labelWidthMils/1000)} × ${fmtIn(c.labelHeightMils/1000)}`:"unknown";
-  const spec=BL.find(l=>l.n===(t&&t.specN));
+  const spec=blBy(t&&t.specN);
   const tmpl=spec?`${fmtIn(spec.tw)} × ${fmtIn(spec.th)}`:"unknown";
   return `<div class="modal-overlay" onclick="if(event.target===this){P.modal=null;R()}">
     <div class="modal" style="width:430px">

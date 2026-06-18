@@ -38,7 +38,8 @@ public enum LabelRenderer {
     /// per-printer calibration offset. dx is along the label width, dy along
     /// the label height (same sense as the designer's x/y).
     public static func render(template: VLTemplate, record: WireRecord,
-                       offset: (dx: Double, dy: Double) = (0, 0)) -> (pixels: [UInt8], width: Int, height: Int)? {
+                       offset: (dx: Double, dy: Double) = (0, 0),
+                       loadedPartNumber: String? = nil) -> (pixels: [UInt8], width: Int, height: Int)? {
         guard let size = template.labelSize else { return nil }
         let dpi = size.dpi
         let pw  = size.printablePixelWidth
@@ -68,7 +69,7 @@ public enum LabelRenderer {
         // the designer layout, so the whole label is rotated to match. The angle
         // comes from the catalog (feedRotationDeg); its printable area is square,
         // so a 90° rotation stays in bounds.
-        let feedRotation = BradyCatalog.feedRotationDeg(forPartNumber: size.partNumber)
+        let feedRotation = BradyCatalog.effectiveFeedRotationDeg(selected: size.partNumber, loaded: loadedPartNumber)
         if abs(feedRotation) > 0.0001 {
             let cx = CGFloat(pw) / 2, cy = CGFloat(ph) / 2
             ctx.translateBy(x: cx, y: cy)

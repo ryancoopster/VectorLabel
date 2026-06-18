@@ -35,7 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             UserDefaults.standard.set("com.sai.vectorlabel.customdesigner", forKey: "CFBundleIdentifier")
         }
         AppSettings.shared.applyNativeAppearance()
-        if let appIcon = CoreResources.image("AppIcon", "icns") {
+        if let appIcon = CoreResources.appIcon() {
             NSApp.applicationIconImage = appIcon
         }
         NSApp.setActivationPolicy(.regular)

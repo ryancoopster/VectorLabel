@@ -31,13 +31,12 @@ final class FoundationTests: XCTestCase {
 
     // MARK: – Single-source catalog (M6)
 
-    /// The catalog must come from the bundled BradyCatalog.json, not the built-in
-    /// fallback — proves the resource path resolves in both `swift build` and the
-    /// packaged .app.
-    func testCatalogLoadsFromResource() {
-        _ = BradyCatalog.sizes                       // force the lazy load
-        XCTAssertTrue(BradyCatalog.loadedFromResource,
-                      "BradyCatalog fell back to the built-in table — the bundled JSON did not load")
+    /// The catalog must populate from the editable store's default seed (every app
+    /// process loads it at launch / lazily). Spot-check the core supplies are present.
+    func testDefaultCatalogPopulated() {
+        XCTAssertGreaterThanOrEqual(BradyCatalog.sizes.count, 3)
+        XCTAssertNotNil(BradyCatalog.size(forPartNumber: "M6-32-427"))
+        XCTAssertNotNil(BradyCatalog.size(forPartNumber: "M6C-2000-595"))   // a continuous tape
     }
 
     /// Pin the exact physical + printable sizes and the feed rotation. These drive
@@ -80,10 +79,9 @@ final class FoundationTests: XCTestCase {
         // Unknown parts safely default to die-cut.
         XCTAssertEqual(BradyCatalog.supplyType(forPartNumber: "ZZ-999-000"), .dieCut)
         XCTAssertFalse(BradyCatalog.isContinuous(forPartNumber: "ZZ-999-000"))
-        // Buy URLs are present for the original supplies and are https.
-        let roll = BradyCatalog.buyUrlRoll(forPartNumber: "BM-32-427")
-        XCTAssertTrue(roll.hasPrefix("https://"), "expected an https buy URL, got \(roll)")
-        // Unknown part → empty URLs (no crash).
+        // Buy URLs are per-part overrides now ("" ⇒ the buy buttons open a Brady
+        // part-number search). The seed leaves them empty; unknown parts too (no crash).
+        XCTAssertEqual(BradyCatalog.buyUrlRoll(forPartNumber: "BM-32-427"), "")
         XCTAssertEqual(BradyCatalog.buyUrlRoll(forPartNumber: "ZZ-999-000"), "")
     }
 
@@ -106,86 +104,17 @@ final class FoundationTests: XCTestCase {
                        BradyCatalog.size(forPartNumber: "M6C-1000-422")?.printableHeightInches)
     }
 
-    /// The JS `BL` tables embedded in the two HTML UIs are mirrors of
-    /// BradyCatalog.json's `js` projection. This fails if either HTML drifts from
-    /// the catalog, or if the two HTML copies differ from each other — keeping the
-    /// catalog single-sourced without runtime injection.
-    func testJSCatalogMirrorsCatalogJSON() throws {
-        struct JSProj: Codable {
-            let tw: Double; let th: Double; let pw: Double; let ph: Double; let lb: String
-            // Phase 5 additive projection: material, type, laminated, buy URLs.
-            let mt: String; let ty: String; let lm: Bool; let br: String; let bb: String
-        }
-        struct SpecT: Codable {
-            let partNumber: String
-            let widthInches: Double; let heightInches: Double
-            let printableWidthInches: Double; let printableHeightInches: Double
-            let feedRotationDeg: Double
-            let material: String; let type: String; let laminated: Bool
-            let buyUrlRoll: String; let buyUrlBulk: String
-            let js: JSProj
-        }
-        struct FileT: Codable { let sizes: [SpecT] }
-
-        let sourcesDir = URL(fileURLWithPath: #filePath)   // MacApp/Tests/FoundationTests.swift
-            .deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("Sources")
-            .appendingPathComponent("Core")
-        let json = try Data(contentsOf: sourcesDir.appendingPathComponent("BradyCatalog.json"))
-        let catalog = try JSONDecoder().decode(FileT.self, from: json)
-
-        // JS number formatting: integers without ".0", values <1 without a leading 0.
-        func jsNum(_ v: Double) -> String {
-            if v == v.rounded() { return String(Int(v)) }
-            var s = String(v)
-            if s.hasPrefix("0.") { s = String(s.dropFirst()) }
-            return s
-        }
-        func entryLiteral(_ s: SpecT) -> String {
-            "{n:\"\(s.partNumber)\",tw:\(jsNum(s.js.tw)),th:\(jsNum(s.js.th)),pw:\(jsNum(s.js.pw)),ph:\(jsNum(s.js.ph)),lb:'\(s.js.lb)',mt:\"\(s.js.mt)\",ty:\"\(s.js.ty)\",lm:\(s.js.lm),br:\"\(s.js.br)\",bb:\"\(s.js.bb)\"}"
-        }
-
-        let printHTML = try String(contentsOf: sourcesDir.appendingPathComponent("VectorLabelPrint.html"), encoding: .utf8)
-        let designHTML = try String(contentsOf: sourcesDir.appendingPathComponent("VectorLabelDesigner.html"), encoding: .utf8)
-
-        for s in catalog.sizes {
-            let lit = entryLiteral(s)
-            XCTAssertTrue(printHTML.contains(lit),
-                          "VectorLabelPrint.html BL is out of sync with BradyCatalog.json. Expected entry:\n\(lit)")
-            XCTAssertTrue(designHTML.contains(lit),
-                          "VectorLabelDesigner.html BL is out of sync with BradyCatalog.json. Expected entry:\n\(lit)")
-        }
-
-        // Cross-view invariant: within one entry, the JS projection must agree
-        // with the Swift fields, so editing one side without the other fails.
-        for s in catalog.sizes {
-            XCTAssertEqual(s.js.pw, s.printableWidthInches,  "\(s.partNumber): JS pw must equal Swift printableWidthInches")
-            XCTAssertEqual(s.js.ph, s.printableHeightInches, "\(s.partNumber): JS ph must equal Swift printableHeightInches")
-            if s.feedRotationDeg == 90 {   // rotated supplies present the long axis swapped
-                XCTAssertEqual(s.js.tw, s.heightInches, "\(s.partNumber): rotated 90°, JS tw must equal Swift heightInches")
-                XCTAssertEqual(s.js.th, s.widthInches,  "\(s.partNumber): rotated 90°, JS th must equal Swift widthInches")
-            } else {
-                XCTAssertEqual(s.js.tw, s.widthInches,  "\(s.partNumber): JS tw must equal Swift widthInches")
-                XCTAssertEqual(s.js.th, s.heightInches, "\(s.partNumber): JS th must equal Swift heightInches")
-            }
-            // Phase 5: the JS projection must agree with the Swift metadata fields,
-            // so editing one side without the other fails the test.
-            XCTAssertEqual(s.js.mt, s.material,   "\(s.partNumber): JS mt must equal Swift material")
-            XCTAssertEqual(s.js.ty, s.type,       "\(s.partNumber): JS ty must equal Swift type")
-            XCTAssertEqual(s.js.lm, s.laminated,  "\(s.partNumber): JS lm must equal Swift laminated")
-            XCTAssertEqual(s.js.br, s.buyUrlRoll, "\(s.partNumber): JS br must equal Swift buyUrlRoll")
-            XCTAssertEqual(s.js.bb, s.buyUrlBulk, "\(s.partNumber): JS bb must equal Swift buyUrlBulk")
-            XCTAssertTrue(s.type == "dieCut" || s.type == "continuous", "\(s.partNumber): type must be dieCut or continuous")
-        }
-
-        // The two HTML BL blocks must be identical to each other.
-        func blBlock(_ html: String) -> Substring? {
-            guard let start = html.range(of: "const BL=["),
-                  let end = html.range(of: "];", range: start.upperBound..<html.endIndex) else { return nil }
-            return html[start.lowerBound..<end.upperBound]
-        }
-        XCTAssertEqual(blBlock(printHTML), blBlock(designHTML),
-                       "The BL catalog tables in the print and designer HTML differ from each other")
+    /// The JS designer/print UIs no longer embed a static `BL` mirror of the
+    /// catalog — they receive `window.__VL_CATALOG__` injected from the editable
+    /// store (SupplyCatalogStore.webCatalogJSON), with a small hardcoded fallback
+    /// for dev. So the old "BL mirrors BradyCatalog.json" sync test is retired.
+    /// The default catalog's invariants are pinned by testBradyGeometryPinned,
+    /// testLabelsPerRollKnownSizes and testSupplyTypeAndBuyURLs above.
+    func testWebCatalogProjectionForModel() {
+        let json = SupplyCatalogStore.webCatalogJSON(forModel: "M611")
+        XCTAssertTrue(json.contains("\"bl\""), "projection must carry a bl array")
+        XCTAssertTrue(json.contains("M6-32-427"), "projection must include seeded supplies")
+        XCTAssertTrue(json.contains("\"categories\""), "projection must carry category names")
     }
 
     // MARK: – CSV parser (H1)

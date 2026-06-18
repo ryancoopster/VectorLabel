@@ -35,7 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             UserDefaults.standard.set("com.sai.vectorlabel.autoprint", forKey: "CFBundleIdentifier")
         }
         AppSettings.shared.applyNativeAppearance()
-        if let appIcon = CoreResources.image("AppIcon", "icns") {
+        if let appIcon = CoreResources.appIcon() {
             NSApp.applicationIconImage = appIcon
         }
         // Background app: no Dock icon. The print window appears on demand.

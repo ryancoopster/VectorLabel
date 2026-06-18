@@ -72,4 +72,15 @@ public enum CoreResources {
 
     public static func url(_ name: String, _ ext: String) -> URL? { bundle.url(forResource: name, withExtension: ext) }
     public static func image(_ name: String, _ ext: String) -> NSImage? { url(name, ext).flatMap { NSImage(contentsOf: $0) } }
+
+    /// The Dock/app icon for the CURRENT app. Prefers the running app bundle's own
+    /// `AppIcon.icns` — packaging gives each app its per-app monogram (CD / TD / L)
+    /// there, so the runtime icon matches the bundle icon instead of reverting to
+    /// the shared Core bundle's generic "L". Falls back to the Core resource bundle
+    /// for `swift build` / test runs that have no app bundle icon.
+    public static func appIcon() -> NSImage? {
+        if let url = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
+           let img = NSImage(contentsOf: url) { return img }
+        return image("AppIcon", "icns")
+    }
 }

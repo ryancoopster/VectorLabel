@@ -158,6 +158,10 @@ public final class PrintWindowController: NSObject {
         contentController.addUserScript(WKUserScript(
             source: "document.documentElement.dataset.theme='\(theme)';",
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        // Inject the editable supply catalog before the page's BL table is built.
+        contentController.addUserScript(WKUserScript(
+            source: "window.__VL_CATALOG__=\(SupplyCatalogStore.webCatalogJSON(forModel: ""));",
+            injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController = contentController
         config.preferences.setValue(true, forKey: "developerExtrasEnabled")
 
@@ -183,6 +187,11 @@ public final class PrintWindowController: NSObject {
         AppSettings.shared.$systemAppearanceTick.dropFirst().receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.evalJS("if(typeof setTheme==='function')setTheme('\(AppSettings.shared.effectiveTheme)')") }
             .store(in: &columnObservers)
+
+        // Live-sync the supply catalog: the editor lives in this process, so observe
+        // the store directly and push the latest catalog into the web UI.
+        SupplyCatalogStore.shared.$catalog.dropFirst().receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.reinjectCatalog() }.store(in: &columnObservers)
 
         // Keep the column config in sync with the designer / persisted setting.
         AppSettings.shared.$recordColumnOrder.dropFirst().receive(on: RunLoop.main)
@@ -548,6 +557,9 @@ extension PrintWindowController: WKScriptMessageHandler {
         // Per-printer calibration offset (keyed by the printer's serial).
         let serial = printerID.split(separator: ":").dropFirst(2).joined(separator: ":")
         let offset = AppSettings.shared.calibrationOffset(forSerial: serial)
+        // Loaded part number, so the renderer can pick its feed rotation when two
+        // parts of one supply rotate differently on the roll.
+        let loadedPN = backend?.status?.printers.first(where: { $0.id == printerID })?.cassette?.partNumber
 
         // Cut SETTING chosen in the print header (Phase 6). Falls back to the
         // sensible default the JS picks per stock (continuous → eachLabel; die-cut
@@ -569,7 +581,7 @@ extension PrintWindowController: WKScriptMessageHandler {
             var rasters: [(pixels: [UInt8], width: Int, height: Int)] = []
             var labelPx = 0   // longest rendered dimension (px) → print-length estimate
             for record in selectedRecords {
-                guard let rendered = LabelRenderer.render(template: template, record: record, offset: offset) else { continue }
+                guard let rendered = LabelRenderer.render(template: template, record: record, offset: offset, loadedPartNumber: loadedPN) else { continue }
                 labelPx = max(labelPx, max(rendered.width, rendered.height))
                 rasters.append(rendered)
             }
@@ -624,6 +636,12 @@ extension PrintWindowController: WKScriptMessageHandler {
 
     private func evalJS(_ js: String) {
         webView?.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    /// Push the latest supply catalog into the print web UI (live editor sync).
+    private func reinjectCatalog() {
+        let json = SupplyCatalogStore.webCatalogJSON(forModel: "")
+        evalJS("window.__VL_CATALOG__=\(json); if(typeof applyCatalog==='function')applyCatalog(window.__VL_CATALOG__);")
     }
 }
 

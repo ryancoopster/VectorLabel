@@ -2,6 +2,22 @@
 
 A macOS menu bar app for printing Brady M610/M611 wrap-around wire labels from Vectorworks ConnectCAD exports.
 
+## Adding support for another printer
+
+Got a different printer working with VectorLabel and want to contribute it back?
+
+- **[docs/CONTRIBUTING-VIA-CLAUDE-CODE.md](docs/CONTRIBUTING-VIA-CLAUDE-CODE.md)** — a
+  no-code-experience-required walkthrough: use [Claude Code](https://claude.com/claude-code)
+  to make the change and open a pull request on GitHub.
+- **[docs/ADDING-PRINTER-TYPES.md](docs/ADDING-PRINTER-TYPES.md)** — the technical
+  instruction set Claude Code follows to wire a new printer type into the print
+  pipeline and supply catalog.
+
+Label supplies themselves are editable in-app, no code needed:
+**Engine ▸ Preferences ▸ Printers ▸ Edit Supplies…** (categories, sizes, part
+numbers, quantities / roll lengths, 90° feed rotation, and buy links, grouped per
+printer model).
+
 ## Folder structure
 
 ```

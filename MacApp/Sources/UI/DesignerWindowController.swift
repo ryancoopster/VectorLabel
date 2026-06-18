@@ -99,6 +99,9 @@ public final class DesignerWindowController: NSObject {
     /// What to do once a save triggered from the close prompt completes.
     private enum AfterSave { case none, close, terminate }
     private var afterSave: AfterSave = .none
+    /// Polls the Engine's on-disk supply catalog (this designer is a separate
+    /// process) and pushes changes into the web UI live.
+    private var catalogPollTimer: Timer?
 
     public init(mode: DesignerMode) {
         self.mode = mode
@@ -196,6 +199,12 @@ public final class DesignerWindowController: NSObject {
         contentController.addUserScript(WKUserScript(
             source: "document.documentElement.dataset.theme='\(theme)';\(modeJS)",
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        // Inject the editable supply catalog (window.__VL_CATALOG__) at document start
+        // so the designer builds its BL table from it before first render. "" ⇒ the
+        // default group (one group today; keyed by printer model once more exist).
+        contentController.addUserScript(WKUserScript(
+            source: "window.__VL_CATALOG__=\(SupplyCatalogStore.webCatalogJSON(forModel: ""));",
+            injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController = contentController
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.navigationDelegate = self
@@ -247,6 +256,14 @@ public final class DesignerWindowController: NSObject {
             .sink { [weak self] _ in
                 self?.webView?.evaluateJavaScript("if(typeof setTheme==='function')setTheme('\(AppSettings.shared.effectiveTheme)')", completionHandler: nil)
             }.store(in: &cancellables)
+        // Live-sync the supply catalog from the Engine's edits.
+        catalogPollTimer?.invalidate()
+        catalogPollTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self = self else { return }
+                if SupplyCatalogStore.reloadSnapshotFromDisk() { self.reinjectCatalog() }
+            }
+        }
 
         closeObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
@@ -397,10 +414,15 @@ public final class DesignerWindowController: NSObject {
         // Continuous supplies carry the saved label length (inches); 0 ⇒ default.
         let lenInches = (doc.template.labelLengthInches ?? 0) > 0
             ? (doc.template.labelLengthInches ?? 0) : doc.labelLengthInches
+        let supplyIDJSON = (doc.template.supplyID ?? "").jsonQuoted
+        let geomJSON = doc.template.supplyGeometry
+            .flatMap { try? JSONEncoder().encode($0) }
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "null"
         let js = """
         if(typeof initCustomDocument==='function')initCustomDocument({\
         name:\(nameJSON),specN:\(specJSON),objs:\(objJSON),copies:\(doc.copies),\
         cutMode:\(doc.cutMode.rawValue.jsonQuoted),\
+        supplyID:\(supplyIDJSON),supplyGeometry:\(geomJSON),\
         labelLengthInches:\(lenInches),canvasRot:\(doc.template.canvasRot ?? 0),\
         records:\(recJSON),columns:\(colJSON),filename:\(filename),\
         headerRow:\(doc.dataSourceHeaderRow),isXLSX:\(isXLSX),\
@@ -729,6 +751,14 @@ public final class DesignerWindowController: NSObject {
             completionHandler: nil)
     }
 
+    /// Push the latest supply catalog (the Engine's edits) into the designer.
+    private func reinjectCatalog() {
+        let json = SupplyCatalogStore.webCatalogJSON(forModel: "")
+        webView?.evaluateJavaScript(
+            "window.__VL_CATALOG__=\(json); if(typeof applyCatalog==='function')applyCatalog(window.__VL_CATALOG__);",
+            completionHandler: nil)
+    }
+
     /// The Engine's in-flight (printing/queued) jobs as the array the designer's
     /// print header consumes for live progress + a Cancel control. Custom mode only.
     private func activeJobsJSONString() -> String {
@@ -820,6 +850,9 @@ public final class DesignerWindowController: NSObject {
         // print window does). printerID is "vid:pid:serial".
         let serial = (printerID ?? "").split(separator: ":").dropFirst(2).joined(separator: ":")
         let offset = AppSettings.shared.calibrationOffset(forSerial: serial)
+        // The part number actually loaded in this printer, so the renderer can use
+        // its feed rotation when two parts of one supply rotate differently.
+        let loadedPN = printBackend?.status?.printers.first(where: { $0.id == printerID })?.cassette?.partNumber
 
         // Render off the main thread (matching the print window), then submit back
         // on the main actor.
@@ -831,7 +864,7 @@ public final class DesignerWindowController: NSObject {
             var rasters: [(pixels: [UInt8], width: Int, height: Int)] = []
             var maxLabelPx = 0
             for record in records {
-                guard let rendered = LabelRenderer.render(template: template, record: record, offset: offset) else { continue }
+                guard let rendered = LabelRenderer.render(template: template, record: record, offset: offset, loadedPartNumber: loadedPN) else { continue }
                 maxLabelPx = max(maxLabelPx, rendered.width, rendered.height)
                 for _ in 0..<copies { rasters.append(rendered) }
             }
@@ -897,6 +930,10 @@ public final class DesignerWindowController: NSObject {
         // Landscape canvas rotation (continuous only) → renderer rotates the raster. #14.
         if let rot = payload["canvasRot"] as? Int { tplDict["canvasRot"] = rot }
         else if let rotN = payload["canvasRot"] as? NSNumber { tplDict["canvasRot"] = rotN.intValue }
+        // Supply identity + geometry snapshot (keep the canvas size if the supply is
+        // later removed from the catalog).
+        if let sid = payload["supplyID"] as? String, !sid.isEmpty { tplDict["supplyID"] = sid }
+        if let geom = payload["supplyGeometry"] as? [String: Any] { tplDict["supplyGeometry"] = geom }
         guard let data = try? JSONSerialization.data(withJSONObject: tplDict),
               let template = try? JSONDecoder().decode(VLTemplate.self, from: data)
         else { return }

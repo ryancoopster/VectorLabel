@@ -361,6 +361,15 @@ struct PreferencesView: View {
                     }
                 }
             }
+            PrefSection(title: "Label Supplies") {
+                PrefRow(
+                    label: "Edit supply catalog",
+                    caption: "Customise the label supplies (categories, sizes, part numbers, quantities/roll lengths, 90° rotation and buy links) for each printer model."
+                ) {
+                    Button("Edit Supplies…") { SupplyCatalogEditorWindow.shared.show() }
+                        .buttonStyle(VLButtonStyle())
+                }
+            }
         }
     }
 

@@ -70,7 +70,25 @@ public struct VLTemplate: Codable, Identifiable, Hashable {
     /// Optional so older templates decode unchanged. #14.
     public var canvasRot: Int? = nil
 
-    public var labelSize: BradyLabelSize? { BradyCatalog.size(forPartNumber: specN) }
+    /// The catalog Supply.id (UUID string) this design was created against. The
+    /// supply catalog is user-editable, so we save the stable id (not just the part
+    /// number) to re-resolve the supply on load. Optional — older files have none.
+    public var supplyID: String? = nil
+    /// A snapshot of the supply's geometry at save time. If the supply is later
+    /// removed from the catalog, the canvas keeps THIS size until a new supply is
+    /// picked (the catalog can no longer provide the geometry). Optional.
+    public var supplyGeometry: SupplyGeometry? = nil
+
+    /// Resolve the label size from the catalog by part number; if the supply was
+    /// removed, fall back to the saved geometry snapshot so the canvas size is kept.
+    public var labelSize: BradyLabelSize? {
+        if let s = BradyCatalog.size(forPartNumber: specN) { return s }
+        if let g = supplyGeometry {
+            return BradyLabelSize(partNumber: specN, widthInches: g.widthInches, heightInches: g.heightInches,
+                                  type: g.isContinuous ? .continuous : .dieCut)
+        }
+        return nil
+    }
 
     /// The printable height (inches) used for rendering: the catalog's fixed value
     /// for die-cut supplies, or the user-set `labelLengthInches` for continuous
@@ -81,7 +99,28 @@ public struct VLTemplate: Codable, Identifiable, Hashable {
            let len = labelLengthInches, len > 0 {
             return len
         }
+        // Ghost supply (removed from the catalog): use the saved printable height.
+        if BradyCatalog.size(forPartNumber: specN) == nil, let g = supplyGeometry {
+            if g.isContinuous, let len = labelLengthInches, len > 0 { return len }
+            return g.printableHeightInches
+        }
         return size.printableHeightInches
+    }
+}
+
+/// A snapshot of a supply's geometry, saved into a template/custom document so the
+/// canvas size survives the (now editable) supply being removed from the catalog.
+public struct SupplyGeometry: Codable, Hashable {
+    public var widthInches: Double
+    public var heightInches: Double
+    public var printableWidthInches: Double
+    public var printableHeightInches: Double
+    public var isContinuous: Bool
+    public init(widthInches: Double, heightInches: Double, printableWidthInches: Double,
+                printableHeightInches: Double, isContinuous: Bool) {
+        self.widthInches = widthInches; self.heightInches = heightInches
+        self.printableWidthInches = printableWidthInches; self.printableHeightInches = printableHeightInches
+        self.isContinuous = isContinuous
     }
 }
 

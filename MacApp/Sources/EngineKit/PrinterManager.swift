@@ -285,7 +285,11 @@ public final class PrinterManager: ObservableObject {
            let match = BradyCatalog.sizes.first(where: { BradyCatalog.core($0.partNumber) == BradyCatalog.core(c.partNumber) }) {
             return match
         }
-        return BradyCatalog.size(forPartNumber: "BM-32-427") ?? BradyCatalog.sizes[0]
+        // Non-crashing fallback: the editable catalog can in principle be emptied,
+        // so never force-index BradyCatalog.sizes.
+        return BradyCatalog.size(forPartNumber: "BM-32-427")
+            ?? BradyCatalog.sizes.first
+            ?? BradyLabelSize(partNumber: "M6-32-427", widthInches: 1.5, heightInches: 1.5)
     }
 
     /// Print a 1/8" calibration grid on the loaded label, applying the printer's

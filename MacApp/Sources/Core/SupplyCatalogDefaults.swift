@@ -1,0 +1,163 @@
+import Foundation
+
+// MARK: – Factory-default supply catalog
+//
+// The shipped seed. Generated in code (not a bundled JSON) so it's easy to curate
+// and never drifts from a resource. Users edit a saved copy in Application Support;
+// "Restore defaults" rebuilds from here.
+//
+// Data sources, in priority order:
+//   1. The previous hand-tuned catalog (BradyCatalog.json) — its geometry, printable
+//      areas, rotation and quantities are PRESERVED verbatim for the part numbers it
+//      had, so existing designs/templates and the unit tests are unaffected.
+//   2. The seven Brady M6/M7 product PDFs the user supplied (2026-06-17) — used to
+//      ADD new sizes/families. Sizes + part numbers are reliable; printable areas
+//      were not captured for the flat (non-self-laminating) families, where the
+//      printable area equals the full label, so that default is correct. Continuous
+//      tapes were scroll-clipped in the PDFs, so only confirmed widths are seeded.
+// Everything here is editable in Engine ▸ Preferences ▸ Supplies.
+
+extension SupplyCatalog {
+
+    /// One flat seed row, grouped into `Supply` objects by geometry below.
+    fileprivate struct Row {
+        let cat: String
+        let kind: SupplyKind
+        let selfLam: Bool
+        let material: String        // family, e.g. "B-427"
+        let w: Double, h: Double, pw: Double, ph: Double
+        let pn: String
+        let qty: Int?
+        let lenFt: Double?
+        let rot: Bool
+        let matLabel: String        // shown on continuous buy buttons
+        init(_ cat: String, _ kind: SupplyKind, selfLam: Bool = false, material: String,
+             _ w: Double, _ h: Double, _ pw: Double, _ ph: Double,
+             _ pn: String, qty: Int? = nil, lenFt: Double? = nil, rot: Bool = false, matLabel: String = "") {
+            self.cat = cat; self.kind = kind; self.selfLam = selfLam; self.material = material
+            self.w = w; self.h = h; self.pw = pw; self.ph = ph
+            self.pn = pn; self.qty = qty; self.lenFt = lenFt; self.rot = rot; self.matLabel = matLabel
+        }
+    }
+
+    public static func makeDefault() -> SupplyCatalog {
+        let WRAP = "Wire & cable wraps (self-laminating)"
+        let POLY = "Multi-purpose polyester labels"
+        let CLEAR = "Clear polyester labels"
+        let PANEL = "Raised panel labels"
+        let CONT = "Continuous tapes"
+
+        let rows: [Row] = [
+            // ── Self-laminating vinyl wraps (B-427) — geometry preserved from the old
+            //    catalog; same-size cartridge / bulk-box parts consolidated per size. ──
+            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.0, 1.5, 1.0, 0.5, "M6-31-427", qty: 250),
+            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.0, 1.5, 1.0, 0.5, "M6-21-427", qty: 250),
+            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.0, 1.5, 1.0, 0.5, "BM-31-427", qty: 250),
+            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.5, 1.5, 1.5, 0.5, "M6-32-427", qty: 250),
+            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.5, 1.5, 1.5, 0.5, "BM-32-427", qty: 250),
+            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.5, 4.0, 1.5, 1.5, "M6-33-427", qty: 100, rot: true),
+            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.5, 4.0, 1.5, 1.5, "BM-33-427", qty: 100, rot: true),
+            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.5, 4.0, 1.5, 1.5, "M6-109-427", rot: true),
+            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 0.5, 1.0, 0.5, 0.25, "M6-11-427", qty: 250),
+            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 0.75, 1.0, 0.75, 0.25, "M6-17-427", qty: 250),
+            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.0, 1.0, 1.0, 0.375, "M6-19-427", qty: 250),
+            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 2.0, 2.0, 2.0, 1.0, "M6-34-427", qty: 100),
+            // New wrap sizes from the wrap PDF (printable from the PDF; qty not shown).
+            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 0.25, 1.5, 0.25, 0.5, "M6-28-427"),
+            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 0.5, 1.5, 0.5, 0.5, "M6-29-427"),
+            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 0.75, 1.5, 0.75, 0.5, "M6-30-427"),
+            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.0, 4.0, 1.0, 1.0, "M6-23-427"),
+            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.75, 1.5, 1.75, 0.5, "M6-88-427"),
+
+            // ── Multi-purpose polyester die-cut labels (flat: printable = full label).
+            //    B-423 (harsh), B-483 (ultra-aggressive), B-422 (PermaShield). ──
+            Row(POLY, .dieCut, material: "B-423", 0.25, 0.25, 0.25, 0.25, "M6-1-423"),
+            Row(POLY, .dieCut, material: "B-423", 0.375, 0.375, 0.375, 0.375, "M6-3-423"),
+            Row(POLY, .dieCut, material: "B-423", 0.4, 0.4, 0.4, 0.4, "M6-4-423"),
+            Row(POLY, .dieCut, material: "B-423", 1.0, 1.0, 1.0, 1.0, "M6-19-423"),
+            Row(POLY, .dieCut, material: "B-423", 1.0, 2.0, 1.0, 2.0, "M6-20-423"),
+            Row(POLY, .dieCut, material: "B-423", 2.0, 0.25, 2.0, 0.25, "M6-2-423"),
+            Row(POLY, .dieCut, material: "B-423", 3.0, 1.0, 3.0, 1.0, "M6-22-423"),
+            Row(POLY, .dieCut, material: "B-483", 1.0, 0.375, 1.0, 0.375, "M6-16-483"),
+            Row(POLY, .dieCut, material: "B-483", 1.0, 0.5, 1.0, 0.5, "M6-17-483"),
+            Row(POLY, .dieCut, material: "B-483", 1.5, 0.5, 1.5, 0.5, "M6-29-483"),
+            Row(POLY, .dieCut, material: "B-483", 1.5, 0.75, 1.5, 0.75, "M6-30-483"),
+            Row(POLY, .dieCut, material: "B-483", 1.5, 1.5, 1.5, 1.5, "M6-32-483"),
+            Row(POLY, .dieCut, material: "B-483", 4.0, 1.0, 4.0, 1.0, "M6-23-483"),
+            Row(POLY, .dieCut, material: "B-483", 4.0, 1.9, 4.0, 1.9, "M6-38-483"),
+            Row(POLY, .dieCut, material: "B-422", 1.0, 0.5, 1.0, 0.5, "M6-17-422", qty: nil),
+            Row(POLY, .dieCut, material: "B-422", 2.0, 1.0, 2.0, 1.0, "M6-20-422", qty: 100),
+            Row(POLY, .dieCut, material: "B-422", 2.75, 1.25, 2.75, 1.25, "M6-26-422"),
+            Row(POLY, .dieCut, material: "B-422", 3.0, 1.65, 3.0, 1.65, "M6-50-422"),
+
+            // ── Clear polyester die-cut labels (B-430; flat, printable = full). ──
+            Row(CLEAR, .dieCut, material: "B-430", 1.0, 0.375, 1.0, 0.375, "M6-98-430"),
+            Row(CLEAR, .dieCut, material: "B-430", 1.0, 3.0, 1.0, 3.0, "M6-22-430"),
+            Row(CLEAR, .dieCut, material: "B-430", 1.5, 0.25, 1.5, 0.25, "M6-28-430"),
+            Row(CLEAR, .dieCut, material: "B-430", 1.5, 0.75, 1.5, 0.75, "M6-30-430"),
+            Row(CLEAR, .dieCut, material: "B-430", 1.9, 0.6, 1.9, 0.6, "M6-52-430"),
+            Row(CLEAR, .dieCut, material: "B-430", 1.9, 1.0, 1.9, 1.0, "M6-78-430"),
+            Row(CLEAR, .dieCut, material: "B-430", 1.25, 2.75, 1.25, 2.75, "M6-198-430"),
+            Row(CLEAR, .dieCut, material: "B-430", 3.0, 1.9, 3.0, 1.9, "M6-37-430"),
+
+            // ── Raised panel die-cut labels (B-593; flat, printable = full). ──
+            Row(PANEL, .dieCut, material: "B-593", 1.0, 3.0, 1.0, 3.0, "M6-176-593", qty: 100),
+            Row(PANEL, .dieCut, material: "B-593", 1.77, 0.59, 1.77, 0.59, "M6-172-593"),
+
+            // ── Continuous tapes — grouped by WIDTH; each material is a buy option.
+            //    Length is user-set ("width × definable"); 50 ft rolls. ──
+            Row(CONT, .continuous, material: "B-483", 0.25, 1.0, 0.25, 1.0, "M6C-250-483", lenFt: 50, matLabel: "Polyester"),
+            Row(CONT, .continuous, material: "B-422", 0.5, 1.0, 0.5, 1.0, "M6C-500-422", lenFt: 50, matLabel: "Polyester"),
+            Row(CONT, .continuous, material: "B-595", 0.5, 1.0, 0.5, 1.0, "M6C-500-595", lenFt: 50, matLabel: "Vinyl"),
+            Row(CONT, .continuous, material: "B-422", 1.0, 1.0, 1.0, 1.0, "M6C-1000-422", lenFt: 50, matLabel: "Polyester"),
+            Row(CONT, .continuous, material: "B-430", 1.0, 1.0, 1.0, 1.0, "M6C-1000-430", lenFt: 50, matLabel: "Clear polyester"),
+            Row(CONT, .continuous, material: "B-430", 1.9, 1.0, 1.9, 1.0, "M6C-1900-430", lenFt: 50, matLabel: "Clear polyester"),
+            Row(CONT, .continuous, material: "B-595", 2.0, 1.0, 2.0, 1.0, "M6C-2000-595", lenFt: 50, matLabel: "Vinyl"),
+        ]
+
+        // Group rows into supplies. Die-cut: one supply per (category, w, h, pw, ph).
+        // Continuous: one supply per (category, width) — length is user-set, so all
+        // materials of a width share one row with several buy options.
+        let catOrder = [WRAP, POLY, CLEAR, PANEL, CONT]
+        var categories: [SupplyCategory] = []
+        for catName in catOrder {
+            let catRows = rows.filter { $0.cat == catName }
+            var supplyKeys: [String] = []                 // preserve first-seen order
+            var byKey: [String: [Row]] = [:]
+            for r in catRows {
+                let key = r.kind == .continuous
+                    ? "c|\(r.w)"
+                    : "d|\(r.w)|\(r.h)|\(r.pw)|\(r.ph)"
+                if byKey[key] == nil { byKey[key] = []; supplyKeys.append(key) }
+                byKey[key]!.append(r)
+            }
+            var supplies: [Supply] = []
+            for key in supplyKeys {
+                let group = byKey[key]!
+                let r0 = group[0]
+                let parts = group.map {
+                    SupplyPartNumber(partNumber: $0.pn, quantityPerRoll: $0.qty,
+                                     rollLengthFeet: $0.lenFt, rotate90: $0.rot,
+                                     materialLabel: $0.matLabel)
+                }
+                let name = r0.kind == .continuous
+                    ? "\(fmtIn(r0.w)) continuous"
+                    : "\(fmtIn(r0.w)) × \(fmtIn(r0.h))"
+                supplies.append(Supply(
+                    name: name, kind: r0.kind, selfLaminating: r0.selfLam,
+                    materialFamily: r0.material, widthInches: r0.w, heightInches: r0.h,
+                    printableWidthInches: r0.pw, printableHeightInches: r0.ph, parts: parts))
+            }
+            categories.append(SupplyCategory(name: catName, supplies: supplies))
+        }
+
+        let group = SupplyGroup(name: "Brady M6 / M7", printerModels: ["M610", "M611"],
+                                categories: categories)
+        return SupplyCatalog(version: 1, groups: [group],
+                             coreEquivalences: ["109-427": "33-427"])
+    }
+
+    private static func fmtIn(_ v: Double) -> String {
+        (v == v.rounded() ? "\(Int(v))" : String(format: "%g", v)) + "\""
+    }
+}
