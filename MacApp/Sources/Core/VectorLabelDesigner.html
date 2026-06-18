@@ -18,6 +18,8 @@ input,select,button,textarea{font-family:system-ui,sans-serif;font-size:12px}
 .btn{background:var(--surface3);border:1px solid var(--bd4);color:var(--text2);border-radius:4px;padding:4px 9px;cursor:pointer;font-size:11px;white-space:nowrap}
 .btn:hover{background:var(--surface4)}
 .btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary{background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600}
+.btn.primary:hover{filter:brightness(1.08)}
 .tbtn{display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--surface3);border:1px solid var(--bd4);color:var(--text2);border-radius:5px;padding:6px 0;cursor:pointer;font-size:10px;width:56px}
 .tbtn:hover{background:var(--surface4)}
 .fbtn{background:var(--surface);border:1px solid var(--bd2);color:var(--text2);border-radius:3px;padding:2px 7px;font-size:11px;cursor:pointer}
@@ -753,7 +755,7 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
       const textAlign=o.al||"left";
       const dispVal=e?`⚠ ${e.substring(0,40)}`:v.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
       const rb=single&&!readOnly?resizeHandles(o.id):"";
-      const dropAttr=readOnly?"":`ondragover="event.preventDefault()" ondrop="onColDropToText(event,'${o.id}')"`;
+      const dropAttr=readOnly?"":`ondragenter="onColTextEnter(event,this)" ondragover="event.preventDefault();if(event.dataTransfer)event.dataTransfer.dropEffect='copy'" ondragleave="onColTextLeave(this)" ondrop="onColTextLeave(this);onColDropToText(event,'${o.id}')"`;
       const isStatic=txMode(o)==="static";
       const editing=!readOnly&&isStatic&&S.editingId===o.id;
       const editAttrs=editing?`contenteditable="true" onmousedown="event.stopPropagation()" oninput="setStaticText('${o.id}',this.innerText)" onblur="endTextEdit()" onkeydown="if(event.key==='Escape')this.blur()"`:"";
@@ -1566,6 +1568,18 @@ function dragColName(e){
 // Drop a record-column header onto a text box → field mode bound to that column
 // (Target A). stopPropagation so the canvas-container drop handler (Target B,
 // create-new) does not also fire as the event bubbles.
+// Blue-highlight a text object while a database column header is dragged over it,
+// to show the drop will map (overwrite) that object to the field. Applies in both
+// the Custom Designer and Template Designer (shared canvas).
+function onColTextEnter(e,el){
+  if(!_vlDragCol)return;
+  e.preventDefault();
+  el.style.outline='2px solid var(--accent)';
+  el.style.outlineOffset='1px';
+  el.style.background='rgba(108,142,245,0.22)';
+  el.style.borderRadius='3px';
+}
+function onColTextLeave(el){ if(el){ el.style.outline=''; el.style.background=''; } }
 function onColDropToText(e,id){
   e.preventDefault(); e.stopPropagation();
   const key=dragColName(e);
@@ -2301,8 +2315,9 @@ function dRequiredSupply(specN){
 function dFmtIn(v){ return (v==null?"—":(+v).toString())+'"'; }
 function dCanPrint(){
   if(!(S.objs.length>0&&dPrinter().status==="ready"))return false;
-  // With data bound, the chosen print range must select at least one row.
-  if(hasBoundData()&&dbPrintIndices().length===0)return false;
+  // Only require a selected row when a field is actually bound (otherwise it's a
+  // single label and the row selection is irrelevant).
+  if(hasBoundData()&&labelUsesData()&&dbPrintIndices().length===0)return false;
   return true;
 }
 
@@ -2348,7 +2363,7 @@ function buildJobStatusControl(){
 // All / Selected (the checked rows) / Range (from..to), mirroring the Print
 // window's print bar. Returns "" with no data bound (single-label print).
 function buildPrintRangeControl(){
-  if(!hasBoundData())return "";
+  if(!hasBoundData()||!labelUsesData())return "";   // single label → no range control
   const total=dBoundRowCount();
   const nSel=dbSelCount();
   return`<div style="display:flex;align-items:center;gap:6px">
@@ -2497,7 +2512,9 @@ function doCustomPrint(){
   // Swift prints exactly All / Selected / Range (× copies). Omitted when unbound
   // (single-label path).
   if(hasBoundData()){
-    payload.recordIndices=dbPrintIndices();
+    // One label per selected row only when an object pulls from the data; otherwise
+    // every row is identical, so print a single label.
+    payload.recordIndices=labelUsesData()?dbPrintIndices():[Math.min(Math.max(0,S.recIdx||0),dBoundRowCount()-1)];
     payload.printRange=S.printRange;
     payload.rangeFrom=S.rangeFrom;
     payload.rangeTo=S.rangeTo;
@@ -2981,6 +2998,21 @@ function initBoundData(records, columns, filename, headerRow, isXLSX){
   showToast("Bound "+(records?records.length:0)+" row"+((records&&records.length===1)?"":"s")+" from "+(filename||"file"));
 }
 function hasBoundData(){ return !!(isCustomMode()&&window._boundData&&window._boundData.records&&window._boundData.records.length); }
+// True when at least one text object actually pulls from the bound data (a field
+// binding, or a formula that references a bound column). With NO such object every
+// row renders an identical label, so the job is a single label no matter how many
+// rows are bound (the database pane can stay open).
+function labelUsesData(){
+  if(!hasBoundData())return false;
+  const cols=(window._boundData&&Array.isArray(window._boundData.columns))?window._boundData.columns:[];
+  return S.objs.some(o=>{
+    if(o.t!=="tx")return false;
+    const m=txMode(o);
+    if(m==="field")return !!o.field;
+    if(m==="formula"){ const f=o.f||""; return cols.some(c=>c&&f.indexOf(c)>=0); }
+    return false;
+  });
+}
 // True size of the print job, matching Swift: one label per bound ROW × copies
 // when a data source is bound, else just `copies`.
 function dBoundRowCount(){ return hasBoundData()?window._boundData.records.length:0; }
@@ -3007,7 +3039,7 @@ function dbPrintIndices(){
 }
 function dJobLabelCount(){
   const copies=Math.max(1,S.copies||1);
-  if(!hasBoundData())return copies;
+  if(!hasBoundData()||!labelUsesData())return copies;   // no field bound → one label
   return dbPrintIndices().length*copies;
 }
 
