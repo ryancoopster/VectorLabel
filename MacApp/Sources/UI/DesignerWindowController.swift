@@ -1266,6 +1266,11 @@ extension DesignerWindowController: WKScriptMessageHandler {
             isDirty = (body["payload"] as? [String: Any])?["dirty"] as? Bool ?? false
             if isDirty { afterSave = .none }   // a new edit cancels a pending close
 
+        case "jsError":
+            // Uncaught error inside the WKWebView — log prominently for diagnosis.
+            let p = body["payload"] as? [String: Any] ?? [:]
+            NSLog("[VL-JS-ERROR] \(p["msg"] ?? "") @ \(p["at"] ?? "") \(p["stack"] ?? "")")
+
         case "saveCustomDocument":
             // Custom Designer only — write the current canvas + embedded data as a
             // ".vlcus" document (Finder-openable). Shows a Save panel.

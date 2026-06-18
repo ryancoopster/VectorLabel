@@ -2818,6 +2818,14 @@ function _vlPost(action,payload){
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
     window.webkit.messageHandlers.vectorlabel.postMessage({action,payload:payload===undefined?null:payload});
 }
+// Surface any uncaught JS error to Swift (it NSLogs "[VL-JS-ERROR] …"), so a failure
+// inside the real WKWebView — which can't be reproduced in a headless DOM — can be
+// diagnosed from Console.app. Best-effort; never throws itself.
+if(typeof window!=='undefined'&&!window._vlErrHook){
+  window._vlErrHook=true;
+  window.addEventListener('error',function(e){ try{_vlPost('jsError',{msg:String(e.message||''),at:String(e.filename||'')+':'+(e.lineno||0)+':'+(e.colno||0),stack:String(e.error&&e.error.stack||'')});}catch(_){} });
+  window.addEventListener('unhandledrejection',function(e){ try{var r=e.reason||{};_vlPost('jsError',{msg:'unhandledrejection: '+String(r.message||r),stack:String(r.stack||'')});}catch(_){} });
+}
 // Templates loaded from disk are UNTRUSTED (the user opens arbitrary .vlt.json,
 // and any file dropped in the Templates folder auto-loads). Their object fields
 // are interpolated into HTML attributes / inline handlers in this privileged
