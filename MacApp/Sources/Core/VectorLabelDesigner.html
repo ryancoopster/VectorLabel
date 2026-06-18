@@ -1381,9 +1381,17 @@ function R(){
         <!-- Left ruler + scrollable canvas -->
         <div style="display:flex;flex:1;overflow:hidden">
           <div id="ruler-v" style="width:${RULER}px;flex-shrink:0;overflow:hidden;position:relative;background:var(--surface);border-right:1px solid var(--bd2)"></div>
-          <div id="canvas-scroll" onscroll="scheduleRulers()" style="flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;background:var(--canvas);padding:28px">
-            <div id="canvas-host" style="transform:scale(${S.zoom});transform-origin:center center;flex-shrink:0">
-              ${buildCanvas(S.spec,S.objs,S.selId,rec,S.wrap,false)}
+          <div id="canvas-scroll" onscroll="scheduleRulers()" style="flex:1;overflow:auto;background:var(--canvas)">
+            <!-- Sizer wrapper: the host carries the SCALED pixel size (so zoomed
+                 content is fully scrollable in every direction) and margin:auto
+                 centers it when it fits — flex justify-center clips overflow, this
+                 doesn't. The inner div scales the unscaled canvas from top-left. -->
+            <div style="min-width:100%;min-height:100%;display:flex;padding:28px;box-sizing:border-box">
+              <div id="canvas-host" style="width:${(S.spec.pw+2*BLEED_IN)*SC*S.zoom}px;height:${(S.spec.ph+2*BLEED_IN)*SC*S.zoom}px;flex-shrink:0;margin:auto">
+                <div style="transform:scale(${S.zoom});transform-origin:top left;width:${(S.spec.pw+2*BLEED_IN)*SC}px;height:${(S.spec.ph+2*BLEED_IN)*SC}px">
+                  ${buildCanvas(S.spec,S.objs,S.selId,rec,S.wrap,false)}
+                </div>
+              </div>
             </div>
           </div>
         </div>

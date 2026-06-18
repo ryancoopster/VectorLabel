@@ -236,20 +236,17 @@ struct SupplyCatalogEditorView: View {
     // Printer models for a group — a multi-select linked to the printer-model
     // registry (Preferences ▸ Printers ▸ Printer Models), not free text.
     private func printerModelsMenu(_ gid: UUID) -> some View {
-        let selected = draft.groups.first { $0.id == gid }?.printerModels ?? []
-        return Menu {
+        HStack(spacing: 12) {
             if printerStore.list.models.isEmpty {
-                Text("No printer models — add them in Printer Models…")
+                Text("None — add in Printer Models…").font(.system(size: 11)).foregroundStyle(.secondary)
             }
             ForEach(printerStore.list.models) { m in
-                Button { toggleModel(m.name, for: gid) } label: {
-                    Label(m.name, systemImage: selected.contains(m.name) ? "checkmark" : "")
-                }
+                Toggle(m.name, isOn: Binding(
+                    get: { (draft.groups.first { $0.id == gid }?.printerModels ?? []).contains(m.name) },
+                    set: { _ in toggleModel(m.name, for: gid) }))
+                    .toggleStyle(.checkbox).font(.system(size: 12))
             }
-        } label: {
-            Text(selected.isEmpty ? "Select models…" : selected.joined(separator: ", "))
         }
-        .frame(width: 210)
     }
     private func toggleModel(_ name: String, for gid: UUID) {
         guard let i = draft.groups.firstIndex(where: { $0.id == gid }) else { return }
@@ -367,6 +364,25 @@ struct SupplyCatalogEditorView: View {
                 Spacer()
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
+        }
+        // Arrow keys step the selection up/down through the flattened supply list.
+        .focusable()
+        .onMoveCommand { dir in
+            switch dir { case .up: moveSelection(-1); case .down: moveSelection(1); default: break }
+        }
+    }
+
+    /// Supply ids in display order across the active group's categories.
+    private func orderedSupplyIDs() -> [UUID] {
+        guard draft.groups.indices.contains(groupIndex) else { return [] }
+        return draft.groups[groupIndex].categories.flatMap { $0.supplies.map { $0.id } }
+    }
+    private func moveSelection(_ delta: Int) {
+        let ids = orderedSupplyIDs(); guard !ids.isEmpty else { return }
+        if let cur = selectedSupply, let i = ids.firstIndex(of: cur) {
+            selectedSupply = ids[min(max(i + delta, 0), ids.count - 1)]
+        } else {
+            selectedSupply = delta > 0 ? ids.first : ids.last
         }
     }
 
