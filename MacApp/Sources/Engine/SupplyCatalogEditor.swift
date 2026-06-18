@@ -15,7 +15,8 @@ final class SupplyCatalogEditorWindow {
 
     func show() {
         if let w = window { NSApp.activate(ignoringOtherApps: true); w.makeKeyAndOrderFront(nil); return }
-        let win = NSWindow(contentViewController: NSHostingController(rootView: SupplyCatalogEditorView()))
+        let win = NSWindow(contentViewController: NSHostingController(rootView:
+            SupplyCatalogEditorView(onClose: { [weak self] in self?.close() })))
         win.title = "Supply Catalog"
         win.styleMask = [.titled, .closable, .resizable, .miniaturizable]
         win.isReleasedWhenClosed = false
@@ -32,9 +33,8 @@ final class SupplyCatalogEditorWindow {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self = self else { return }
-                // Flush a pending edit (if any) when the editor closes. Does nothing
-                // when there were no edits, so opening/closing never freezes defaults.
-                SupplyCatalogStore.shared.flushPendingSaveIfNeeded()
+                // The editor works on a draft and commits only via Apply, so closing
+                // (Cancel / window-X) simply discards — nothing to persist here.
                 if let t = self.closeObserver { NotificationCenter.default.removeObserver(t) }
                 self.closeObserver = nil
                 self.window = nil
@@ -47,14 +47,13 @@ final class SupplyCatalogEditorWindow {
 
 // MARK: – Supply catalog editor (Engine ▸ Preferences ▸ Supplies)
 //
-// Edits SupplyCatalogStore.shared: supply GROUPS (assigned to printer models),
-// each with CATEGORIES of SUPPLIES, each supply with PART NUMBERS (qty / roll
-// length, 90° feed rotation, optional purchase URL). Supplies drag between
-// categories. All edits auto-persist (the store debounces a disk write), so the
-// designers pick them up the next time they open.
+// Edits a DRAFT copy of SupplyCatalogStore: supply GROUPS (assigned to printer
+// models), each with CATEGORIES of SUPPLIES, each supply with PART NUMBERS (qty /
+// roll length, 90° feed rotation, optional purchase URL). Supplies drag between
+// categories. Apply commits the draft to the store (which the designers pick up);
+// Cancel discards it.
 
 struct SupplyCatalogEditorView: View {
-    @ObservedObject private var store = SupplyCatalogStore.shared
     @State private var groupIndex = 0
     @State private var selectedSupply: UUID?
     @State private var dropTarget: UUID?
@@ -68,6 +67,13 @@ struct SupplyCatalogEditorView: View {
     @ObservedObject private var printerStore = PrinterModelStore.shared
     @State private var pendingDelete: PendingDelete?
     @State private var duplicating: DuplicateState?
+    /// Working copy — every edit stays here until Apply; Cancel discards it.
+    @State private var draft: SupplyCatalog
+    let onClose: () -> Void
+    init(onClose: @escaping () -> Void = {}) {
+        self.onClose = onClose
+        _draft = State(initialValue: SupplyCatalogStore.snapshot)
+    }
 
     /// A delete the user must confirm; carries the target's name for a smart prompt.
     enum PendingDelete: Identifiable {
@@ -93,17 +99,19 @@ struct SupplyCatalogEditorView: View {
         VStack(spacing: 0) {
             groupBar.padding(12)
             Divider()
-            if store.catalog.groups.indices.contains(groupIndex) {
+            if draft.groups.indices.contains(groupIndex) {
                 splitPanes
             } else {
                 Spacer(); Text("No supply group selected.").foregroundStyle(.secondary); Spacer()
             }
+            Divider()
+            footer
         }
         .frame(minWidth: 780, minHeight: 560)
-        .onAppear { if !store.catalog.groups.indices.contains(groupIndex) { groupIndex = 0 } }
+        .onAppear { if !draft.groups.indices.contains(groupIndex) { groupIndex = 0 } }
         .alert("Restore the factory supply catalog?", isPresented: $confirmRestore) {
             Button("Restore defaults", role: .destructive) {
-                store.restoreDefaults(); groupIndex = 0; selectedSupply = nil
+                draft = .makeDefault(); groupIndex = 0; selectedSupply = nil   // applied on Apply
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -116,6 +124,19 @@ struct SupplyCatalogEditorView: View {
                   secondaryButton: .cancel())
         }
         .sheet(item: $duplicating) { dup in duplicateSheet(dup) }
+    }
+
+    // MARK: Apply / Cancel footer
+
+    private var footer: some View {
+        HStack(spacing: 8) {
+            Spacer()
+            Button("Cancel") { onClose() }                                      // revert: discard the draft
+            Button("Apply") { SupplyCatalogStore.shared.replace(with: draft) }
+            Button("Apply & Close") { SupplyCatalogStore.shared.replace(with: draft); onClose() }
+                .keyboardShortcut(.defaultAction)
+        }
+        .padding(12)
     }
 
     // MARK: Duplicate-group sheet
@@ -184,7 +205,7 @@ struct SupplyCatalogEditorView: View {
             HStack(spacing: 8) {
                 Text("Supply group").font(.system(size: 12, weight: .semibold))
                 Picker("", selection: $groupIndex) {
-                    ForEach(Array(store.catalog.groups.enumerated()), id: \.offset) { i, g in
+                    ForEach(Array(draft.groups.enumerated()), id: \.offset) { i, g in
                         Text(g.name.isEmpty ? "Untitled" : g.name).tag(i)
                     }
                 }.labelsHidden().frame(width: 220)
@@ -197,11 +218,11 @@ struct SupplyCatalogEditorView: View {
                     .help("Duplicate this supply group")
                 Button { pendingDelete = .group(group.id, group.name) } label: { Image(systemName: "trash") }
                     .help("Delete this supply group")
-                    .disabled(store.catalog.groups.count <= 1)
+                    .disabled(draft.groups.count <= 1)
                 Spacer()
                 Button("Restore defaults…") { confirmRestore = true }
             }
-            if store.catalog.groups.indices.contains(groupIndex) {
+            if draft.groups.indices.contains(groupIndex) {
                 HStack(spacing: 6) {
                     Text("Group name").font(.system(size: 11)).foregroundStyle(.secondary)
                     TextField("Group name", text: groupBinding(group.id).name).frame(width: 200)
@@ -215,7 +236,7 @@ struct SupplyCatalogEditorView: View {
     // Printer models for a group — a multi-select linked to the printer-model
     // registry (Preferences ▸ Printers ▸ Printer Models), not free text.
     private func printerModelsMenu(_ gid: UUID) -> some View {
-        let selected = store.catalog.groups.first { $0.id == gid }?.printerModels ?? []
+        let selected = draft.groups.first { $0.id == gid }?.printerModels ?? []
         return Menu {
             if printerStore.list.models.isEmpty {
                 Text("No printer models — add them in Printer Models…")
@@ -231,11 +252,11 @@ struct SupplyCatalogEditorView: View {
         .frame(width: 210)
     }
     private func toggleModel(_ name: String, for gid: UUID) {
-        guard let i = store.catalog.groups.firstIndex(where: { $0.id == gid }) else { return }
-        if let j = store.catalog.groups[i].printerModels.firstIndex(of: name) {
-            store.catalog.groups[i].printerModels.remove(at: j)
+        guard let i = draft.groups.firstIndex(where: { $0.id == gid }) else { return }
+        if let j = draft.groups[i].printerModels.firstIndex(of: name) {
+            draft.groups[i].printerModels.remove(at: j)
         } else {
-            store.catalog.groups[i].printerModels.append(name)
+            draft.groups[i].printerModels.append(name)
         }
     }
 
@@ -249,21 +270,21 @@ struct SupplyCatalogEditorView: View {
         }
     }
     private func deleteGroupByID(_ gid: UUID) {
-        guard store.catalog.groups.count > 1, let i = store.catalog.groups.firstIndex(where: { $0.id == gid }) else { return }
-        store.catalog.groups.remove(at: i)
-        groupIndex = min(groupIndex, store.catalog.groups.count - 1)
+        guard draft.groups.count > 1, let i = draft.groups.firstIndex(where: { $0.id == gid }) else { return }
+        draft.groups.remove(at: i)
+        groupIndex = min(groupIndex, draft.groups.count - 1)
         selectedSupply = nil
     }
     private func deleteCategoryByID(_ cid: UUID) {
-        for gi in store.catalog.groups.indices {
-            guard store.catalog.groups[gi].categories.count > 1 else { continue }
-            if let ci = store.catalog.groups[gi].categories.firstIndex(where: { $0.id == cid }) {
-                store.catalog.groups[gi].categories.remove(at: ci); return
+        for gi in draft.groups.indices {
+            guard draft.groups[gi].categories.count > 1 else { continue }
+            if let ci = draft.groups[gi].categories.firstIndex(where: { $0.id == cid }) {
+                draft.groups[gi].categories.remove(at: ci); return
             }
         }
     }
     private func performDuplicate(_ sourceID: UUID, newName: String) {
-        guard !newName.isEmpty, let src = store.catalog.groups.first(where: { $0.id == sourceID }) else { return }
+        guard !newName.isEmpty, let src = draft.groups.first(where: { $0.id == sourceID }) else { return }
         // Deep copy with fresh ids so the copy is independent.
         let copy = SupplyGroup(name: newName, printerModels: src.printerModels,
             categories: src.categories.map { cat in
@@ -278,8 +299,8 @@ struct SupplyCatalogEditorView: View {
                            })
                 })
             })
-        store.catalog.groups.append(copy)
-        groupIndex = store.catalog.groups.count - 1
+        draft.groups.append(copy)
+        groupIndex = draft.groups.count - 1
         selectedSupply = nil
     }
 
@@ -288,29 +309,29 @@ struct SupplyCatalogEditorView: View {
     // which crashes with "Index out of range". Each get/set looks the element up by
     // id and no-ops if it's gone.
     private func groupBinding(_ gid: UUID) -> Binding<SupplyGroup> {
-        Binding(get: { store.catalog.groups.first { $0.id == gid }
+        Binding(get: { draft.groups.first { $0.id == gid }
                         ?? SupplyGroup(name: "", printerModels: [], categories: []) },
-                set: { v in if let i = store.catalog.groups.firstIndex(where: { $0.id == gid }) { store.catalog.groups[i] = v } })
+                set: { v in if let i = draft.groups.firstIndex(where: { $0.id == gid }) { draft.groups[i] = v } })
     }
     private func modelsBinding(_ gid: UUID) -> Binding<String> {
-        Binding(get: { (store.catalog.groups.first { $0.id == gid }?.printerModels ?? []).joined(separator: ", ") },
-                set: { v in if let i = store.catalog.groups.firstIndex(where: { $0.id == gid }) {
-                    store.catalog.groups[i].printerModels = v.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } } })
+        Binding(get: { (draft.groups.first { $0.id == gid }?.printerModels ?? []).joined(separator: ", ") },
+                set: { v in if let i = draft.groups.firstIndex(where: { $0.id == gid }) {
+                    draft.groups[i].printerModels = v.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty } } })
     }
     private func categoryNameBinding(_ cid: UUID) -> Binding<String> {
-        Binding(get: { for g in store.catalog.groups { for c in g.categories where c.id == cid { return c.name } }; return "" },
-                set: { v in for gi in store.catalog.groups.indices { for ci in store.catalog.groups[gi].categories.indices
-                    where store.catalog.groups[gi].categories[ci].id == cid { store.catalog.groups[gi].categories[ci].name = v; return } } })
+        Binding(get: { for g in draft.groups { for c in g.categories where c.id == cid { return c.name } }; return "" },
+                set: { v in for gi in draft.groups.indices { for ci in draft.groups[gi].categories.indices
+                    where draft.groups[gi].categories[ci].id == cid { draft.groups[gi].categories[ci].name = v; return } } })
     }
     private func supplyValue(_ sid: UUID) -> Supply? {
-        for g in store.catalog.groups { for c in g.categories { if let s = c.supplies.first(where: { $0.id == sid }) { return s } } }
+        for g in draft.groups { for c in g.categories { if let s = c.supplies.first(where: { $0.id == sid }) { return s } } }
         return nil
     }
     private func mutateSupply(_ sid: UUID, _ f: (inout Supply) -> Void) {
-        for gi in store.catalog.groups.indices {
-            for ci in store.catalog.groups[gi].categories.indices {
-                if let si = store.catalog.groups[gi].categories[ci].supplies.firstIndex(where: { $0.id == sid }) {
-                    f(&store.catalog.groups[gi].categories[ci].supplies[si]); return
+        for gi in draft.groups.indices {
+            for ci in draft.groups[gi].categories.indices {
+                if let si = draft.groups[gi].categories[ci].supplies.firstIndex(where: { $0.id == sid }) {
+                    f(&draft.groups[gi].categories[ci].supplies[si]); return
                 }
             }
         }
@@ -529,46 +550,46 @@ struct SupplyCatalogEditorView: View {
     // MARK: Model access + mutations
 
     private var group: SupplyGroup {
-        store.catalog.groups.indices.contains(groupIndex) ? store.catalog.groups[groupIndex]
+        draft.groups.indices.contains(groupIndex) ? draft.groups[groupIndex]
             : SupplyGroup(name: "", printerModels: [], categories: [])
     }
 
     private func addGroup() {
-        store.catalog.groups.append(SupplyGroup(name: "New group", printerModels: [],
+        draft.groups.append(SupplyGroup(name: "New group", printerModels: [],
             categories: [SupplyCategory(name: "Category", supplies: [])]))
-        groupIndex = store.catalog.groups.count - 1
+        groupIndex = draft.groups.count - 1
         selectedSupply = nil
     }
     private func deleteGroup() {
-        guard store.catalog.groups.count > 1, store.catalog.groups.indices.contains(groupIndex) else { return }
-        store.catalog.groups.remove(at: groupIndex)
-        groupIndex = min(groupIndex, store.catalog.groups.count - 1)
+        guard draft.groups.count > 1, draft.groups.indices.contains(groupIndex) else { return }
+        draft.groups.remove(at: groupIndex)
+        groupIndex = min(groupIndex, draft.groups.count - 1)
         selectedSupply = nil
     }
     private func addCategory() {
-        guard store.catalog.groups.indices.contains(groupIndex) else { return }
-        store.catalog.groups[groupIndex].categories.append(SupplyCategory(name: "New category", supplies: []))
+        guard draft.groups.indices.contains(groupIndex) else { return }
+        draft.groups[groupIndex].categories.append(SupplyCategory(name: "New category", supplies: []))
     }
     private func deleteCategory(ci: Int) {
-        guard store.catalog.groups.indices.contains(groupIndex),
-              store.catalog.groups[groupIndex].categories.count > 1,
-              store.catalog.groups[groupIndex].categories.indices.contains(ci) else { return }
-        store.catalog.groups[groupIndex].categories.remove(at: ci)
+        guard draft.groups.indices.contains(groupIndex),
+              draft.groups[groupIndex].categories.count > 1,
+              draft.groups[groupIndex].categories.indices.contains(ci) else { return }
+        draft.groups[groupIndex].categories.remove(at: ci)
     }
     private func addSupply(ci: Int) {
-        guard store.catalog.groups.indices.contains(groupIndex),
-              store.catalog.groups[groupIndex].categories.indices.contains(ci) else { return }
+        guard draft.groups.indices.contains(groupIndex),
+              draft.groups[groupIndex].categories.indices.contains(ci) else { return }
         let s = Supply(name: "New supply", kind: .dieCut, widthInches: 1, heightInches: 1,
                        printableWidthInches: 1, printableHeightInches: 1,
                        parts: [SupplyPartNumber(partNumber: "")])
-        store.catalog.groups[groupIndex].categories[ci].supplies.append(s)
+        draft.groups[groupIndex].categories[ci].supplies.append(s)
         selectedSupply = s.id
     }
     private func deleteSupply(_ sid: UUID) {
-        for gi in store.catalog.groups.indices {
-            for ci in store.catalog.groups[gi].categories.indices {
-                if let si = store.catalog.groups[gi].categories[ci].supplies.firstIndex(where: { $0.id == sid }) {
-                    store.catalog.groups[gi].categories[ci].supplies.remove(at: si)
+        for gi in draft.groups.indices {
+            for ci in draft.groups[gi].categories.indices {
+                if let si = draft.groups[gi].categories[ci].supplies.firstIndex(where: { $0.id == sid }) {
+                    draft.groups[gi].categories[ci].supplies.remove(at: si)
                     if selectedSupply == sid { selectedSupply = nil }
                     return
                 }
@@ -576,15 +597,15 @@ struct SupplyCatalogEditorView: View {
         }
     }
     private func moveSupply(_ id: UUID, toCategory cid: UUID) {
-        guard store.catalog.groups.indices.contains(groupIndex) else { return }
-        var cats = store.catalog.groups[groupIndex].categories
+        guard draft.groups.indices.contains(groupIndex) else { return }
+        var cats = draft.groups[groupIndex].categories
         var moved: Supply?
         for ci in cats.indices {
             if let si = cats[ci].supplies.firstIndex(where: { $0.id == id }) { moved = cats[ci].supplies.remove(at: si); break }
         }
         guard let supply = moved, let dci = cats.firstIndex(where: { $0.id == cid }) else { return }
         cats[dci].supplies.append(supply)
-        store.catalog.groups[groupIndex].categories = cats
+        draft.groups[groupIndex].categories = cats
         selectedSupply = id
     }
     private func addPart(_ sid: UUID) { mutateSupply(sid) { $0.parts.append(SupplyPartNumber(partNumber: "")) } }
