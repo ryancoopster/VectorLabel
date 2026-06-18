@@ -944,6 +944,13 @@ public final class DesignerWindowController: NSObject {
     // MARK: – Dev HTML loader
 
     private func devHTMLURL(_ name: String) -> URL? {
+        // Live-reload the HTML from the repo during development ONLY when opted in
+        // via the VL_DEV_HTML environment variable. A shipped/installed app must NOT
+        // probe ~/Documents / ~/Desktop here — even a fileExists() inside those
+        // folders triggers the macOS privacy-access prompt on launch (and unsigned
+        // beta builds re-prompt on every rebuild). With the flag unset we return nil
+        // and the caller loads the bundled resource.
+        guard ProcessInfo.processInfo.environment["VL_DEV_HTML"] != nil else { return nil }
         // During development, load HTML directly from the repo so changes
         // are picked up without a full rebuild. Xcode's .copy resource bundling
         // caches files and may not re-copy after a git pull.

@@ -40,7 +40,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         NSApp.setActivationPolicy(.regular)
 
-        TemplateStore.shared.reload()
+        // Do NOT touch TemplateStore here: the Custom Designer never uses templates,
+        // and TemplateStore.shared's init reloads the Templates folder (under
+        // ~/Documents) — exactly what triggered the macOS Documents-access prompt on
+        // launch. Leaving the singleton untouched means it's never created for the
+        // Custom Designer, so ~/Documents is not read on launch.
         designer = DesignerWindowController(mode: .custom)
         // If Finder handed us a ".vlcus" before launch finished, open it directly;
         // otherwise open the empty Custom Designer.
