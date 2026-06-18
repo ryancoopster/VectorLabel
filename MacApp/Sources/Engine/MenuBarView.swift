@@ -124,10 +124,6 @@ struct MenuBarView: View {
             }
             .keyboardShortcut("e", modifiers: .command)
 
-            AppearanceSlider()
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-
             MenuActionRow(icon: "gearshape", title: "Preferences…", shortcut: "⌘,") {
                 appDelegate.openPreferences()
             }

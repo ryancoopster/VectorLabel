@@ -41,6 +41,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         NSApp.setActivationPolicy(.regular)
 
+        // Bring up the Engine if it isn't already running (it owns printing + the
+        // menu bar), and shut down with it if it later quits.
+        DesignerAppLauncher.ensureRunning(.engine)
+        observeEngineTermination()
+
         TemplateStore.shared.reload()
         designer = DesignerWindowController(mode: .template)
         // If Finder handed us a document before launch finished, open it directly;
@@ -50,6 +55,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             openTemplate(at: url)
         } else {
             designer.open()
+        }
+    }
+
+    /// Quit fully when the (only) designer window closes — don't linger in the Dock.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    /// When the Engine quits, close this designer (prompting to save first, no
+    /// Cancel) and quit, so the whole suite shuts down together.
+    private func observeEngineTermination() {
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+                  app.bundleIdentifier == DesignerAppLauncher.bundleID(for: .engine) else { return }
+            MainActor.assumeIsolated { self?.designer?.closeForEngineQuit() }
         }
     }
 

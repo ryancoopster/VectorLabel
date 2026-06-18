@@ -15,6 +15,7 @@ public enum DesignerAppLauncher {
         case template
         case custom
         case autoPrint
+        case engine
 
         /// Bundle-id stem (without the optional ".beta" infix).
         fileprivate var idLeaf: String {
@@ -22,6 +23,7 @@ public enum DesignerAppLauncher {
             case .template:  return "templatedesigner"
             case .custom:    return "customdesigner"
             case .autoPrint: return "autoprint"
+            case .engine:    return "engine"
             }
         }
     }
@@ -46,6 +48,24 @@ public enum DesignerAppLauncher {
         config.activates = true
         NSWorkspace.shared.openApplication(at: url, configuration: config) { _, error in
             if let error { NSLog("[DesignerAppLauncher] launch \(id) failed: \(error.localizedDescription)") }
+        }
+    }
+
+    /// Whether an app with this target's bundle id is currently running.
+    public static func isRunning(_ target: Target) -> Bool {
+        !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID(for: target)).isEmpty
+    }
+
+    /// Launch the target only if it isn't already running, without stealing focus —
+    /// so opening a designer brings the Engine up when it isn't running.
+    public static func ensureRunning(_ target: Target) {
+        guard !isRunning(target),
+              let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID(for: target))
+        else { return }
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = false
+        NSWorkspace.shared.openApplication(at: url, configuration: config) { _, error in
+            if let error { NSLog("[DesignerAppLauncher] ensureRunning failed: \(error.localizedDescription)") }
         }
     }
 }

@@ -93,6 +93,13 @@ public final class DesignerWindowController: NSObject {
     }
     private var dataSource: BoundDataSource?
 
+    // MARK: – Unsaved-changes / close handling
+    /// Mirrors the web designer's unsaved-changes state (setDirty messages).
+    private var isDirty = false
+    /// What to do once a save triggered from the close prompt completes.
+    private enum AfterSave { case none, close, terminate }
+    private var afterSave: AfterSave = .none
+
     public init(mode: DesignerMode) {
         self.mode = mode
         super.init()
@@ -206,6 +213,7 @@ public final class DesignerWindowController: NSObject {
         win.title = (mode == .custom) ? "VectorLabel — Custom Designer"
                                       : "VectorLabel — Template Designer"
         win.contentView = wv
+        win.delegate = self   // unsaved-changes prompt on close (windowShouldClose)
         win.hidesOnDeactivate = false
         win.isReleasedWhenClosed = false
         win.applyVLSizing(autosaveName: (mode == .custom) ? "VLCustomDesignerWindow" : "VLDesignerWindow",
@@ -929,14 +937,17 @@ public final class DesignerWindowController: NSObject {
         panel.message = "Save this custom label (.vlcus)"
         panel.level = .modalPanel
         panel.begin { [weak self] response in
-            guard response == .OK, let url = panel.url else { return }
             MainActor.assumeIsolated {
+                guard let self = self else { return }
+                guard response == .OK, let url = panel.url else { self.cancelPendingSave(); return }
                 do {
                     try CustomLabelStore.save(doc, to: url)
-                    self?.webView?.evaluateJavaScript(
+                    self.webView?.evaluateJavaScript(
                         "if(typeof showToast==='function')showToast('Saved: '+\(CustomLabelStore.stem(url).jsonQuoted));",
                         completionHandler: nil)
+                    self.finishSave()
                 } catch {
+                    self.cancelPendingSave()
                     let alert = NSAlert()
                     alert.alertStyle = .warning
                     alert.messageText = "Couldn’t save the custom label"
@@ -945,6 +956,69 @@ public final class DesignerWindowController: NSObject {
                 }
             }
         }
+    }
+
+    // MARK: – Unsaved-changes prompt + close
+
+    /// Standard unsaved-changes prompt. Returns true if the caller should proceed to
+    /// close/terminate now (Don't Save), false to keep the window open (Cancel, or a
+    /// save was started that finishes the action on completion).
+    @discardableResult
+    private func promptUnsaved(allowCancel: Bool, then action: AfterSave) -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        let what = mode == .custom ? "this custom label" : "this template"
+        alert.messageText = "Do you want to save the changes you made to \(what)?"
+        alert.informativeText = "Your changes will be lost if you don't save them."
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Save As…")
+        alert.addButton(withTitle: "Don't Save")
+        if allowCancel { alert.addButton(withTitle: "Cancel") }
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:  triggerSave(saveAs: false, then: action); return false
+        case .alertSecondButtonReturn: triggerSave(saveAs: true,  then: action); return false
+        case .alertThirdButtonReturn:  return true    // Don't Save
+        default:                        return false   // Cancel
+        }
+    }
+
+    /// Trigger a save from the close prompt; `afterSave` runs once it succeeds.
+    private func triggerSave(saveAs: Bool, then action: AfterSave) {
+        afterSave = action
+        let js: String
+        if mode == .template {
+            js = saveAs ? "if(typeof saveAsTemplate==='function')saveAsTemplate()"
+                        : "if(typeof saveTemplate==='function')saveTemplate()"
+        } else {
+            js = "if(typeof saveCustomDocument==='function')saveCustomDocument()"
+        }
+        webView?.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    /// Called by the save handlers after a successful save: clears the dirty flag
+    /// and performs any pending close/terminate from the close prompt.
+    private func finishSave() {
+        isDirty = false
+        webView?.evaluateJavaScript("if(typeof markClean==='function')markClean()", completionHandler: nil)
+        let action = afterSave; afterSave = .none
+        switch action {
+        case .close:     window?.close()
+        case .terminate: NSApp.terminate(nil)
+        case .none:      break
+        }
+    }
+
+    /// A pending save-on-close was abandoned (e.g. the save panel was dismissed).
+    private func cancelPendingSave() { afterSave = .none }
+
+    /// The Engine quit: close this designer — prompting to save first (no Cancel,
+    /// since the suite is shutting down) — then terminate.
+    public func closeForEngineQuit() {
+        guard window != nil, isDirty, !designerForPrintEdit else { NSApp.terminate(nil); return }
+        if promptUnsaved(allowCancel: false, then: .terminate) {
+            NSApp.terminate(nil)   // Don't Save → quit now
+        }
+        // Save / Save As returned false: finishSave() terminates on completion.
     }
 
     // MARK: – Dev HTML loader
@@ -981,6 +1055,16 @@ public final class DesignerWindowController: NSObject {
             .appendingPathComponent("Core")
         let candidate = src.appendingPathComponent("\(name).html")
         return FileManager.default.fileExists(atPath: candidate.path) ? candidate : nil
+    }
+}
+
+// MARK: – NSWindowDelegate (unsaved-changes prompt on close)
+
+extension DesignerWindowController: NSWindowDelegate {
+    public func windowShouldClose(_ sender: NSWindow) -> Bool {
+        if designerForPrintEdit { return true }   // print-edit close uses editReturn
+        if !isDirty { return true }
+        return promptUnsaved(allowCancel: true, then: .close)
     }
 }
 
@@ -1071,8 +1155,10 @@ extension DesignerWindowController: WKScriptMessageHandler {
 
         switch action {
         case "saveTemplate":
-            TemplateStore.shared.save(fromPayload: body["payload"])
-            injectDesignerTemplates()   // refresh the Open list with the new file
+            if TemplateStore.shared.save(fromPayload: body["payload"]) {
+                injectDesignerTemplates()   // refresh the Open list with the new file
+                finishSave()
+            }
 
         case "listTemplates":
             TemplateStore.shared.reload()   // pick up renamed/added/removed files
@@ -1129,6 +1215,11 @@ extension DesignerWindowController: WKScriptMessageHandler {
                 let jobId = (body["payload"] as? [String: Any])?["jobId"] as? String
                 (printBackend as? IPCPrintBackend)?.cancel(jobId: jobId)
             }
+
+        case "setDirty":
+            // The web designer mirrors its unsaved-changes state here.
+            isDirty = (body["payload"] as? [String: Any])?["dirty"] as? Bool ?? false
+            if isDirty { afterSave = .none }   // a new edit cancels a pending close
 
         case "saveCustomDocument":
             // Custom Designer only — write the current canvas + embedded data as a

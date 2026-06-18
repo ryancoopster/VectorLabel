@@ -343,11 +343,13 @@ function pickSupply(specN){
   // Drop any explicit cut override so the new stock's sensible default applies.
   S.cutMode=null;
   S.canvasRot=0;   // reset orientation when switching supplies (#14)
+  markDirty();
   R();
 }
 function setLabelLen(v){
   const n=parseFloat(v);
   S.labelLen=(isFinite(n)&&n>0)?Math.min(LEN_MAX,Math.max(LEN_MIN,n)):null;
+  markDirty();
   R();
 }
 // Toggle the continuous-label canvas between portrait (0°) and landscape (90°).
@@ -1807,7 +1809,13 @@ function startPropResize(e){
 const HISTORY=[];
 const MAX_HISTORY=50;
 
+// Unsaved-changes tracking. markDirty() on any edit, markClean() on save/load;
+// both notify Swift (setDirty) so the window-close handler can prompt to save.
+let _dirty=false;
+function markDirty(){ if(!_dirty){ _dirty=true; _vlPost('setDirty',{dirty:true}); } }
+function markClean(){ _dirty=false; _vlPost('setDirty',{dirty:false}); }
 function snapshot(){
+  markDirty();
   // Deep-clone just the parts that change: objs and selId
   HISTORY.push(JSON.parse(JSON.stringify({objs:S.objs,selId:S.selId})));
   if(HISTORY.length>MAX_HISTORY)HISTORY.shift();
@@ -2767,6 +2775,7 @@ async function saveTemplate(){
       return;
     }
     window.webkit.messageHandlers.vectorlabel.postMessage({action:"saveTemplate",payload});
+    markClean();
     S.modal=null;
     showToast("Saved: "+S.tplName);
     R();
@@ -2837,6 +2846,7 @@ function newBlankCustomDesign(){
   S.selId=null;S.selIds=[];S._ef=undefined;
   S.copies=1;S.cutMode=null;
   clearDataSourceCustom(true);   // empty database pane, single-label canvas
+  markClean();
   R();
 }
 
@@ -2933,7 +2943,7 @@ function loadSelectedTemplate(){
   S.selId=null;S._ef=undefined;
   S.modal=null;
   R();
-  showToast("Opened: "+S.tplName);
+  markClean();showToast("Opened: "+S.tplName);
 }
 
 // Called by Swift when a ".vltmp" is double-clicked in Finder (standalone open,
@@ -2949,7 +2959,7 @@ function initOpenTemplate(t){
   S.objs=sanitizeObjs(t.objs);
   S.selId=null;S._ef=undefined;
   R();
-  showToast("Opened: "+S.tplName);
+  markClean();showToast("Opened: "+S.tplName);
 }
 
 // ── Toast notifications ───────────────────────────────────────────────────────
@@ -3167,7 +3177,7 @@ function initCustomDocument(doc){
     S.printRange="all"; S.rangeFrom=1; S.rangeTo=1;
   }
   R();
-  showToast("Opened: "+S.tplName);
+  markClean();showToast("Opened: "+S.tplName);
 }
 
 // "Choose data file…" → Swift opens an NSOpenPanel (csv,xlsx), sending the current
