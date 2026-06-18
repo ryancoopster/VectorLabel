@@ -361,6 +361,15 @@ struct PreferencesView: View {
                     }
                 }
             }
+            PrefSection(title: "Printer Models") {
+                PrefRow(
+                    label: "Printer models & USB IDs",
+                    caption: "Manage the printer models (and their USB vendor/product IDs) that the supply catalog's groups are assigned to."
+                ) {
+                    Button("Printer Models…") { PrinterModelEditorWindow.shared.show() }
+                        .buttonStyle(VLButtonStyle())
+                }
+            }
             PrefSection(title: "Label Supplies") {
                 PrefRow(
                     label: "Edit supply catalog",

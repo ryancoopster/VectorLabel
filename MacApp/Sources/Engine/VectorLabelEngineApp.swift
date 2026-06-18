@@ -220,6 +220,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self = self else { return }
+                // Closing Preferences also closes its child editor windows.
+                SupplyCatalogEditorWindow.shared.close()
+                PrinterModelEditorWindow.shared.close()
                 self.preferencesWindow = nil
                 if let token = self.preferencesCloseObserver {
                     NotificationCenter.default.removeObserver(token)

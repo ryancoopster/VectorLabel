@@ -41,6 +41,8 @@ final class SupplyCatalogEditorWindow {
             }
         }
     }
+
+    func close() { window?.close() }
 }
 
 // MARK: – Supply catalog editor (Engine ▸ Preferences ▸ Supplies)
