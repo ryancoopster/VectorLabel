@@ -163,6 +163,16 @@ public final class RecentPrintsStore: ObservableObject {
         save()
     }
 
+    /// Finalize a record's lifecycle: set its terminal status and, when provided,
+    /// correct its label count to what actually printed. (A cancelled job prints
+    /// fewer labels than the intended total, so the recent should reflect that.)
+    public func finish(id: UUID, status: RecentPrint.Status, labelCount: Int? = nil) {
+        guard let idx = prints.firstIndex(where: { $0.id == id }) else { return }
+        prints[idx].status = status
+        if let c = labelCount { prints[idx].labelCount = c }
+        save()
+    }
+
     public func clear() { prints = []; save() }
 
     // MARK: – Persistence

@@ -370,12 +370,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private func finishInFlight(_ job: PrintJob) {
         guard let entry = inFlight.removeValue(forKey: job.id) else { return }
         entry.subs.forEach { $0.cancel() }
-        // Update the Recent-Prints record to its terminal lifecycle state.
+        // Update the Recent-Prints record to its terminal lifecycle state. For a
+        // cancelled job, distinguish "before printing" (nothing printed) from
+        // "mid-print", and correct the label count to the number actually printed
+        // so the recent shows the real outcome, not the full intended total.
+        let printed = job.completedLabels
         let status: RecentPrint.Status
         if job.didFail            { status = .failed }
-        else if job.isCancelled   { status = .cancelledMidPrint }
+        else if job.isCancelled   { status = printed > 0 ? .cancelledMidPrint : .cancelledBeforePrinting }
         else                      { status = .complete }
-        recents.updateStatus(id: entry.recentID, to: status)
+        recents.finish(id: entry.recentID, status: status,
+                       labelCount: job.isCancelled ? printed : nil)
         // A cancelled job's processing/ file still moves to done/ (its rendered
         // labels are retained there so it can still be reprinted); only a true
         // device failure routes to failed/.
