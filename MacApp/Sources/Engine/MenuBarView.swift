@@ -407,6 +407,17 @@ struct JobRow: View {
             Text(job.isPrinting ? "Printing…" : "Queued")
                 .font(.system(size: 10))
                 .foregroundColor(.vlSecondary)
+            // Cancellable only while QUEUED (waiting behind a prior job). Once this
+            // job starts printing, the full-job batch has been sent to the printer in
+            // one write and can't be interrupted, so the button disappears.
+            if !job.isPrinting {
+                Button { job.requestCancel() } label: {
+                    Image(systemName: "xmark.circle.fill").font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.vlRed)
+                .help("Cancel this queued print")
+            }
         }
     }
 }
