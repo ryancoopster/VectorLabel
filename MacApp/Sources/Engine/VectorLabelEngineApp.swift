@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import Combine
+import Darwin
 @preconcurrency import UserNotifications
 import VectorLabelCore
 import VectorLabelEngineKit
@@ -60,9 +61,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     // Debounces status publishing so a burst of @Published changes coalesces.
     private var statusPublishWork: DispatchWorkItem?
 
+    /// Exclusive single-Engine lock fd, held for the process lifetime. The OS releases
+    /// the advisory flock automatically when this process exits (even on crash).
+    private var engineLockFD: Int32 = -1
+
+    /// Take an exclusive lock so only ONE Engine per IPC root owns the USB printer and
+    /// the published status file. Two engines would contend the device, clobber each
+    /// other's printers.json, and re-claim each other's in-flight processing jobs
+    /// (duplicate prints). Returns false if another Engine already holds the lock.
+    private func acquireSingleInstanceLock() -> Bool {
+        let root = AppEnvironment.ipcRoot
+        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let fd = open(root.appendingPathComponent("engine.lock").path, O_CREAT | O_RDWR, 0o644)
+        guard fd >= 0 else { return true }            // can't create a lock → don't block startup
+        if flock(fd, LOCK_EX | LOCK_NB) != 0 {
+            close(fd)
+            return false                              // held by another Engine
+        }
+        engineLockFD = fd                             // keep open for the process lifetime
+        return true
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         if Bundle.main.bundleIdentifier == nil || Bundle.main.bundleIdentifier!.isEmpty {
             UserDefaults.standard.set("com.sai.vectorlabel.engine", forKey: "CFBundleIdentifier")
+        }
+        // Refuse to start a second Engine on the same IPC root (resolved from the
+        // bundle id above): it would double-own the USB device and race the status file.
+        guard acquireSingleInstanceLock() else {
+            NSLog("[Engine] another VectorLabel Engine already owns \(AppEnvironment.ipcRoot.path) — exiting.")
+            NSApp.terminate(nil)
+            return
         }
         // Unsigned builds don't reliably leave a crash report, so capture uncaught
         // Obj-C/AppKit exceptions (the common class for a Preferences/menu crash) to
@@ -303,6 +332,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 
     private func consume(job: PrintJobFile, processingURL: URL) {
+        // A job with no printable rasters — a corrupt file that decoded to empty, or a
+        // legacy `labels`-only file the Engine can't feed — must FAIL loudly, not submit
+        // a 0-label job that PrinterManager marks "complete" and records as a printed
+        // 0-label Recent Print. (F29/F91)
+        guard !job.renderedLabels.isEmpty else {
+            NSLog("[Engine] job \(job.id) has no rendered labels — routing to failed/.")
+            PrintQueue().complete(processingURL, success: false)
+            return
+        }
         // A job that names a SPECIFIC printer is resolved to exactly that id; if
         // it's absent we fail it (same as before). A job with no printerID
         // (Custom Designer's "Engine picks the printer" contract) is resolved to
@@ -333,8 +371,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     private func consumeResolved(job: PrintJobFile, processingURL: URL, printerID: String) {
 
+        // Honor `copies` (clamped to a sane range): expand each rendered label so a
+        // submitter that sets copies>1 instead of pre-expanding prints the right count.
+        // The current front-ends pre-expand and pass copies:1, so this is a no-op for
+        // them — but the public field is no longer a silent trap. (F90/F57)
+        let copies = min(max(job.copies, 1), 999)
+        let labels = copies > 1
+            ? job.renderedLabels.flatMap { Array(repeating: $0, count: copies) }
+            : job.renderedLabels
+
         let printJob = PrinterManager.shared.submit(
-            labels: job.renderedLabels,
+            labels: labels,
             title: job.title,
             templateName: job.templateName,
             printerID: printerID,
@@ -358,7 +405,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             sourceFileName: rp?.sourceFileName ?? "",
             templateName: job.templateName,
             printerName: printerName,
-            labelCount: job.renderedLabels.count,
+            labelCount: labels.count,
             printRange: RecentPrint.PrintRange(rawValue: rp?.printRange ?? "") ?? .all,
             selectedIndices: rp?.selectedIndices ?? [],
             status: .printing,

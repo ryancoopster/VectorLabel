@@ -26,8 +26,12 @@ public enum BradyVGL {
     // one place once the byte sequence is confirmed on hardware.
     //
     // The cut feature is FULLY PLUMBED end to end: the UI cut setting flows into
-    // `PrintJobFile.cutMode`, which `vglCutMode(forIPCRawValue:index:total:)` maps to
-    // a per-label `CutMode`, which `buildPrintJob` stamps via `cutCommand(for:)`. The
+    // `PrintJobFile.cutMode`; the Engine's printer module maps it to a per-label
+    // `CutMode` at ENCODE time (M610Module.encode using `isLastLabel`) and
+    // `buildPrintJob` stamps it via `cutCommand(for:)`. (`vglCutMode(forIPCRawValue:…)`
+    // is the equivalent pure mapping helper — kept and unit-tested, but NOT on the live
+    // path, which ships rasters and encodes in the Engine rather than baking VGL in the
+    // front-end.) The
     // ONLY unverified piece is the actual byte sequence the M611 firmware expects, so
     // the emission is gated OFF by default (`cutCommandEnabled == false`) — no cut
     // bytes reach real hardware, and the historical Auto-Print/Print die-cut wire
@@ -94,6 +98,12 @@ public enum BradyVGL {
 
     /// Build a complete VGL job for one label image.
     public static func buildPrintJob(pixels: [UInt8], width: Int, height: Int, cutMode: CutMode = .afterJob) -> [UInt8] {
+        // Defensive bound: the per-column loop indexes pixels[row*width+col], so a
+        // raster smaller than width*height (or with absurd/overflowing dimensions)
+        // would read out of bounds and trap. IPC input is validated at the
+        // RenderedLabel decode boundary; this also guards in-process callers.
+        let (need, overflow) = width.multipliedReportingOverflow(by: height)
+        guard width > 0, height > 0, !overflow, pixels.count >= need else { return [] }
         var job: [UInt8] = []
 
         // Job Start

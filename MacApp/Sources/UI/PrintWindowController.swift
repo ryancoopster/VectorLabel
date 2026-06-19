@@ -668,8 +668,9 @@ extension PrintWindowController: WKScriptMessageHandler {
 
         // Cut SETTING chosen in the print header (Phase 6). Falls back to the
         // sensible default the JS picks per stock (continuous → eachLabel; die-cut
-        // → never; else afterJobLast). Carried into PrintJobFile.cutMode AND baked
-        // into each label's VGL via BradyVGL.vglCutMode.
+        // → never; else afterJobLast). Carried into PrintJobFile.cutMode; the Engine's
+        // printer module stamps the per-label cut at ENCODE time — this front-end ships
+        // printer-agnostic rasters, not VGL.
         let cutMode = CutMode(rawValue: (payload["cutMode"] as? String) ?? "") ?? .afterJobLast
 
         // Capture the print-time state (main actor) so a later Reprint can re-open
@@ -719,7 +720,7 @@ extension PrintWindowController: WKScriptMessageHandler {
             }
             // Estimate per-label print time from the label's print length. Calibrated
             // to measured hardware: a 1.5" label (~450 px @ 300 dpi) prints in ~0.85 s.
-            let estLabelMs = Int(Double(labelPx) / 300.0 * 370.0) + 300
+            let estLabelMs = RenderedLabel.estimatedPrintMs(maxDimensionPx: labelPx)
 
             Task { @MainActor in
                 guard !renderedLabels.isEmpty else { return }   // nothing printable — keep window open
@@ -741,7 +742,17 @@ extension PrintWindowController: WKScriptMessageHandler {
                 do {
                     try self.backend?.submit(job)
                 } catch {
-                    print("[PrintWindowController] submit failed: \(error)")
+                    // Submit failed (disk full / permissions / encode): the job was NOT
+                    // queued, so do NOT close the window or signal "print started".
+                    // Tell the user and keep the window open to retry. (F26)
+                    NSLog("[PrintWindowController] submit failed: \(error)")
+                    let alert = NSAlert()
+                    alert.alertStyle = .warning
+                    alert.messageText = "Couldn’t start the print"
+                    alert.informativeText = "The job could not be queued: \(error.localizedDescription)\n\nNothing was sent to the printer. Please try again."
+                    alert.addButton(withTitle: "OK")
+                    if let w = self.window { alert.beginSheetModal(for: w) } else { alert.runModal() }
+                    return
                 }
                 // The print has started: close the window, return to the prior app,
                 // and pop the menu so the user can watch the queue. Live job outcome

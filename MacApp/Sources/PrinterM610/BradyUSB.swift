@@ -4,16 +4,6 @@ import VectorLabelCore
 import CLibUSB
 #endif
 
-// MARK: – Device model
-
-struct BradyUSBDevice: Identifiable, Hashable {
-    let id: String          // "vendorID:productID:serialNumber"
-    let name: String
-    let model: String
-    let serial: String
-    var status: PrinterDevice.Status = .ready
-}
-
 // MARK: – BradyUSB
 
 /// USB transport for Brady M610/M611 label printers.
@@ -94,26 +84,13 @@ public enum BradyUSB {
     static let chunkSize           = 512
     static let chunkTimeoutMs: UInt32 = 10_000
 
-    /// Per-printer mutex. The M610 allows only one owner of a given device at a
-    /// time (`LIBUSB_ERROR_ACCESS` otherwise), but *different* printers are
-    /// independent — so locking per device id lets multiple printers print
-    /// simultaneously while serializing jobs (and SmartCell polling) to the same
-    /// printer. A semaphore (not NSLock) because the print task `await`s while
-    /// holding it and may resume on a different thread.
-    private static let locksLock = NSLock()
-    private static var deviceQueues: [String: DispatchQueue] = [:]
-    /// One serial queue per printer. Serializes all device access to that printer
-    /// (prints and cassette reads run one at a time) while different printers run
-    /// concurrently — replacing the old DispatchSemaphore. Crucially this is a
-    /// dedicated GCD queue, so the long blocking USB work + pacing sleeps no longer
-    /// park threads in Swift's cooperative pool.
-    public static func deviceQueue(for id: String) -> DispatchQueue {
-        locksLock.lock(); defer { locksLock.unlock() }
-        if let q = deviceQueues[id] { return q }
-        let q = DispatchQueue(label: "vectorlabel.printer.\(id)", qos: .utility)
-        deviceQueues[id] = q
-        return q
-    }
+    // NOTE: per-printer serialization of device I/O is owned by PrinterManager
+    // (`PrinterManager.deviceQueue(for:)`) — the single source of truth that prints,
+    // cassette reads, and pacing actually run on. An earlier duplicate queue registry
+    // here (locksLock/deviceQueues/deviceQueue) had ZERO callers and is removed, so
+    // there can't be two independent queues with the same label silently diverging.
+    // Callers of querySmartCell/labelsRemaining must run on PrinterManager's per-printer
+    // serial queue (there is no separate `deviceLock` in this file).
 
     enum USBError: Error, LocalizedError {
         case initFailed
@@ -225,21 +202,31 @@ public enum BradyUSB {
             guard deviceIsPrinter(dev, desc: desc) else { continue }
 
             var handle: OpaquePointer?
-            guard libusb_open(dev, &handle) == 0, let h = handle else { throw USBError.openFailed }
+            // A device we can't open (busy / permissions / transient) must NOT abort the
+            // whole lookup — skip it so other matching printers are still considered (F96).
+            guard libusb_open(dev, &handle) == 0, let h = handle else { continue }
 
-            // Check serial to match deviceID if possible
-            var serial = ""
+            // Build the composite id EXACTLY as enumeratePrinters does, INCLUDING the
+            // serial-less fallback (uppercase hex PID). Otherwise a printer with no
+            // readable USB serial enumerates as "…:10B" but resolved here as "…:" and
+            // never matched — listed yet impossible to open (F93).
+            var serial = "\(desc.idProduct, radix: 16, uppercase: true)"
             if desc.iSerialNumber != 0 {
                 var buf = [UInt8](repeating: 0, count: 64)
                 let n = libusb_get_string_descriptor_ascii(h, desc.iSerialNumber, &buf, 64)
-                if n > 0 { serial = String(bytes: buf.prefix(Int(n)), encoding: .ascii) ?? "" }
+                if n > 0 { serial = String(bytes: buf.prefix(Int(n)), encoding: .ascii) ?? serial }
             }
             let id = "\(String(desc.idVendor, radix: 16)):\(String(desc.idProduct, radix: 16)):\(serial)"
             if !deviceID.isEmpty && id != deviceID {
                 libusb_close(h); continue
             }
 
-            _ = libusb_detach_kernel_driver(h, 0)   // detach CUPS if attached
+            // Let libusb transparently detach the kernel (CUPS) driver on claim and
+            // RE-ATTACH it on release/close, so we never strand the device without its OS
+            // driver (the old manual detach was never paired with an attach, breaking the
+            // CUPS binding on every open/close — and on the claim-failure path too).
+            // A no-op on platforms without kernel-driver detach. (F18/F95)
+            _ = libusb_set_auto_detach_kernel_driver(h, 1)
             guard libusb_claim_interface(h, 0) == 0 else {
                 libusb_close(h); throw USBError.claimFailed
             }
@@ -278,7 +265,12 @@ public enum BradyUSB {
                 )
             }
             guard rc == 0 else { throw USBError.transferFailed(rc) }
-            offset = end
+            // Advance by the bytes ACTUALLY sent, not the full chunk: libusb can report a
+            // short transfer on success, and skipping the un-sent tail would punch a hole
+            // into the VGL stream (garbled/blank labels or a stalled printer). A
+            // zero-progress success would also spin forever — treat it as a failure. (F94)
+            guard transferred > 0 else { throw USBError.transferFailed(rc) }
+            offset += Int(transferred)
         }
         #endif
     }
@@ -293,14 +285,22 @@ public enum BradyUSB {
         var readBuf = [UInt8](repeating: 0, count: 256)
         for _ in 0 ..< 4 {
             var sent: Int32 = 0
-            _ = query.withUnsafeMutableBufferPointer { buf in
+            let wrc = query.withUnsafeMutableBufferPointer { buf in
                 libusb_bulk_transfer(handle, outEndpoint, buf.baseAddress, Int32(buf.count), &sent, 300)
             }
+            // A failed/stalled OUT write never reaches the printer; clear the endpoint
+            // halt and retry rather than burning attempts on read timeouts (F99).
+            if wrc != 0 { _ = libusb_clear_halt(handle, outEndpoint) }
             var got: Int32 = 0
             let rrc = readBuf.withUnsafeMutableBufferPointer { buf in
                 libusb_bulk_transfer(handle, inEndpoint, buf.baseAddress, Int32(buf.count), &got, 300)
             }
-            if rrc == 0 && got >= 0x16 {
+            // Require the SAME readiness threshold parseSmartCell uses (>= 108 bytes)
+            // before trusting fixed-offset fields. A short/partial read that merely
+            // cleared the old 0x16 gate would otherwise be parsed as a garbage counter
+            // and corrupt print pacing; below threshold we fall through to -1 (time
+            // pacing). The 0x37 field offset is left as the hardware-pinned value. (F3/F25)
+            if rrc == 0 && got >= 108 {
                 let data = Array(readBuf.prefix(Int(got)))
                 func nulFrom(_ start: Int, _ maxLen: Int) -> Int {
                     var e = start
@@ -355,10 +355,11 @@ public enum BradyUSB {
         for _ in 0 ..< maxAttempts {
             // Write the query to EP1 OUT.
             var transferred: Int32 = 0
-            _ = query.withUnsafeMutableBufferPointer { buf in
+            let wrc = query.withUnsafeMutableBufferPointer { buf in
                 libusb_bulk_transfer(handle, outEndpoint, buf.baseAddress,
                                      Int32(buf.count), &transferred, 1_000)
             }
+            if wrc != 0 { _ = libusb_clear_halt(handle, outEndpoint) }   // recover a stalled OUT (F99)
             usleep(50_000)  // 50 ms
 
             // Read the response from EP2 IN with a short timeout.

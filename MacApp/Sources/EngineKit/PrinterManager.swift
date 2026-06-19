@@ -167,6 +167,13 @@ public final class PrinterManager: ObservableObject {
         // Skip if a scan is still running, so slow USB enumeration can't pile up
         // overlapping detached tasks all contending for device access.
         if scanInFlight { return }
+        // Don't enumerate while a job is in flight. Enumeration opens device handles
+        // and reads string descriptors over EP0 (BradyUSB.enumeratePrinters /
+        // M611USB.enumerate); doing that concurrently with the in-flight bulk transfers
+        // on a printer's serial queue is unsynchronized libusb access to the same device
+        // and surfaces as intermittent transfer failures / bogus cassette reads. The
+        // post-job finish re-marks status and the next 5s tick resumes scanning.
+        if activeJobs.contains(where: { !$0.isComplete }) { return }
         scanInFlight = true
         // Enumerate every registered module (USB + network) on a background thread.
         Task.detached {
@@ -219,13 +226,12 @@ public final class PrinterManager: ObservableObject {
 
     // MARK: – Print dispatch
 
-    /// Submit a set of VGL jobs to the given printer.
+    /// Submit a batch of rendered labels to the given printer.
     /// Returns the created `PrintJob` so callers can observe its progress.
-    /// `cutMode` is the user-chosen cut SETTING for the job. The labels handed in
-    /// are already-rendered VGL buffers whose per-label cut command was baked in by
-    /// the front-end (via `BradyVGL.vglCutMode`), so the Engine doesn't re-stamp the
-    /// bytes here — it just carries the setting through for logging / future device
-    /// control. Defaulting to `.afterJobLast` keeps the existing single-job paths
+    /// `labels` are printer-agnostic `RenderedLabel` rasters (NOT pre-encoded VGL):
+    /// the Engine encodes each into the target printer's wire format HERE, via the
+    /// model's module, and STAMPS the per-label cut from `cutMode` + `isLastLabel` at
+    /// encode time. Defaulting `cutMode` to `.afterJobLast` keeps the single-job paths
     /// (calibration grid, in-process callers) unchanged.
     @discardableResult
     public func submit(
@@ -308,6 +314,12 @@ public final class PrinterManager: ObservableObject {
                     }
                     if job.isCancelled { break }
                     Task { @MainActor in job.completedLabels = i + 1 }
+                    // Honor the user's inter-label delay (Preferences ▸ interLabelDelayMs).
+                    // Applied between labels (not after the last) and interruptible by Cancel.
+                    if delayMs > 0 && i < count - 1 {
+                        var slept = 0
+                        while slept < delayMs && !job.isCancelled { usleep(20_000); slept += 20 }
+                    }
                 }
                 // Settle: keep the job "printing" until the counter drops by the job's
                 // label count (bounded so a non-reporting supply can't hang it).
@@ -383,7 +395,9 @@ public final class PrinterManager: ObservableObject {
     private func setPrinterBusy(_ id: String, busy: Bool) {
         printers = printers.map { p in
             var copy = p
-            if copy.id == id { copy.status = busy ? .busy : .ready }
+            // Don't promote an offline (unplugged) printer to .ready/.busy — e.g. when a
+            // job finishes after the device vanished. The scan owns the offline state.
+            if copy.id == id && copy.status != .offline { copy.status = busy ? .busy : .ready }
             return copy
         }
     }

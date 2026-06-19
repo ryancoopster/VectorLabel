@@ -56,17 +56,18 @@ public struct PrintQueue {
 
     // MARK: – Shared file primitives (atomic publish / list / decode)
 
-    /// Encode + publish atomically (temp `.json.tmp` → rename `.json`) so a watcher
-    /// filtering on `.json` never sees a partial file.
+    /// Encode + publish atomically. `Data.write(options:.atomic)` writes to a hidden
+    /// temp file in the same directory and then renames it onto `<id>.json` in one
+    /// atomic step — so a watcher (filtering on `.json`) never sees a partial file and
+    /// a reader never sees the destination momentarily missing. (Replaces an earlier
+    /// write-tmp → remove-final → move-tmp sequence whose remove+move opened a window
+    /// where `<id>.json` did not exist, intermittently feeding readers ENOENT.)
     @discardableResult
     private func atomicWrite<T: Encodable>(_ value: T, to dir: URL, id: String) throws -> URL {
         ensureDirs()
         let data = try JSONEncoder().encode(value)
         let finalURL = dir.appendingPathComponent("\(id).json")
-        let tmpURL = dir.appendingPathComponent("\(id).json.tmp")
-        try data.write(to: tmpURL, options: .atomic)
-        try? FileManager.default.removeItem(at: finalURL)
-        try FileManager.default.moveItem(at: tmpURL, to: finalURL)
+        try data.write(to: finalURL, options: .atomic)
         return finalURL
     }
 
@@ -113,7 +114,14 @@ public struct PrintQueue {
         }
         guard let data = try? Data(contentsOf: dest),
               let job = try? JSONDecoder().decode(PrintJobFile.self, from: data) else {
-            try? FileManager.default.moveItem(at: dest, to: failedDir.appendingPathComponent(dest.lastPathComponent))
+            // Undecodable: route to failed/. Remove any pre-existing failed/<id>.json
+            // first (moveItem won't overwrite), and if the move still fails, delete the
+            // processing file outright — otherwise recoverProcessingJobs() would move it
+            // back to queue/ on every launch and re-fail it forever (a wedge loop).
+            let failedTarget = failedDir.appendingPathComponent(dest.lastPathComponent)
+            try? FileManager.default.removeItem(at: failedTarget)
+            do { try FileManager.default.moveItem(at: dest, to: failedTarget) }
+            catch { try? FileManager.default.removeItem(at: dest) }
             return nil
         }
         return (job, dest)
@@ -123,7 +131,16 @@ public struct PrintQueue {
     public func complete(_ processingURL: URL, success: Bool) {
         let target = (success ? doneDir : failedDir).appendingPathComponent(processingURL.lastPathComponent)
         try? FileManager.default.removeItem(at: target)
-        try? FileManager.default.moveItem(at: processingURL, to: target)
+        do {
+            try FileManager.default.moveItem(at: processingURL, to: target)
+        } catch {
+            // The move failed (transient FS error, or a collision the remove didn't
+            // clear). Don't leave a finalized job sitting in processing/ — the next
+            // launch's recoverProcessingJobs() would re-drain and REPRINT it. Log and
+            // remove so the job reaches a terminal state.
+            NSLog("[PrintQueue] complete(): could not move \(processingURL.lastPathComponent) to \(success ? "done/" : "failed/"): \(error). Removing to avoid a duplicate reprint.")
+            try? FileManager.default.removeItem(at: processingURL)
+        }
     }
 
     /// Un-claim a processing job by moving it back to queue/, so it will be
@@ -153,6 +170,11 @@ public struct PrintQueue {
             let dest = queueDir.appendingPathComponent(url.lastPathComponent)
             try? FileManager.default.removeItem(at: dest)
             try? FileManager.default.moveItem(at: url, to: dest)
+            // A job interrupted AFTER some labels physically printed is re-drained in
+            // full (no per-label progress is persisted), so recovery can reprint
+            // already-printed labels. Logged so the duplicate isn't silent; resuming
+            // from a persisted offset is a follow-up (needs hardware to validate pacing).
+            NSLog("[PrintQueue] recovered orphaned job \(url.lastPathComponent) → re-queued (may reprint already-printed labels)")
         }
     }
 
@@ -162,7 +184,11 @@ public struct PrintQueue {
     /// stem). Returns nil if the file is missing or undecodable. Used by reprint
     /// to re-submit the same rendered VGL labels as a fresh job.
     public func readDoneJob(id: String) -> PrintJobFile? {
-        decodeJSON(doneDir.appendingPathComponent("\(id).json"))
+        // Defensive: `id` flows from a stored RecentPrint and is used as a path
+        // component, so never let it escape done/. (Decode-time validation already
+        // rejects unsafe ids, but a reprint may read an id persisted before that guard.)
+        guard PrintJobFile.isSafeID(id) else { return nil }
+        return decodeJSON(doneDir.appendingPathComponent("\(id).json"))
     }
 
     /// Re-submit a finished job's already-rendered VGL labels as a fresh queue job

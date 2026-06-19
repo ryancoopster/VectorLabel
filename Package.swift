@@ -76,7 +76,7 @@ let package = Package(
 
         .executableTarget(
             name: "VectorLabelEngine",
-            dependencies: ["VectorLabelCore", "VectorLabelEngineKit", "VectorLabelUI", "PrinterM610"],
+            dependencies: ["VectorLabelCore", "VectorLabelEngineKit", "VectorLabelUI", "PrinterM610", "PrinterM611"],
             path: "MacApp/Sources/Engine",
             linkerSettings: appLinkerSettings
         ),

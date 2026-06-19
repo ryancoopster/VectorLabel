@@ -28,6 +28,53 @@ public struct RenderedLabel: Codable, Equatable {
         self.init(pixels: Data(pixels), width: width, height: height, partNumber: partNumber)
     }
 
+    enum CodingKeys: String, CodingKey { case pixels, width, height, partNumber }
+
+    /// Upper sanity bound on either decoded dimension (~333" at 300 dpi). Generous on
+    /// purpose: it must clear the longest real continuous-tape strip, so it's only a
+    /// guard against absurd values + `width*height` overflow — the actual integrity
+    /// check is `pixels.count == width*height` below.
+    static let maxDimension = 100_000
+
+    /// Decode with the raster invariant enforced at the trust boundary. A
+    /// `PrintJobFile` is read straight off the IPC queue (any local process can drop
+    /// a file in `queue/`), so a label whose declared `width*height` doesn't match
+    /// `pixels.count`, or whose dimensions are non-positive / absurd, would otherwise
+    /// drive an out-of-bounds read or a multi-GB allocation in the encoders
+    /// (`BradyVGL.buildPrintJob`, `M611Bitmap.rotate/bmp1bpp` all index
+    /// `pixels[row*width+col]`). Reject it here so the offending job is routed to
+    /// `failed/` instead of crashing the USB-owning Engine.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let pixels = try c.decode(Data.self, forKey: .pixels)
+        let width  = try c.decode(Int.self, forKey: .width)
+        let height = try c.decode(Int.self, forKey: .height)
+        let partNumber = (try? c.decode(String.self, forKey: .partNumber)) ?? ""
+        guard width > 0, height > 0,
+              width <= Self.maxDimension, height <= Self.maxDimension else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .width, in: c,
+                debugDescription: "RenderedLabel dimensions out of range: \(width)x\(height)")
+        }
+        let (count, overflow) = width.multipliedReportingOverflow(by: height)
+        guard !overflow, pixels.count == count else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .pixels, in: c,
+                debugDescription: "RenderedLabel pixel count \(pixels.count) != \(width)×\(height)")
+        }
+        self.pixels = pixels
+        self.width = width
+        self.height = height
+        self.partNumber = partNumber
+    }
+
     /// The raster as a `[UInt8]` for encoders.
     public var bytes: [UInt8] { [UInt8](pixels) }
+
+    /// Per-label print-time estimate (ms) from the label's longest pixel dimension.
+    /// Calibrated to hardware: a 1.5" label (~450 px @ 300 dpi) prints in ~0.85 s.
+    /// Shared by the print controllers so the calibration constant lives in one place.
+    public static func estimatedPrintMs(maxDimensionPx px: Int) -> Int {
+        Int(Double(max(0, px)) / 300.0 * 370.0) + 300
+    }
 }

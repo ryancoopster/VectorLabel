@@ -95,20 +95,55 @@ public struct PrintJobFile: Codable {
         case schema, id, createdAt, sourceApp, title, templateName, printerID
         case copies, cutMode, estLabelMs, renderedLabels, labels, reprint
     }
+    /// The highest `schema` this build understands. A file declaring a newer schema
+    /// is rejected (routed to failed/) rather than silently mis-decoded by an older
+    /// Engine against a newer front-end's field semantics.
+    static let maxSchema = 2
+
+    /// `id` doubles as a filesystem path component (`queue/<id>.json`,
+    /// `done/<id>.json`) and is used verbatim in `appendingPathComponent`, so it must
+    /// be an opaque, traversal-safe token — never a relative path.
+    static func isSafeID(_ s: String) -> Bool {
+        guard (1...128).contains(s.count), !s.contains("..") else { return false }
+        return s.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "." }
+    }
+
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        schema         = (try? c.decode(Int.self, forKey: .schema)) ?? 1
-        id             = (try? c.decode(String.self, forKey: .id)) ?? UUID().uuidString
-        createdAt      = (try? c.decode(String.self, forKey: .createdAt)) ?? ""
-        sourceApp      = (try? c.decode(String.self, forKey: .sourceApp)) ?? ""
-        title          = (try? c.decode(String.self, forKey: .title)) ?? ""
-        templateName   = (try? c.decode(String.self, forKey: .templateName)) ?? ""
-        printerID      = try? c.decode(String.self, forKey: .printerID)
-        copies         = (try? c.decode(Int.self, forKey: .copies)) ?? 1
-        cutMode        = (try? c.decode(CutMode.self, forKey: .cutMode)) ?? .afterJobLast
-        estLabelMs     = (try? c.decode(Int.self, forKey: .estLabelMs)) ?? 1000
-        renderedLabels = (try? c.decode([RenderedLabel].self, forKey: .renderedLabels)) ?? []
-        labels         = (try? c.decode([Data].self, forKey: .labels)) ?? []
-        reprint        = try? c.decode(ReprintInfo.self, forKey: .reprint)
+        schema = (try? c.decode(Int.self, forKey: .schema)) ?? 1
+        guard schema <= Self.maxSchema else {
+            throw DecodingError.dataCorruptedError(forKey: .schema, in: c,
+                debugDescription: "PrintJobFile schema \(schema) is newer than this build supports (\(Self.maxSchema))")
+        }
+        // `id` is REQUIRED and must be a safe token. The whole IPC pipeline keys file
+        // moves and reprint lookups on it; fabricating a random UUID on a missing key
+        // would desync it from the filename, and an unsanitised id is a path-traversal
+        // sink in readDoneJob/atomicWrite.
+        let rawID = try c.decode(String.self, forKey: .id)
+        guard Self.isSafeID(rawID) else {
+            throw DecodingError.dataCorruptedError(forKey: .id, in: c,
+                debugDescription: "PrintJobFile id is not a safe token: \(rawID)")
+        }
+        id = rawID
+        createdAt    = (try? c.decode(String.self, forKey: .createdAt)) ?? ""
+        sourceApp    = (try? c.decode(String.self, forKey: .sourceApp)) ?? ""
+        title        = (try? c.decode(String.self, forKey: .title)) ?? ""
+        templateName = (try? c.decode(String.self, forKey: .templateName)) ?? ""
+        printerID    = try? c.decode(String.self, forKey: .printerID)
+        copies       = (try? c.decode(Int.self, forKey: .copies)) ?? 1
+        cutMode      = (try? c.decode(CutMode.self, forKey: .cutMode)) ?? .afterJobLast
+        estLabelMs   = (try? c.decode(Int.self, forKey: .estLabelMs)) ?? 1000
+        // When the key is PRESENT, a malformed/oversized raster (see RenderedLabel's
+        // validating decoder) must PROPAGATE so claim() routes the file to failed/ —
+        // not be swallowed into an empty job that "prints" zero labels and is recorded
+        // as a successful 0-label print. An absent key is still tolerated (a
+        // pre-`renderedLabels` file decodes with []).
+        if c.contains(.renderedLabels) {
+            renderedLabels = try c.decode([RenderedLabel].self, forKey: .renderedLabels)
+        } else {
+            renderedLabels = []
+        }
+        labels  = (try? c.decode([Data].self, forKey: .labels)) ?? []
+        reprint = try? c.decode(ReprintInfo.self, forKey: .reprint)
     }
 }

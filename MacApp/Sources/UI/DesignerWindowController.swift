@@ -838,7 +838,8 @@ public final class DesignerWindowController: NSObject {
         let templateName = template.name
         // Cut SETTING chosen in the Custom Designer print header (Phase 6). The JS
         // defaults it per stock (continuous → eachLabel; die-cut → never). Carried
-        // into PrintJobFile.cutMode AND baked into each label's VGL.
+        // into PrintJobFile.cutMode; the Engine's printer module stamps the per-label
+        // cut at ENCODE time — this front-end ships printer-agnostic rasters, not VGL.
         let cutMode = CutMode(rawValue: (payload["cutMode"] as? String) ?? "") ?? .never
 
         // One record per label, honoring the print-range subset (Phase 6). When a
@@ -893,7 +894,7 @@ public final class DesignerWindowController: NSObject {
                 RenderedLabel(pixels: $0.pixels, width: $0.width, height: $0.height, partNumber: part)
             }
             // Same pacing estimate the print window uses.
-            let estLabelMs = Int(Double(maxLabelPx) / 300.0 * 370.0) + 300
+            let estLabelMs = RenderedLabel.estimatedPrintMs(maxDimensionPx: maxLabelPx)
 
             Task { @MainActor in
                 let jobID = UUID().uuidString
@@ -910,7 +911,18 @@ public final class DesignerWindowController: NSObject {
                     renderedLabels: renderedLabels
                 )
                 do { try backend.submit(job) }
-                catch { print("[DesignerWindowController] printCustom submit failed: \(error)") }
+                catch {
+                    // Submit failed: the job was NOT queued, so do NOT tell the page a
+                    // print started. Surface it and bail. (F26)
+                    NSLog("[DesignerWindowController] printCustom submit failed: \(error)")
+                    let alert = NSAlert()
+                    alert.alertStyle = .warning
+                    alert.messageText = "Couldn’t start the print"
+                    alert.informativeText = "The job could not be queued: \(error.localizedDescription)\n\nNothing was sent to the printer. Please try again."
+                    alert.addButton(withTitle: "OK")
+                    if let w = self.window { alert.beginSheetModal(for: w) } else { alert.runModal() }
+                    return
+                }
                 // Hand the page its job id so it can match the Engine's published
                 // status, and push an immediate status so the in-header progress +
                 // Cancel control appear right away (updated live thereafter).

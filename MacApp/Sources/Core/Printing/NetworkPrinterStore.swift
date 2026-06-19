@@ -1,7 +1,8 @@
 import Foundation
 
 /// Persistent list of network (TCP) printers — manually added by IP or found by a
-/// subnet scan. Backed by `UserDefaults` (entries are "name|host"); lives in Core so
+/// subnet scan. Backed by `UserDefaults` (entries are "name|model|host", legacy
+/// "name|host" still read); lives in Core so
 /// both the M611 module (reads it to enumerate) and the Engine UI (adds/removes) can
 /// use it without a cross-module dependency.
 public enum NetworkPrinterStore {
@@ -19,25 +20,30 @@ public enum NetworkPrinterStore {
     private static func raw() -> [String] { UserDefaults.standard.stringArray(forKey: defaultsKey) ?? [] }
     private static func setRaw(_ v: [String]) { UserDefaults.standard.set(v, forKey: defaultsKey) }
 
-    /// Parsed entries. Format per item: "name|host" (host required; name optional).
+    /// Parsed entries. Format per item: "name|model|host" (current) or legacy
+    /// "name|host". Host is always the LAST field, so both forms parse; model defaults
+    /// to M611. (host required; name/model optional.)
     public static func list() -> [Entry] {
         raw().compactMap { item in
-            let parts = item.split(separator: "|", maxSplits: 1).map(String.init)
+            let parts = item.split(separator: "|", maxSplits: 2, omittingEmptySubsequences: false).map(String.init)
             guard let host = parts.last, !host.isEmpty else { return nil }
-            let name = parts.count > 1 && !parts[0].isEmpty ? parts[0] : "Brady M611 (\(host))"
-            return Entry(name: name, host: host)
+            let name = (parts.count > 1 && !parts[0].isEmpty) ? parts[0] : "Brady M611 (\(host))"
+            let model = (parts.count >= 3 && !parts[1].isEmpty) ? parts[1] : "M611"
+            return Entry(name: name, host: host, model: model)
         }
     }
 
-    /// Add (or update the name of) a printer, deduped by host. Returns false if `host`
-    /// is empty.
+    /// Add (or update the name/model of) a printer, deduped by host. Returns false if
+    /// `host` is empty. Persists the model so a non-M611 network printer round-trips
+    /// (previously the model was dropped and every loaded entry became M611).
     @discardableResult
-    public static func add(name: String, host: String) -> Bool {
+    public static func add(name: String, host: String, model: String = "M611") -> Bool {
         let h = host.trimmingCharacters(in: .whitespaces)
         guard !h.isEmpty else { return false }
         let nm = name.trimmingCharacters(in: .whitespaces)
+        let m = model.trimmingCharacters(in: .whitespaces)
         var items = raw().filter { hostOf($0) != h }
-        items.append("\(nm)|\(h)")
+        items.append("\(nm)|\(m.isEmpty ? "M611" : m)|\(h)")
         setRaw(items)
         return true
     }
@@ -51,6 +57,7 @@ public enum NetworkPrinterStore {
     }
 
     private static func hostOf(_ item: String) -> String {
-        String(item.split(separator: "|", maxSplits: 1).last ?? "")
+        // Host is the last field in both "name|model|host" and legacy "name|host".
+        String(item.split(separator: "|", maxSplits: 2, omittingEmptySubsequences: false).last ?? "")
     }
 }
