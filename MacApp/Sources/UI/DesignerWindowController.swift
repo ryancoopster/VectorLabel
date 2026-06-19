@@ -886,14 +886,11 @@ public final class DesignerWindowController: NSObject {
                 for _ in 0..<copies { rasters.append(rendered) }
             }
             guard !rasters.isEmpty else { return }
-            let total = rasters.count
-            var labels: [Data] = []
-            labels.reserveCapacity(total)
-            for (i, r) in rasters.enumerated() {
-                let vglCut = BradyVGL.vglCutMode(forIPCRawValue: cutMode.rawValue, index: i, total: total)
-                let vgl = BradyVGL.buildPrintJob(pixels: r.pixels, width: r.width,
-                                                 height: r.height, cutMode: vglCut)
-                labels.append(Data(vgl))
+            // Printer-agnostic rasters; the Engine encodes per target printer + stamps
+            // the per-label cut from `cutMode` at print time.
+            let part = loadedPN ?? template.labelSize?.partNumber ?? ""
+            let renderedLabels = rasters.map {
+                RenderedLabel(pixels: $0.pixels, width: $0.width, height: $0.height, partNumber: part)
             }
             // Same pacing estimate the print window uses.
             let estLabelMs = Int(Double(maxLabelPx) / 300.0 * 370.0) + 300
@@ -907,10 +904,10 @@ public final class DesignerWindowController: NSObject {
                     title: templateName.isEmpty ? "Custom Label" : templateName,
                     templateName: templateName,
                     printerID: printerID,
-                    copies: 1,            // copies are expanded into `labels` above
+                    copies: 1,            // copies are expanded into `renderedLabels` above
                     cutMode: cutMode,     // user-chosen cut setting (Phase 6)
                     estLabelMs: estLabelMs,
-                    labels: labels
+                    renderedLabels: renderedLabels
                 )
                 do { try backend.submit(job) }
                 catch { print("[DesignerWindowController] printCustom submit failed: \(error)") }
@@ -918,7 +915,7 @@ public final class DesignerWindowController: NSObject {
                 // status, and push an immediate status so the in-header progress +
                 // Cancel control appear right away (updated live thereafter).
                 self.webView?.evaluateJavaScript(
-                    "if(typeof customPrintSubmitted==='function')customPrintSubmitted(\(labels.count),\(jobID.jsonQuoted));",
+                    "if(typeof customPrintSubmitted==='function')customPrintSubmitted(\(renderedLabels.count),\(jobID.jsonQuoted));",
                     completionHandler: nil)
                 self.injectActiveJobs()
             }

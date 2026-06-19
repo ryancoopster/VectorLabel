@@ -3,7 +3,7 @@ import Foundation
 /// The loaded cassette as published by the Engine — a Codable mirror of the
 /// EngineKit's hardware-read SmartCellInfo (which lives in EngineKit and isn't
 /// Codable). Front-ends use this to render cassette match/mismatch.
-public struct CassetteStatus: Codable {
+public struct CassetteStatus: Codable, Equatable {
     public var partNumber: String
     public var labelWidthMils: Int
     public var labelHeightMils: Int
@@ -14,10 +14,20 @@ public struct CassetteStatus: Codable {
     public var labelsPerRoll: Int?
     public var pixelWidth: Int
     public var pixelHeight: Int
+    /// The printer's raster-frame rotation for the loaded media (M611 PICL "Area
+    /// Rotation", e.g. 270 for M6 die-cut). nil for the M610 (VGL handles its own).
+    /// Optional so older status files still decode.
+    public var areaRotation: Int?
+    /// M611-only live telemetry (nil/absent for the M610). Optional → tolerant decode.
+    public var ribbonRemainingPct: Int?
+    public var ribbonPartNumber: String?
+    public var batteryPct: Int?
 
     public init(partNumber: String, labelWidthMils: Int, labelHeightMils: Int,
                 printableWidthMils: Int, printableHeightMils: Int, isDieCut: Bool,
-                supplyRemainingPct: Int, labelsPerRoll: Int?, pixelWidth: Int, pixelHeight: Int) {
+                supplyRemainingPct: Int, labelsPerRoll: Int?, pixelWidth: Int, pixelHeight: Int,
+                areaRotation: Int? = nil, ribbonRemainingPct: Int? = nil,
+                ribbonPartNumber: String? = nil, batteryPct: Int? = nil) {
         self.partNumber = partNumber
         self.labelWidthMils = labelWidthMils
         self.labelHeightMils = labelHeightMils
@@ -28,6 +38,10 @@ public struct CassetteStatus: Codable {
         self.labelsPerRoll = labelsPerRoll
         self.pixelWidth = pixelWidth
         self.pixelHeight = pixelHeight
+        self.areaRotation = areaRotation
+        self.ribbonRemainingPct = ribbonRemainingPct
+        self.ribbonPartNumber = ribbonPartNumber
+        self.batteryPct = batteryPct
     }
 }
 

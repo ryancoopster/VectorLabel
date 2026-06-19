@@ -52,7 +52,13 @@ public struct PrintJobFile: Codable {
     public var copies: Int                // per-label copies (default 1)
     public var cutMode: CutMode
     public var estLabelMs: Int            // pacing estimate (→ PrinterManager.submit estLabelMs:)
-    public var labels: [Data]             // each element is one complete VGL job
+    /// Pre-rendered, printer-agnostic label rasters. The Engine encodes each into the
+    /// target printer's wire format (VGL for M610, bitmap/LZ4 for M611) at print time
+    /// — "encode in the Engine", so front-ends stay printer-agnostic.
+    public var renderedLabels: [RenderedLabel]
+    /// LEGACY: pre-encoded VGL byte jobs. Empty for jobs that carry `renderedLabels`.
+    /// Kept so an in-flight pre-upgrade job file still decodes.
+    public var labels: [Data]
     public var reprint: ReprintInfo?      // print-time state for "reopen on reprint"
 
     public init(id: String,
@@ -64,9 +70,10 @@ public struct PrintJobFile: Codable {
                 copies: Int = 1,
                 cutMode: CutMode = .afterJobLast,
                 estLabelMs: Int = 1000,
-                labels: [Data],
+                renderedLabels: [RenderedLabel] = [],
+                labels: [Data] = [],
                 reprint: ReprintInfo? = nil) {
-        self.schema = 1
+        self.schema = 2
         self.id = id
         self.createdAt = createdAt
         self.sourceApp = sourceApp
@@ -76,7 +83,32 @@ public struct PrintJobFile: Codable {
         self.copies = copies
         self.cutMode = cutMode
         self.estLabelMs = estLabelMs
+        self.renderedLabels = renderedLabels
         self.labels = labels
         self.reprint = reprint
+    }
+
+    // Tolerant decode: a job file written before `renderedLabels` (or `labels`)
+    // existed still decodes (defaults to empty), so a partial upgrade can't wedge
+    // the queue on an undecodable file.
+    enum CodingKeys: String, CodingKey {
+        case schema, id, createdAt, sourceApp, title, templateName, printerID
+        case copies, cutMode, estLabelMs, renderedLabels, labels, reprint
+    }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        schema         = (try? c.decode(Int.self, forKey: .schema)) ?? 1
+        id             = (try? c.decode(String.self, forKey: .id)) ?? UUID().uuidString
+        createdAt      = (try? c.decode(String.self, forKey: .createdAt)) ?? ""
+        sourceApp      = (try? c.decode(String.self, forKey: .sourceApp)) ?? ""
+        title          = (try? c.decode(String.self, forKey: .title)) ?? ""
+        templateName   = (try? c.decode(String.self, forKey: .templateName)) ?? ""
+        printerID      = try? c.decode(String.self, forKey: .printerID)
+        copies         = (try? c.decode(Int.self, forKey: .copies)) ?? 1
+        cutMode        = (try? c.decode(CutMode.self, forKey: .cutMode)) ?? .afterJobLast
+        estLabelMs     = (try? c.decode(Int.self, forKey: .estLabelMs)) ?? 1000
+        renderedLabels = (try? c.decode([RenderedLabel].self, forKey: .renderedLabels)) ?? []
+        labels         = (try? c.decode([Data].self, forKey: .labels)) ?? []
+        reprint        = try? c.decode(ReprintInfo.self, forKey: .reprint)
     }
 }

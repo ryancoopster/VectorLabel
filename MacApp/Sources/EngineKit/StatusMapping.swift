@@ -6,38 +6,20 @@ import VectorLabelCore
 // combined app's LocalPrintBackend, and reused by the Engine's status publisher
 // in a later step.
 
-public extension BradyUSB.SmartCellInfo {
-    /// A Codable `CassetteStatus` mirror of this SmartCell read. `labelsPerRoll`
-    /// is resolved from the catalog here so front-ends don't have to.
-    /// NOTE: SmartCellInfo carries no `printableHeightMils`; it's set equal to the
-    /// label height (the chip only reports printableWidthMils).
-    func asCassetteStatus() -> CassetteStatus {
-        CassetteStatus(
-            partNumber: partNumber,
-            labelWidthMils: labelWidthMils,
-            labelHeightMils: labelHeightMils,
-            printableWidthMils: printableWidthMils,
-            printableHeightMils: labelHeightMils,
-            isDieCut: isDieCut,
-            supplyRemainingPct: supplyRemainingPct,
-            labelsPerRoll: BradyCatalog.labelsPerRoll(forPartNumber: partNumber),
-            pixelWidth: pixelWidth,
-            pixelHeight: pixelHeight
-        )
-    }
-}
+// `BradyUSB.SmartCellInfo.asCassetteStatus()` now lives in the PrinterM610 module
+// (PrinterM610/M610Module.swift) so each printer module owns its status mapping.
 
 public extension PrinterDevice {
     /// A `PrinterStatusEntry` for this printer, given its detected cassette (if
     /// any) and the number of jobs currently active on it.
-    func asStatusEntry(cassette: BradyUSB.SmartCellInfo?, activeJobCount: Int) -> PrinterStatusEntry {
+    func asStatusEntry(cassette: CassetteStatus?, activeJobCount: Int) -> PrinterStatusEntry {
         PrinterStatusEntry(
             id: id,
             name: name,
             model: model,
             serial: serial,
             status: status.rawValue,
-            cassette: cassette?.asCassetteStatus(),
+            cassette: cassette,
             activeJobCount: activeJobCount
         )
     }

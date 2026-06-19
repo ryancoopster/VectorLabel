@@ -48,7 +48,7 @@ let package = Package(
         ),
         .target(
             name: "VectorLabelEngineKit",
-            dependencies: ["VectorLabelCore", "CLibUSB"],
+            dependencies: ["VectorLabelCore", "PrinterM610", "PrinterM611"],
             path: "MacApp/Sources/EngineKit"
         ),
         .target(
@@ -58,11 +58,25 @@ let package = Package(
             linkerSettings: appLinkerSettings
         ),
 
+        // MARK: – Per-printer modules (one self-contained module per printer).
+        // Each conforms to the shared PrinterModule abstraction. M610 = USB/VGL
+        // (links libusb), M611 = network bitmap/LZ4 over TCP (Foundation-only).
+        .target(
+            name: "PrinterM610",
+            dependencies: ["VectorLabelCore", "CLibUSB"],
+            path: "MacApp/Sources/PrinterM610"
+        ),
+        .target(
+            name: "PrinterM611",
+            dependencies: ["VectorLabelCore", "CLibUSB"],
+            path: "MacApp/Sources/PrinterM611"
+        ),
+
         // MARK: – Executables (one @main each)
 
         .executableTarget(
             name: "VectorLabelEngine",
-            dependencies: ["VectorLabelCore", "VectorLabelEngineKit", "VectorLabelUI"],
+            dependencies: ["VectorLabelCore", "VectorLabelEngineKit", "VectorLabelUI", "PrinterM610"],
             path: "MacApp/Sources/Engine",
             linkerSettings: appLinkerSettings
         ),
@@ -87,7 +101,7 @@ let package = Package(
 
         .testTarget(
             name: "VectorLabelTests",
-            dependencies: ["VectorLabelCore"],
+            dependencies: ["VectorLabelCore", "PrinterM611"],
             path: "MacApp/Tests",
             resources: [
                 // Tiny inline-string .xlsx (no xl/sharedStrings.xml) used to verify

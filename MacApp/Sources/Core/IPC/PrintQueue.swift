@@ -182,6 +182,7 @@ public struct PrintQueue {
             copies: original.copies,
             cutMode: original.cutMode,
             estLabelMs: original.estLabelMs,
+            renderedLabels: original.renderedLabels,
             labels: original.labels,
             reprint: original.reprint
         )

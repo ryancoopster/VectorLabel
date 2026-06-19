@@ -2,29 +2,13 @@ import Foundation
 import Combine
 import AppKit
 import VectorLabelCore
+import PrinterM610   // M610 driver module (VGL/USB)
+import PrinterM611   // M611 driver module (bitmap/LZ4 over TCP)
 
 // MARK: – Models
 
-/// A Brady printer discovered on USB.
-public struct PrinterDevice: Identifiable, Hashable {
-    public let id: String          // "<vendorID>:<productID>:<serialNumber>"
-    public let name: String        // "Brady M610" or "Brady M611"
-    public let model: String       // "M610" | "M611"
-    public let serial: String
-    public var status: Status
-
-    public enum Status: String, Hashable {
-        case ready, busy, offline
-        public var displayName: String {
-            switch self { case .ready: "Ready"; case .busy: "Busy"; case .offline: "Offline" }
-        }
-    }
-
-    public init(id: String, name: String, model: String, serial: String, status: Status) {
-        self.id = id; self.name = name; self.model = model
-        self.serial = serial; self.status = status
-    }
-}
+// `PrinterDevice` moved to VectorLabelCore (Core/Printing/PrinterDevice.swift) so the
+// shared `PrinterModule` protocol + both per-printer modules can refer to it.
 
 /// One print job in the active queue.
 public final class PrintJob: ObservableObject, Identifiable {
@@ -88,6 +72,25 @@ public final class PrinterManager: ObservableObject {
 
     public static let shared = PrinterManager()
 
+    public init() {
+        // Register the per-printer driver modules. Everything (discovery, encode,
+        // transport, status) routes by model through the registry from here on.
+        PrinterModuleRegistry.shared.register(M610Module())
+        PrinterModuleRegistry.shared.register(M611Module())
+    }
+
+    // One serial queue per printer, serializing all device access (prints + status
+    // reads) to that printer while different printers run concurrently.
+    private let queuesLock = NSLock()
+    private var deviceQueues: [String: DispatchQueue] = [:]
+    private func deviceQueue(for id: String) -> DispatchQueue {
+        queuesLock.lock(); defer { queuesLock.unlock() }
+        if let q = deviceQueues[id] { return q }
+        let q = DispatchQueue(label: "vectorlabel.printer.\(id)", qos: .utility)
+        deviceQueues[id] = q
+        return q
+    }
+
     @Published public var printers: [PrinterDevice] = []
     @Published public var activeJobs: [PrintJob] = []
 
@@ -114,14 +117,60 @@ public final class PrinterManager: ObservableObject {
     /// Public entry point for manual refresh (called from Preferences).
     public func scanNow() { performScan() }
 
+    // MARK: – Network printers (manual add + subnet discovery)
+
+    /// True while a subnet scan is running, for UI feedback.
+    @Published public private(set) var isScanningNetwork = false
+    /// Last network scan / add result, shown in the Preferences UI.
+    @Published public var networkScanMessage: String?
+
+    /// Add a network printer by IP/hostname, then rescan so it appears.
+    public func addNetworkPrinter(name: String, host: String) {
+        if NetworkPrinterStore.add(name: name, host: host) {
+            networkScanMessage = "Added \(host)."
+            performScan()
+        }
+    }
+
+    /// Remove a network printer and forget its cassette.
+    public func removeNetworkPrinter(host: String) {
+        NetworkPrinterStore.remove(host: host)
+        cassettes["net:\(host)"] = nil
+        performScan()
+    }
+
+    /// Scan the local subnet for Brady network printers (port 9102), add any new ones,
+    /// then rescan.
+    public func scanNetwork() {
+        guard !isScanningNetwork else { return }
+        isScanningNetwork = true
+        networkScanMessage = "Scanning the local network…"
+        Task.detached {
+            let hosts = NetworkDiscovery.scanSubnet()
+            await MainActor.run {
+                var added = 0
+                for host in hosts where !NetworkPrinterStore.contains(host: host) {
+                    // TODO: PICL-verify the model; all supported network models are M611.
+                    NetworkPrinterStore.add(name: "Brady M611 (\(host))", host: host)
+                    added += 1
+                }
+                self.isScanningNetwork = false
+                self.networkScanMessage = added > 0
+                    ? "Found \(added) new network printer\(added == 1 ? "" : "s")."
+                    : "No new network printers found."
+                self.performScan()
+            }
+        }
+    }
+
     private func performScan() {
         // Skip if a scan is still running, so slow USB enumeration can't pile up
         // overlapping detached tasks all contending for device access.
         if scanInFlight { return }
         scanInFlight = true
-        // Perform USB enumeration on a background thread so we don't block the main queue.
+        // Enumerate every registered module (USB + network) on a background thread.
         Task.detached {
-            let found = BradyUSB.enumeratePrinters()
+            let found = PrinterModuleRegistry.shared.all().flatMap { $0.enumerate() }
             await MainActor.run {
                 defer { self.scanInFlight = false; self.hasScannedOnce = true }
                 // Merge: update status for existing entries, add new ones, mark missing as offline
@@ -180,7 +229,7 @@ public final class PrinterManager: ObservableObject {
     /// (calibration grid, in-process callers) unchanged.
     @discardableResult
     public func submit(
-        jobs: [[UInt8]],
+        labels: [RenderedLabel],
         title: String,
         templateName: String,
         printerID: String,
@@ -190,12 +239,10 @@ public final class PrinterManager: ObservableObject {
         sourceApp: String = "",
         delayMs: Int = AppSettings.shared.interLabelDelayMs
     ) -> PrintJob {
-        // The cut command is baked into each label's VGL by the front-end renderer;
-        // surface the chosen mode here so the device path / logs reflect it.
-        print("[PrinterManager] submit \(jobs.count) label(s) cutMode=\(cutMode.rawValue) → \(title)")
+        print("[PrinterManager] submit \(labels.count) label(s) cutMode=\(cutMode.rawValue) → \(title)")
         let job = PrintJob(
             title: title,
-            labelCount: jobs.count,
+            labelCount: labels.count,
             templateName: templateName,
             printerID: printerID,
             ipcJobID: ipcJobID,
@@ -204,17 +251,18 @@ public final class PrinterManager: ObservableObject {
         activeJobs.append(job)
         setPrinterBusy(printerID, busy: true)
 
-        // Run device I/O on the printer's dedicated SERIAL queue (not the Swift
-        // cooperative pool). The serial queue gives the same per-printer mutual
-        // exclusion the old semaphore did, but blocking USB sends + pacing sleeps
-        // here can't starve the cooperative pool. @Published mutations hop to the
-        // main actor; everything else stays on the queue thread.
-        let queue = BradyUSB.deviceQueue(for: printerID)
+        // Resolve the target device, its driver module, and last-known media status
+        // on the main actor (printers + cassette cache are main-actor state); then do
+        // all device I/O on the printer's dedicated serial queue (blocking sends +
+        // pacing sleeps stay off the Swift cooperative pool).
+        let device = printers.first { $0.id == printerID }
+        let module = device.flatMap { PrinterModuleRegistry.shared.module(forModel: $0.model) }
+        let status = cassettes[printerID]
+        let queue = deviceQueue(for: printerID)
         queue.async {
             func finishOnMain() {
                 Task { @MainActor in
                     job.isComplete = true
-                    // Keep this printer busy if it still has queued/printing jobs.
                     let stillBusy = self.activeJobs.contains {
                         $0.printerID == printerID && !$0.isComplete && $0.id != job.id
                     }
@@ -227,33 +275,33 @@ public final class PrinterManager: ObservableObject {
             if job.isCancelled { finishOnMain(); return }
             Task { @MainActor in job.isPrinting = true }
 
-            do {
-                let handle = try BradyUSB.openPrinterByID(printerID)
-                defer { BradyUSB.close(handle) }
+            guard let module, let device else {
+                print("[PrinterManager] no driver/device for \(printerID)")
+                job.markFailed(); finishOnMain(); return
+            }
 
-                // The printer buffers everything sent to it almost instantly (no USB
-                // backpressure) and exposes no usable per-label status. So we PACE the
-                // sends to the real print rate (calibrated from label length): the bar
-                // advances one label at a time as each finishes, and — because we send
-                // one at a time and check between them — Cancel stops the remaining
-                // labels (anything already sent stays in the printer).
-                let count = jobs.count
+            do {
+                let conn = try module.open(device)
+                defer { module.close(conn) }
+
+                // Encode each label into the printer's wire format HERE (in the Engine,
+                // via the model's module) and send one at a time, so progress advances
+                // per-label and Cancel stops the rest. The M610 paces off its SmartCell
+                // labels-remaining counter; a transport without one (M611) falls back to
+                // the time estimate (capabilities.pacesByLabelsRemaining).
+                let count = labels.count
                 let perLabelMs = max(150, estLabelMs)
-                let initialRem = BradyUSB.labelsRemaining(handle: handle)   // -1 if unavailable
-                for (i, vglJob) in jobs.enumerated() {
+                let usePacing = module.capabilities.pacesByLabelsRemaining
+                let initialRem = usePacing ? module.labelsRemaining(on: conn) : -1
+                for (i, label) in labels.enumerated() {
                     if job.isCancelled { break }
-                    try BradyUSB.sendJob(vglJob, handle: handle)
-                    // Pace to the printer's REAL rate: advance as soon as the supply
-                    // counter confirms this label printed (polled gently), instead of
-                    // always burning the full time estimate. `perLabelMs` is now just
-                    // a fallback cap so a non-reporting supply can't stall. This
-                    // removes the idle gap when the printer prints faster than the
-                    // estimate, while keeping one-at-a-time sends (cancellable) and
-                    // accurate per-label progress.
+                    let bytes = module.encode(label: label, status: status,
+                                              cut: cutMode, isLastLabel: i == count - 1)
+                    try module.send(bytes, on: conn)
                     var waited = 0
                     while waited < perLabelMs && !job.isCancelled {
                         if initialRem >= 0, waited % 120 == 0 {
-                            let rem = BradyUSB.labelsRemaining(handle: handle)
+                            let rem = module.labelsRemaining(on: conn)
                             if rem >= 0 && (initialRem - rem) >= (i + 1) { break }   // this label printed
                         }
                         usleep(40_000); waited += 40
@@ -261,14 +309,13 @@ public final class PrinterManager: ObservableObject {
                     if job.isCancelled { break }
                     Task { @MainActor in job.completedLabels = i + 1 }
                 }
-                // Keep the job "printing" (status visible + cancellable) until the
-                // printer's labels-remaining counter drops by the job's label count.
-                // Bounded so a supply that doesn't report can't hang it.
+                // Settle: keep the job "printing" until the counter drops by the job's
+                // label count (bounded so a non-reporting supply can't hang it).
                 if !job.isCancelled && initialRem >= 0 {
                     let startNs = DispatchTime.now().uptimeNanoseconds
                     let capMs = count * perLabelMs * 2 + 8000
                     while !job.isCancelled {
-                        let rem = BradyUSB.labelsRemaining(handle: handle)
+                        let rem = module.labelsRemaining(on: conn)
                         let elapsedMs = Int((DispatchTime.now().uptimeNanoseconds &- startNs) / 1_000_000)
                         if rem >= 0 && (initialRem - rem) >= count { break }   // truly finished
                         if elapsedMs >= capMs { break }                        // safety cap
@@ -312,8 +359,9 @@ public final class PrinterManager: ObservableObject {
         let offset = AppSettings.shared.calibrationOffset(forSerial: serial)
         let size = calibrationSize(for: printerID)
         guard let grid = LabelRenderer.renderCalibrationGrid(size: size, offset: offset) else { return }
-        let job = BradyVGL.buildPrintJob(pixels: grid.pixels, width: grid.width, height: grid.height)
-        submit(jobs: [job], title: "Calibration grid (\(size.partNumber))",
+        let label = RenderedLabel(pixels: grid.pixels, width: grid.width, height: grid.height,
+                                  partNumber: size.partNumber)
+        submit(labels: [label], title: "Calibration grid (\(size.partNumber))",
                templateName: "Calibration", printerID: printerID)
     }
 
@@ -344,7 +392,7 @@ public final class PrinterManager: ObservableObject {
 
     /// Most recent SmartCell read per printer ID, for auto-detecting the loaded
     /// supply instead of asking the user.
-    @Published public var cassettes: [String: BradyUSB.SmartCellInfo] = [:]
+    @Published public var cassettes: [String: CassetteStatus] = [:]
     private var cassetteFetchedAt: [String: Date] = [:]
     private let cassetteTTL: TimeInterval = 60
 
@@ -367,18 +415,14 @@ public final class PrinterManager: ObservableObject {
         }
         if !force, let at = cassetteFetchedAt[printerID],
            Date().timeIntervalSince(at) < cassetteTTL { return }
+        guard let device = printers.first(where: { $0.id == printerID }),
+              let module = PrinterModuleRegistry.shared.module(forModel: device.model) else { return }
 
         // Same per-printer serial queue as printing — serializes against jobs and
-        // stays off the cooperative pool.
-        BradyUSB.deviceQueue(for: printerID).async {
-            var info: BradyUSB.SmartCellInfo?
-            do {
-                let handle = try BradyUSB.openPrinterByID(printerID)
-                defer { BradyUSB.close(handle) }
-                info = BradyUSB.querySmartCell(handle: handle)
-            } catch {
-                // LIBUSB_ERROR_ACCESS or not found — keep any cached value.
-            }
+        // stays off the cooperative pool. The module reads its own status (M610 =
+        // SmartCell over USB, M611 = PICL over TCP) and maps it to CassetteStatus.
+        deviceQueue(for: printerID).async {
+            let info = module.readStatus(device)
             Task { @MainActor in
                 if let info {
                     self.cassettes[printerID] = info

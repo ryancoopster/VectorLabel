@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import VectorLabelCore
+import PrinterM610
 import VectorLabelEngineKit
 
 // MARK: – Root menu bar content
@@ -261,7 +262,7 @@ struct MenuActionRow: View {
 
 struct PrinterRow: View {
     let printer: PrinterDevice
-    var cassette: BradyUSB.SmartCellInfo? = nil
+    var cassette: CassetteStatus? = nil
     var jobs: [PrintJob] = []
 
     var statusColor: Color {
@@ -287,7 +288,7 @@ struct PrinterRow: View {
                         .font(.system(size: 10))
                         .foregroundColor(.vlSecondary)
                     if let c = cassette, !c.partNumber.isEmpty {
-                        Text(c.partNumber + (c.ribbonCode.isEmpty ? "" : " · \(c.ribbonCode)"))
+                        Text(c.partNumber + (c.ribbonPartNumber.map { " · \($0)" } ?? ""))
                             .font(.system(size: 10))
                             .foregroundColor(.vlAccent)
                     }

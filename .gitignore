@@ -12,3 +12,5 @@ dist/
 *.dmg
 # Generated at build time by scripts/stamp-version.sh (also regenerated in CI)
 MacApp/Sources/Core/Generated/BuildInfo.swift
+# Local Claude Code settings
+.claude/

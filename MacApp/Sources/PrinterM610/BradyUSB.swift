@@ -107,7 +107,7 @@ public enum BradyUSB {
     /// concurrently — replacing the old DispatchSemaphore. Crucially this is a
     /// dedicated GCD queue, so the long blocking USB work + pacing sleeps no longer
     /// park threads in Swift's cooperative pool.
-    static func deviceQueue(for id: String) -> DispatchQueue {
+    public static func deviceQueue(for id: String) -> DispatchQueue {
         locksLock.lock(); defer { locksLock.unlock() }
         if let q = deviceQueues[id] { return q }
         let q = DispatchQueue(label: "vectorlabel.printer.\(id)", qos: .utility)
@@ -148,7 +148,7 @@ public enum BradyUSB {
     #endif
 
     /// Returns all connected Brady printers.
-    static func enumeratePrinters() -> [PrinterDevice] {
+    public static func enumeratePrinters() -> [PrinterDevice] {
         var results: [PrinterDevice] = []
         #if canImport(CLibUSB)
         guard let context = sharedContext else { return [] }
@@ -201,7 +201,7 @@ public enum BradyUSB {
     // MARK: – Open / close
 
     /// Open a specific printer by its composite ID.
-    static func openPrinterByID(_ deviceID: String) throws -> OpaquePointer {
+    public static func openPrinterByID(_ deviceID: String) throws -> OpaquePointer {
         #if canImport(CLibUSB)
         guard let context = sharedContext else { throw USBError.initFailed }
 
@@ -252,7 +252,7 @@ public enum BradyUSB {
         #endif
     }
 
-    static func close(_ handle: OpaquePointer) {
+    public static func close(_ handle: OpaquePointer) {
         #if canImport(CLibUSB)
         libusb_release_interface(handle, 0)
         libusb_close(handle)
@@ -262,7 +262,7 @@ public enum BradyUSB {
     // MARK: – Send
 
     /// Send one VGL job to an already-opened printer handle.
-    static func sendJob(_ job: [UInt8], handle: OpaquePointer) throws {
+    public static func sendJob(_ job: [UInt8], handle: OpaquePointer) throws {
         #if canImport(CLibUSB)
         var data = job
         var offset = 0
@@ -287,7 +287,7 @@ public enum BradyUSB {
     /// job's label count when a print physically completes — a reliable "done"
     /// signal over the USB back-channel. Returns -1 if unavailable. Located relative
     /// to the variable-length field block (fb), like parseSmartCell. Hold device lock.
-    static func labelsRemaining(handle: OpaquePointer) -> Int {
+    public static func labelsRemaining(handle: OpaquePointer) -> Int {
         #if canImport(CLibUSB)
         var query: [UInt8] = [0x1B, 0x49, 0x00]
         var readBuf = [UInt8](repeating: 0, count: 256)
@@ -347,7 +347,7 @@ public enum BradyUSB {
     /// attempts time out before the controller starts answering (§8). We retry up
     /// to `maxAttempts` (typically succeeds around attempt 16). Returns nil if the
     /// cassette never answers. Caller must hold `deviceLock`.
-    static func querySmartCell(handle: OpaquePointer, maxAttempts: Int = 25) -> SmartCellInfo? {
+    public static func querySmartCell(handle: OpaquePointer, maxAttempts: Int = 25) -> SmartCellInfo? {
         #if canImport(CLibUSB)
         var query: [UInt8] = [0x1B, 0x49, 0x00]  // ESC I <any>
         var readBuf = [UInt8](repeating: 0, count: 512)

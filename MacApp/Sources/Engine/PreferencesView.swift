@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import VectorLabelCore
+import PrinterM610
 import VectorLabelEngineKit
 
 // Design tokens (Color.vl*) live in Theme.swift, shared with the menu bar.
@@ -72,6 +73,7 @@ struct PreferencesView: View {
     @State private var selectedTab = 0
     @State private var showResetConfirm       = false
     @State private var showClearRecentConfirm = false
+    @State private var newPrinterHost = ""
 
     private let tabs = ["Export", "Printing", "Templates", "Recent", "Printers", "Advanced"]
     private let icons = ["arrow.down.doc", "printer", "doc.richtext", "clock", "cable.connector", "gearshape.2"]
@@ -257,13 +259,20 @@ struct PreferencesView: View {
 
     // MARK: – Printers
 
+    private func addNetworkPrinter() {
+        let host = newPrinterHost.trimmingCharacters(in: .whitespaces)
+        guard !host.isEmpty else { return }
+        PrinterManager.shared.addNetworkPrinter(name: "Brady M611 (\(host))", host: host)
+        newPrinterHost = ""
+    }
+
     /// Caption for a printer row, including the detected cassette if known.
-    private func printerCaption(_ printer: PrinterDevice, _ cassette: BradyUSB.SmartCellInfo?) -> String {
+    private func printerCaption(_ printer: PrinterDevice, _ cassette: CassetteStatus?) -> String {
         var s = "Serial: \(printer.serial)  ·  \(printer.status.displayName)"
         if let c = cassette, !c.partNumber.isEmpty {
             let dims = "\(c.labelWidthMils)×\(c.labelHeightMils) mil"
             s += "  ·  Loaded: \(c.partNumber) (\(dims))"
-            if !c.ribbonCode.isEmpty { s += "  ·  Ribbon: \(c.ribbonCode)" }
+            if let rib = c.ribbonPartNumber, !rib.isEmpty { s += "  ·  Ribbon: \(rib)" }
         }
         return s
     }
@@ -326,12 +335,33 @@ struct PreferencesView: View {
     private var printersTab: some View {
         VStack(alignment: .leading, spacing: 0) {
             PrefSection(title: "Connected Printers") {
-                if printerManager.printers.isEmpty {
-                    PrefRow(label: "No Brady printers detected") {
-                        Button("Scan Now") { Task { @MainActor in PrinterManager.shared.scanNow() } }
-                            .buttonStyle(VLButtonStyle())
+                // Always-visible scan control: choose USB or a network subnet scan.
+                PrefRow(label: printerManager.printers.isEmpty ? "No printers detected"
+                            : "\(printerManager.printers.count) printer\(printerManager.printers.count == 1 ? "" : "s") connected",
+                        caption: printerManager.networkScanMessage) {
+                    Menu("Scan") {
+                        Button("Scan USB") { PrinterManager.shared.scanNow() }
+                        Button(printerManager.isScanningNetwork ? "Scanning network…" : "Scan network (subnet)") {
+                            PrinterManager.shared.scanNetwork()
+                        }
+                        .disabled(printerManager.isScanningNetwork)
                     }
-                } else {
+                    .fixedSize()
+                }
+                // Manually add a network printer by IP / hostname.
+                PrefRow(label: "Add network printer", caption: "Enter the printer's IP address (port 9100/9102)") {
+                    HStack(spacing: 8) {
+                        TextField("192.168.1.50", text: $newPrinterHost)
+                            .textFieldStyle(.roundedBorder).frame(width: 150)
+                            .font(.system(size: 12, design: .monospaced))
+                            .onSubmit { addNetworkPrinter() }
+                        Button("Add") { addNetworkPrinter() }
+                            .buttonStyle(VLButtonStyle())
+                            .disabled(newPrinterHost.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                }
+                if !printerManager.printers.isEmpty {
+                    PrefDivider()
                     ForEach(printerManager.printers) { printer in
                         VStack(alignment: .leading, spacing: 8) {
                             PrefRow(label: printer.name,
@@ -342,6 +372,10 @@ struct PreferencesView: View {
                                     }
                                     .buttonStyle(VLButtonStyle())
                                     .disabled(printer.status != .ready)
+                                    if printer.id.hasPrefix("net:"), let host = printer.host {
+                                        Button("Remove") { PrinterManager.shared.removeNetworkPrinter(host: host) }
+                                            .buttonStyle(VLButtonStyle())
+                                    }
                                     Circle()
                                         .fill(printer.status == .ready ? Color.vlGreen : printer.status == .busy ? Color.yellow : Color.vlDim)
                                         .frame(width: 8, height: 8)

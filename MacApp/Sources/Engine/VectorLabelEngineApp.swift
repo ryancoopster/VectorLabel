@@ -334,7 +334,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private func consumeResolved(job: PrintJobFile, processingURL: URL, printerID: String) {
 
         let printJob = PrinterManager.shared.submit(
-            jobs: job.labels.map { [UInt8]($0) },
+            labels: job.renderedLabels,
             title: job.title,
             templateName: job.templateName,
             printerID: printerID,
@@ -358,7 +358,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             sourceFileName: rp?.sourceFileName ?? "",
             templateName: job.templateName,
             printerName: printerName,
-            labelCount: job.labels.count,
+            labelCount: job.renderedLabels.count,
             printRange: RecentPrint.PrintRange(rawValue: rp?.printRange ?? "") ?? .all,
             selectedIndices: rp?.selectedIndices ?? [],
             status: .printing,

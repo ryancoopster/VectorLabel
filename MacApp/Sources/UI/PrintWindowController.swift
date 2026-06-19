@@ -707,24 +707,24 @@ extension PrintWindowController: WKScriptMessageHandler {
                 labelPx = max(labelPx, max(rendered.width, rendered.height))
                 rasters.append(rendered)
             }
-            let total = rasters.count
-            var jobs: [[UInt8]] = []
-            jobs.reserveCapacity(total)
-            for (i, rendered) in rasters.enumerated() {
-                let vglCut = BradyVGL.vglCutMode(forIPCRawValue: cutMode.rawValue, index: i, total: total)
-                jobs.append(BradyVGL.buildPrintJob(pixels: rendered.pixels, width: rendered.width,
-                                                   height: rendered.height, cutMode: vglCut))
+            // Wrap each raster as a model-agnostic RenderedLabel; the Engine encodes it
+            // for the target printer (VGL for the M610, bitmap/LZ4 for the M611) at print
+            // time, stamping the per-label cut from `cutMode`.
+            let part = loadedPN ?? template.labelSize?.partNumber ?? ""
+            var renderedLabels: [RenderedLabel] = []
+            renderedLabels.reserveCapacity(rasters.count)
+            for rendered in rasters {
+                renderedLabels.append(RenderedLabel(pixels: rendered.pixels, width: rendered.width,
+                                                    height: rendered.height, partNumber: part))
             }
             // Estimate per-label print time from the label's print length. Calibrated
             // to measured hardware: a 1.5" label (~450 px @ 300 dpi) prints in ~0.85 s.
             let estLabelMs = Int(Double(labelPx) / 300.0 * 370.0) + 300
 
             Task { @MainActor in
-                guard !jobs.isEmpty else { return }   // nothing printable — keep window open
-                // Hand the rendered batch to the print backend as a PrintJobFile.
-                // The combined app's LocalPrintBackend forwards it to PrinterManager
-                // exactly as before; a standalone front-end would write it to the
-                // IPC queue for the Engine to print.
+                guard !renderedLabels.isEmpty else { return }   // nothing printable — keep window open
+                // Hand the rendered batch to the print backend as a PrintJobFile. The
+                // front-end is printer-agnostic — it submits rasters; the Engine encodes.
                 let job = PrintJobFile(
                     id: UUID().uuidString,
                     createdAt: ISO8601DateFormatter().string(from: Date()),
@@ -735,7 +735,7 @@ extension PrintWindowController: WKScriptMessageHandler {
                     copies: 1,
                     cutMode: cutMode,
                     estLabelMs: estLabelMs,
-                    labels: jobs.map { Data($0) },
+                    renderedLabels: renderedLabels,
                     reprint: reprintInfo
                 )
                 do {
