@@ -1,5 +1,6 @@
 import XCTest
 @testable import VectorLabelCore
+import PrinterM611
 
 /// Per-model print settings (inter-label delay + full-job/single-label) added 2026-06-19,
 /// plus the v1→v2 migration that seeds sensible defaults for existing installs.
@@ -56,5 +57,24 @@ final class PrinterModelSettingsTests: XCTestCase {
         """
         let migrated = try JSONDecoder().decode(PrinterModelList.self, from: Data(v1.utf8)).migrated()
         XCTAssertEqual(migrated.models.first?.singleLabelPrinting, true)
+    }
+
+    // MARK: connection methods (per-printer transports)
+
+    func testEnabledTransportsDefaultsToAllOnDecode() throws {
+        // A printer written before the field existed gets all methods enabled.
+        let json = #"{"id":"66666666-6666-6666-6666-666666666666","name":"X","usbIDs":[]}"#
+        let m = try JSONDecoder().decode(PrinterModel.self, from: Data(json.utf8))
+        XCTAssertEqual(m.enabledTransports, Set(PrinterTransport.allCases))
+    }
+
+    func testEnabledTransportsAccessorDefaultsToAllForUnknownModel() {
+        XCTAssertEqual(PrinterModelStore.enabledTransports(forName: "no-such-printer-zzz"),
+                       Set(PrinterTransport.allCases))
+    }
+
+    func testM611DriverReportsSupportedTransports() {
+        // The driver reports what it can drive — M611 = USB + network (not Bluetooth).
+        XCTAssertEqual(M611Module().capabilities.supportedTransports, [.usb, .network])
     }
 }

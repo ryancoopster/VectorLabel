@@ -62,8 +62,8 @@ struct SupplyCatalogEditorView: View {
     /// detail pane gets 2/3. Persisted across opens (draggable divider below).
     @AppStorage("vlSupplyCatalogSplit") private var splitFraction: Double = 1.0 / 3.0
     @State private var dragStartLeft: CGFloat?
-    /// The printer-model registry (Preferences ▸ Printers ▸ Printer Models), so a
-    /// group's printer models link to that list instead of being free text.
+    /// The printer registry (Preferences ▸ Printers ▸ Per-Printer Settings), so a
+    /// group's printers link to that list instead of being free text.
     @ObservedObject private var printerStore = PrinterModelStore.shared
     @State private var pendingDelete: PendingDelete?
     @State private var duplicating: DuplicateState?
@@ -233,12 +233,12 @@ struct SupplyCatalogEditorView: View {
         }
     }
 
-    // Printer models for a group — a multi-select linked to the printer-model
-    // registry (Preferences ▸ Printers ▸ Printer Models), not free text.
+    // Printers for a group — a multi-select linked to the per-printer-settings
+    // registry (Preferences ▸ Printers ▸ Per-Printer Settings), not free text.
     private func printerModelsMenu(_ gid: UUID) -> some View {
         HStack(spacing: 12) {
             if printerStore.list.models.isEmpty {
-                Text("None — add in Printer Models…").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text("None — add in Per-Printer Settings…").font(.system(size: 11)).foregroundStyle(.secondary)
             }
             ForEach(printerStore.list.models) { m in
                 Toggle(m.name, isOn: Binding(

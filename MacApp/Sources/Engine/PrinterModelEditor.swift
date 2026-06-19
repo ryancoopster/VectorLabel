@@ -3,10 +3,11 @@ import AppKit
 import VectorLabelCore
 import VectorLabelUI
 
-// MARK: – Printer-models editor (Engine ▸ Preferences ▸ Printers ▸ Printer Models…)
+// MARK: – Per-printer settings editor (Engine ▸ Preferences ▸ Printers ▸ Per-Printer Settings…)
 //
-// Edits the PrinterModelStore: the printer models + their USB IDs that the supply
-// catalog's groups link to. Works on a DRAFT — Apply commits, Cancel reverts.
+// Edits the PrinterModelStore: each printer (name + USB IDs), the connection methods
+// to use, and the print behavior (inter-label delay, full-job vs single-label). The
+// supply catalog's groups link to these printers. Works on a DRAFT — Apply / Cancel.
 
 struct PrinterModelEditorView: View {
     @ObservedObject private var store = PrinterModelStore.shared
@@ -29,16 +30,16 @@ struct PrinterModelEditorView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Printer Models").font(.system(size: 14, weight: .semibold))
+                Text("Per-Printer Settings").font(.system(size: 14, weight: .semibold))
                 Spacer()
-                Button { addModel() } label: { Label("Add model", systemImage: "plus") }
+                Button { addModel() } label: { Label("Add printer", systemImage: "plus") }
             }.padding(12)
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(draft.models) { m in modelCard(m.id) }
                     if draft.models.isEmpty {
-                        Text("No printer models. Add one to make it available in the supply catalog.")
+                        Text("No printers configured. Add one to make it available in the supply catalog.")
                             .font(.system(size: 12)).foregroundStyle(.secondary).padding(.vertical, 8)
                     }
                 }.padding(12)
@@ -55,7 +56,7 @@ struct PrinterModelEditorView: View {
         }
         .frame(minWidth: 540, minHeight: 440)
         .alert(item: $pendingDelete) { d in
-            Alert(title: Text("Delete the “\(d.name)” printer model?"),
+            Alert(title: Text("Delete the “\(d.name)” printer?"),
                   message: Text("This can’t be undone. The supply catalog will no longer be able to link supplies to it."),
                   primaryButton: .destructive(Text("Delete")) {
                       draft.models.removeAll { $0.id == d.modelID }
@@ -68,7 +69,7 @@ struct PrinterModelEditorView: View {
         let m = draft.models.first { $0.id == mid }
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Model").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text("Printer").font(.system(size: 11)).foregroundStyle(.secondary)
                 TextField("e.g. M611", text: modelName(mid)).frame(width: 140)
                 Spacer()
                 Button(role: .destructive) {
@@ -89,6 +90,10 @@ struct PrinterModelEditorView: View {
             }
             Button { addUSB(mid) } label: { Label("Add USB ID", systemImage: "plus.circle") }
                 .buttonStyle(.borderless).font(.system(size: 11))
+
+            Divider().padding(.vertical, 2)
+
+            connectionsRow(mid)
 
             Divider().padding(.vertical, 2)
 
@@ -125,6 +130,30 @@ struct PrinterModelEditorView: View {
                 draft.models[mi].usbIDs[ui][keyPath: kp] = v.uppercased()
             })
     }
+    // Connection-method checkboxes (all on by default). The driver decides which
+    // actually take effect (PrinterCapabilities.supportedTransports); enabling one the
+    // driver doesn't support is a harmless no-op.
+    private func connectionsRow(_ mid: UUID) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 14) {
+                Text("Connections").font(.system(size: 11)).foregroundStyle(.secondary)
+                ForEach(PrinterTransport.allCases, id: \.self) { t in
+                    Toggle(t.displayName, isOn: transportBinding(mid, t)).toggleStyle(.checkbox)
+                }
+            }
+            Text("Only methods the printer's driver supports take effect.")
+                .font(.system(size: 10)).foregroundStyle(.secondary)
+        }
+    }
+    private func transportBinding(_ mid: UUID, _ t: PrinterTransport) -> Binding<Bool> {
+        Binding(
+            get: { draft.models.first { $0.id == mid }?.enabledTransports.contains(t) ?? false },
+            set: { on in
+                guard let i = draft.models.firstIndex(where: { $0.id == mid }) else { return }
+                if on { draft.models[i].enabledTransports.insert(t) }
+                else  { draft.models[i].enabledTransports.remove(t) }
+            })
+    }
     private func singleLabelBinding(_ mid: UUID) -> Binding<Bool> {
         Binding(get: { draft.models.first { $0.id == mid }?.singleLabelPrinting ?? false },
                 set: { v in if let i = draft.models.firstIndex(where: { $0.id == mid }) { draft.models[i].singleLabelPrinting = v } })
@@ -134,7 +163,7 @@ struct PrinterModelEditorView: View {
                 set: { v in if let i = draft.models.firstIndex(where: { $0.id == mid }) { draft.models[i].interLabelDelayMs = max(0, v) } })
     }
     private func addModel() {
-        draft.models.append(PrinterModel(name: "New model", usbIDs: [PrinterUSBID(vendorID: "0E2E", productID: "")]))
+        draft.models.append(PrinterModel(name: "New printer", usbIDs: [PrinterUSBID(vendorID: "0E2E", productID: "")]))
     }
     private func addUSB(_ mid: UUID) {
         guard let i = draft.models.firstIndex(where: { $0.id == mid }) else { return }
@@ -158,7 +187,7 @@ final class PrinterModelEditorWindow {
         if let w = window { NSApp.activate(ignoringOtherApps: true); w.makeKeyAndOrderFront(nil); return }
         let win = NSWindow(contentViewController: NSHostingController(rootView:
             PrinterModelEditorView(onClose: { [weak self] in self?.close() })))
-        win.title = "Printer Models"
+        win.title = "Per-Printer Settings"
         win.styleMask = [.titled, .closable, .resizable, .miniaturizable]
         win.isReleasedWhenClosed = false
         win.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 2)

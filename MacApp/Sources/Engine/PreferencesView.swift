@@ -191,9 +191,9 @@ struct PreferencesView: View {
             PrefSection(title: "Hardware") {
                 PrefRow(
                     label: "Inter-label delay & print mode",
-                    caption: "These are now per-printer-model. Set the inter-label delay and full-job / single-label mode under Printers ▸ Printer Models…"
+                    caption: "These are per-printer now. Set the inter-label delay, full-job / single-label mode, and connection methods under Printers ▸ Per-Printer Settings."
                 ) {
-                    Button("Printer Models…") { PrinterModelEditorWindow.shared.show() }
+                    Button("Per-Printer Settings…") { PrinterModelEditorWindow.shared.show() }
                 }
             }
         }
@@ -382,12 +382,12 @@ struct PreferencesView: View {
                     }
                 }
             }
-            PrefSection(title: "Printer Models") {
+            PrefSection(title: "Per-Printer Settings") {
                 PrefRow(
-                    label: "Printer models & USB IDs",
-                    caption: "Manage the printer models (and their USB vendor/product IDs) that the supply catalog's groups are assigned to."
+                    label: "Per-printer settings",
+                    caption: "Each printer's USB vendor/product IDs, the connection methods to use (USB, Network, Bluetooth), the inter-label delay, and full-job vs single-label printing. The supply catalog's groups are assigned to these printers."
                 ) {
-                    Button("Printer Models…") { PrinterModelEditorWindow.shared.show() }
+                    Button("Per-Printer Settings…") { PrinterModelEditorWindow.shared.show() }
                         .buttonStyle(VLButtonStyle())
                 }
             }

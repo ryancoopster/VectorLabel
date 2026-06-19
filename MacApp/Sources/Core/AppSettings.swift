@@ -38,8 +38,8 @@ public final class AppSettings: ObservableObject {
 
     // MARK: – Printing
 
-    // Inter-label delay moved to per-printer-model settings (PrinterModelStore /
-    // PrinterModel.interLabelDelayMs), set under Printers ▸ Printer Models…
+    // Inter-label delay moved to per-printer settings (PrinterModelStore /
+    // PrinterModel.interLabelDelayMs), set under Printers ▸ Per-Printer Settings…
 
     /// Default print range mode: "all", "selected", or "range".
     @Published public var defaultPrintRange: String {

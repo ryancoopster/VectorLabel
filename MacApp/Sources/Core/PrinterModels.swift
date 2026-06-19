@@ -41,14 +41,22 @@ public struct PrinterModel: Codable, Hashable, Identifiable {
     /// whether the menu shows live per-label progress or just "Printing".
     public var interLabelDelayMs: Int
     public var singleLabelPrinting: Bool
+    /// Communication methods enabled for this printer (USB / Network / Bluetooth), all
+    /// enabled by default. The Engine drives the printer only over a transport that is
+    /// both enabled here and supported by the driver (see PrinterCapabilities).
+    public var enabledTransports: Set<PrinterTransport>
     public init(name: String, usbIDs: [PrinterUSBID],
                 interLabelDelayMs: Int = 0, singleLabelPrinting: Bool = false,
+                enabledTransports: Set<PrinterTransport> = Set(PrinterTransport.allCases),
                 id: UUID = UUID()) {
         self.id = id; self.name = name; self.usbIDs = usbIDs
         self.interLabelDelayMs = interLabelDelayMs
         self.singleLabelPrinting = singleLabelPrinting
+        self.enabledTransports = enabledTransports
     }
-    private enum CodingKeys: String, CodingKey { case id, name, usbIDs, interLabelDelayMs, singleLabelPrinting }
+    private enum CodingKeys: String, CodingKey {
+        case id, name, usbIDs, interLabelDelayMs, singleLabelPrinting, enabledTransports
+    }
     public init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
         id = (try? c.decode(UUID.self, forKey: .id)) ?? UUID()
@@ -56,6 +64,8 @@ public struct PrinterModel: Codable, Hashable, Identifiable {
         usbIDs = (try? c.decode([PrinterUSBID].self, forKey: .usbIDs)) ?? []
         interLabelDelayMs = (try? c.decode(Int.self, forKey: .interLabelDelayMs)) ?? 0
         singleLabelPrinting = (try? c.decode(Bool.self, forKey: .singleLabelPrinting)) ?? false
+        enabledTransports = (try? c.decode(Set<PrinterTransport>.self, forKey: .enabledTransports))
+            ?? Set(PrinterTransport.allCases)
     }
 }
 
@@ -204,5 +214,12 @@ public final class PrinterModelStore: ObservableObject {
                                  singleLabelPrinting: m.singleLabelPrinting)
         }
         return PrintSettings(interLabelDelayMs: 0, singleLabelPrinting: false)
+    }
+
+    /// Communication methods enabled for a printer by model NAME (USB/Network/Bluetooth).
+    /// All methods if the model isn't registered. Reads the thread-safe snapshot, so it's
+    /// safe off the main thread (the modules call it during background enumeration).
+    public static func enabledTransports(forName name: String) -> Set<PrinterTransport> {
+        snapshot.models.first { $0.name == name }?.enabledTransports ?? Set(PrinterTransport.allCases)
     }
 }

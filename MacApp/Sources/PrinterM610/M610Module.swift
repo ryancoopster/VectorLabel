@@ -40,13 +40,16 @@ public final class M610Module: PrinterModule {
     public init() {}
 
     public let capabilities = PrinterCapabilities(
-        model: "M610", transport: .usb, hasLiveTelemetry: false, pacesByLabelsRemaining: true)
+        model: "M610", supportedTransports: [.usb], hasLiveTelemetry: false, pacesByLabelsRemaining: true)
 
     // Only claim M610 USB devices. A USB-connected M611 (composite, PID 0x13) is NOT
     // handled here — the M611 speaks ECP, not VGL — so it's filtered out (M611 USB
     // support is a separate effort; the M611 is driven over the network for now).
     public func enumerate() -> [PrinterDevice] {
-        BradyUSB.enumeratePrinters().filter { $0.model == "M610" }
+        // Only enumerate over transports the user has enabled for this printer (the
+        // M610 driver supports USB only).
+        guard PrinterModelStore.enabledTransports(forName: capabilities.model).contains(.usb) else { return [] }
+        return BradyUSB.enumeratePrinters().filter { $0.model == "M610" }
     }
 
     public func encode(label: RenderedLabel, status: CassetteStatus?,

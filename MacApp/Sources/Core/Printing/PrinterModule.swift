@@ -5,11 +5,28 @@ import Foundation
 /// `send`/`labelsRemaining`/`close` — it never inspects the concrete type.
 public protocol PrinterConnection: AnyObject {}
 
+/// A communication method a printer can be driven over. Drivers report which they
+/// SUPPORT (`PrinterCapabilities.supportedTransports`); the user enables which to USE
+/// per printer (`PrinterModel.enabledTransports`). The Engine drives a printer only
+/// over a transport that is BOTH supported by the driver and enabled by the user.
+public enum PrinterTransport: String, Codable, Hashable, CaseIterable {
+    case usb, network, bluetooth
+    public var displayName: String {
+        switch self {
+        case .usb:       return "USB"
+        case .network:   return "Network"
+        case .bluetooth: return "Bluetooth"
+        }
+    }
+}
+
 /// Static capabilities of a printer model, so the Engine/UI route and gate features
 /// without branching on the model string everywhere.
 public struct PrinterCapabilities {
     public let model: String
-    public let transport: Transport
+    /// The communication methods this driver can actually drive the printer over. The
+    /// Engine intersects this with the user's per-printer enabled transports.
+    public let supportedTransports: Set<PrinterTransport>
     /// Live ribbon/label/battery + media telemetry over the wire (M611). M610 reads
     /// only the SmartCell cassette.
     public let hasLiveTelemetry: Bool
@@ -17,12 +34,10 @@ public struct PrinterCapabilities {
     /// false the Engine paces by time estimate (M611).
     public let pacesByLabelsRemaining: Bool
 
-    public enum Transport: String { case usb, network }
-
-    public init(model: String, transport: Transport,
+    public init(model: String, supportedTransports: Set<PrinterTransport>,
                 hasLiveTelemetry: Bool, pacesByLabelsRemaining: Bool) {
         self.model = model
-        self.transport = transport
+        self.supportedTransports = supportedTransports
         self.hasLiveTelemetry = hasLiveTelemetry
         self.pacesByLabelsRemaining = pacesByLabelsRemaining
     }
