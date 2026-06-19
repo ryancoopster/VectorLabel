@@ -284,7 +284,9 @@ struct PrinterRow: View {
                     Text(printer.name)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.vlLabel)
-                    Text("\(printer.serial) · \(printer.status.displayName)")
+                    // Serial only — the status is shown once, by the colored badge on
+                    // the right (and the status dot). Was "serial · status" here too.
+                    Text(printer.serial)
                         .font(.system(size: 10))
                         .foregroundColor(.vlSecondary)
                     if let c = cassette, !c.partNumber.isEmpty {
@@ -299,6 +301,20 @@ struct PrinterRow: View {
                 Text(printer.status.displayName)
                     .font(.system(size: 11))
                     .foregroundColor(statusColor)
+
+                // Network printers can be removed from the list (a USB printer is
+                // physical — it would just reappear on the next scan). Lets the user
+                // clear out a disconnected / stale network printer.
+                if let host = printer.host, !host.isEmpty {
+                    Button {
+                        PrinterManager.shared.removeNetworkPrinter(host: host)
+                    } label: {
+                        Image(systemName: "minus.circle.fill").font(.system(size: 12))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(.vlSecondary)
+                    .help("Remove this printer")
+                }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 5)

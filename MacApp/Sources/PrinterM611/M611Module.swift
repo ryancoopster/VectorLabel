@@ -24,10 +24,15 @@ public final class M611Module: PrinterModule {
 
     public func enumerate() -> [PrinterDevice] {
         // Network printers (manually added / discovered) PLUS any USB-connected M611
-        // composite device — the same module drives both transports.
-        let net = NetworkPrinterStore.list().map { e in
-            PrinterDevice(id: "net:\(e.host)", name: e.name, model: e.model,
-                          serial: e.host, status: .ready, host: e.host)
+        // composite device — the same module drives both transports. Each network
+        // printer's control port (9102) is probed so an unreachable / powered-off /
+        // unplugged one reports .offline instead of a permanent .ready. This runs on
+        // the background scan task (PrinterManager.performScan), so a short blocking
+        // connect with a tight timeout is fine here.
+        let net = NetworkPrinterStore.list().map { e -> PrinterDevice in
+            let online = NetworkDiscovery.tcpReachable(host: e.host, port: Self.telemetryPort, timeoutMs: 600)
+            return PrinterDevice(id: "net:\(e.host)", name: e.name, model: e.model,
+                                 serial: e.host, status: online ? .ready : .offline, host: e.host)
         }
         return net + M611USB.enumerate()
     }

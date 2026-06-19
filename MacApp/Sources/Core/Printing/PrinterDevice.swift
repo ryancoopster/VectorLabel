@@ -17,7 +17,7 @@ public struct PrinterDevice: Identifiable, Hashable {
     public enum Status: String, Hashable {
         case ready, busy, offline
         public var displayName: String {
-            switch self { case .ready: "Ready"; case .busy: "Busy"; case .offline: "Offline" }
+            switch self { case .ready: "Ready"; case .busy: "Busy"; case .offline: "Disconnected" }
         }
     }
 
