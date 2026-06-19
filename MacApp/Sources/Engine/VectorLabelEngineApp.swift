@@ -64,6 +64,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     /// Exclusive single-Engine lock fd, held for the process lifetime. The OS releases
     /// the advisory flock automatically when this process exits (even on crash).
     private var engineLockFD: Int32 = -1
+    /// True once this instance has passed the single-instance check and taken on the
+    /// Engine role. A losing second instance never sets it, so its termination handler
+    /// must not touch the (winner-owned) shared IPC root.
+    private var didBecomeEngine = false
 
     /// Take an exclusive lock so only ONE Engine per IPC root owns the USB printer and
     /// the published status file. Two engines would contend the device, clobber each
@@ -93,6 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             NSApp.terminate(nil)
             return
         }
+        didBecomeEngine = true
         // Unsigned builds don't reliably leave a crash report, so capture uncaught
         // Obj-C/AppKit exceptions (the common class for a Preferences/menu crash) to
         // a log we can read after the fact.
@@ -122,6 +127,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // A second Engine that LOST the single-instance lock terminates without having
+        // started anything; it must not touch the winner's shared IPC root. Publishing
+        // an empty/engineRunning=false status here would blank the winner's printers and
+        // in-flight jobs for every front-end watching printers.json.
+        guard didBecomeEngine else { return }
         queueWatcher?.stop()
         controlWatcher?.stop()
         cancelledWatcher?.stop()

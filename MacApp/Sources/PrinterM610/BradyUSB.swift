@@ -98,6 +98,7 @@ public enum BradyUSB {
         case openFailed
         case claimFailed
         case transferFailed(Int32)
+        case transferIncomplete
 
         var errorDescription: String? {
             switch self {
@@ -106,6 +107,7 @@ public enum BradyUSB {
             case .openFailed:            return "Could not open printer (permissions?)"
             case .claimFailed:           return "Could not claim USB interface"
             case .transferFailed(let c): return "USB transfer error \(c)"
+            case .transferIncomplete:    return "USB transfer stalled (zero bytes sent)"
             }
         }
     }
@@ -190,6 +192,10 @@ public enum BradyUSB {
             throw USBError.deviceNotFound(deviceID)
         }
 
+        // Track whether a candidate device existed but couldn't be opened, so a busy /
+        // permissions failure on the (often only) printer reports the actionable
+        // "Could not open printer (permissions?)" instead of a misleading "not found".
+        var sawOpenFailure = false
         for i in 0 ..< count {
             guard let dev = devices[Int(i)] else { continue }
             var desc = libusb_device_descriptor()
@@ -204,7 +210,7 @@ public enum BradyUSB {
             var handle: OpaquePointer?
             // A device we can't open (busy / permissions / transient) must NOT abort the
             // whole lookup — skip it so other matching printers are still considered (F96).
-            guard libusb_open(dev, &handle) == 0, let h = handle else { continue }
+            guard libusb_open(dev, &handle) == 0, let h = handle else { sawOpenFailure = true; continue }
 
             // Build the composite id EXACTLY as enumeratePrinters does, INCLUDING the
             // serial-less fallback (uppercase hex PID). Otherwise a printer with no
@@ -233,7 +239,10 @@ public enum BradyUSB {
             return h
         }
 
-        throw USBError.deviceNotFound(deviceID)
+        // A matching device that existed but couldn't be opened reports openFailed
+        // (actionable) rather than deviceNotFound, which would mislead in the common
+        // single-printer case. (F96)
+        throw sawOpenFailure ? USBError.openFailed : USBError.deviceNotFound(deviceID)
         #else
         throw USBError.initFailed
         #endif
@@ -269,7 +278,7 @@ public enum BradyUSB {
             // short transfer on success, and skipping the un-sent tail would punch a hole
             // into the VGL stream (garbled/blank labels or a stalled printer). A
             // zero-progress success would also spin forever — treat it as a failure. (F94)
-            guard transferred > 0 else { throw USBError.transferFailed(rc) }
+            guard transferred > 0 else { throw USBError.transferIncomplete }
             offset += Int(transferred)
         }
         #endif

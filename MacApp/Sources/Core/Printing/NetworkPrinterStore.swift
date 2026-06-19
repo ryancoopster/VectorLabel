@@ -40,8 +40,10 @@ public enum NetworkPrinterStore {
     public static func add(name: String, host: String, model: String = "M611") -> Bool {
         let h = host.trimmingCharacters(in: .whitespaces)
         guard !h.isEmpty else { return false }
-        let nm = name.trimmingCharacters(in: .whitespaces)
-        let m = model.trimmingCharacters(in: .whitespaces)
+        // "|" is the field delimiter, so strip it from name/model or it would corrupt
+        // parsing (shift the host field) for a user-entered name containing a pipe.
+        let nm = name.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "|", with: " ")
+        let m = model.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "|", with: "")
         var items = raw().filter { hostOf($0) != h }
         items.append("\(nm)|\(m.isEmpty ? "M611" : m)|\(h)")
         setRaw(items)
