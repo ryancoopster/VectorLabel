@@ -48,7 +48,7 @@ public final class M610Module: PrinterModule {
     public func enumerate() -> [PrinterDevice] {
         // Only enumerate over transports the user has enabled for this printer (the
         // M610 driver supports USB only).
-        guard PrinterModelStore.enabledTransports(forName: capabilities.model).contains(.usb) else { return [] }
+        guard PrinterModelStore.enabledTransports(forName: capabilities.model, productIDs: ["010B"]).contains(.usb) else { return [] }
         return BradyUSB.enumeratePrinters().filter { $0.model == "M610" }
     }
 

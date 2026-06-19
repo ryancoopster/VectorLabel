@@ -3,10 +3,11 @@ import Combine
 
 // MARK: – Printer-model registry
 //
-// The set of printer models the app knows about, each with its USB IDs. Seeded with
-// the Brady M610 / M611. Editable in Engine ▸ Preferences ▸ Printers ▸ Printer
-// Models…, and referenced by the supply catalog (a SupplyGroup's `printerModels` are
-// names from this list). Persisted as JSON in Application Support (beta-aware).
+// The set of printers the app knows about, each with its USB IDs + per-printer
+// settings. Seeded with the Brady M610 / M611. Editable in Engine ▸ Preferences ▸
+// Printers ▸ Per-Printer Settings…, and referenced by the supply catalog (a
+// SupplyGroup's `printerModels` are names from this list). Persisted as JSON in
+// Application Support (beta-aware).
 
 /// A USB vendor/product id pair, stored as 4-hex-digit strings (e.g. "0E2E"/"010C").
 public struct PrinterUSBID: Codable, Hashable, Identifiable {
@@ -216,10 +217,16 @@ public final class PrinterModelStore: ObservableObject {
         return PrintSettings(interLabelDelayMs: 0, singleLabelPrinting: false)
     }
 
-    /// Communication methods enabled for a printer by model NAME (USB/Network/Bluetooth).
-    /// All methods if the model isn't registered. Reads the thread-safe snapshot, so it's
-    /// safe off the main thread (the modules call it during background enumeration).
-    public static func enabledTransports(forName name: String) -> Set<PrinterTransport> {
-        snapshot.models.first { $0.name == name }?.enabledTransports ?? Set(PrinterTransport.allCases)
+    /// Communication methods enabled for a printer, matched by model NAME or by any of
+    /// `productIDs` (uppercase hex, no 0x) — mirroring the migration's name-or-PID match,
+    /// so a RENAMED printer entry still resolves and its checkboxes still take effect.
+    /// All methods if nothing matches. Reads the thread-safe snapshot (safe off-main).
+    public static func enabledTransports(forName name: String,
+                                         productIDs: Set<String> = []) -> Set<PrinterTransport> {
+        let pids = Set(productIDs.map { $0.uppercased() })
+        if let m = snapshot.models.first(where: {
+            $0.name == name || $0.usbIDs.contains { pids.contains($0.productID.uppercased()) }
+        }) { return m.enabledTransports }
+        return Set(PrinterTransport.allCases)
     }
 }

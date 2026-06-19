@@ -28,7 +28,7 @@ public final class M611Module: PrinterModule {
         // port (9102) is probed so an unreachable / powered-off / unplugged one reports
         // .offline instead of a permanent .ready. Runs on the background scan task
         // (PrinterManager.performScan), so a short blocking connect is fine here.
-        let enabled = PrinterModelStore.enabledTransports(forName: capabilities.model)
+        let enabled = PrinterModelStore.enabledTransports(forName: capabilities.model, productIDs: ["010C"])
         let net: [PrinterDevice] = enabled.contains(.network)
             ? NetworkPrinterStore.list().map { e -> PrinterDevice in
                 let online = NetworkDiscovery.tcpReachable(host: e.host, port: Self.telemetryPort, timeoutMs: 600)

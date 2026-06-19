@@ -226,7 +226,7 @@ struct SupplyCatalogEditorView: View {
                 HStack(spacing: 6) {
                     Text("Group name").font(.system(size: 11)).foregroundStyle(.secondary)
                     TextField("Group name", text: groupBinding(group.id).name).frame(width: 200)
-                    Text("Printer models").font(.system(size: 11)).foregroundStyle(.secondary).padding(.leading, 8)
+                    Text("Printers").font(.system(size: 11)).foregroundStyle(.secondary).padding(.leading, 8)
                     printerModelsMenu(group.id)
                 }
             }
