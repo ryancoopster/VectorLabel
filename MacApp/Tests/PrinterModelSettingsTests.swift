@@ -45,4 +45,16 @@ final class PrinterModelSettingsTests: XCTestCase {
         let d = PrinterModelList.makeDefault()   // already v2
         XCTAssertEqual(d.migrated(), d)
     }
+
+    func testV1MigrationMatchesM610ByUSBProductID() throws {
+        // A renamed M610 (identified by PID 0x010B) still gets single-label on upgrade.
+        let v1 = """
+        {"version":1,"models":[
+          {"id":"44444444-4444-4444-4444-444444444444","name":"Wire Printer",
+           "usbIDs":[{"id":"55555555-5555-5555-5555-555555555555","vendorID":"0E2E","productID":"010B"}]}
+        ]}
+        """
+        let migrated = try JSONDecoder().decode(PrinterModelList.self, from: Data(v1.utf8)).migrated()
+        XCTAssertEqual(migrated.models.first?.singleLabelPrinting, true)
+    }
 }

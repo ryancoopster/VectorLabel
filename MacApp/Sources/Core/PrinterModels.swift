@@ -88,10 +88,21 @@ public struct PrinterModelList: Codable, Hashable {
     /// defaults to a single full job. No-op for v2+.
     public func migrated() -> PrinterModelList {
         guard version < 2 else { return self }
+        // Carry over the user's OLD global inter-label delay if they explicitly set it
+        // (UserDefaults only holds the key once changed), so an upgrade doesn't silently
+        // drop a value tuned to stop dropped/misprinted labels. Default 0 otherwise —
+        // which restores the pre-separation M610 behavior (the old global default was
+        // never actually applied to the M610 before the module split).
+        let carriedDelay = max(0, (UserDefaults.standard.object(forKey: "interLabelDelayMs") as? Int) ?? 0)
         var l = self
         for i in l.models.indices {
-            l.models[i].singleLabelPrinting = (l.models[i].name.uppercased() == "M610")
-            l.models[i].interLabelDelayMs = 0
+            // Identify the M610 by its hardware PID (0x010B) OR name, so a RENAMED M610
+            // entry still keeps single-label printing — its SmartCell label counter is
+            // what makes per-label progress meaningful.
+            let isM610 = l.models[i].name.uppercased() == "M610"
+                || l.models[i].usbIDs.contains { $0.productID.uppercased() == "010B" }
+            l.models[i].singleLabelPrinting = isM610
+            l.models[i].interLabelDelayMs = carriedDelay
         }
         l.version = 2
         return l
