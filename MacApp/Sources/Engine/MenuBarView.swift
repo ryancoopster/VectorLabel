@@ -346,6 +346,12 @@ struct JobRow: View {
     @ObservedObject var job: PrintJob
 
     var body: some View {
+        // Detailed (bar + %, per-label count, cancel) when the driver reports progress
+        // or the job prints one label at a time; otherwise a coarse "Printing…" row.
+        if job.reportsProgress { detailedRow } else { coarseRow }
+    }
+
+    private var detailedRow: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
                 Image(systemName: job.isPrinting ? "printer.fill" : "clock")
@@ -381,6 +387,25 @@ struct JobRow: View {
             Text(job.isPrinting ? "\(job.completedLabels) of \(job.labelCount)"
                                 : "Queued · \(job.labelCount) label\(job.labelCount == 1 ? "" : "s")")
                 .font(.system(size: 9))
+                .foregroundColor(.vlSecondary)
+        }
+    }
+
+    // Coarse: the printer can't report per-label progress and the job is sent as one
+    // full batch, so there's nothing meaningful to animate — just "Printing…" until it
+    // finishes (then the job leaves the queue and appears in Recent Prints as done).
+    private var coarseRow: some View {
+        HStack(spacing: 6) {
+            Image(systemName: job.isPrinting ? "printer.fill" : "clock")
+                .font(.system(size: 9))
+                .foregroundColor(job.isPrinting ? .vlAccent : .vlSecondary)
+            Text(job.title)
+                .font(.system(size: 11))
+                .foregroundColor(.vlLabel)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            Text(job.isPrinting ? "Printing…" : "Queued")
+                .font(.system(size: 10))
                 .foregroundColor(.vlSecondary)
         }
     }

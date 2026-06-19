@@ -38,10 +38,8 @@ public final class AppSettings: ObservableObject {
 
     // MARK: – Printing
 
-    /// Milliseconds to wait between sending consecutive label jobs.
-    @Published public var interLabelDelayMs: Int {
-        didSet { UserDefaults.standard.set(interLabelDelayMs, forKey: "interLabelDelayMs") }
-    }
+    // Inter-label delay moved to per-printer-model settings (PrinterModelStore /
+    // PrinterModel.interLabelDelayMs), set under Printers ▸ Printer Models…
 
     /// Default print range mode: "all", "selected", or "range".
     @Published public var defaultPrintRange: String {
@@ -236,7 +234,6 @@ public final class AppSettings: ObservableObject {
         maxExportsPerProject = defaults.object(forKey: "maxExportsPerProject") as? Int ?? 15
         templatesFolderPath = defaults.string(forKey: "templatesFolderPath")
                            ?? ((base as NSString).appendingPathComponent("Templates"))
-        interLabelDelayMs = defaults.object(forKey: "interLabelDelayMs") as? Int ?? 50
         defaultPrintRange = defaults.string(forKey: "defaultPrintRange") ?? "all"
         defaultTemplateID = defaults.string(forKey: "defaultTemplateID") ?? ""
         recordColumnOrder = (defaults.array(forKey: "recordColumnOrder") as? [String]) ?? []
@@ -286,7 +283,6 @@ public final class AppSettings: ObservableObject {
         autoOpenPrintWindow  = true
         maxExportsPerProject = 15
         templatesFolderPath  = (base as NSString).appendingPathComponent("Templates")
-        interLabelDelayMs    = 50
         defaultPrintRange    = "all"
         defaultTemplateID    = ""
         recordColumnOrder    = []

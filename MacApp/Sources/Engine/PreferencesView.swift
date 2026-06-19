@@ -190,17 +190,10 @@ struct PreferencesView: View {
 
             PrefSection(title: "Hardware") {
                 PrefRow(
-                    label: "Inter-label delay",
-                    caption: "Pause between consecutive label jobs sent to the printer. Increase this if labels are dropped or misprinted."
+                    label: "Inter-label delay & print mode",
+                    caption: "These are now per-printer-model. Set the inter-label delay and full-job / single-label mode under Printers ▸ Printer Models…"
                 ) {
-                    HStack(spacing: 6) {
-                        Stepper("", value: $settings.interLabelDelayMs, in: 0...2000, step: 5)
-                            .labelsHidden()
-                        Text("\(settings.interLabelDelayMs) ms")
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundColor(.vlLabel)
-                            .frame(width: 54, alignment: .trailing)
-                    }
+                    Button("Printer Models…") { PrinterModelEditorWindow.shared.show() }
                 }
             }
         }

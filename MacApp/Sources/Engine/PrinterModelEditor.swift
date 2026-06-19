@@ -89,6 +89,23 @@ struct PrinterModelEditorView: View {
             }
             Button { addUSB(mid) } label: { Label("Add USB ID", systemImage: "plus.circle") }
                 .buttonStyle(.borderless).font(.system(size: 11))
+
+            Divider().padding(.vertical, 2)
+
+            // Per-model print behavior (built into the driver).
+            Toggle(isOn: singleLabelBinding(mid)) {
+                Text("Send one label at a time").font(.system(size: 12))
+            }
+            Text("On: each label is sent as its own print — the menu shows per-label progress and the inter-label delay applies. Off: the whole job is sent at once (the menu shows live progress only if the printer reports it, otherwise just “Printing”).")
+                .font(.system(size: 10)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 6) {
+                Text("Inter-label delay").font(.system(size: 11)).foregroundStyle(.secondary)
+                Stepper("", value: delayBinding(mid), in: 0...2000, step: 5).labelsHidden()
+                Text("\(m?.interLabelDelayMs ?? 0) ms")
+                    .font(.system(.body, design: .monospaced)).frame(width: 60, alignment: .trailing)
+            }
+            .disabled(!(m?.singleLabelPrinting ?? false))
         }
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.06)))
@@ -107,6 +124,14 @@ struct PrinterModelEditorView: View {
                       let ui = draft.models[mi].usbIDs.firstIndex(where: { $0.id == uid }) else { return }
                 draft.models[mi].usbIDs[ui][keyPath: kp] = v.uppercased()
             })
+    }
+    private func singleLabelBinding(_ mid: UUID) -> Binding<Bool> {
+        Binding(get: { draft.models.first { $0.id == mid }?.singleLabelPrinting ?? false },
+                set: { v in if let i = draft.models.firstIndex(where: { $0.id == mid }) { draft.models[i].singleLabelPrinting = v } })
+    }
+    private func delayBinding(_ mid: UUID) -> Binding<Int> {
+        Binding(get: { draft.models.first { $0.id == mid }?.interLabelDelayMs ?? 0 },
+                set: { v in if let i = draft.models.firstIndex(where: { $0.id == mid }) { draft.models[i].interLabelDelayMs = max(0, v) } })
     }
     private func addModel() {
         draft.models.append(PrinterModel(name: "New model", usbIDs: [PrinterUSBID(vendorID: "0E2E", productID: "")]))

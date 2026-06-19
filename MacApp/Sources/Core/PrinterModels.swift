@@ -31,15 +31,31 @@ public struct PrinterModel: Codable, Hashable, Identifiable {
     public var id: UUID
     public var name: String          // e.g. "M611"
     public var usbIDs: [PrinterUSBID]
-    public init(name: String, usbIDs: [PrinterUSBID], id: UUID = UUID()) {
+    /// Per-model print settings (built into the driver, not a global setting).
+    ///
+    /// `interLabelDelayMs`: pause between consecutive labels when sending one label at
+    /// a time; ignored in full-job mode (there's no inter-label gap).
+    /// `singleLabelPrinting`: send each label as its own print (true) vs. one batched
+    /// full job (false). Single-label gives per-label progress + honors the delay; full
+    /// job is one send. Together with the driver's progress capability this decides
+    /// whether the menu shows live per-label progress or just "Printing".
+    public var interLabelDelayMs: Int
+    public var singleLabelPrinting: Bool
+    public init(name: String, usbIDs: [PrinterUSBID],
+                interLabelDelayMs: Int = 0, singleLabelPrinting: Bool = false,
+                id: UUID = UUID()) {
         self.id = id; self.name = name; self.usbIDs = usbIDs
+        self.interLabelDelayMs = interLabelDelayMs
+        self.singleLabelPrinting = singleLabelPrinting
     }
-    private enum CodingKeys: String, CodingKey { case id, name, usbIDs }
+    private enum CodingKeys: String, CodingKey { case id, name, usbIDs, interLabelDelayMs, singleLabelPrinting }
     public init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
         id = (try? c.decode(UUID.self, forKey: .id)) ?? UUID()
         name = try c.decode(String.self, forKey: .name)
         usbIDs = (try? c.decode([PrinterUSBID].self, forKey: .usbIDs)) ?? []
+        interLabelDelayMs = (try? c.decode(Int.self, forKey: .interLabelDelayMs)) ?? 0
+        singleLabelPrinting = (try? c.decode(Bool.self, forKey: .singleLabelPrinting)) ?? false
     }
 }
 
@@ -55,12 +71,30 @@ public struct PrinterModelList: Codable, Hashable {
     }
 
     /// Seed: the Brady wire-label printers and their USB IDs (VID 0x0E2E; M610 PID
-    /// 0x010B confirmed, M611 0x010C unverified — see BradyUSB).
+    /// 0x010B confirmed, M611 0x010C unverified — see BradyUSB). M610 defaults to
+    /// single-label printing (it reports a hardware label counter and historically
+    /// printed one label at a time); the M611 defaults to one full job.
     public static func makeDefault() -> PrinterModelList {
-        PrinterModelList(version: 1, models: [
-            PrinterModel(name: "M611", usbIDs: [PrinterUSBID(vendorID: "0E2E", productID: "010C")]),
-            PrinterModel(name: "M610", usbIDs: [PrinterUSBID(vendorID: "0E2E", productID: "010B")]),
+        PrinterModelList(version: 2, models: [
+            PrinterModel(name: "M611", usbIDs: [PrinterUSBID(vendorID: "0E2E", productID: "010C")],
+                         interLabelDelayMs: 0, singleLabelPrinting: false),
+            PrinterModel(name: "M610", usbIDs: [PrinterUSBID(vendorID: "0E2E", productID: "010B")],
+                         interLabelDelayMs: 0, singleLabelPrinting: true),
         ])
+    }
+
+    /// Upgrade a pre-print-settings (v1) list: seed per-model defaults by name so an
+    /// existing install keeps M610's one-label-at-a-time behavior while the M611
+    /// defaults to a single full job. No-op for v2+.
+    public func migrated() -> PrinterModelList {
+        guard version < 2 else { return self }
+        var l = self
+        for i in l.models.indices {
+            l.models[i].singleLabelPrinting = (l.models[i].name.uppercased() == "M610")
+            l.models[i].interLabelDelayMs = 0
+        }
+        l.version = 2
+        return l
     }
 }
 
@@ -81,18 +115,28 @@ public final class PrinterModelStore: ObservableObject {
     public static var modelsFileURL: URL { fileURL }
 
     private init() {
-        let loaded = Self.loadFromDisk() ?? PrinterModelList.makeDefault()
-        list = loaded
-        Self.setSnapshot(loaded)
+        if let decoded = Self.decodeFile() {
+            let upgraded = decoded.migrated()
+            list = upgraded
+            Self.setSnapshot(upgraded)
+            if decoded.version < 2 { save() }   // persist the v1→v2 upgrade once
+        } else {
+            let def = PrinterModelList.makeDefault()
+            list = def
+            Self.setSnapshot(def)
+        }
     }
 
-    private static func loadFromDisk() -> PrinterModelList? {
+    /// Raw decode of the on-disk file (no migration), or nil if missing/empty/undecodable.
+    private static func decodeFile() -> PrinterModelList? {
         guard let data = try? Data(contentsOf: fileURL),
               let decoded = try? JSONDecoder().decode(PrinterModelList.self, from: data),
               !decoded.models.isEmpty
         else { return nil }
         return decoded
     }
+
+    private static func loadFromDisk() -> PrinterModelList? { decodeFile()?.migrated() }
 
     public func save() {
         Self.setSnapshot(list)
@@ -130,4 +174,24 @@ public final class PrinterModelStore: ObservableObject {
 
     /// All registered model names, in order.
     public static var modelNames: [String] { snapshot.models.map { $0.name } }
+
+    /// Per-model print settings (inter-label delay + single-label mode) resolved by
+    /// model NAME. Reads the thread-safe snapshot, so it's safe off the main thread
+    /// (the Engine resolves it on the per-printer device queue). Unknown model → no
+    /// delay, full-job.
+    public struct PrintSettings: Equatable {
+        public let interLabelDelayMs: Int
+        public let singleLabelPrinting: Bool
+        public init(interLabelDelayMs: Int, singleLabelPrinting: Bool) {
+            self.interLabelDelayMs = interLabelDelayMs
+            self.singleLabelPrinting = singleLabelPrinting
+        }
+    }
+    public static func printSettings(forName name: String) -> PrintSettings {
+        if let m = snapshot.models.first(where: { $0.name == name }) {
+            return PrintSettings(interLabelDelayMs: max(0, m.interLabelDelayMs),
+                                 singleLabelPrinting: m.singleLabelPrinting)
+        }
+        return PrintSettings(interLabelDelayMs: 0, singleLabelPrinting: false)
+    }
 }

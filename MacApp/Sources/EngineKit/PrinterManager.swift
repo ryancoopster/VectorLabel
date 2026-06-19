@@ -25,6 +25,10 @@ public final class PrintJob: ObservableObject, Identifiable {
     public let ipcJobID: String
     /// Originating app ("autoprint" | "customdesigner" | …), for status display.
     public let sourceApp: String
+    /// Whether per-label progress is meaningful for this job — the driver reports a
+    /// progress signal (M610 counter) OR it's printing one label at a time. When false
+    /// the menu shows a coarse "Printing…" → done instead of a per-label bar/count.
+    public let reportsProgress: Bool
 
     @Published public var completedLabels: Int = 0
     @Published public var isComplete: Bool = false
@@ -42,10 +46,11 @@ public final class PrintJob: ObservableObject, Identifiable {
     public var progress: Double { labelCount > 0 ? Double(completedLabels) / Double(labelCount) : 0 }
 
     public init(title: String, labelCount: Int, templateName: String, printerID: String,
-                ipcJobID: String = "", sourceApp: String = "") {
+                ipcJobID: String = "", sourceApp: String = "", reportsProgress: Bool = true) {
         self.title = title; self.labelCount = labelCount
         self.templateName = templateName; self.printerID = printerID
         self.ipcJobID = ipcJobID; self.sourceApp = sourceApp
+        self.reportsProgress = reportsProgress
     }
 
     public func requestCancel() {
@@ -242,27 +247,35 @@ public final class PrinterManager: ObservableObject {
         cutMode: CutMode = .afterJobLast,
         estLabelMs: Int = 1000,
         ipcJobID: String = "",
-        sourceApp: String = "",
-        delayMs: Int = AppSettings.shared.interLabelDelayMs
+        sourceApp: String = ""
     ) -> PrintJob {
-        print("[PrinterManager] submit \(labels.count) label(s) cutMode=\(cutMode.rawValue) → \(title)")
+        // Resolve the target device, its driver module, and the model's per-model print
+        // settings up front (main-actor state). The driver's progress capability +
+        // the single-label setting decide whether this job reports per-label progress;
+        // the model's inter-label delay replaces the old global setting.
+        let device = printers.first { $0.id == printerID }
+        let module = device.flatMap { PrinterModuleRegistry.shared.module(forModel: $0.model) }
+        let settings = PrinterModelStore.printSettings(forName: device?.model ?? "")
+        let pacesByLabels = module?.capabilities.pacesByLabelsRemaining ?? false
+        let reportsProgress = pacesByLabels || settings.singleLabelPrinting
+        print("[PrinterManager] submit \(labels.count) label(s) cut=\(cutMode.rawValue) " +
+              "mode=\(settings.singleLabelPrinting ? "single-label" : "full-job") " +
+              "progress=\(reportsProgress ? "detailed" : "coarse") → \(title)")
+
         let job = PrintJob(
             title: title,
             labelCount: labels.count,
             templateName: templateName,
             printerID: printerID,
             ipcJobID: ipcJobID,
-            sourceApp: sourceApp
+            sourceApp: sourceApp,
+            reportsProgress: reportsProgress
         )
         activeJobs.append(job)
         setPrinterBusy(printerID, busy: true)
 
-        // Resolve the target device, its driver module, and last-known media status
-        // on the main actor (printers + cassette cache are main-actor state); then do
-        // all device I/O on the printer's dedicated serial queue (blocking sends +
-        // pacing sleeps stay off the Swift cooperative pool).
-        let device = printers.first { $0.id == printerID }
-        let module = device.flatMap { PrinterModuleRegistry.shared.module(forModel: $0.model) }
+        // last-known media status is main-actor state; capture it before hopping to the
+        // printer's dedicated serial queue (blocking sends + pacing stay off the pool).
         let status = cassettes[printerID]
         let queue = deviceQueue(for: printerID)
         queue.async {
@@ -290,49 +303,75 @@ public final class PrinterManager: ObservableObject {
                 let conn = try module.open(device)
                 defer { module.close(conn) }
 
-                // Encode each label into the printer's wire format HERE (in the Engine,
-                // via the model's module) and send one at a time, so progress advances
-                // per-label and Cancel stops the rest. The M610 paces off its SmartCell
-                // labels-remaining counter; a transport without one (M611) falls back to
-                // the time estimate (capabilities.pacesByLabelsRemaining).
                 let count = labels.count
                 let perLabelMs = max(150, estLabelMs)
-                let usePacing = module.capabilities.pacesByLabelsRemaining
-                let initialRem = usePacing ? module.labelsRemaining(on: conn) : -1
-                for (i, label) in labels.enumerated() {
-                    if job.isCancelled { break }
-                    let bytes = module.encode(label: label, status: status,
-                                              cut: cutMode, isLastLabel: i == count - 1)
-                    try module.send(bytes, on: conn)
-                    var waited = 0
-                    while waited < perLabelMs && !job.isCancelled {
-                        if initialRem >= 0, waited % 120 == 0 {
-                            let rem = module.labelsRemaining(on: conn)
-                            if rem >= 0 && (initialRem - rem) >= (i + 1) { break }   // this label printed
+                let initialRem = pacesByLabels ? module.labelsRemaining(on: conn) : -1
+
+                if settings.singleLabelPrinting {
+                    // SINGLE-LABEL: encode + send one label at a time, advancing per-label
+                    // progress and honoring the model's inter-label delay. The M610 paces
+                    // off its SmartCell counter; a transport without one falls back to the
+                    // time estimate. Cancel stops the remaining labels.
+                    for (i, label) in labels.enumerated() {
+                        if job.isCancelled { break }
+                        let bytes = module.encode(label: label, status: status,
+                                                  cut: cutMode, isLastLabel: i == count - 1)
+                        try module.send(bytes, on: conn)
+                        var waited = 0
+                        while waited < perLabelMs && !job.isCancelled {
+                            if initialRem >= 0, waited % 120 == 0 {
+                                let rem = module.labelsRemaining(on: conn)
+                                if rem >= 0 && (initialRem - rem) >= (i + 1) { break }   // this label printed
+                            }
+                            usleep(40_000); waited += 40
                         }
-                        usleep(40_000); waited += 40
+                        if job.isCancelled { break }
+                        Task { @MainActor in job.completedLabels = i + 1 }
+                        // Per-model inter-label delay (interruptible by Cancel).
+                        if settings.interLabelDelayMs > 0 && i < count - 1 {
+                            var slept = 0
+                            while slept < settings.interLabelDelayMs && !job.isCancelled { usleep(20_000); slept += 20 }
+                        }
                     }
-                    if job.isCancelled { break }
-                    Task { @MainActor in job.completedLabels = i + 1 }
-                    // Honor the user's inter-label delay (Preferences ▸ interLabelDelayMs).
-                    // Applied between labels (not after the last) and interruptible by Cancel.
-                    if delayMs > 0 && i < count - 1 {
-                        var slept = 0
-                        while slept < delayMs && !job.isCancelled { usleep(20_000); slept += 20 }
+                    // Settle until the counter drops by the job's label count (bounded).
+                    if !job.isCancelled && initialRem >= 0 {
+                        let startNs = DispatchTime.now().uptimeNanoseconds
+                        let capMs = count * perLabelMs * 2 + 8000
+                        while !job.isCancelled {
+                            let rem = module.labelsRemaining(on: conn)
+                            let elapsedMs = Int((DispatchTime.now().uptimeNanoseconds &- startNs) / 1_000_000)
+                            if rem >= 0 && (initialRem - rem) >= count { break }
+                            if elapsedMs >= capMs { break }
+                            usleep(200_000)
+                        }
                     }
-                }
-                // Settle: keep the job "printing" until the counter drops by the job's
-                // label count (bounded so a non-reporting supply can't hang it).
-                if !job.isCancelled && initialRem >= 0 {
-                    let startNs = DispatchTime.now().uptimeNanoseconds
-                    let capMs = count * perLabelMs * 2 + 8000
-                    while !job.isCancelled {
-                        let rem = module.labelsRemaining(on: conn)
-                        let elapsedMs = Int((DispatchTime.now().uptimeNanoseconds &- startNs) / 1_000_000)
-                        if rem >= 0 && (initialRem - rem) >= count { break }   // truly finished
-                        if elapsedMs >= capMs { break }                        // safety cap
-                        usleep(200_000)
+                } else {
+                    // FULL JOB: encode every label and send as ONE batch (no inter-label
+                    // gap). If the driver reports a counter (M610), drive detailed progress
+                    // off it; otherwise the job is coarse — the menu shows just "Printing".
+                    var batch: [UInt8] = []
+                    for (i, label) in labels.enumerated() {
+                        batch += module.encode(label: label, status: status,
+                                               cut: cutMode, isLastLabel: i == count - 1)
                     }
+                    if !job.isCancelled { try module.send(batch, on: conn) }
+                    if pacesByLabels && !job.isCancelled {
+                        let startNs = DispatchTime.now().uptimeNanoseconds
+                        let capMs = count * perLabelMs * 2 + 8000
+                        while !job.isCancelled {
+                            let rem = module.labelsRemaining(on: conn)
+                            if rem >= 0 {
+                                let printed = max(0, min(count, initialRem - rem))
+                                Task { @MainActor in job.completedLabels = printed }
+                            }
+                            let elapsedMs = Int((DispatchTime.now().uptimeNanoseconds &- startNs) / 1_000_000)
+                            if rem >= 0 && (initialRem - rem) >= count { break }
+                            if elapsedMs >= capMs { break }
+                            usleep(200_000)
+                        }
+                    }
+                    // Mark all labels done on success (coarse jobs never advanced per-label).
+                    if !job.isCancelled { Task { @MainActor in job.completedLabels = count } }
                 }
             } catch {
                 print("[PrinterManager] Print failed: \(error)")
