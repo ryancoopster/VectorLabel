@@ -2855,17 +2855,18 @@ function buildCustomPrintHeader(){
 
     <div style="flex:1;min-width:8px"></div>
 
-    <!-- RIGHT column. Top: Cut (+ Copies when multi-label). Bottom: Copies (single only) +
-         Feed + the All/Selected/Range control (only active when multi-label), range nearest
-         the Print button. -->
+    <!-- RIGHT column. Multi-label (a bound field → >1 label): Cut + Copies + Feed share the
+         top row, and the All/Selected/Range control sits alone on the bottom row nearest the
+         Print button. Single-label: Cut on top; Copies + Feed on the bottom (range hidden). -->
     <div style="display:flex;flex-direction:column;gap:6px;justify-content:center;align-items:flex-end">
       <div style="display:flex;align-items:center;gap:12px;justify-content:flex-end">
         ${cutCtl}
         ${multi?copiesCtl:""}
+        ${multi?feedCtl:""}
       </div>
       <div style="display:flex;align-items:center;gap:12px;justify-content:flex-end">
         ${multi?"":copiesCtl}
-        ${feedCtl}
+        ${multi?"":feedCtl}
         ${buildPrintRangeControl()}
       </div>
     </div>
