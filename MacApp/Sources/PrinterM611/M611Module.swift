@@ -149,45 +149,75 @@ public final class M611Module: PrinterModule {
             return
         }
 
-        // ONE AT A TIME: a separate job per label, paced by a wall-clock estimate so the printer
-        // pipelines ~maxAhead ahead without idling. Cancel stops sending; sent labels still print.
+        // ONE AT A TIME: a separate job per label, and report the counter from the printer's
+        // REAL per-label completion — the menu ticks up as each label's job reaches "Print
+        // Complete", not on a clock. Sending is gated on confirmed completions so at most
+        // `maxAhead` labels are unconfirmed-in-flight (responsive cancel, no printer idle). If
+        // job telemetry turns out unavailable, it falls back to time pacing so all labels still
+        // print and the counter still advances (best effort).
         let t0 = DispatchTime.now().uptimeNanoseconds
-        func printedEst() -> Int { Int((DispatchTime.now().uptimeNanoseconds &- t0) / 1_000_000) / perLabelMs }
-        let maxAhead = 2
-        var sent = 0
-        var lastID = ""
-        for (i, page) in job.pages.enumerated() {
-            if job.isCancelled() { break }
-            while !job.isCancelled() && (i - printedEst()) >= maxAhead { usleep(30_000) }
-            if job.isCancelled() { break }
-            let id = "VL" + token + String(format: "%04d", i)   // 30 chars, unique per label
-            try send(M611Bitmap.buildPrintJob(pixels: page.label.bytes, width: page.label.width,
-                                              height: page.label.height, areaRotation: rotation,
-                                              substratePart: page.label.partNumber,
-                                              cut: mapCut(page.cut), isLastPage: page.isLast,
-                                              jobID: id), on: conn)
-            sent = i + 1; lastID = id
-            job.progress(.counter(done: min(sent, max(0, printedEst())), of: count))
-            if job.interLabelDelayMs > 0 && i < count - 1 {
-                var slept = 0
-                while slept < job.interLabelDelayMs && !job.isCancelled() { usleep(20_000); slept += 20 }
+        func elapsedMs() -> Int { Int((DispatchTime.now().uptimeNanoseconds &- t0) / 1_000_000) }
+        func printedEst() -> Int { elapsedMs() / perLabelMs }
+        let ids = (0..<count).map { "VL" + token + String(format: "%04d", $0) }   // 30 chars each, unique
+        let maxAhead = 3
+        let capMs = count * perLabelMs * 3 + 8000      // safety net only (telemetry unavailable)
+        var nextToSend = 0
+        var completed = 0                              // labels confirmed printed (monotonic)
+        var seen = Set<Int>()                          // label indices ever observed in a slot
+        var telemetryDead = false
+        var firstSendMs = -1
+        var lastPollMs = Int.min
+
+        func sendLabel(_ i: Int) throws {
+            let p = job.pages[i]
+            try send(M611Bitmap.buildPrintJob(pixels: p.label.bytes, width: p.label.width,
+                                              height: p.label.height, areaRotation: rotation,
+                                              substratePart: p.label.partNumber,
+                                              cut: mapCut(p.cut), isLastPage: p.isLast,
+                                              jobID: ids[i]), on: conn)
+        }
+
+        while true {
+            // SEND: keep at most maxAhead labels beyond the confirmed-printed frontier (the time
+            // frontier when telemetry is dead) so a backlog never builds and cancel stays prompt.
+            let pace = telemetryDead ? printedEst() : completed
+            while nextToSend < count && !job.isCancelled() && (nextToSend - pace) < maxAhead {
+                try sendLabel(nextToSend)
+                if firstSendMs < 0 { firstSendMs = elapsedMs() }
+                nextToSend += 1
+                if job.interLabelDelayMs > 0 && nextToSend < count {
+                    var slept = 0
+                    while slept < job.interLabelDelayMs && !job.isCancelled() { usleep(20_000); slept += 20 }
+                }
             }
+            // POLL real per-label status (rate-limited) and advance the confirmed count.
+            if elapsedMs() - lastPollMs >= 500 {
+                lastPollMs = elapsedMs()
+                if let map = M611PICL.parse(piclRoundTrip(M611PICL.jobStatusRequest(), host: host,
+                                                          deviceID: deviceID, connectTimeoutMs: 1000)) {
+                    completed = max(completed, M611PICL.completedCount(in: map, ids: ids, seen: &seen))
+                }
+                // Sent labels but never saw ANY of our jobs after a few seconds → job telemetry
+                // isn't reporting; fall back to the time estimate for pacing + the counter.
+                if !telemetryDead && firstSendMs >= 0 && seen.isEmpty && elapsedMs() - firstSendMs > 4000 {
+                    telemetryDead = true
+                    NSLog("[M611] job status not reported — single-label progress falls back to time estimate")
+                }
+            }
+            // COUNTER: real completed when telemetry works, else the time estimate.
+            let shown = telemetryDead ? min(nextToSend, printedEst()) : completed
+            job.progress(.counter(done: min(count, max(0, shown)), of: count))
+            // DONE when every label we committed to (all of them, or up to a cancel) has finished.
+            let committed = nextToSend
+            if job.isCancelled() || nextToSend >= count {
+                if telemetryDead { if printedEst() >= committed { break } }
+                else if completed >= committed { break }
+            }
+            if elapsedMs() >= capMs { break }
+            usleep(60_000)
         }
-        // DRAIN: wait for the LAST label we sent to ACTUALLY finish printing (real status), so
-        // the menu stays until the final in-flight label is done and the Engine's connection
-        // close never aborts a label mid-print. Real-status polling ends this as soon as the
-        // in-flight labels finish (even on cancel); the cap only matters if telemetry is down.
-        if sent > 0 {
-            let s = sent
-            // Cap scales with the whole job: when the estimate under-predicts, the unprinted
-            // backlog at loop end grows with the label count, so a fixed few-label cap would
-            // fire while the printer is still going and close the socket mid-print. Real status
-            // ends the wait as soon as the last label finishes; this is only the fallback.
-            awaitJobComplete(externalId: lastID, host: host, deviceID: deviceID,
-                             capMs: count * perLabelMs * 3 + 8000,
-                             tick: { job.progress(.counter(done: min(s, max(0, printedEst())), of: count)) })
-            job.progress(.counter(done: s, of: count))
-        }
+        let finalDone = telemetryDead ? min(count, max(printedEst(), completed)) : completed
+        job.progress(.counter(done: min(count, max(0, finalDone)), of: count))
     }
 
     /// Block until the printer reports the job with this ExternalId has finished printing, or
@@ -213,7 +243,7 @@ public final class M611Module: PrinterModule {
             if let map = M611PICL.parse(resp) {            // successful round-trip
                 let state = M611PICL.jobState(in: map, externalId: externalId)
                 if state == .complete { return }           // finished — done
-                if state == .printing { everFound = true; absentStreak = 0 }
+                if state == .printing || state == .pending { everFound = true; absentStreak = 0 }
                 else if everFound {                        // .absent after being seen → aging out
                     absentStreak += 1
                     if absentStreak >= 3 { return }        // gone for 3 valid polls → finished

@@ -33,11 +33,13 @@ enum M611PICL {
         static let complete   = "Print Complete"
         static let gone       = "Property No Longer Available"           // slot releasing → also finished
     }
-    /// Job lifecycle reading for one matched slot.
+    /// Job lifecycle reading for one matched slot. Status goes ""→Streaming→Printing→Print
+    /// Complete, then the slot releases (status drops / "Property No Longer Available").
     enum JobState: Equatable {
-        case absent          // no slot currently holds this ExternalId (queued-not-yet, or aged out)
-        case printing        // present + still streaming/printing
-        case complete        // present + "Print Complete" / status released → finished
+        case absent          // no slot currently holds this ExternalId (not queued yet, or aged out)
+        case pending         // present but status "" — queued, NOT started printing
+        case printing        // present + Streaming/Printing — actively printing
+        case complete        // "Print Complete" / status released → finished
     }
     /// The printer keeps a small ring of recent job slots (observed "Job 4"/"Job 5" with
     /// hundreds queued), so scanning 1…N and matching by ExternalId finds ours regardless
@@ -126,9 +128,30 @@ enum M611PICL {
             let group = String(key.dropLast(suffix.count))         // the slot name, e.g. "Job 5"
             let status = map["\(group):\(Job.status)"]
             if status == nil || status == Job.complete || status == Job.gone { return .complete }
-            return .printing
+            if status == "" { return .pending }                    // queued, not started printing yet
+            return .printing                                       // Streaming / Printing
         }
         return .absent
+    }
+
+    /// How many labels in `ids` (in send order) the printer has confirmed printed, from one
+    /// status snapshot. Uses FIFO print order: a label is done if its slot reports complete,
+    /// OR it was seen earlier and is now gone (aged out of the ring), AND every label before
+    /// one that has merely STARTED printing is also done. `seen` accumulates the indices ever
+    /// observed in a slot, so a label that printed and aged out between polls still counts.
+    /// Monotonic source — callers should keep the running max (a transient snapshot can omit
+    /// a slot). A label not yet observed and never seen contributes nothing.
+    static func completedCount(in map: [String: String], ids: [String], seen: inout Set<Int>) -> Int {
+        var done = 0
+        for (i, id) in ids.enumerated() {
+            switch jobState(in: map, externalId: id) {
+            case .complete: seen.insert(i); done = max(done, i + 1)   // finished → i+1 done
+            case .printing: seen.insert(i); done = max(done, i)       // started → 0..i-1 done
+            case .pending:  seen.insert(i)                            // queued, not started → no advance
+            case .absent:   if seen.contains(i) { done = max(done, i + 1) }   // aged out → done
+            }
+        }
+        return done
     }
 
     /// Frame a list of PropertyGetRequest elements: `[magic][uint32-LE len][JSON]`.

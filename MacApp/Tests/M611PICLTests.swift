@@ -58,6 +58,28 @@ final class M611PICLTests: XCTestCase {
         XCTAssertEqual(M611PICL.jobState(in: M611PICL.parse(Array(released.utf8))!, externalId: mine), .complete)
     }
 
+    func testCompletedCountTracksRealPerLabelProgress() {
+        let ids = (0..<5).map { "VL000000000000000000000000\(String(format: "%04d", $0))" }
+        func snap(_ pairs: [(Int, String?)]) -> [String: String] {
+            var items = ""
+            for (i, st) in pairs {
+                items += "{\"GUID\":\"Job \(i):\(M611PICL.Job.externalId)\",\"Value\":\"\(ids[i])\"},"
+                if let st { items += "{\"GUID\":\"Job \(i):\(M611PICL.Job.status)\",\"Value\":\"\(st)\"}," }
+            }
+            return M611PICL.parse(Array("{\"PropertyGetResponses\":[\(items.dropLast())]}".utf8))!
+        }
+        var seen = Set<Int>()
+        // Label 0 printing, 1 queued → 0 done so far (0 in progress).
+        XCTAssertEqual(M611PICL.completedCount(in: snap([(0, "Printing"), (1, "")]), ids: ids, seen: &seen), 0)
+        // 0 complete, 1 printing → 1 done.
+        XCTAssertEqual(M611PICL.completedCount(in: snap([(0, "Print Complete"), (1, "Printing")]), ids: ids, seen: &seen), 1)
+        // 0 aged out (absent, but was seen), 1 complete, 2 printing → 2 done (FIFO order).
+        XCTAssertEqual(M611PICL.completedCount(in: snap([(1, "Print Complete"), (2, "Printing")]), ids: ids, seen: &seen), 2)
+        // All slots aged out (empty snapshot) but all were seen → stays at the max seen frontier.
+        var seen2 = Set([0, 1, 2, 3, 4])
+        XCTAssertEqual(M611PICL.completedCount(in: M611PICL.parse(Array("{\"PropertyGetResponses\":[]}".utf8)) ?? [:], ids: ids, seen: &seen2), 5)
+    }
+
     func testParseExtractsJSONFromFramedResponse() {
         let sg = M611PICL.P.substrateGroup
         let json = """
