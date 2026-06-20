@@ -32,7 +32,7 @@ struct MenuBarView: View {
             // Actions
             actionsSection
         }
-        .frame(width: 320)
+        .frame(width: 400)
         // Fixed width + the popover's preferredContentSize sizing lets the
         // height grow to fit wrapped content so rows are never clipped.
         .fixedSize(horizontal: false, vertical: true)
