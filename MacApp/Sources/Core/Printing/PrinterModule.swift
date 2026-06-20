@@ -41,16 +41,24 @@ public struct PrinterCapabilities {
     /// direct-thermal printer). Front-ends extrapolate remaining ribbon length from the
     /// telemetry ribbon % against this, to forecast whether a job will run the ribbon out.
     public let ribbonLengthInches: Double
+    /// Stream the job one label at a time (one framed print job per label, paced to the
+    /// print) rather than one batched write — even when the per-printer "single label"
+    /// setting is off. The M611 has no hardware label counter and no printer-side cancel,
+    /// so incremental streaming is how it gets per-label progress AND a responsive cancel:
+    /// stopping the stream lets the in-flight label finish and skips the rest.
+    public let streamsLabelsIncrementally: Bool
 
     public init(model: String, supportedTransports: Set<PrinterTransport>,
                 hasLiveTelemetry: Bool, pacesByLabelsRemaining: Bool,
-                hasAutoCutter: Bool = false, ribbonLengthInches: Double = 0) {
+                hasAutoCutter: Bool = false, ribbonLengthInches: Double = 0,
+                streamsLabelsIncrementally: Bool = false) {
         self.model = model
         self.supportedTransports = supportedTransports
         self.hasLiveTelemetry = hasLiveTelemetry
         self.pacesByLabelsRemaining = pacesByLabelsRemaining
         self.hasAutoCutter = hasAutoCutter
         self.ribbonLengthInches = ribbonLengthInches
+        self.streamsLabelsIncrementally = streamsLabelsIncrementally
     }
 }
 

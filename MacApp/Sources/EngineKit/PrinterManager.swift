@@ -277,9 +277,14 @@ public final class PrinterManager: ObservableObject {
         let module = device.flatMap { PrinterModuleRegistry.shared.module(forModel: $0.model) }
         let settings = PrinterModelStore.printSettings(forName: device?.model ?? "")
         let pacesByLabels = module?.capabilities.pacesByLabelsRemaining ?? false
-        let reportsProgress = pacesByLabels || settings.singleLabelPrinting
+        // Stream one label at a time when the user asked for it OR the driver always wants
+        // it (M611: no label counter + no printer-side cancel, so incremental streaming is
+        // how it gets per-label progress + a responsive stop-cancel).
+        let incremental = settings.singleLabelPrinting
+            || (module?.capabilities.streamsLabelsIncrementally ?? false)
+        let reportsProgress = pacesByLabels || incremental
         print("[PrinterManager] submit \(labels.count) label(s) cut=\(cutMode.rawValue) " +
-              "mode=\(settings.singleLabelPrinting ? "single-label" : "full-job") " +
+              "mode=\(incremental ? "incremental" : "full-job") " +
               "progress=\(reportsProgress ? "detailed" : "coarse") → \(title)")
 
         let job = PrintJob(
@@ -368,8 +373,8 @@ public final class PrinterManager: ObservableObject {
                 let perLabelMs = max(150, estLabelMs)
                 let initialRem = pacesByLabels ? module.labelsRemaining(on: conn) : -1
 
-                if settings.singleLabelPrinting {
-                    // SINGLE-LABEL: encode + send one label at a time, advancing per-label
+                if incremental {
+                    // INCREMENTAL: encode + send one label at a time, advancing per-label
                     // progress and honoring the model's inter-label delay. The M610 paces
                     // off its SmartCell counter; a transport without one falls back to the
                     // time estimate. Cancel stops the remaining labels.

@@ -23,7 +23,8 @@ public final class M611Module: PrinterModule {
     public let capabilities = PrinterCapabilities(
         model: "M611", supportedTransports: [.network, .usb], hasLiveTelemetry: true,
         pacesByLabelsRemaining: false, hasAutoCutter: true,   // M611 has a built-in cutter
-        ribbonLengthInches: 75 * 12)                          // 75 ft ribbon
+        ribbonLengthInches: 75 * 12,                          // 75 ft ribbon
+        streamsLabelsIncrementally: true)                     // per-label progress + stop-cancel
 
     static let printPort: UInt16 = 9100
     static let telemetryPort: UInt16 = 9102
