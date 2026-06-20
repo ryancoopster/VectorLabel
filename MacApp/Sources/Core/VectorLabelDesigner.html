@@ -2428,10 +2428,15 @@ function updateDesignerPrinters(printers){
 function updateDesignerCassettes(map){
   window._dcassettes=map||{};
   // Signature from only the match-relevant fields (not the volatile supply % /
-  // pixel counts) so normal cassette-read jitter doesn't force a full rebuild.
+  // pixel counts) so normal cassette-read jitter doesn't force a full rebuild —
+  // EXCEPT for telemetry-capable printers (M611), where the battery/labels/ribbon %s
+  // ARE the readout, so they must be in the signature or the live numbers go stale.
+  const tele=new Set(dPrinters().filter(p=>p.supportsTelemetry).map(p=>p.id));
   const sig=JSON.stringify(Object.keys(window._dcassettes).sort().map(k=>{
     const c=window._dcassettes[k]||{};
-    return [k,c.partNumber,c.labelWidthMils,c.labelHeightMils,c.isDieCut];
+    const base=[k,c.partNumber,c.labelWidthMils,c.labelHeightMils,c.isDieCut];
+    if(tele.has(k)) base.push(c.batteryPct,c.supplyRemainingPct,c.ribbonRemainingPct);
+    return base;
   }));
   if(isCustomMode() && sig!==window._dcassettesSig){ window._dcassettesSig=sig; R(); }
 }
