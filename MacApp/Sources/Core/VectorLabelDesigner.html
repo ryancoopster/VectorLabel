@@ -1631,6 +1631,23 @@ function renderModal(){
       </div>`;
   }
 
+  // Custom Designer: confirm when the job may exhaust the loaded labels/ribbon.
+  if(S.modal==="confirmSupply"){
+    const f=S._forecast||{};
+    const what=(f.labels&&f.ribbon)?"labels and ribbon":(f.labels?"labels":"ribbon");
+    overlay.innerHTML=`
+      <div class="modal" style="width:440px">
+        <div class="modal-title" style="display:flex;align-items:center;gap:8px"><span style="color:var(--warn)">⚠</span> May run out of supply</div>
+        <div style="color:var(--text2);font-size:13px;line-height:1.6;margin:6px 0 18px">
+          This job may require more <b style="color:var(--text)">${what}</b> than the loaded supply has. Print anyway?
+        </div>
+        <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px">
+          <button class="btn" onclick="closeModal()">Cancel</button>
+          <button class="btn" onclick="S.modal=null;S._supplyForce=true;doCustomPrint()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Print anyway</button>
+        </div>
+      </div>`;
+  }
+
   if(S.modal==="supply"){
     const fi=v=>dFmtIn(v);
     // Continuous tapes have no fixed length — the user sets it — so show "W × definable".
@@ -2452,12 +2469,49 @@ function dLoadedCassette(){ return (window._dcassettes||{})[S.activePrinter]||nu
 function dTelemetryHTML(){
   const pr=dPrinter(); if(!pr||!pr.supportsTelemetry) return "";
   const c=dLoadedCassette(); if(!c) return "";
+  const f=dSupplyForecast();   // {labels,ribbon} | null — caution when the job may exhaust a supply
+  const warn=(t)=>` <span title="${t}" style="color:var(--warn)">⚠</span>`;
   const parts=[];
   if(typeof c.batteryPct==='number')         parts.push(`Battery ${c.batteryPct}%${c.acConnected?" ⚡":""}`);
-  if(typeof c.supplyRemainingPct==='number') parts.push(`Labels ${c.supplyRemainingPct}%`);
-  if(typeof c.ribbonRemainingPct==='number') parts.push(`Ribbon ${c.ribbonRemainingPct}%`);
+  if(typeof c.supplyRemainingPct==='number') parts.push(`Labels ${c.supplyRemainingPct}%${(f&&f.labels)?warn("This job may need more labels than remain"):""}`);
+  if(typeof c.ribbonRemainingPct==='number') parts.push(`Ribbon ${c.ribbonRemainingPct}%${(f&&f.ribbon)?warn("This job may need more ribbon than remains"):""}`);
   if(!parts.length) return "";
   return `<span title="Live printer telemetry" style="font-size:11px;color:var(--text2);white-space:nowrap">${parts.join(" · ")}</span>`;
+}
+
+// Supply-exhaustion forecast for the current custom job (telemetry printers only).
+// Returns {labels, ribbon} — true where the job is likely to run that supply out — or
+// null when not applicable. 2% safety buffer on the remaining amounts. Mirrors the print
+// window's supplyForecast (die-cut → label count; continuous → length; ribbon → feed length).
+function dSupplyForecast(){
+  const pr=dPrinter(); if(!pr||!pr.supportsTelemetry) return null;
+  const c=dLoadedCassette(); if(!c) return null;
+  const n=dJobLabelCount(); if(n<=0) return null;
+  const spec=blBy(S.spec.n);
+  const BUF=0.98;
+  const cont=(typeof c.isContinuous==='boolean')?c.isContinuous:(spec?spec.ty==="continuous":false);
+  const contLen=dContinuous()?(dEffLen()||0):(spec?spec.ph:0);
+  const perFeedIn=cont?contLen:((c.labelHeightMils>0)?c.labelHeightMils/1000:(spec?spec.th:0));
+  let labels=false, ribbon=false;
+  if(cont){
+    const rollFt=+c.rollLengthFeet||0;
+    if(contLen>0 && rollFt>0 && typeof c.supplyRemainingPct==='number'){
+      const remainIn=(c.supplyRemainingPct/100)*rollFt*12;
+      if(n*contLen > remainIn*BUF) labels=true;
+    }
+  } else {
+    const per=+c.labelsPerRoll||0;
+    if(per>0 && typeof c.supplyRemainingPct==='number'){
+      const remain=(c.supplyRemainingPct/100)*per;
+      if(n > remain*BUF) labels=true;
+    }
+  }
+  const ribLenIn=+pr.ribbonLengthInches||0;
+  if(ribLenIn>0 && perFeedIn>0 && typeof c.ribbonRemainingPct==='number'){
+    const remainIn=(c.ribbonRemainingPct/100)*ribLenIn;
+    if(n*perFeedIn > remainIn*BUF) ribbon=true;
+  }
+  return {labels, ribbon};
 }
 
 // Pre-flight: printer-reported errors that should block a print until fixed
@@ -2794,14 +2848,17 @@ function saveCustomDocument(){
 function doCustomPrint(){
   if(!isCustomMode()||!dCanPrint())return;
   if(dCassetteMismatch()&&!S._printForce){ S.modal="confirmMismatch"; renderModal(); return; }
+  // Warn if the job may exhaust the loaded labels/ribbon (telemetry printers only).
+  const _f=dSupplyForecast();
+  if(_f&&(_f.labels||_f.ribbon)&&!S._supplyForce){ S._forecast=_f; S.modal="confirmSupply"; renderModal(); return; }
   // Guard against firing off a big batch by surprise (e.g. a 200-row dataset):
   // confirm when the true job size exceeds 10 labels.
   if(dJobLabelCount()>10&&!S._largeJobForce){ S.modal="confirmLargeJob"; renderModal(); return; }
-  // Both guards passed — only NOW clear the force flags. Clearing _printForce
-  // before the large-job guard would re-show the mismatch dialog for a job that
-  // is BOTH size-mismatched AND large (the large-job re-entry would find the
-  // flag already reset).
+  // All guards passed — only NOW clear the force flags. Clearing them earlier would
+  // re-show an already-acknowledged dialog for a job that trips more than one guard
+  // (the next guard's re-entry would find the flag already reset).
   S._printForce=false;
+  S._supplyForce=false;
   S._largeJobForce=false;
   const data=templateData();
   const payload={

@@ -101,7 +101,7 @@ let package = Package(
 
         .testTarget(
             name: "VectorLabelTests",
-            dependencies: ["VectorLabelCore", "PrinterM611"],
+            dependencies: ["VectorLabelCore", "PrinterM611", "PrinterM610"],
             path: "MacApp/Tests",
             resources: [
                 // Tiny inline-string .xlsx (no xl/sharedStrings.xml) used to verify

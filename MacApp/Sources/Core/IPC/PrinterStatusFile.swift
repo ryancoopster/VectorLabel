@@ -83,18 +83,25 @@ public struct PrinterStatusEntry: Codable {
     public var supportsTelemetry: Bool
     /// Driver has a built-in auto cutter (M611). Front-ends gate the cut control on it.
     public var hasAutoCutter: Bool
+    /// Full-ribbon length in inches for this driver (M610/M611 = 900"; 0 = no/unknown
+    /// ribbon). Front-ends extrapolate remaining ribbon length from the telemetry ribbon %
+    /// to forecast whether a job will exhaust the ribbon.
+    public var ribbonLengthInches: Double
 
     public init(id: String, name: String, model: String, serial: String,
                 status: String, cassette: CassetteStatus?, activeJobCount: Int,
-                supportsTelemetry: Bool = false, hasAutoCutter: Bool = false) {
+                supportsTelemetry: Bool = false, hasAutoCutter: Bool = false,
+                ribbonLengthInches: Double = 0) {
         self.id = id; self.name = name; self.model = model; self.serial = serial
         self.status = status; self.cassette = cassette; self.activeJobCount = activeJobCount
         self.supportsTelemetry = supportsTelemetry
         self.hasAutoCutter = hasAutoCutter
+        self.ribbonLengthInches = ribbonLengthInches
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, model, serial, status, cassette, activeJobCount, supportsTelemetry, hasAutoCutter
+        case id, name, model, serial, status, cassette, activeJobCount
+        case supportsTelemetry, hasAutoCutter, ribbonLengthInches
     }
     // Tolerant decode so a status file written before `supportsTelemetry` existed still
     // decodes (default false) rather than dropping the whole printers array.
@@ -109,6 +116,7 @@ public struct PrinterStatusEntry: Codable {
         activeJobCount = (try? c.decode(Int.self, forKey: .activeJobCount)) ?? 0
         supportsTelemetry = (try? c.decode(Bool.self, forKey: .supportsTelemetry)) ?? false
         hasAutoCutter = (try? c.decode(Bool.self, forKey: .hasAutoCutter)) ?? false
+        ribbonLengthInches = (try? c.decode(Double.self, forKey: .ribbonLengthInches)) ?? 0
     }
 }
 

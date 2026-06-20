@@ -1500,12 +1500,54 @@ function supplyEstimate(){
 function telemetryHTML(){
   const pr=printer(); if(!pr||!pr.supportsTelemetry) return "";
   const c=loadedCassette(); if(!c) return "";
+  const f=supplyForecast();   // {labels,ribbon} | null — caution when the job may exhaust a supply
+  const warn=(t)=>` <span title="${t}" style="color:var(--warn)">⚠</span>`;
   const parts=[];
   if(typeof c.batteryPct==='number')         parts.push(`Battery ${c.batteryPct}%${c.acConnected?" ⚡":""}`);
-  if(typeof c.supplyRemainingPct==='number') parts.push(`Labels ${c.supplyRemainingPct}%`);
-  if(typeof c.ribbonRemainingPct==='number') parts.push(`Ribbon ${c.ribbonRemainingPct}%`);
+  if(typeof c.supplyRemainingPct==='number') parts.push(`Labels ${c.supplyRemainingPct}%${(f&&f.labels)?warn("This job may need more labels than remain"):""}`);
+  if(typeof c.ribbonRemainingPct==='number') parts.push(`Ribbon ${c.ribbonRemainingPct}%${(f&&f.ribbon)?warn("This job may need more ribbon than remains"):""}`);
   if(!parts.length) return "";
   return `<div title="Live printer telemetry" style="font-size:11px;color:var(--text2);white-space:nowrap">${parts.join(" · ")}</div>`;
+}
+
+// Supply-exhaustion forecast for the active job (telemetry printers only). Returns
+// {labels, ribbon} — true where the job is likely to run that supply out — or null when
+// not applicable / not computable. A 2% safety buffer is applied to the remaining amount
+// (warn when the job would consume more than 98% of what telemetry reports remaining).
+// Die-cut: compares label COUNT vs remaining count. Continuous: compares total LENGTH vs
+// remaining roll length. Ribbon: total feed length vs remaining ribbon length (ribbon % of
+// the driver's known full-ribbon length).
+function supplyForecast(){
+  const pr=printer(); if(!pr||!pr.supportsTelemetry) return null;
+  const c=loadedCassette(); if(!c) return null;
+  const n=printCount(); if(n<=0) return null;
+  const t=tpl(); const spec=t?blBy(t.specN):null;
+  const BUF=0.98;
+  const cont=(typeof c.isContinuous==='boolean')?c.isContinuous:(spec?spec.ty==="continuous":false);
+  // Feed length consumed per label (inches): continuous = the user-set length; die-cut =
+  // the physical label height (≈ the roll pitch). Drives both ribbon and continuous media.
+  const contLen=(t&&t.labelLengthInches>0)?t.labelLengthInches:(spec?spec.ph:0);
+  const perFeedIn=cont?contLen:((c.labelHeightMils>0)?c.labelHeightMils/1000:(spec?spec.th:0));
+  let labels=false, ribbon=false;
+  if(cont){
+    const rollFt=+c.rollLengthFeet||0;
+    if(contLen>0 && rollFt>0 && typeof c.supplyRemainingPct==='number'){
+      const remainIn=(c.supplyRemainingPct/100)*rollFt*12;
+      if(n*contLen > remainIn*BUF) labels=true;
+    }
+  } else {
+    const per=+c.labelsPerRoll||0;
+    if(per>0 && typeof c.supplyRemainingPct==='number'){
+      const remain=(c.supplyRemainingPct/100)*per;
+      if(n > remain*BUF) labels=true;
+    }
+  }
+  const ribLenIn=+pr.ribbonLengthInches||0;
+  if(ribLenIn>0 && perFeedIn>0 && typeof c.ribbonRemainingPct==='number'){
+    const remainIn=(c.ribbonRemainingPct/100)*ribLenIn;
+    if(n*perFeedIn > remainIn*BUF) ribbon=true;
+  }
+  return {labels, ribbon};
 }
 
 // Pre-flight: printer-reported errors that should block a print until fixed
@@ -1710,7 +1752,7 @@ window.addEventListener("keydown",function(e){
   }
   // Escape closes the expanded preview.
   if(e.key==="Escape"&&P.modal==="preview"){ e.preventDefault(); closeExpandedPreview(); return; }
-  if(e.key==="Escape"&&P.modal==="confirmMismatch"){ e.preventDefault(); P.modal=null; R(); return; }
+  if(e.key==="Escape"&&(P.modal==="confirmMismatch"||P.modal==="confirmSupply")){ e.preventDefault(); P.modal=null; R(); return; }
   // ⌘Return (or Ctrl+Return) prints, mirroring the Print button.
   if((e.metaKey||e.ctrlKey)&&(e.key==="Enter"||e.key==="Return")){
     if(modalOpen||!canPrintNow())return;
@@ -1782,18 +1824,45 @@ function buildMismatchConfirmModal(){
       </div>
       <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px">
         <button class="btn" onclick="P.modal=null;R()">Cancel</button>
-        <button class="btn primary" onclick="P.modal=null;doPrint(true)">Print anyway</button>
+        <button class="btn primary" onclick="P.modal=null;doPrint(2)">Print anyway</button>
       </div>
     </div>
   </div>`;
 }
 
-function doPrint(force){
+// Confirmation shown when Print is pressed and the job may exhaust the loaded supply.
+// Cancel dismisses; "Print anyway" advances past the supply check (stage 1).
+function buildSupplyConfirmModal(){
+  const f=P._forecast||{};
+  const what=(f.labels&&f.ribbon)?"labels and ribbon":(f.labels?"labels":"ribbon");
+  return `<div class="modal-overlay" onclick="if(event.target===this){P.modal=null;R()}">
+    <div class="modal" style="width:440px">
+      <div class="modal-title" style="display:flex;align-items:center;gap:8px"><span style="color:var(--warn)">⚠</span> May run out of supply</div>
+      <div style="color:var(--text2);font-size:13px;line-height:1.6;margin:6px 0 18px">
+        This job may require more <b style="color:var(--text)">${what}</b> than the loaded supply has. Print anyway?
+      </div>
+      <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn" onclick="P.modal=null;R()">Cancel</button>
+        <button class="btn primary" onclick="P.modal=null;doPrint(1)">Print anyway</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function doPrint(stage){
   const n=printCount();
   if(n===0)return;
+  // Staged confirmations so neither masks the other: 0 = supply forecast, 1 = size
+  // mismatch, ≥2 = send. Each modal's "Print anyway" calls doPrint(nextStage).
+  stage=(typeof stage==="number")?stage:0;
 
-  // Confirm before printing when the loaded label size doesn't match the template.
-  if(!force && cassetteMismatch()){ P.modal="confirmMismatch"; R(); return; }
+  // Stage 0: warn if the job may exhaust the loaded labels/ribbon (telemetry printers).
+  if(stage<=0){
+    const f=supplyForecast();
+    if(f && (f.labels||f.ribbon)){ P._forecast=f; P.modal="confirmSupply"; R(); return; }
+  }
+  // Stage 1: confirm before printing when the loaded label size doesn't match the template.
+  if(stage<=1 && cassetteMismatch()){ P.modal="confirmMismatch"; R(); return; }
 
   const indices=printIndices();
   const payload={ action:"print", payload:buildPrintPayloadBody(indices) };
@@ -2266,6 +2335,7 @@ function R(){
     ${P.modal==="printing"||P.modal==="done"?buildPrintingModal():""}
     ${P.modal==="preview"?buildExpandedPreviewModal():""}
     ${P.modal==="confirmMismatch"?buildMismatchConfirmModal():""}
+    ${P.modal==="confirmSupply"?buildSupplyConfirmModal():""}
   `;
   applyColVars();
   // Restore scroll position and wire wheel acceleration (bound once on #app,

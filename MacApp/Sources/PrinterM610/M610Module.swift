@@ -40,7 +40,8 @@ public final class M610Module: PrinterModule {
     public init() {}
 
     public let capabilities = PrinterCapabilities(
-        model: "M610", supportedTransports: [.usb], hasLiveTelemetry: false, pacesByLabelsRemaining: true)
+        model: "M610", supportedTransports: [.usb], hasLiveTelemetry: false,
+        pacesByLabelsRemaining: true, ribbonLengthInches: 75 * 12)   // 75 ft ribbon
 
     // Only claim M610 USB devices. A USB-connected M611 (composite, PID 0x13) is NOT
     // handled here — the M611 speaks ECP, not VGL — so it's filtered out (M611 USB

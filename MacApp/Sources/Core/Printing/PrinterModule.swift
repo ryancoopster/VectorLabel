@@ -36,15 +36,21 @@ public struct PrinterCapabilities {
     /// Has a built-in AUTOMATIC cutter the Engine can actuate (M611). The M610 has only
     /// a manual cutter, so it can't auto-cut (a future "stop and prompt to cut" flow).
     public let hasAutoCutter: Bool
+    /// Length of a full ribbon for this printer, in inches (a fixed, known per-driver
+    /// value — Brady M610/M611 = 75 ft = 900"). 0 means no ribbon / unknown (e.g. a
+    /// direct-thermal printer). Front-ends extrapolate remaining ribbon length from the
+    /// telemetry ribbon % against this, to forecast whether a job will run the ribbon out.
+    public let ribbonLengthInches: Double
 
     public init(model: String, supportedTransports: Set<PrinterTransport>,
                 hasLiveTelemetry: Bool, pacesByLabelsRemaining: Bool,
-                hasAutoCutter: Bool = false) {
+                hasAutoCutter: Bool = false, ribbonLengthInches: Double = 0) {
         self.model = model
         self.supportedTransports = supportedTransports
         self.hasLiveTelemetry = hasLiveTelemetry
         self.pacesByLabelsRemaining = pacesByLabelsRemaining
         self.hasAutoCutter = hasAutoCutter
+        self.ribbonLengthInches = ribbonLengthInches
     }
 }
 

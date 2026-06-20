@@ -134,6 +134,16 @@ public enum BradyCatalog {
             ?? matches.first?.part.quantityPerRoll
     }
 
+    /// Roll length in feet for a continuous-tape part number, by core. nil if unknown
+    /// (die-cut parts carry a label count instead — see labelsPerRoll). Matched by core
+    /// so a sibling part with the length still resolves.
+    public static func rollLengthFeet(forPartNumber pn: String) -> Double? {
+        let c = core(pn)
+        let matches = catalog.allSupplyParts().filter { core($0.part.partNumber) == c }
+        return matches.first(where: { $0.part.rollLengthFeet != nil })?.part.rollLengthFeet
+            ?? matches.first?.part.rollLengthFeet
+    }
+
     /// Printable area in inches for a part number (nil if unknown — callers fall
     /// back to the physical size).
     public static func printableWidthInches(forPartNumber pn: String)  -> Double? { find(pn)?.supply.printableWidthInches }

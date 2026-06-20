@@ -723,7 +723,7 @@ public final class DesignerWindowController: NSObject {
         let dicts: [[String: Any]] = (lastStatus?.printers ?? []).map { p in
             ["id": p.id, "name": p.name, "model": p.model, "serial": p.serial,
              "status": p.status, "supportsTelemetry": p.supportsTelemetry,
-             "hasAutoCutter": p.hasAutoCutter]
+             "hasAutoCutter": p.hasAutoCutter, "ribbonLengthInches": p.ribbonLengthInches]
         }
         guard let data = try? JSONSerialization.data(withJSONObject: dicts),
               let json = String(data: data, encoding: .utf8) else { return "[]" }

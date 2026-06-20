@@ -33,6 +33,11 @@ extension CassetteStatus {
         if let perRoll = labelsPerRoll ?? BradyCatalog.labelsPerRoll(forPartNumber: partNumber) {
             e["labelsPerRoll"] = perRoll
         }
+        // Continuous roll length (feet) for the loaded part, so the supply forecast can
+        // turn the remaining-supply % into a remaining length. nil for die-cut.
+        if let rollFt = BradyCatalog.rollLengthFeet(forPartNumber: partNumber) {
+            e["rollLengthFeet"] = rollFt
+        }
         return e
     }
 }

@@ -21,7 +21,8 @@ public final class M611Module: PrinterModule {
     // once the M611 USB capture confirms the PID/interface/endpoints/framing.
     public let capabilities = PrinterCapabilities(
         model: "M611", supportedTransports: [.network], hasLiveTelemetry: true,
-        pacesByLabelsRemaining: false, hasAutoCutter: true)   // M611 has a built-in cutter
+        pacesByLabelsRemaining: false, hasAutoCutter: true,   // M611 has a built-in cutter
+        ribbonLengthInches: 75 * 12)                          // 75 ft ribbon
 
     static let printPort: UInt16 = 9100
     static let telemetryPort: UInt16 = 9102
