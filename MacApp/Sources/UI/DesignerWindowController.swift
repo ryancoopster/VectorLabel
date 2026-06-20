@@ -502,6 +502,9 @@ public final class DesignerWindowController: NSObject {
         panel.directoryURL = AppSettings.shared.templatesFolderURL
         panel.message = "Choose a VectorLabel template (.vltmp) to open"
         panel.level = .modalPanel  // above the floating designer window
+        // The designer window is a .nonactivatingPanel, so the app may not be active —
+        // activate it first or the modeless open panel can't become key (unclickable).
+        NSApp.activate(ignoringOtherApps: true)
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             MainActor.assumeIsolated { self?.injectBrowsedTemplate(from: url) }
@@ -538,6 +541,9 @@ public final class DesignerWindowController: NSObject {
         panel.directoryURL = (mode == .custom ? AppSettings.shared.lastDataSourceFolderURL : nil)
                              ?? AppSettings.shared.exportsFolderURL
         panel.level = .modalPanel
+        // Activate first (the designer window is a .nonactivatingPanel) so this modeless
+        // open panel can become key — otherwise it appears but can't be clicked.
+        NSApp.activate(ignoringOtherApps: true)
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             MainActor.assumeIsolated {
@@ -641,6 +647,7 @@ public final class DesignerWindowController: NSObject {
             panel.directoryURL = ds.path.deletingLastPathComponent()
             panel.message = "“\(ds.path.lastPathComponent)” was moved or deleted. Choose the file again."
             panel.level = .modalPanel
+            NSApp.activate(ignoringOtherApps: true)   // .nonactivatingPanel → make the open panel clickable
             panel.begin { [weak self] response in
                 guard response == .OK, let url = panel.url else { return }
                 MainActor.assumeIsolated {
@@ -995,6 +1002,7 @@ public final class DesignerWindowController: NSObject {
         panel.directoryURL = CustomLabelStore.defaultFolderURL
         panel.message = "Save this custom label (.vlcus)"
         panel.level = .modalPanel
+        NSApp.activate(ignoringOtherApps: true)   // .nonactivatingPanel → make the save panel clickable
         panel.begin { [weak self] response in
             MainActor.assumeIsolated {
                 guard let self = self else { return }
@@ -1173,6 +1181,7 @@ extension DesignerWindowController: WKUIDelegate {
         panel.allowsMultipleSelection = parameters.allowsMultipleSelection
         panel.allowedFileTypes = ["png", "jpg", "jpeg", "svg"]
         panel.prompt = "Choose Image"
+        NSApp.activate(ignoringOtherApps: true)   // .nonactivatingPanel → make the image picker clickable
         panel.begin { response in
             completionHandler(response == .OK ? panel.urls : nil)
         }
