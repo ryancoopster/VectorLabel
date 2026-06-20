@@ -382,6 +382,16 @@ struct PreferencesView: View {
                     }
                 }
             }
+            PrefSection(title: "Status Refresh") {
+                PrefRow(
+                    label: "Refresh interval",
+                    caption: "How often the app scans for connected printers and re-reads their live status — battery, ribbon, labels, supply and errors. Lower is more responsive; higher is lighter on the printer. Paused while a job is printing."
+                ) {
+                    Stepper("\(settings.refreshIntervalSec) s",
+                            value: $settings.refreshIntervalSec, in: 1...600)
+                        .fixedSize()
+                }
+            }
             PrefSection(title: "Per-Printer Settings") {
                 PrefRow(
                     label: "Per-printer settings",

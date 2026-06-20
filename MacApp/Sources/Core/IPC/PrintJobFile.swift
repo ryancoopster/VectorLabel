@@ -131,7 +131,14 @@ public struct PrintJobFile: Codable {
         templateName = (try? c.decode(String.self, forKey: .templateName)) ?? ""
         printerID    = try? c.decode(String.self, forKey: .printerID)
         copies       = (try? c.decode(Int.self, forKey: .copies)) ?? 1
-        cutMode      = (try? c.decode(CutMode.self, forKey: .cutMode)) ?? .afterJobLast
+        // Distinguish ABSENT (legacy file → default) from MALFORMED (a corrupt/unknown
+        // value must propagate so claim() routes the file to failed/, not be silently
+        // coerced into a cutting mode). Mirrors the renderedLabels handling below.
+        if c.contains(.cutMode) {
+            cutMode = try c.decode(CutMode.self, forKey: .cutMode)
+        } else {
+            cutMode = .afterJobLast
+        }
         estLabelMs   = (try? c.decode(Int.self, forKey: .estLabelMs)) ?? 1000
         // When the key is PRESENT, a malformed/oversized raster (see RenderedLabel's
         // validating decoder) must PROPAGATE so claim() routes the file to failed/ —

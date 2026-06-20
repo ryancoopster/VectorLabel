@@ -41,6 +41,13 @@ public final class AppSettings: ObservableObject {
     // Inter-label delay moved to per-printer settings (PrinterModelStore /
     // PrinterModel.interLabelDelayMs), set under Printers ▸ Per-Printer Settings…
 
+    /// How often (seconds) the Engine scans for connected printers and re-reads their
+    /// live status/telemetry (battery / ribbon / labels / supply / errors). Default 5s;
+    /// reads pause while a job is printing. Clamped to 1…600 by consumers.
+    @Published public var refreshIntervalSec: Int {
+        didSet { UserDefaults.standard.set(refreshIntervalSec, forKey: "refreshIntervalSec") }
+    }
+
     /// Default print range mode: "all", "selected", or "range".
     @Published public var defaultPrintRange: String {
         didSet { UserDefaults.standard.set(defaultPrintRange, forKey: "defaultPrintRange") }
@@ -234,6 +241,7 @@ public final class AppSettings: ObservableObject {
         maxExportsPerProject = defaults.object(forKey: "maxExportsPerProject") as? Int ?? 15
         templatesFolderPath = defaults.string(forKey: "templatesFolderPath")
                            ?? ((base as NSString).appendingPathComponent("Templates"))
+        refreshIntervalSec = defaults.object(forKey: "refreshIntervalSec") as? Int ?? 5
         defaultPrintRange = defaults.string(forKey: "defaultPrintRange") ?? "all"
         defaultTemplateID = defaults.string(forKey: "defaultTemplateID") ?? ""
         recordColumnOrder = (defaults.array(forKey: "recordColumnOrder") as? [String]) ?? []
@@ -283,6 +291,7 @@ public final class AppSettings: ObservableObject {
         autoOpenPrintWindow  = true
         maxExportsPerProject = 15
         templatesFolderPath  = (base as NSString).appendingPathComponent("Templates")
+        refreshIntervalSec   = 5
         defaultPrintRange    = "all"
         defaultTemplateID    = ""
         recordColumnOrder    = []

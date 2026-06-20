@@ -736,27 +736,7 @@ public final class DesignerWindowController: NSObject {
         var dict: [String: [String: Any]] = [:]
         for p in lastStatus?.printers ?? [] {
             guard let c = p.cassette else { continue }
-            var entry: [String: Any] = [
-                "partNumber": c.partNumber,
-                "labelWidthMils": c.labelWidthMils,
-                "labelHeightMils": c.labelHeightMils,
-                "isDieCut": c.isDieCut,
-                "supplyRemainingPct": c.supplyRemainingPct,
-                "pixelWidth": c.pixelWidth,
-                "pixelHeight": c.pixelHeight,
-            ]
-            if let b = c.batteryPct { entry["batteryPct"] = b }
-            if let r = c.ribbonRemainingPct { entry["ribbonRemainingPct"] = r }
-            if let ps = c.printerSerial { entry["printerSerial"] = ps }
-            if let cont = c.isContinuous { entry["isContinuous"] = cont }
-            if let ac = c.acConnected { entry["acConnected"] = ac }
-            if c.printheadOpen == true { entry["printheadOpen"] = true }
-            if c.substrateInvalid == true { entry["substrateInvalid"] = true }
-            if c.ribbonInvalid == true { entry["ribbonInvalid"] = true }
-            if let perRoll = c.labelsPerRoll ?? BradyCatalog.labelsPerRoll(forPartNumber: c.partNumber) {
-                entry["labelsPerRoll"] = perRoll
-            }
-            dict[p.id] = entry
+            dict[p.id] = c.webDict()   // shared mapping — see CassetteStatus+WebDict.swift
         }
         if let data = try? JSONSerialization.data(withJSONObject: dict),
            let json = String(data: data, encoding: .utf8) { return json }
@@ -847,10 +827,10 @@ public final class DesignerWindowController: NSObject {
         let printerID = (payload["printerID"] as? String).flatMap { $0.isEmpty ? nil : $0 }
         let templateName = template.name
         // Cut SETTING chosen in the Custom Designer print header (Phase 6). The JS
-        // defaults it per stock (continuous → eachLabel; die-cut → never). Carried
+        // defaults it per stock (continuous → eachLabel; die-cut → afterJobLast). Carried
         // into PrintJobFile.cutMode; the Engine's printer module stamps the per-label
         // cut at ENCODE time — this front-end ships printer-agnostic rasters, not VGL.
-        let cutMode = CutMode(rawValue: (payload["cutMode"] as? String) ?? "") ?? .never
+        let cutMode = CutMode(rawValue: (payload["cutMode"] as? String) ?? "") ?? .afterJobLast
 
         // One record per label, honoring the print-range subset (Phase 6). When a
         // data source is bound, the page sends `recordIndices` — the rows chosen by
@@ -974,9 +954,10 @@ public final class DesignerWindowController: NSObject {
               let template = try? JSONDecoder().decode(VLTemplate.self, from: data)
         else { return }
         let copies = max(1, (payload["copies"] as? Int) ?? 1)
-        // The effective cut mode chosen in the designer, so the choice round-trips
-        // in the .vlcus. Falls back to .never if absent/unrecognised.
-        let cutMode = CutMode(rawValue: (payload["cutMode"] as? String) ?? "") ?? .never
+        // The effective cut mode chosen in the designer, so the choice round-trips in the
+        // .vlcus. Falls back to afterJobLast if absent/unrecognised (matches the system
+        // default in PrintJobFile / PrinterManager).
+        let cutMode = CutMode(rawValue: (payload["cutMode"] as? String) ?? "") ?? .afterJobLast
 
         // Embedded data snapshot from the in-memory bound source (if any).
         var rows: [[String: String]] = []

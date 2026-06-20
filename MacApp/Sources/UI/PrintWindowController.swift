@@ -349,30 +349,7 @@ public final class PrintWindowController: NSObject {
         var dict: [String: [String: Any]] = [:]
         for p in lastStatus?.printers ?? [] {
             guard let c = p.cassette else { continue }
-            var entry: [String: Any] = [
-                "partNumber": c.partNumber,
-                "labelWidthMils": c.labelWidthMils,
-                "labelHeightMils": c.labelHeightMils,
-                "isDieCut": c.isDieCut,
-                "supplyRemainingPct": c.supplyRemainingPct,
-                "pixelWidth": c.pixelWidth,
-                "pixelHeight": c.pixelHeight,
-            ]
-            // M611-only live telemetry (nil for the M610): include only when present.
-            if let b = c.batteryPct { entry["batteryPct"] = b }
-            if let r = c.ribbonRemainingPct { entry["ribbonRemainingPct"] = r }
-            if let ps = c.printerSerial { entry["printerSerial"] = ps }
-            if let cont = c.isContinuous { entry["isContinuous"] = cont }
-            if let ac = c.acConnected { entry["acConnected"] = ac }
-            if c.printheadOpen == true { entry["printheadOpen"] = true }
-            if c.substrateInvalid == true { entry["substrateInvalid"] = true }
-            if c.ribbonInvalid == true { entry["ribbonInvalid"] = true }
-            // Prefer the value the Engine already resolved; fall back to the local
-            // catalog so the field is present even on an older status file.
-            if let perRoll = c.labelsPerRoll ?? BradyCatalog.labelsPerRoll(forPartNumber: c.partNumber) {
-                entry["labelsPerRoll"] = perRoll
-            }
-            dict[p.id] = entry
+            dict[p.id] = c.webDict()   // shared mapping — see CassetteStatus+WebDict.swift
         }
         if let data = try? JSONSerialization.data(withJSONObject: dict),
            let json = String(data: data, encoding: .utf8) { return json }

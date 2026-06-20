@@ -107,17 +107,36 @@ public final class PrinterManager: ObservableObject {
 
     private var scanTimer: Timer?
     private var scanInFlight = false   // prevents overlapping scans piling up if one runs long
+    private var settingsSubs = Set<AnyCancellable>()
 
     // MARK: – USB scan
 
     public func startScan() {
         performScan()
-        scanTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.performScan() }
-        }
+        // The scan + telemetry poll run on the user's configurable refresh interval
+        // (Preferences ▸ Printers ▸ Status Refresh). $refreshIntervalSec emits its
+        // current value on subscribe — scheduling the timer — and again on every change.
+        AppSettings.shared.$refreshIntervalSec
+            .removeDuplicates()
+            .sink { [weak self] _ in Task { @MainActor in self?.scheduleScanTimer() } }
+            .store(in: &settingsSubs)
     }
 
     public func stopScan() { scanTimer?.invalidate(); scanTimer = nil }
+
+    /// (Re)create the periodic timer that BOTH scans for connected printers and re-reads
+    /// live status/telemetry, on the configured refresh interval (clamped 1…600s). Each
+    /// tick polls telemetry-capable printers, skipping any that are mid-print.
+    private func scheduleScanTimer() {
+        scanTimer?.invalidate()
+        let interval = TimeInterval(min(600, max(1, AppSettings.shared.refreshIntervalSec)))
+        scanTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.performScan()
+                self?.pollTelemetry()
+            }
+        }
+    }
 
     /// Public entry point for manual refresh (called from Preferences).
     public func scanNow() { performScan() }
@@ -481,14 +500,29 @@ public final class PrinterManager: ObservableObject {
     /// needs priming) and needs exclusive device access, so it runs on a
     /// background task behind the shared device lock and publishes to `cassettes`.
     /// Skipped while a print is in progress so it never delays a job.
-    public func refreshCassette(for printerID: String, force: Bool = false) {
-        // Never delay a print. A background detect just bails; a user-initiated
-        // (force) detect reports "busy" so the operator isn't left without feedback.
-        if activeJobs.contains(where: { !$0.isComplete }) {
+    /// Re-read live telemetry for every connected telemetry-capable printer (M611) so
+    /// battery / ribbon / labels / supply / errors stay current — they're otherwise only
+    /// read on connect. Per-printer: skips any printer that's mid-print. Driven by the
+    /// refresh-interval timer (Preferences ▸ Printers ▸ Status Refresh).
+    private func pollTelemetry() {
+        for dev in printers where dev.status == .ready {
+            guard let caps = PrinterModuleRegistry.shared.module(forModel: dev.model)?.capabilities,
+                  caps.hasLiveTelemetry else { continue }
+            refreshCassette(for: dev.id, bypassTTL: true)
+        }
+    }
+
+    public func refreshCassette(for printerID: String, force: Bool = false, bypassTTL: Bool = false) {
+        // Never delay a print on THIS printer. A background detect just bails; a
+        // user-initiated (force) detect reports "busy" so the operator isn't left
+        // without feedback.
+        if activeJobs.contains(where: { $0.printerID == printerID && !$0.isComplete }) {
             if force { onForcedDetectResult?(printerID, false, true) }
             return
         }
-        if !force, let at = cassetteFetchedAt[printerID],
+        // The periodic telemetry poll passes bypassTTL (the timer interval IS the cadence);
+        // the connect-time auto-detect respects the TTL to avoid redundant back-to-back reads.
+        if !force, !bypassTTL, let at = cassetteFetchedAt[printerID],
            Date().timeIntervalSince(at) < cassetteTTL { return }
         guard let device = printers.first(where: { $0.id == printerID }),
               let module = PrinterModuleRegistry.shared.module(forModel: device.model) else { return }
