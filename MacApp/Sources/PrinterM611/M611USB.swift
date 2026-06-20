@@ -22,9 +22,16 @@ final class M611USBConnection: PrinterConnection {
 enum M611USB {
     static let vendorID: UInt16 = 0x0E2E
     static let productID: UInt16 = 0x13      // M611 composite device
-    static let iface: Int32 = 0               // printer-class interface (07/01/02)
-    static let epOut: UInt8 = 0x01            // bulk OUT
-    static let epIn: UInt8 = 0x82             // bulk IN
+    static let iface: Int32 = 0               // printer-class interface (07/01/02) — PRINT
+    static let epOut: UInt8 = 0x01            // bulk OUT (print)
+    static let epIn: UInt8 = 0x82             // bulk IN (print)
+    // Telemetry rides the VENDOR interface (iface 1, EP 0x03/0x84) — the USB analog of
+    // network TCP:9102 (the FirmwareDriver/PICL channel). Confirmed live on hardware:
+    // iface 1 answers the FirmwareDriver component (supply/ribbon/battery/substrate);
+    // iface 0 answers the Job Handler (print). Separate channel ⇒ polling it can't misprint.
+    static let telIface: Int32 = 1
+    static let telEpOut: UInt8 = 0x03
+    static let telEpIn: UInt8 = 0x84
     static let chunkSize = 512
     static let chunkTimeoutMs: UInt32 = 10_000
 
@@ -102,15 +109,55 @@ enum M611USB {
         }
     }
 
-    /// Write a PICL request packet and read one response (for telemetry, Phase 3).
-    static func request(_ packet: [UInt8], handle: OpaquePointer, timeoutMs: UInt32 = 1000) -> [UInt8] {
-        try? send(packet, handle: handle)
-        var buf = [UInt8](repeating: 0, count: 8192)
-        var got: Int32 = 0
-        let rc = buf.withUnsafeMutableBufferPointer { b in
-            libusb_bulk_transfer(handle, epIn, b.baseAddress, Int32(b.count), &got, timeoutMs)
+    /// One PICL request/response over the M611's VENDOR interface (iface 1, EP 0x03/0x84)
+    /// — the USB analog of network TCP:9102 (the FirmwareDriver/telemetry channel, separate
+    /// from the print pipe on iface 0). Self-contained: open → claim iface 1 → write request
+    /// → read response → release. Returns the raw response bytes ([] on failure); the caller
+    /// parses with M611PICL. Runs on the per-printer device queue (blocking is fine).
+    static func readTelemetry(deviceID: String, request req: [UInt8]) -> [UInt8] {
+        guard let ctx else { return [] }
+        let wantSerial = deviceID.hasPrefix("usb:") ? String(deviceID.dropFirst(4)) : deviceID
+        var list: UnsafeMutablePointer<OpaquePointer?>?
+        let n = libusb_get_device_list(ctx, &list)
+        defer { libusb_free_device_list(list, 1) }
+        guard n > 0, let devs = list else { return [] }
+        for i in 0 ..< n {
+            guard let dev = devs[Int(i)] else { continue }
+            var d = libusb_device_descriptor()
+            guard libusb_get_device_descriptor(dev, &d) == 0,
+                  d.idVendor == vendorID, d.idProduct == productID else { continue }
+            var h: OpaquePointer?
+            guard libusb_open(dev, &h) == 0, let handle = h else { return [] }
+            if wantSerial != "usb", readSerial(dev, desc: d) != wantSerial { libusb_close(handle); continue }
+            _ = libusb_set_auto_detach_kernel_driver(handle, 1)
+            guard libusb_claim_interface(handle, telIface) == 0 else { libusb_close(handle); return [] }
+            defer { libusb_release_interface(handle, telIface); libusb_close(handle) }
+            _ = libusb_clear_halt(handle, telEpOut)
+            _ = libusb_clear_halt(handle, telEpIn)
+            // Write the PICL request to the telemetry OUT endpoint (chunked).
+            var out = req; var off = 0
+            while off < out.count {
+                let end = min(off + chunkSize, out.count); var sent: Int32 = 0
+                let rc = out.withUnsafeMutableBufferPointer { b in
+                    libusb_bulk_transfer(handle, telEpOut, b.baseAddress?.advanced(by: off),
+                                         Int32(end - off), &sent, chunkTimeoutMs)
+                }
+                guard rc == 0, sent > 0 else { return [] }
+                off += Int(sent)
+            }
+            // Read the response. The bidirectional channel may need a couple of reads to
+            // populate; the full PICL frame (≈300 B) fits one read once it's ready.
+            var rbuf = [UInt8](repeating: 0, count: 8192)
+            for _ in 0 ..< 8 {
+                var got: Int32 = 0
+                let rc = rbuf.withUnsafeMutableBufferPointer { b in
+                    libusb_bulk_transfer(handle, telEpIn, b.baseAddress, Int32(b.count), &got, 1000)
+                }
+                if rc == 0 && got > 0 { return Array(rbuf.prefix(Int(got))) }
+            }
+            return []
         }
-        return rc == 0 && got > 0 ? Array(buf.prefix(Int(got))) : []
+        return []
     }
 
     static func close(_ handle: OpaquePointer) {

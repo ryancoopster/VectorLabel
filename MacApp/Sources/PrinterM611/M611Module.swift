@@ -93,13 +93,22 @@ public final class M611Module: PrinterModule {
     }
 
     public func readStatus(_ device: PrinterDevice) -> CassetteStatus? {
-        // Network telemetry (USB telemetry will ride M611USB.request once USB lands).
         // Issue a PICL PropertyGetRequest for supply / ribbon / battery / substrate and
         // parse the response into CassetteStatus. Runs on the per-printer device queue,
-        // so a short blocking connect+read is fine.
-        guard let host = device.host, !host.isEmpty else { return nil }
+        // so a short blocking round-trip is fine.
         let req = M611PICL.getRequest()
         guard !req.isEmpty else { return nil }
+        // USB-connected M611 → PICL over the VENDOR interface (iface 1, EP 0x03/0x84), the
+        // USB analog of network TCP:9102 (the FirmwareDriver/telemetry channel, separate
+        // from the print pipe). Same request + parse as the network path — confirmed live.
+        guard let host = device.host, !host.isEmpty else {
+            #if canImport(CLibUSB)
+            return M611PICL.parse(M611USB.readTelemetry(deviceID: device.id, request: req))
+                .flatMap(Self.cassetteStatus(from:))
+            #else
+            return nil
+            #endif
+        }
         // PICL telemetry rides TCP 9102 — CONFIRMED on M611 hardware: 9102 resolves the
         // FirmwareDriver properties; 9100 (the print datastream) echoes the frame but
         // returns "Invalid Value". Request and response are the same
