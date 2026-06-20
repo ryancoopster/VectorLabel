@@ -360,6 +360,7 @@ public final class PrintWindowController: NSObject {
             // M611-only live telemetry (nil for the M610): include only when present.
             if let b = c.batteryPct { entry["batteryPct"] = b }
             if let r = c.ribbonRemainingPct { entry["ribbonRemainingPct"] = r }
+            if let ps = c.printerSerial { entry["printerSerial"] = ps }
             // Prefer the value the Engine already resolved; fall back to the local
             // catalog so the field is present even on an older status file.
             if let perRoll = c.labelsPerRoll ?? BradyCatalog.labelsPerRoll(forPartNumber: c.partNumber) {

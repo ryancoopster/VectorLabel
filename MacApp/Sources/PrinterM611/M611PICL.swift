@@ -33,12 +33,17 @@ enum M611PICL {
         static let isDieCut         = "1BC6EE50-5F32-4CAA-8D32-D70167E0792D"
         static let ribbonGroup      = "CC359C57-F0F2-44E3-9940-3F1BFF1685BC"
         static let ribbonRemaining  = "5DA4C82D-C498-4DB2-A87A-D65499E225A0"  // %
+        static let ribbonName       = "349FA937-C9C0-4605-A382-B5FEE4A56C0D"  // ribbon part # (e.g. R4310)
         static let batteryGroup     = "FDA4C5D4-8C46-45E5-80E4-48504451C7B5"
         static let batteryCharge    = "62160CE4-7FED-4F3B-BE27-9D773CFB84DC"  // %
         // AreaRotation's group is the literal string "Substrate Area 0" — confirmed on
         // hardware to resolve directly (no boot-packet handshake needed).
         static let areaGroup        = "Substrate Area 0"
         static let areaRotation     = "E7CBB620-9556-4979-AEF0-76DAB1FBAC8E"  // degrees
+        // Printer identity (group "Printer Properties").
+        static let printerGroup     = "222D688A-1554-4C0E-B7A0-0BC377EF4071"
+        static let serial           = "AE2955D7-1AE3-4520-BB1C-1DC0C2B5A58B"  // "Printer Serial Number"
+        static let firmware         = "ACEB1224-1DAF-42A2-BBAA-4678D5D3C8DA"  // "Firmware Version"
     }
 
     /// The (group, property) pairs we query. (AreaRotation is intentionally omitted —
@@ -49,8 +54,9 @@ enum M611PICL {
         (P.substrateGroup, P.substrateWidth),  (P.substrateGroup, P.substrateHeight),
         (P.substrateGroup, P.printableWidth),  (P.substrateGroup, P.printableHeight),
         (P.substrateGroup, P.isDieCut),
-        (P.ribbonGroup, P.ribbonRemaining),    (P.batteryGroup, P.batteryCharge),
-        (P.areaGroup, P.areaRotation),
+        (P.ribbonGroup, P.ribbonRemaining),    (P.ribbonGroup, P.ribbonName),
+        (P.batteryGroup, P.batteryCharge),     (P.areaGroup, P.areaRotation),
+        (P.printerGroup, P.serial),            (P.printerGroup, P.firmware),
     ]
 
     /// A framed `PropertyGetRequest` for all the telemetry properties above.

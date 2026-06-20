@@ -273,6 +273,19 @@ struct PrinterRow: View {
         }
     }
 
+    private var isNetwork: Bool { printer.host?.isEmpty == false }
+    /// Top (large) line: "model · name" for a network printer (e.g. "M611 · ryanm611"),
+    /// the device name alone for USB.
+    private var topLine: String {
+        isNetwork ? "\(printer.model) · \(printer.name)" : printer.name
+    }
+    /// Small (grey) identity line: "IP · serial" for a network printer once the PICL
+    /// serial is known, otherwise just the serial/host.
+    private var subLine: String {
+        if isNetwork, let ps = cassette?.printerSerial, !ps.isEmpty { return "\(printer.serial) · \(ps)" }
+        return printer.serial
+    }
+
     /// The printer's driver reports live telemetry (battery/labels/ribbon). M611 yes,
     /// M610 no — gated on the driver capability so it only shows where supported.
     private var showsTelemetry: Bool {
@@ -298,12 +311,12 @@ struct PrinterRow: View {
                     .frame(width: 7, height: 7)
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(printer.name)
+                    Text(topLine)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.vlLabel)
-                    // Serial only — the status is shown once, by the colored badge on
-                    // the right (and the status dot). Was "serial · status" here too.
-                    Text(printer.serial)
+                    // Small grey identity line: IP · serial for a network printer, else
+                    // the serial. (Status is shown by the colored badge + dot, not here.)
+                    Text(subLine)
                         .font(.system(size: 10))
                         .foregroundColor(.vlSecondary)
                     if let c = cassette, !c.partNumber.isEmpty {

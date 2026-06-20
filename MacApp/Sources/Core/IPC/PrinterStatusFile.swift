@@ -22,12 +22,17 @@ public struct CassetteStatus: Codable, Equatable {
     public var ribbonRemainingPct: Int?
     public var ribbonPartNumber: String?
     public var batteryPct: Int?
+    /// Printer identity reported over PICL (M611): serial number + firmware version.
+    /// nil for the M610 (its SmartCell read carries no printer-level identity).
+    public var printerSerial: String?
+    public var firmwareVersion: String?
 
     public init(partNumber: String, labelWidthMils: Int, labelHeightMils: Int,
                 printableWidthMils: Int, printableHeightMils: Int, isDieCut: Bool,
                 supplyRemainingPct: Int, labelsPerRoll: Int?, pixelWidth: Int, pixelHeight: Int,
                 areaRotation: Int? = nil, ribbonRemainingPct: Int? = nil,
-                ribbonPartNumber: String? = nil, batteryPct: Int? = nil) {
+                ribbonPartNumber: String? = nil, batteryPct: Int? = nil,
+                printerSerial: String? = nil, firmwareVersion: String? = nil) {
         self.partNumber = partNumber
         self.labelWidthMils = labelWidthMils
         self.labelHeightMils = labelHeightMils
@@ -42,6 +47,8 @@ public struct CassetteStatus: Codable, Equatable {
         self.ribbonRemainingPct = ribbonRemainingPct
         self.ribbonPartNumber = ribbonPartNumber
         self.batteryPct = batteryPct
+        self.printerSerial = printerSerial
+        self.firmwareVersion = firmwareVersion
     }
 }
 

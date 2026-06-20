@@ -37,7 +37,8 @@ public final class M611Module: PrinterModule {
         let net: [PrinterDevice] = active.contains(.network)
             ? NetworkPrinterStore.list().map { e -> PrinterDevice in
                 let online = NetworkDiscovery.tcpReachable(host: e.host, port: Self.telemetryPort, timeoutMs: 600)
-                return PrinterDevice(id: "net:\(e.host)", name: e.name, model: e.model,
+                let name = Self.friendlyName(host: e.host, model: e.model) ?? e.name
+                return PrinterDevice(id: "net:\(e.host)", name: name, model: e.model,
                                      serial: e.host, status: online ? .ready : .offline, host: e.host)
               }
             : []
@@ -202,8 +203,50 @@ public final class M611Module: PrinterModule {
             pixelWidth: px(w), pixelHeight: px(h),
             areaRotation: i(M611PICL.P.areaGroup, M611PICL.P.areaRotation),  // real value from telemetry
             ribbonRemainingPct: ribbon,
-            ribbonPartNumber: nil,
-            batteryPct: battery
+            ribbonPartNumber: v(M611PICL.P.ribbonGroup, M611PICL.P.ribbonName),
+            batteryPct: battery,
+            printerSerial: v(M611PICL.P.printerGroup, M611PICL.P.serial),
+            firmwareVersion: v(M611PICL.P.printerGroup, M611PICL.P.firmware)
         )
+    }
+
+    // MARK: – Friendly name (reverse-DNS hostname)
+
+    /// A network printer's friendly name, from its reverse-DNS hostname. The printer
+    /// registers a DHCP hostname like "m611-ryanm611" (`<model>-<name>`, lowercased) —
+    /// the BLE friendly name itself isn't exposed over TCP, so this hostname (with the
+    /// leading "<model>-" stripped) is the best network-available name. nil when the
+    /// host has no reverse-DNS record (caller falls back to the stored name).
+    static func friendlyName(host: String, model: String) -> String? {
+        guard let h = reverseDNSHostname(host) else { return nil }
+        let prefix = "\(model)-".lowercased()
+        let stripped = h.lowercased().hasPrefix(prefix) ? String(h.dropFirst(prefix.count)) : h
+        return stripped.isEmpty ? nil : stripped
+    }
+
+    private static let rdnsLock = NSLock()
+    private static var rdnsCache: [String: String] = [:]   // host → hostname label ("" = none)
+    private static func reverseDNSHostname(_ host: String) -> String? {
+        rdnsLock.lock()
+        if let c = rdnsCache[host] { rdnsLock.unlock(); return c.isEmpty ? nil : c }
+        rdnsLock.unlock()
+        let resolved = resolveReverseDNS(host) ?? ""
+        rdnsLock.lock(); rdnsCache[host] = resolved; rdnsLock.unlock()
+        return resolved.isEmpty ? nil : resolved
+    }
+    private static func resolveReverseDNS(_ host: String) -> String? {
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        guard inet_pton(AF_INET, host, &addr.sin_addr) == 1 else { return nil }
+        var nameBuf = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+        let rc = withUnsafePointer(to: &addr) { p in
+            p.withMemoryRebound(to: sockaddr.self, capacity: 1) { sp in
+                getnameinfo(sp, socklen_t(MemoryLayout<sockaddr_in>.size),
+                            &nameBuf, socklen_t(nameBuf.count), nil, 0, NI_NAMEREQD)
+            }
+        }
+        guard rc == 0 else { return nil }
+        // First label only: "m611-ryanm611.lan" → "m611-ryanm611".
+        return String(cString: nameBuf).split(separator: ".").first.map(String.init)
     }
 }

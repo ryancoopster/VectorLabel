@@ -746,6 +746,7 @@ public final class DesignerWindowController: NSObject {
             ]
             if let b = c.batteryPct { entry["batteryPct"] = b }
             if let r = c.ribbonRemainingPct { entry["ribbonRemainingPct"] = r }
+            if let ps = c.printerSerial { entry["printerSerial"] = ps }
             if let perRoll = c.labelsPerRoll ?? BradyCatalog.labelsPerRoll(forPartNumber: c.partNumber) {
                 entry["labelsPerRoll"] = perRoll
             }
