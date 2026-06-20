@@ -2388,8 +2388,8 @@ document.addEventListener("keydown",function(e){
     return;
   }
 
-  // Escape — deselect
-  if(e.key==="Escape"&&!inInput){
+  // Escape — deselect (but not when a modal is open; that Escape just closes the modal)
+  if(e.key==="Escape"&&!inInput&&!S.modal){
     deselect();
   }
 });
@@ -2397,7 +2397,12 @@ document.addEventListener("keydown",function(e){
 // ── Template management ───────────────────────────────────────────────────────
 
 function showModal(name){S.modal=name;renderModal();}
-function closeModal(){S.modal=null;renderModal();
+function closeModal(){S.modal=null;
+  // A confirm dismissed without proceeding must not leave its force flag set, or the
+  // NEXT job would silently skip that warning. (The "Print anyway" buttons re-enter via
+  // S.modal=null, not closeModal(), so the acknowledged multi-guard flow is unaffected.)
+  S._printForce=false; S._supplyForce=false; S._largeJobForce=false;
+  renderModal();
   // Save As cancelled during a print-edit: restore the original loaded id so a
   // later "Save & Return" overwrites in place instead of duplicating the template.
   if(window._printEdit&&window._printReturnAfterSave){ S._loadedId=window._preEditLoadedId||null; window._printReturnAfterSave=false; }
@@ -2432,9 +2437,14 @@ function templateData(){
 // Swift injects the live printer list (updateDesignerPrinters) and detected
 // cassettes (updateDesignerCassettes), the same JSON the print window consumes.
 function updateDesignerPrinters(printers){
+  // Spread so new capability fields (hasAutoCutter, ribbonLengthInches, …) survive the
+  // rebuild instead of being dropped by a hand-picked allowlist; normalize the typed ones.
   window._dprinters=(printers||[]).map(p=>({
-    id:p.id, name:p.name, model:p.model||"M6xx", status:p.status||"ready", serial:p.serial||"",
-    supportsTelemetry:!!p.supportsTelemetry
+    ...p,
+    model:p.model||"M6xx", status:p.status||"ready", serial:p.serial||"",
+    supportsTelemetry:!!p.supportsTelemetry,
+    hasAutoCutter:!!p.hasAutoCutter,
+    ribbonLengthInches:+p.ribbonLengthInches||0
   }));
   // Keep the current selection if still present; else pick a ready printer.
   if(!window._dprinters.find(p=>p.id===S.activePrinter)){

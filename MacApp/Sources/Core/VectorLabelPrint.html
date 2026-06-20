@@ -2483,13 +2483,16 @@ function initPrintWindow(opts){
   // Printers from USB scan
   if(opts.printers&&opts.printers.length>0){
     // Replace the simulated PRINTERS array
+    // Spread the Swift-supplied dict so new capability fields (hasAutoCutter,
+    // ribbonLengthInches, …) aren't silently dropped; normalize the typed ones.
     window._swiftPrinters=opts.printers.map(p=>({
-      id: p.id,
-      name: p.name,
+      ...p,
       model: p.model||"M6xx",
       status: p.status||"ready",
       serial: p.serial||"",
-      supportsTelemetry: !!p.supportsTelemetry
+      supportsTelemetry: !!p.supportsTelemetry,
+      hasAutoCutter: !!p.hasAutoCutter,
+      ribbonLengthInches: +p.ribbonLengthInches||0
     }));
     P.activePrinter=window._swiftPrinters.find(p=>p.status==="ready")?.id
                    ||window._swiftPrinters[0]?.id
@@ -2534,13 +2537,16 @@ function initPrintWindow(opts){
 // Called by Swift whenever the USB printer list changes, so the dropdown stays
 // in sync with the live scan without resetting the user's record selection.
 function updatePrinters(printers){
+  // Spread so new capability fields (hasAutoCutter, ribbonLengthInches, …) survive the
+  // rebuild instead of being dropped by a hand-picked allowlist; normalize the typed ones.
   window._swiftPrinters=(printers||[]).map(p=>({
-    id: p.id,
-    name: p.name,
+    ...p,
     model: p.model||"M6xx",
     status: p.status||"ready",
     serial: p.serial||"",
-    supportsTelemetry: !!p.supportsTelemetry
+    supportsTelemetry: !!p.supportsTelemetry,
+    hasAutoCutter: !!p.hasAutoCutter,
+    ribbonLengthInches: +p.ribbonLengthInches||0
   }));
   // Keep the current selection if that printer is still present; otherwise pick
   // a ready printer (or the first available one).
