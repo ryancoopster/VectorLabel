@@ -37,21 +37,57 @@ public enum M611Bitmap {
                                      isLastPage: Bool = true,
                                      jobID: String = "VL0000000000000000000000000000",
                                      jobTime: String = "20000101000000") -> [UInt8] {
+        // One job-meta segment (NumberOfPages = 1) + one page segment = a complete 1-page job.
+        return segment(jobMetaJSON(jobID: jobID, jobTime: jobTime, part: substratePart, numberOfPages: 1))
+             + pageSegment(jobID: jobID, pageNumber: 0, pixels: pixels, width: width, height: height,
+                           areaRotation: areaRotation, cut: cut, isLast: isLastPage)
+    }
+
+    /// One page of a multi-page job: its raster + the cut to apply after it.
+    public struct Page {
+        public let pixels: [UInt8]; public let width: Int; public let height: Int
+        public let cut: CutMode; public let isLast: Bool
+        public init(pixels: [UInt8], width: Int, height: Int, cut: CutMode, isLast: Bool) {
+            self.pixels = pixels; self.width = width; self.height = height
+            self.cut = cut; self.isLast = isLast
+        }
+    }
+
+    /// Build ONE multi-page M611 job: a single job-meta segment with `NumberOfPages` =
+    /// `pages.count`, followed by one page segment per label (PageNumber 0…N-1), all
+    /// sharing one JobID. The printer treats this as a SINGLE job — continuous feed, with
+    /// each page's PostPrintOperations deciding cuts (afterJobLast → shear only on the last
+    /// page). Contrast `buildPrintJob`: concatenating N of those produced N INDEPENDENT
+    /// jobs, so the printer cut/fed between every label (it looked like single-label jobs).
+    public static func buildMultiPageJob(pages: [Page], areaRotation: Int = 0,
+                                         substratePart: String = "",
+                                         jobID: String = "VL0000000000000000000000000000",
+                                         jobTime: String = "20000101000000") -> [UInt8] {
+        guard !pages.isEmpty else { return [] }
+        var out = segment(jobMetaJSON(jobID: jobID, jobTime: jobTime,
+                                      part: substratePart, numberOfPages: pages.count))
+        for (i, p) in pages.enumerated() {
+            out += pageSegment(jobID: jobID, pageNumber: i, pixels: p.pixels, width: p.width,
+                               height: p.height, areaRotation: areaRotation, cut: p.cut, isLast: p.isLast)
+        }
+        return out
+    }
+
+    /// Encode one page into its framed segment: rotate → 1-bpp BMP → raw-LZ4 → page JSON →
+    /// `[magic][len][JSON]`. Shared by `buildPrintJob` (single) and `buildMultiPageJob`.
+    static func pageSegment(jobID: String, pageNumber: Int, pixels: [UInt8], width: Int, height: Int,
+                            areaRotation: Int, cut: CutMode, isLast: Bool) -> [UInt8] {
         // 1. Rotate the rendered raster into the printer's raster frame.
         let r = rotate(pixels: pixels, width: width, height: height, deg: areaRotation)
         // 2. Pack a 1-bpp BMP (palette idx0=black/idx1=white, ink = bit 0).
         let bmp = bmp1bpp(pixels: r.pixels, width: r.width, height: r.height)
         // 3. Raw LZ4 block (Apple Compression COMPRESSION_LZ4_RAW — the M611's format).
-        let comp = lz4RawBlock(bmp)
-        let b64 = Data(comp).base64EncodedString()
+        let b64 = Data(lz4RawBlock(bmp)).base64EncodedString()
         // 4. Label dims, in MILS, in the printer's RASTER orientation (across-head × feed).
         let labelWmils = Int((Double(r.width)  / Double(dpi) * 1000).rounded())
         let labelHmils = Int((Double(r.height) / Double(dpi) * 1000).rounded())
-        // 5. Two JSON segments: job metadata + the page.
-        let segA = segment(jobMetaJSON(jobID: jobID, jobTime: jobTime, part: substratePart))
-        let segB = segment(pageJSON(jobID: jobID, labelW: labelWmils, labelH: labelHmils,
-                                    bitmapB64: b64, cut: cut, isLastPage: isLastPage))
-        return segA + segB
+        return segment(pageJSON(jobID: jobID, pageNumber: pageNumber, labelW: labelWmils,
+                                labelH: labelHmils, bitmapB64: b64, cut: cut, isLastPage: isLast))
     }
 
     // MARK: – Raster rotation (reading frame → printer raster frame)
@@ -128,15 +164,15 @@ public enum M611Bitmap {
         return out
     }
 
-    static func jobMetaJSON(jobID: String, jobTime: String, part: String) -> Data {
+    static func jobMetaJSON(jobID: String, jobTime: String, part: String, numberOfPages: Int) -> Data {
         let dict: [String: Any] = [
             "JobID": jobID, "JobName": "VectorLabel Print", "JobTime": jobTime,
-            "NumberOfPages": 1, "SubstratePart": part, "JobType": "Print", "JobSource": "VectorLabel",
+            "NumberOfPages": numberOfPages, "SubstratePart": part, "JobType": "Print", "JobSource": "VectorLabel",
         ]
         return (try? JSONSerialization.data(withJSONObject: dict)) ?? Data()
     }
 
-    static func pageJSON(jobID: String, labelW: Int, labelH: Int, bitmapB64: String,
+    static func pageJSON(jobID: String, pageNumber: Int, labelW: Int, labelH: Int, bitmapB64: String,
                          cut: CutMode, isLastPage: Bool) -> Data {
         let layer: [String: Any] = ["Bitmap": bitmapB64, "Compression": "lz4"]
         let pages: [String: Any] = [
@@ -144,7 +180,7 @@ public enum M611Bitmap {
             "PostPrintOperations": postPrintOps(cut: cut, isLastPage: isLastPage),
         ]
         let dict: [String: Any] = [
-            "PrintFileName": "Page1.prn", "JobID": jobID, "PageNumber": 0,
+            "PrintFileName": "Page\(pageNumber + 1).prn", "JobID": jobID, "PageNumber": pageNumber,
             "LabelWidth": labelW, "LabelHeight": labelH, "Pages": pages,
         ]
         return (try? JSONSerialization.data(withJSONObject: dict)) ?? Data()

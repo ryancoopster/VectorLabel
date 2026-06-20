@@ -57,16 +57,19 @@ public final class M611Module: PrinterModule {
         // Rotation comes from the printer's reported Area Rotation when known;
         // 270 is the M6 die-cut default until Phase-3 telemetry fills it in.
         let rotation = status?.areaRotation ?? 270
-        let m611Cut: M611Bitmap.CutMode
-        switch cut {
-        case .never:        m611Cut = .never
-        case .eachLabel:    m611Cut = .eachLabel
-        case .afterJobLast: m611Cut = .afterJobLast
-        }
         return M611Bitmap.buildPrintJob(
             pixels: label.bytes, width: label.width, height: label.height,
             areaRotation: rotation, substratePart: label.partNumber,
-            cut: m611Cut, isLastPage: isLastLabel)
+            cut: mapCut(cut), isLastPage: isLastLabel)
+    }
+
+    /// Map the Core `CutMode` to the M611 bitmap encoder's cut enum.
+    private func mapCut(_ cut: CutMode) -> M611Bitmap.CutMode {
+        switch cut {
+        case .never:        return .never
+        case .eachLabel:    return .eachLabel
+        case .afterJobLast: return .afterJobLast
+        }
     }
 
     public func open(_ device: PrinterDevice) throws -> PrinterConnection {
@@ -113,12 +116,27 @@ public final class M611Module: PrinterModule {
             encode(label: p.label, status: job.status, cut: p.cut, isLastLabel: p.isLast)
         }
         if !job.singleLabel {
-            // FULL JOB: encode every page and send as one batch (no inter-label gap).
-            var batch: [UInt8] = []
-            for page in job.pages { batch += bytes(page) }
+            // FULL JOB: build ONE multi-page M611 job (NumberOfPages = N) so the printer
+            // prints it as a single job — continuous feed, one end-of-job cut for die-cut —
+            // instead of N back-to-back single-label jobs. No mid-job cancel (the firmware
+            // has none); progress is coarse ("Printing…").
             if job.isCancelled() { return }
+            let rotation = job.status?.areaRotation ?? 270
+            let mpages = job.pages.map { p in
+                M611Bitmap.Page(pixels: p.label.bytes, width: p.label.width, height: p.label.height,
+                                cut: mapCut(p.cut), isLast: p.isLast)
+            }
+            let part = job.pages.first?.label.partNumber ?? ""
             job.progress(.printing)
-            try send(batch, on: conn)
+            try send(M611Bitmap.buildMultiPageJob(pages: mpages, areaRotation: rotation, substratePart: part),
+                     on: conn)
+            // Keep "Printing…" in the menu for ~the print duration. send() returns when the
+            // BYTES reach the printer (fast); the printer then prints N labels over several
+            // seconds. Without this hold, the job would leave the menu while it's still
+            // physically printing. Bounded by the estimate; nothing to cancel at this point.
+            let printMs = count * perLabelMs + 1500
+            let end = DispatchTime.now().uptimeNanoseconds &+ UInt64(printMs) * 1_000_000
+            while DispatchTime.now().uptimeNanoseconds < end { usleep(200_000) }
             job.progress(.done)
             return
         }

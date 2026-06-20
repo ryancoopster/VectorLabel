@@ -90,4 +90,45 @@ final class M611BitmapTests: XCTestCase {
         XCTAssertNil(M611Bitmap.postPrintOps(cut: .afterJobLast, isLastPage: false)[0]["Cut"])
         XCTAssertEqual(M611Bitmap.postPrintOps(cut: .afterJobLast, isLastPage: false)[0]["SetByPrinter"] as? String, "SetByPrinter")
     }
+
+    /// A multi-page job is ONE job-meta segment (NumberOfPages = N) followed by N page
+    /// segments (PageNumber 0…N-1) — a single printer job, not N concatenated jobs. With
+    /// afterJobLast only the final page shears; the rest defer to the printer.
+    func testBuildMultiPageJob() {
+        let w = 8, h = 8, n = 3
+        func raster(_ i: Int) -> [UInt8] { var p = [UInt8](repeating: 0, count: w*h); p[i] = 0xFF; return p }
+        let pages = (0..<n).map { i in
+            M611Bitmap.Page(pixels: raster(i), width: w, height: h, cut: .afterJobLast, isLast: i == n - 1)
+        }
+        let job = M611Bitmap.buildMultiPageJob(pages: pages, areaRotation: 0, substratePart: "M6-32-427")
+
+        // Walk the framed segments: [16 magic][u32 LE len][json] × (1 meta + n pages).
+        var off = 0
+        func nextJSON() -> [String: Any] {
+            XCTAssertEqual(Array(job[off..<off+16]), M611Bitmap.segMagic)
+            let len = Int(job[off+16]) | Int(job[off+17])<<8 | Int(job[off+18])<<16 | Int(job[off+19])<<24
+            let json = try! JSONSerialization.jsonObject(with: Data(job[off+20..<off+20+len])) as! [String: Any]
+            off += 20 + len
+            return json
+        }
+        // Meta segment first: NumberOfPages must reflect the real count.
+        let meta = nextJSON()
+        XCTAssertEqual(meta["JobType"] as? String, "Print")
+        XCTAssertEqual(meta["NumberOfPages"] as? Int, n)
+        XCTAssertEqual(meta["SubstratePart"] as? String, "M6-32-427")
+        // Then n page segments: PageNumber 0…n-1, cut only on the last.
+        for i in 0..<n {
+            let page = nextJSON()
+            XCTAssertEqual(page["PageNumber"] as? Int, i)
+            XCTAssertEqual(page["JobID"] as? String, meta["JobID"] as? String)   // same job
+            let ops = (page["Pages"] as! [String: Any])["PostPrintOperations"] as! [[String: Any]]
+            if i == n - 1 { XCTAssertEqual(ops[0]["Cut"] as? String, "Shear") }
+            else          { XCTAssertEqual(ops[0]["SetByPrinter"] as? String, "SetByPrinter") }
+        }
+        XCTAssertEqual(off, job.count)   // consumed exactly 1 meta + n pages, no trailing bytes
+    }
+
+    func testBuildMultiPageJobEmptyIsEmpty() {
+        XCTAssertTrue(M611Bitmap.buildMultiPageJob(pages: []).isEmpty)
+    }
 }
