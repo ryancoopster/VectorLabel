@@ -97,11 +97,20 @@ struct PrinterModelEditorView: View {
 
             Divider().padding(.vertical, 2)
 
-            // Per-model print behavior (built into the driver).
-            Toggle(isOn: singleLabelBinding(mid)) {
-                Text("Send one label at a time").font(.system(size: 12))
+            // Per-model send mode (the driver decides how it sends + what progress it
+            // reports). Greyed out for drivers that report live progress on their own.
+            HStack(spacing: 8) {
+                Text("Send mode").font(.system(size: 12))
+                Picker("", selection: singleLabelBinding(mid)) {
+                    Text("One at a time").tag(true)
+                    Text("Full job").tag(false)
+                }
+                .pickerStyle(.segmented).labelsHidden().fixedSize()
+                .disabled(sendModeFixed(mid))
             }
-            Text("On: each label is sent as its own print — the menu shows per-label progress and the inter-label delay applies. Off: the whole job is sent at once (the menu shows live progress only if the printer reports it, otherwise just “Printing”).")
+            Text(sendModeFixed(mid)
+                 ? "This printer reports live print progress on its own, so it always streams as one job."
+                 : "One at a time: each label is its own print job — per-label progress, the inter-label delay applies, and you can cancel mid-run (the in-flight label finishes, the rest are dropped). Full job: the whole job is sent at once — fastest, but the M611 can’t be cancelled once it starts and shows only “Printing”.")
                 .font(.system(size: 10)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 6) {
@@ -110,7 +119,7 @@ struct PrinterModelEditorView: View {
                 Text("\(m?.interLabelDelayMs ?? 0) ms")
                     .font(.system(.body, design: .monospaced)).frame(width: 60, alignment: .trailing)
             }
-            .disabled(!(m?.singleLabelPrinting ?? false))
+            .disabled(!(m?.singleLabelPrinting ?? false) || sendModeFixed(mid))
         }
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.06)))
@@ -167,6 +176,13 @@ struct PrinterModelEditorView: View {
     private func singleLabelBinding(_ mid: UUID) -> Binding<Bool> {
         Binding(get: { draft.models.first { $0.id == mid }?.singleLabelPrinting ?? false },
                 set: { v in if let i = draft.models.firstIndex(where: { $0.id == mid }) { draft.models[i].singleLabelPrinting = v } })
+    }
+    /// True when the model's driver reports live progress on its own (`sendMode == .fixed`),
+    /// so the one-at-a-time vs full-job choice doesn't apply — the UI greys it out.
+    private func sendModeFixed(_ mid: UUID) -> Bool {
+        let name = draft.models.first { $0.id == mid }?.name ?? ""
+        if case .fixed = PrinterModuleRegistry.shared.module(forModel: name)?.capabilities.sendMode { return true }
+        return false
     }
     private func delayBinding(_ mid: UUID) -> Binding<Int> {
         Binding(get: { draft.models.first { $0.id == mid }?.interLabelDelayMs ?? 0 },

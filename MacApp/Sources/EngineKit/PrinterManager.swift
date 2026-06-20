@@ -276,16 +276,17 @@ public final class PrinterManager: ObservableObject {
         let device = printers.first { $0.id == printerID }
         let module = device.flatMap { PrinterModuleRegistry.shared.module(forModel: $0.model) }
         let settings = PrinterModelStore.printSettings(forName: device?.model ?? "")
-        let pacesByLabels = module?.capabilities.pacesByLabelsRemaining ?? false
-        // Stream one label at a time when the user asked for it OR the driver always wants
-        // it (M611: no label counter + no printer-side cancel, so incremental streaming is
-        // how it gets per-label progress + a responsive stop-cancel).
-        let incremental = settings.singleLabelPrinting
-            || (module?.capabilities.streamsLabelsIncrementally ?? false)
-        let reportsProgress = pacesByLabels || incremental
+        // The driver owns the send strategy. When it's user-selectable, honor the per-printer
+        // "one label at a time" setting; a `.fixed` driver always handles it (and reports good
+        // progress regardless). The driver tells us whether it'll report a per-label counter
+        // so we set up the right progress UI up front.
+        let singleLabel: Bool
+        if case .selectable = module?.capabilities.sendMode { singleLabel = settings.singleLabelPrinting }
+        else { singleLabel = false }
+        let reportsProgress = module?.reportsCounter(singleLabel: singleLabel) ?? false
         print("[PrinterManager] submit \(labels.count) label(s) cut=\(cutMode.rawValue) " +
-              "mode=\(incremental ? "incremental" : "full-job") " +
-              "progress=\(reportsProgress ? "detailed" : "coarse") → \(title)")
+              "mode=\(singleLabel ? "single-label" : "full-job") " +
+              "progress=\(reportsProgress ? "counter" : "coarse") → \(title)")
 
         let job = PrintJob(
             title: title,
@@ -369,76 +370,29 @@ public final class PrinterManager: ObservableObject {
                 let conn = try module.open(device)
                 defer { module.close(conn) }
 
-                let count = jobLabels.count
-                let perLabelMs = max(150, estLabelMs)
-                let initialRem = pacesByLabels ? module.labelsRemaining(on: conn) : -1
-
-                if incremental {
-                    // INCREMENTAL: encode + send one label at a time, advancing per-label
-                    // progress and honoring the model's inter-label delay. The M610 paces
-                    // off its SmartCell counter; a transport without one falls back to the
-                    // time estimate. Cancel stops the remaining labels.
-                    for (i, label) in jobLabels.enumerated() {
-                        if job.isCancelled { break }
-                        let bytes = module.encode(label: label, status: liveStatus,
-                                                  cut: cutFor(i), isLastLabel: i == count - 1)
-                        try module.send(bytes, on: conn)
-                        var waited = 0
-                        while waited < perLabelMs && !job.isCancelled {
-                            if initialRem >= 0, waited % 120 == 0 {
-                                let rem = module.labelsRemaining(on: conn)
-                                if rem >= 0 && (initialRem - rem) >= (i + 1) { break }   // this label printed
-                            }
-                            usleep(40_000); waited += 40
-                        }
-                        if job.isCancelled { break }
-                        Task { @MainActor in job.completedLabels = i + 1 }
-                        // Per-model inter-label delay (interruptible by Cancel).
-                        if settings.interLabelDelayMs > 0 && i < count - 1 {
-                            var slept = 0
-                            while slept < settings.interLabelDelayMs && !job.isCancelled { usleep(20_000); slept += 20 }
-                        }
-                    }
-                    // Settle until the counter drops by the job's label count (bounded).
-                    if !job.isCancelled && initialRem >= 0 {
-                        let startNs = DispatchTime.now().uptimeNanoseconds
-                        let capMs = count * perLabelMs * 2 + 8000
-                        while !job.isCancelled {
-                            let rem = module.labelsRemaining(on: conn)
-                            let elapsedMs = Int((DispatchTime.now().uptimeNanoseconds &- startNs) / 1_000_000)
-                            if rem >= 0 && (initialRem - rem) >= count { break }
-                            if elapsedMs >= capMs { break }
-                            usleep(200_000)
-                        }
-                    }
-                } else {
-                    // FULL JOB: encode every label and send as ONE batch (no inter-label
-                    // gap). If the driver reports a counter (M610), drive detailed progress
-                    // off it; otherwise the job is coarse — the menu shows just "Printing".
-                    var batch: [UInt8] = []
-                    for (i, label) in jobLabels.enumerated() {
-                        batch += module.encode(label: label, status: liveStatus,
-                                               cut: cutFor(i), isLastLabel: i == count - 1)
-                    }
-                    if !job.isCancelled { try module.send(batch, on: conn) }
-                    if pacesByLabels && !job.isCancelled {
-                        let startNs = DispatchTime.now().uptimeNanoseconds
-                        let capMs = count * perLabelMs * 2 + 8000
-                        while !job.isCancelled {
-                            let rem = module.labelsRemaining(on: conn)
-                            if rem >= 0 {
-                                let printed = max(0, min(count, initialRem - rem))
-                                Task { @MainActor in job.completedLabels = printed }
-                            }
-                            let elapsedMs = Int((DispatchTime.now().uptimeNanoseconds &- startNs) / 1_000_000)
-                            if rem >= 0 && (initialRem - rem) >= count { break }
-                            if elapsedMs >= capMs { break }
-                            usleep(200_000)
-                        }
-                    }
-                    // Mark all labels done on success (coarse jobs never advanced per-label).
-                    if !job.isCancelled { Task { @MainActor in job.completedLabels = count } }
+                // Hand the job to the DRIVER. It owns the send strategy (one label at a time
+                // vs one batched job) + pacing, and reports progress as a counter or coarse
+                // "printing"; it drains in-flight printing before returning so this close is
+                // clean. The Engine just relays progress to the PrintJob.
+                let pages = jobLabels.enumerated().map { i, label in
+                    DriverPage(label: label, cut: cutFor(i), isLast: i == jobLabels.count - 1)
                 }
+                try module.run(DriverJob(
+                    pages: pages, status: liveStatus, singleLabel: singleLabel,
+                    interLabelDelayMs: settings.interLabelDelayMs, estLabelMs: max(150, estLabelMs),
+                    connection: conn, isCancelled: { job.isCancelled },
+                    progress: { upd in
+                        Task { @MainActor in
+                            switch upd {
+                            case .counter(let done, _): if done > job.completedLabels { job.completedLabels = done }
+                            case .printing: break   // coarse — the menu shows "Printing…"
+                            // Fill the bar to 100% only on a clean finish. A cancelled job keeps
+                            // the partial count it reached, so Recent Prints records what actually
+                            // printed (not the full intended total).
+                            case .done:     if !job.isCancelled { job.completedLabels = pages.count }
+                            }
+                        }
+                    }))
             } catch {
                 print("[PrinterManager] Print failed: \(error)")
                 job.markFailed()

@@ -30,9 +30,6 @@ public struct PrinterCapabilities {
     /// Live ribbon/label/battery + media telemetry over the wire (M611). M610 reads
     /// only the SmartCell cassette.
     public let hasLiveTelemetry: Bool
-    /// Paces a batch off a hardware labels-remaining counter (M610 SmartCell). When
-    /// false the Engine paces by time estimate (M611).
-    public let pacesByLabelsRemaining: Bool
     /// Has a built-in AUTOMATIC cutter the Engine can actuate (M611). The M610 has only
     /// a manual cutter, so it can't auto-cut (a future "stop and prompt to cut" flow).
     public let hasAutoCutter: Bool
@@ -41,24 +38,71 @@ public struct PrinterCapabilities {
     /// direct-thermal printer). Front-ends extrapolate remaining ribbon length from the
     /// telemetry ribbon % against this, to forecast whether a job will run the ribbon out.
     public let ribbonLengthInches: Double
-    /// Stream the job one label at a time (one framed print job per label, paced to the
-    /// print) rather than one batched write — even when the per-printer "single label"
-    /// setting is off. The M611 has no hardware label counter and no printer-side cancel,
-    /// so incremental streaming is how it gets per-label progress AND a responsive cancel:
-    /// stopping the stream lets the in-flight label finish and skips the rest.
-    public let streamsLabelsIncrementally: Bool
+    /// Whether the user's "one label at a time vs full job" choice applies to this driver.
+    /// `.selectable` → the per-printer UI offers it (M611: single = per-label progress +
+    /// mid-run cancel; M610: single honors the inter-label delay). `.fixed` → the driver
+    /// always reports good progress (hardware counter / live job telemetry), so the choice
+    /// is irrelevant and the UI greys it out — a future printer with proper feedback ships
+    /// this in its driver with no engine changes.
+    public let sendMode: SendModeSupport
 
     public init(model: String, supportedTransports: Set<PrinterTransport>,
-                hasLiveTelemetry: Bool, pacesByLabelsRemaining: Bool,
+                hasLiveTelemetry: Bool,
                 hasAutoCutter: Bool = false, ribbonLengthInches: Double = 0,
-                streamsLabelsIncrementally: Bool = false) {
+                sendMode: SendModeSupport = .selectable(defaultSingle: false)) {
         self.model = model
         self.supportedTransports = supportedTransports
         self.hasLiveTelemetry = hasLiveTelemetry
-        self.pacesByLabelsRemaining = pacesByLabelsRemaining
         self.hasAutoCutter = hasAutoCutter
         self.ribbonLengthInches = ribbonLengthInches
-        self.streamsLabelsIncrementally = streamsLabelsIncrementally
+        self.sendMode = sendMode
+    }
+}
+
+/// Whether the user's single-vs-batch send choice is meaningful for a driver.
+public enum SendModeSupport: Equatable {
+    case fixed                              // driver always reports good progress → UI greys the toggle
+    case selectable(defaultSingle: Bool)    // user picks one-at-a-time vs full job
+}
+
+/// One page of a print job, ready for the driver to encode + send. The Engine builds these
+/// (feed-to-clear lead prepended, per-page cut resolved, last page flagged); the driver
+/// only decides HOW to send them (one at a time vs batched) and reports progress.
+public struct DriverPage {
+    public let label: RenderedLabel
+    public let cut: CutMode
+    public let isLast: Bool
+    public init(label: RenderedLabel, cut: CutMode, isLast: Bool) {
+        self.label = label; self.cut = cut; self.isLast = isLast
+    }
+}
+
+/// Progress a driver reports as it runs a job. The Engine maps `.counter` to a per-label
+/// bar and `.printing` to an indeterminate "Printing…".
+public enum JobProgress {
+    case counter(done: Int, of: Int)
+    case printing
+    case done
+}
+
+/// A full print job handed to a driver's `run`. The Engine owns the job lifecycle (queue,
+/// cancel, IPC, recents) and supplies an open connection, a cancel check, and a progress
+/// sink; the driver owns the send strategy, pacing, and progress reporting.
+public struct DriverJob {
+    public let pages: [DriverPage]
+    public let status: CassetteStatus?
+    public let singleLabel: Bool          // user preference (ignored when sendMode == .fixed)
+    public let interLabelDelayMs: Int
+    public let estLabelMs: Int            // per-label print-time estimate (pacing fallback)
+    public let connection: PrinterConnection
+    public let isCancelled: () -> Bool
+    public let progress: (JobProgress) -> Void
+    public init(pages: [DriverPage], status: CassetteStatus?, singleLabel: Bool,
+                interLabelDelayMs: Int, estLabelMs: Int, connection: PrinterConnection,
+                isCancelled: @escaping () -> Bool, progress: @escaping (JobProgress) -> Void) {
+        self.pages = pages; self.status = status; self.singleLabel = singleLabel
+        self.interLabelDelayMs = interLabelDelayMs; self.estLabelMs = estLabelMs
+        self.connection = connection; self.isCancelled = isCancelled; self.progress = progress
     }
 }
 
@@ -96,11 +140,22 @@ public protocol PrinterModule: AnyObject {
     /// Hardware labels-remaining counter for pacing, or -1 if the transport can't
     /// report it (the Engine then paces by time estimate).
     func labelsRemaining(on connection: PrinterConnection) -> Int
+
+    /// Run a whole print job: encode + send + pace + report progress. The driver owns the
+    /// send strategy (one label at a time vs one batched job) and pacing, and MUST finish
+    /// or drain any in-flight printing before returning so the Engine's connection close
+    /// doesn't abort a label mid-print. Honors `job.isCancelled` to stop early.
+    func run(_ job: DriverJob) throws
+
+    /// Whether this driver reports a per-label `.counter` (vs coarse `.printing`) for a job
+    /// sent in the given mode — lets the Engine set up the right progress UI up front.
+    func reportsCounter(singleLabel: Bool) -> Bool
 }
 
 public extension PrinterModule {
     func handles(model: String) -> Bool { model == capabilities.model }
     func labelsRemaining(on connection: PrinterConnection) -> Int { -1 }
+    func reportsCounter(singleLabel: Bool) -> Bool { false }
 }
 
 /// Registry of available printer modules. The Engine registers M610 + M611 at

@@ -22,9 +22,11 @@ public final class M611Module: PrinterModule {
     // is still TODO (readStatus is network-only), so a USB-only M611 prints without live %s.
     public let capabilities = PrinterCapabilities(
         model: "M611", supportedTransports: [.network, .usb], hasLiveTelemetry: true,
-        pacesByLabelsRemaining: false, hasAutoCutter: true,   // M611 has a built-in cutter
+        hasAutoCutter: true,                                  // M611 has a built-in cutter
         ribbonLengthInches: 75 * 12,                          // 75 ft ribbon
-        streamsLabelsIncrementally: true)                     // per-label progress + stop-cancel
+        // No hardware label counter + no printer-side cancel, so the user picks: single =
+        // per-label progress + responsive cancel; full job = fastest, coarse, no cancel.
+        sendMode: .selectable(defaultSingle: false))
 
     static let printPort: UInt16 = 9100
     static let telemetryPort: UInt16 = 9102
@@ -91,6 +93,74 @@ public final class M611Module: PrinterModule {
         #if canImport(CLibUSB)
         if let c = connection as? M611USBConnection { M611USB.close(c.handle); return }
         #endif
+    }
+
+    // Per-label progress only when streaming one label at a time (no hardware counter);
+    // a full-job batch is coarse ("Printing…").
+    public func reportsCounter(singleLabel: Bool) -> Bool { singleLabel }
+
+    /// Run a job. Single-label: stream one framed job per label, pipelining a couple ahead
+    /// (no idle) but keeping the queue shallow, then DRAIN so the in-flight labels finish
+    /// before the Engine closes the connection (closing mid-print leaves the M611 'waiting').
+    /// Cancel stops the stream — the in-flight labels finish, the rest are never sent. Full
+    /// job: one batched send (fastest; no per-label progress, no mid-job cancel — the M611
+    /// firmware has no cancel command).
+    public func run(_ job: DriverJob) throws {
+        let conn = job.connection
+        let count = job.pages.count
+        let perLabelMs = max(150, job.estLabelMs)
+        func bytes(_ p: DriverPage) -> [UInt8] {
+            encode(label: p.label, status: job.status, cut: p.cut, isLastLabel: p.isLast)
+        }
+        if !job.singleLabel {
+            // FULL JOB: encode every page and send as one batch (no inter-label gap).
+            var batch: [UInt8] = []
+            for page in job.pages { batch += bytes(page) }
+            if job.isCancelled() { return }
+            job.progress(.printing)
+            try send(batch, on: conn)
+            job.progress(.done)
+            return
+        }
+        // ONE AT A TIME: time-paced look-ahead, then DRAIN so the labels we already sent
+        // finish printing before we return. The Engine closes the connection on return AND
+        // on a thrown error; closing mid-print leaves the M611 'waiting' (the firmware has no
+        // cancel command). The drain runs from `defer` so it covers a normal finish, a cancel,
+        // AND a transport error partway through the stream.
+        let t0 = DispatchTime.now().uptimeNanoseconds
+        func elapsedMs() -> Int { Int((DispatchTime.now().uptimeNanoseconds &- t0) / 1_000_000) }
+        func printedEst() -> Int { elapsedMs() / perLabelMs }   // from the print-time calibration
+        let maxAhead = 2   // pipeline up to 2 labels so the printer never idles, but keep the
+                           // queue shallow so Cancel only lets ~the in-flight labels finish.
+        var sent = 0
+        defer {
+            // Wait ~the in-flight labels' print time before returning, bounded. On cancel,
+            // drop the safety pad and the cosmetic progress spin (the user abandoned the job)
+            // but still let the physically-in-flight labels finish — closing early would
+            // strand the M611 'waiting'. This frees the per-printer queue promptly on cancel.
+            let cancelled = job.isCancelled()
+            let inFlight = max(0, sent - printedEst())
+            let drainMs = cancelled ? inFlight * perLabelMs + 300
+                                    : inFlight * perLabelMs * 13 / 10 + 1500
+            let drainEnd = DispatchTime.now().uptimeNanoseconds &+ UInt64(drainMs) * 1_000_000
+            while DispatchTime.now().uptimeNanoseconds < drainEnd {
+                if !cancelled { job.progress(.counter(done: min(sent, printedEst()), of: count)) }
+                usleep(150_000)
+            }
+            if !cancelled { job.progress(.counter(done: sent, of: count)) }
+        }
+        for (i, page) in job.pages.enumerated() {
+            if job.isCancelled() { break }
+            while !job.isCancelled() && (i - printedEst()) >= maxAhead { usleep(30_000) }
+            if job.isCancelled() { break }
+            try send(bytes(page), on: conn)
+            sent = i + 1
+            job.progress(.counter(done: min(sent, max(0, printedEst())), of: count))
+            if job.interLabelDelayMs > 0 && i < count - 1 {
+                var slept = 0
+                while slept < job.interLabelDelayMs && !job.isCancelled() { usleep(20_000); slept += 20 }
+            }
+        }
     }
 
     public func readStatus(_ device: PrinterDevice) -> CassetteStatus? {
