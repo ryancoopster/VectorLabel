@@ -55,7 +55,10 @@ enum M611USB {
             guard libusb_get_device_descriptor(dev, &d) == 0,
                   d.idVendor == vendorID, d.idProduct == productID else { continue }
             let serial = readSerial(dev, desc: d)
-            out.append(PrinterDevice(id: "usb:\(serial)", name: "Brady M611 (USB)",
+            // No host ⇒ USB. The user-set name isn't retrievable over USB (it's only a
+            // DHCP hostname on the network), so the name is just the model; the UI shows
+            // "USB" where a network printer shows its IP.
+            out.append(PrinterDevice(id: "usb:\(serial)", name: "M611",
                                      model: "M611", serial: serial, status: .ready, host: nil))
         }
         return out

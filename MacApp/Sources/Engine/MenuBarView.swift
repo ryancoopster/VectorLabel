@@ -279,11 +279,15 @@ struct PrinterRow: View {
     private var topLine: String {
         isNetwork ? "\(printer.model) · \(printer.name)" : printer.name
     }
-    /// Small (grey) identity line: "IP · serial" for a network printer once the PICL
-    /// serial is known, otherwise just the serial/host.
+    /// Small (grey) identity line: "IP · serial" for a network printer (once the PICL
+    /// serial is known), or "USB · serial" for a USB printer — "USB" sits where the IP
+    /// would for a network printer.
     private var subLine: String {
-        if isNetwork, let ps = cassette?.printerSerial, !ps.isEmpty { return "\(printer.serial) · \(ps)" }
-        return printer.serial
+        if isNetwork {
+            if let ps = cassette?.printerSerial, !ps.isEmpty { return "\(printer.serial) · \(ps)" }
+            return printer.serial   // IP only, until the PICL serial is known
+        }
+        return printer.serial.isEmpty ? "USB" : "USB · \(printer.serial)"
     }
 
     /// The printer's driver reports live telemetry (battery/labels/ribbon). M611 yes,
