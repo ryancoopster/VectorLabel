@@ -33,13 +33,18 @@ public struct PrinterCapabilities {
     /// Paces a batch off a hardware labels-remaining counter (M610 SmartCell). When
     /// false the Engine paces by time estimate (M611).
     public let pacesByLabelsRemaining: Bool
+    /// Has a built-in AUTOMATIC cutter the Engine can actuate (M611). The M610 has only
+    /// a manual cutter, so it can't auto-cut (a future "stop and prompt to cut" flow).
+    public let hasAutoCutter: Bool
 
     public init(model: String, supportedTransports: Set<PrinterTransport>,
-                hasLiveTelemetry: Bool, pacesByLabelsRemaining: Bool) {
+                hasLiveTelemetry: Bool, pacesByLabelsRemaining: Bool,
+                hasAutoCutter: Bool = false) {
         self.model = model
         self.supportedTransports = supportedTransports
         self.hasLiveTelemetry = hasLiveTelemetry
         self.pacesByLabelsRemaining = pacesByLabelsRemaining
+        self.hasAutoCutter = hasAutoCutter
     }
 }
 

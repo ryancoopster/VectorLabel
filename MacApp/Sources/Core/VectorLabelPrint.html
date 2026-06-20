@@ -525,9 +525,13 @@ let P={
 // after every label (so each printed length is separated); die-cut stock is
 // pre-cut so the cutter never fires. Anything else cuts once at end of job.
 function defaultCutMode(specN){
+  // Prefer the printer-reported supply type (isContinuous, via M611 telemetry); else
+  // the catalog type. Continuous → cut every label; die-cut → cut at end of job.
+  const c=loadedCassette();
+  if(c&&typeof c.isContinuous==='boolean')return c.isContinuous?"eachLabel":"afterJobLast";
   const s=blBy(specN);
   if(s&&s.ty==="continuous")return "eachLabel";
-  if(s&&s.ty==="dieCut")return "never";
+  if(s&&s.ty==="dieCut")return "afterJobLast";
   return "afterJobLast";
 }
 // The effective cut mode right now: the user's explicit choice, else the
@@ -1497,11 +1501,26 @@ function telemetryHTML(){
   const pr=printer(); if(!pr||!pr.supportsTelemetry) return "";
   const c=loadedCassette(); if(!c) return "";
   const parts=[];
-  if(typeof c.batteryPct==='number')         parts.push(`Battery ${c.batteryPct}%`);
+  if(typeof c.batteryPct==='number')         parts.push(`Battery ${c.batteryPct}%${c.acConnected?" ⚡":""}`);
   if(typeof c.supplyRemainingPct==='number') parts.push(`Labels ${c.supplyRemainingPct}%`);
   if(typeof c.ribbonRemainingPct==='number') parts.push(`Ribbon ${c.ribbonRemainingPct}%`);
   if(!parts.length) return "";
   return `<div title="Live printer telemetry" style="font-size:11px;color:var(--text2);white-space:nowrap">${parts.join(" · ")}</div>`;
+}
+
+// Pre-flight: printer-reported errors that should block a print until fixed
+// (printhead open / invalid supply / invalid ribbon). Returns a description or null.
+function cassettePreflightError(){
+  const c=loadedCassette(); if(!c) return null;
+  const e=[];
+  if(c.printheadOpen)    e.push("printhead open");
+  if(c.substrateInvalid) e.push("invalid supply");
+  if(c.ribbonInvalid)    e.push("invalid ribbon");
+  return e.length ? e.join(" · ") : null;
+}
+function preflightHTML(){
+  const e=cassettePreflightError();
+  return e ? `<div title="Fix this on the printer, then re-detect the supply" style="font-size:11px;color:var(--red);font-weight:600;white-space:nowrap">⚠ ${e}</div>` : "";
 }
 
 // BM (bulk box) and M6 (small roll) are the same label in different packaging,
@@ -1626,9 +1645,12 @@ function buildPrintBar(){
         return `<div onclick="detectCassette()" title="${c.partNumber} — click to re-detect" style="cursor:pointer;font-size:11px;color:var(--text2);white-space:nowrap">${c.partNumber}</div>`;
       })()}
       ${telemetryHTML()}
+      ${preflightHTML()}
     </div>
 
-    <!-- Cut option (Phase 6) -->
+    <!-- Cut option (Phase 6) — only printers with a built-in auto cutter expose a
+         cut-timing control; others (e.g. M610) are cut by hand. -->
+    ${printer().hasAutoCutter ? `
     <div style="display:flex;align-items:center;gap:6px">
       <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px" title="When to actuate the printer's cutter">Cut</span>
       <div style="position:relative">
@@ -1640,7 +1662,11 @@ function buildPrintBar(){
         </select>
         <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:9px;pointer-events:none">▼</div>
       </div>
-    </div>
+    </div>` : `
+    <div style="display:flex;align-items:center;gap:6px" title="This printer has no automatic cutter — cut by hand between labels">
+      <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Cut</span>
+      <span style="color:var(--text2);font-size:11px">Manual</span>
+    </div>`}
 
     <!-- Print button — goes straight to printing, no confirmation -->
     <button class="btn primary" onclick="doPrint()" style="padding:6px 22px;font-size:13px;display:flex;flex-direction:column;align-items:center;line-height:1.1;gap:1px" ${canPrint?"":"disabled"}>
@@ -1652,7 +1678,7 @@ function buildPrintBar(){
 
 function printCount(){ return printIndices().length; }
 // Whether the Print button (and ⌘Return shortcut) is enabled right now.
-function canPrintNow(){ const t=tpl(),pr=printer(); return !!(t&&printCount()>0&&pr.status==="ready"); }
+function canPrintNow(){ const t=tpl(),pr=printer(); return !!(t&&printCount()>0&&pr.status==="ready"&&!cassettePreflightError()); }
 
 // Move the previewed/highlighted record up or down through the visible (filtered)
 // rows, then scroll it into view. Used by the up/down arrow keys.

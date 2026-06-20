@@ -44,6 +44,14 @@ enum M611PICL {
         static let printerGroup     = "222D688A-1554-4C0E-B7A0-0BC377EF4071"
         static let serial           = "AE2955D7-1AE3-4520-BB1C-1DC0C2B5A58B"  // "Printer Serial Number"
         static let firmware         = "ACEB1224-1DAF-42A2-BBAA-4678D5D3C8DA"  // "Firmware Version"
+        // Media flags + pre-flight error/validity.
+        static let isContinuous     = "1AB35077-D002-403D-899B-C59CFF7D111E"  // substrateGroup
+        static let yNumber          = "778B241E-BEA5-4600-8871-D5EAF833B775"  // substrateGroup
+        static let acConnected      = "ECDD0A3C-DFCB-4F47-A2EA-235C5803657C"  // batteryGroup
+        static let errorGroup       = "2EBF9DEF-D51C-47FE-935E-5EDCC530B867"
+        static let printheadOpen    = "33A0B25B-1660-4F29-9AF3-40B70CE291B2"
+        static let substrateInvalid = "3033B200-8D64-4D46-A50E-12E93BA03F42"
+        static let ribbonInvalid    = "FB01FE2F-A52D-4A67-A8D5-B4D122CD4B43"
     }
 
     /// The (group, property) pairs we query. (AreaRotation is intentionally omitted —
@@ -57,6 +65,10 @@ enum M611PICL {
         (P.ribbonGroup, P.ribbonRemaining),    (P.ribbonGroup, P.ribbonName),
         (P.batteryGroup, P.batteryCharge),     (P.areaGroup, P.areaRotation),
         (P.printerGroup, P.serial),            (P.printerGroup, P.firmware),
+        (P.substrateGroup, P.isContinuous),    (P.substrateGroup, P.yNumber),
+        (P.batteryGroup, P.acConnected),
+        (P.errorGroup, P.printheadOpen),       (P.errorGroup, P.substrateInvalid),
+        (P.errorGroup, P.ribbonInvalid),
     ]
 
     /// A framed `PropertyGetRequest` for all the telemetry properties above.

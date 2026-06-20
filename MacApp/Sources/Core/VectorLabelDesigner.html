@@ -344,9 +344,13 @@ function dContinuous(){ return specIsContinuous(S.spec.n); }
 // Default cut mode for a supply: continuous tape cuts after every label; die-cut
 // stock is pre-cut so the cutter never fires (Phase 6).
 function dDefaultCutMode(specN){
+  // Prefer the printer-reported supply type (isContinuous, via M611 telemetry); else
+  // the catalog type. Continuous → cut every label; die-cut → cut at end of job.
+  const c=dLoadedCassette();
+  if(c&&typeof c.isContinuous==='boolean')return c.isContinuous?"eachLabel":"afterJobLast";
   const s=blBy(specN);
   if(s&&s.ty==="continuous")return "eachLabel";
-  if(s&&s.ty==="dieCut")return "never";
+  if(s&&s.ty==="dieCut")return "afterJobLast";
   return "afterJobLast";
 }
 // Effective cut mode: explicit choice, else per-stock default for the current supply.
@@ -2449,11 +2453,26 @@ function dTelemetryHTML(){
   const pr=dPrinter(); if(!pr||!pr.supportsTelemetry) return "";
   const c=dLoadedCassette(); if(!c) return "";
   const parts=[];
-  if(typeof c.batteryPct==='number')         parts.push(`Battery ${c.batteryPct}%`);
+  if(typeof c.batteryPct==='number')         parts.push(`Battery ${c.batteryPct}%${c.acConnected?" ⚡":""}`);
   if(typeof c.supplyRemainingPct==='number') parts.push(`Labels ${c.supplyRemainingPct}%`);
   if(typeof c.ribbonRemainingPct==='number') parts.push(`Ribbon ${c.ribbonRemainingPct}%`);
   if(!parts.length) return "";
   return `<span title="Live printer telemetry" style="font-size:11px;color:var(--text2);white-space:nowrap">${parts.join(" · ")}</span>`;
+}
+
+// Pre-flight: printer-reported errors that should block a print until fixed
+// (printhead open / invalid supply / invalid ribbon). Returns a description or null.
+function dCassettePreflightError(){
+  const c=dLoadedCassette(); if(!c) return null;
+  const e=[];
+  if(c.printheadOpen)    e.push("printhead open");
+  if(c.substrateInvalid) e.push("invalid supply");
+  if(c.ribbonInvalid)    e.push("invalid ribbon");
+  return e.length ? e.join(" · ") : null;
+}
+function dPreflightHTML(){
+  const e=dCassettePreflightError();
+  return e ? `<span title="Fix this on the printer, then re-detect the supply" style="font-size:11px;color:var(--red);font-weight:600;white-space:nowrap">⚠ ${e}</span>` : "";
 }
 
 // Strip the model prefix so "BM-32-427" (catalog) matches "M6-32-427" (SmartCell).
@@ -2555,6 +2574,7 @@ function dRequiredSupply(specN){
 function dFmtIn(v){ return (v==null?"—":(+v).toString())+'"'; }
 function dCanPrint(){
   if(!(S.objs.length>0&&dPrinter().status==="ready"))return false;
+  if(dCassettePreflightError())return false;   // pre-flight: printhead open / invalid supply or ribbon
   // Only require a selected row when a field is actually bound (otherwise it's a
   // single label and the row selection is irrelevant).
   if(hasBoundData()&&labelUsesData()&&dbPrintIndices().length===0)return false;
@@ -2675,6 +2695,7 @@ function buildCustomPrintHeader(){
     </div>
     <span style="font-size:11px;color:${dot}">${statusLbl}</span>
     ${dTelemetryHTML()}
+    ${dPreflightHTML()}
 
     <!-- Cassette match / mismatch indicator -->
     <div style="display:flex;align-items:center;gap:7px">
@@ -2692,7 +2713,9 @@ function buildCustomPrintHeader(){
 
     <div style="flex:1"></div>
 
-    <!-- Cut option (Phase 6) -->
+    <!-- Cut option (Phase 6) — only printers with a built-in auto cutter expose a
+         cut-timing control; others (e.g. M610) are cut by hand. -->
+    ${dPrinter().hasAutoCutter ? `
     <div style="display:flex;align-items:center;gap:6px">
       <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px" title="When to actuate the printer's cutter">Cut</span>
       <div style="position:relative">
@@ -2704,7 +2727,11 @@ function buildCustomPrintHeader(){
         </select>
         <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:9px;pointer-events:none">▼</div>
       </div>
-    </div>
+    </div>` : `
+    <div style="display:flex;align-items:center;gap:6px" title="This printer has no automatic cutter — cut by hand between labels">
+      <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Cut</span>
+      <span style="color:var(--text2);font-size:11px">Manual</span>
+    </div>`}
 
     <!-- Copies -->
     <div style="display:flex;align-items:center;gap:6px">

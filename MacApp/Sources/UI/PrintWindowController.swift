@@ -324,7 +324,8 @@ public final class PrintWindowController: NSObject {
     private func printerDicts() -> [[String: Any]] {
         (lastStatus?.printers ?? []).map { p in
             ["id": p.id, "name": p.name, "model": p.model, "serial": p.serial,
-             "status": p.status, "supportsTelemetry": p.supportsTelemetry]
+             "status": p.status, "supportsTelemetry": p.supportsTelemetry,
+             "hasAutoCutter": p.hasAutoCutter]
         }
     }
 
@@ -361,6 +362,11 @@ public final class PrintWindowController: NSObject {
             if let b = c.batteryPct { entry["batteryPct"] = b }
             if let r = c.ribbonRemainingPct { entry["ribbonRemainingPct"] = r }
             if let ps = c.printerSerial { entry["printerSerial"] = ps }
+            if let cont = c.isContinuous { entry["isContinuous"] = cont }
+            if let ac = c.acConnected { entry["acConnected"] = ac }
+            if c.printheadOpen == true { entry["printheadOpen"] = true }
+            if c.substrateInvalid == true { entry["substrateInvalid"] = true }
+            if c.ribbonInvalid == true { entry["ribbonInvalid"] = true }
             // Prefer the value the Engine already resolved; fall back to the local
             // catalog so the field is present even on an older status file.
             if let perRoll = c.labelsPerRoll ?? BradyCatalog.labelsPerRoll(forPartNumber: c.partNumber) {

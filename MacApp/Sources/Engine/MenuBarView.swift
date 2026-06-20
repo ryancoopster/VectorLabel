@@ -297,10 +297,20 @@ struct PrinterRow: View {
     private var telemetryLine: String? {
         guard let c = cassette else { return nil }
         var parts: [String] = []
-        if let b = c.batteryPct { parts.append("Battery \(b)%") }
+        if let b = c.batteryPct { parts.append("Battery \(b)%" + (c.acConnected == true ? " ⚡" : "")) }
         parts.append("Labels \(c.supplyRemainingPct)%")
         if let r = c.ribbonRemainingPct { parts.append("Ribbon \(r)%") }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+    /// Pre-flight warnings from the printer (printhead open / invalid supply or ribbon),
+    /// shown in red so the operator fixes them before printing.
+    private var warningLine: String? {
+        guard let c = cassette else { return nil }
+        var w: [String] = []
+        if c.printheadOpen == true     { w.append("printhead open") }
+        if c.substrateInvalid == true  { w.append("invalid supply") }
+        if c.ribbonInvalid == true     { w.append("invalid ribbon") }
+        return w.isEmpty ? nil : "⚠ " + w.joined(separator: " · ")
     }
 
     var body: some View {
@@ -328,6 +338,11 @@ struct PrinterRow: View {
                         Text(line)
                             .font(.system(size: 10))
                             .foregroundColor(.vlSecondary)
+                    }
+                    if let w = warningLine {
+                        Text(w)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.vlRed)
                     }
                 }
 

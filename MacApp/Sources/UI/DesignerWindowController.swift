@@ -722,7 +722,8 @@ public final class DesignerWindowController: NSObject {
     private func printersJSONString() -> String {
         let dicts: [[String: Any]] = (lastStatus?.printers ?? []).map { p in
             ["id": p.id, "name": p.name, "model": p.model, "serial": p.serial,
-             "status": p.status, "supportsTelemetry": p.supportsTelemetry]
+             "status": p.status, "supportsTelemetry": p.supportsTelemetry,
+             "hasAutoCutter": p.hasAutoCutter]
         }
         guard let data = try? JSONSerialization.data(withJSONObject: dicts),
               let json = String(data: data, encoding: .utf8) else { return "[]" }
@@ -747,6 +748,11 @@ public final class DesignerWindowController: NSObject {
             if let b = c.batteryPct { entry["batteryPct"] = b }
             if let r = c.ribbonRemainingPct { entry["ribbonRemainingPct"] = r }
             if let ps = c.printerSerial { entry["printerSerial"] = ps }
+            if let cont = c.isContinuous { entry["isContinuous"] = cont }
+            if let ac = c.acConnected { entry["acConnected"] = ac }
+            if c.printheadOpen == true { entry["printheadOpen"] = true }
+            if c.substrateInvalid == true { entry["substrateInvalid"] = true }
+            if c.ribbonInvalid == true { entry["ribbonInvalid"] = true }
             if let perRoll = c.labelsPerRoll ?? BradyCatalog.labelsPerRoll(forPartNumber: c.partNumber) {
                 entry["labelsPerRoll"] = perRoll
             }

@@ -20,7 +20,8 @@ public final class M611Module: PrinterModule {
     // unverified/parked — add `.usb` here (and it lights up everywhere automatically)
     // once the M611 USB capture confirms the PID/interface/endpoints/framing.
     public let capabilities = PrinterCapabilities(
-        model: "M611", supportedTransports: [.network], hasLiveTelemetry: true, pacesByLabelsRemaining: false)
+        model: "M611", supportedTransports: [.network], hasLiveTelemetry: true,
+        pacesByLabelsRemaining: false, hasAutoCutter: true)   // M611 has a built-in cutter
 
     static let printPort: UInt16 = 9100
     static let telemetryPort: UInt16 = 9102
@@ -174,6 +175,13 @@ public final class M611Module: PrinterModule {
     static func cassetteStatus(from map: [String: String]) -> CassetteStatus? {
         func v(_ g: String, _ p: String) -> String? { map["\(g):\(p)"] }
         func i(_ g: String, _ p: String) -> Int? { v(g, p).flatMap { Int($0) } }
+        func b(_ g: String, _ p: String) -> Bool? {
+            switch (v(g, p) ?? "").lowercased() {
+            case "true":  return true
+            case "false": return false
+            default:      return nil
+            }
+        }
         // PICL reports substrate dimensions in thousandths of an inch (mils) — use as-is
         // (confirmed on hardware: a 1.5" label reports "1500").
         func mils(_ g: String, _ p: String) -> Int {
@@ -206,7 +214,13 @@ public final class M611Module: PrinterModule {
             ribbonPartNumber: v(M611PICL.P.ribbonGroup, M611PICL.P.ribbonName),
             batteryPct: battery,
             printerSerial: v(M611PICL.P.printerGroup, M611PICL.P.serial),
-            firmwareVersion: v(M611PICL.P.printerGroup, M611PICL.P.firmware)
+            firmwareVersion: v(M611PICL.P.printerGroup, M611PICL.P.firmware),
+            isContinuous: b(M611PICL.P.substrateGroup, M611PICL.P.isContinuous),
+            acConnected: b(M611PICL.P.batteryGroup, M611PICL.P.acConnected),
+            printheadOpen: b(M611PICL.P.errorGroup, M611PICL.P.printheadOpen),
+            substrateInvalid: b(M611PICL.P.errorGroup, M611PICL.P.substrateInvalid),
+            ribbonInvalid: b(M611PICL.P.errorGroup, M611PICL.P.ribbonInvalid),
+            substrateYNumber: v(M611PICL.P.substrateGroup, M611PICL.P.yNumber)
         )
     }
 

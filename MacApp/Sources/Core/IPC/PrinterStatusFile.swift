@@ -26,13 +26,23 @@ public struct CassetteStatus: Codable, Equatable {
     /// nil for the M610 (its SmartCell read carries no printer-level identity).
     public var printerSerial: String?
     public var firmwareVersion: String?
+    /// Media + printer flags (M611 PICL; nil for the M610).
+    public var isContinuous: Bool?        // continuous tape vs die-cut → drives cut default
+    public var acConnected: Bool?         // battery charging (AC plugged in)
+    public var printheadOpen: Bool?       // pre-flight: printhead-open error
+    public var substrateInvalid: Bool?    // pre-flight: loaded supply invalid
+    public var ribbonInvalid: Bool?       // pre-flight: loaded ribbon invalid
+    public var substrateYNumber: String?  // unique smart-cell supply id
 
     public init(partNumber: String, labelWidthMils: Int, labelHeightMils: Int,
                 printableWidthMils: Int, printableHeightMils: Int, isDieCut: Bool,
                 supplyRemainingPct: Int, labelsPerRoll: Int?, pixelWidth: Int, pixelHeight: Int,
                 areaRotation: Int? = nil, ribbonRemainingPct: Int? = nil,
                 ribbonPartNumber: String? = nil, batteryPct: Int? = nil,
-                printerSerial: String? = nil, firmwareVersion: String? = nil) {
+                printerSerial: String? = nil, firmwareVersion: String? = nil,
+                isContinuous: Bool? = nil, acConnected: Bool? = nil,
+                printheadOpen: Bool? = nil, substrateInvalid: Bool? = nil,
+                ribbonInvalid: Bool? = nil, substrateYNumber: String? = nil) {
         self.partNumber = partNumber
         self.labelWidthMils = labelWidthMils
         self.labelHeightMils = labelHeightMils
@@ -49,6 +59,12 @@ public struct CassetteStatus: Codable, Equatable {
         self.batteryPct = batteryPct
         self.printerSerial = printerSerial
         self.firmwareVersion = firmwareVersion
+        self.isContinuous = isContinuous
+        self.acConnected = acConnected
+        self.printheadOpen = printheadOpen
+        self.substrateInvalid = substrateInvalid
+        self.ribbonInvalid = ribbonInvalid
+        self.substrateYNumber = substrateYNumber
     }
 }
 
@@ -65,17 +81,20 @@ public struct PrinterStatusEntry: Codable {
     /// percentages). The M611 does; the M610 doesn't. Front-ends gate the telemetry
     /// display on this so the readouts only show for printers that can supply them.
     public var supportsTelemetry: Bool
+    /// Driver has a built-in auto cutter (M611). Front-ends gate the cut control on it.
+    public var hasAutoCutter: Bool
 
     public init(id: String, name: String, model: String, serial: String,
                 status: String, cassette: CassetteStatus?, activeJobCount: Int,
-                supportsTelemetry: Bool = false) {
+                supportsTelemetry: Bool = false, hasAutoCutter: Bool = false) {
         self.id = id; self.name = name; self.model = model; self.serial = serial
         self.status = status; self.cassette = cassette; self.activeJobCount = activeJobCount
         self.supportsTelemetry = supportsTelemetry
+        self.hasAutoCutter = hasAutoCutter
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, model, serial, status, cassette, activeJobCount, supportsTelemetry
+        case id, name, model, serial, status, cassette, activeJobCount, supportsTelemetry, hasAutoCutter
     }
     // Tolerant decode so a status file written before `supportsTelemetry` existed still
     // decodes (default false) rather than dropping the whole printers array.
@@ -89,6 +108,7 @@ public struct PrinterStatusEntry: Codable {
         cassette = try? c.decode(CassetteStatus.self, forKey: .cassette)
         activeJobCount = (try? c.decode(Int.self, forKey: .activeJobCount)) ?? 0
         supportsTelemetry = (try? c.decode(Bool.self, forKey: .supportsTelemetry)) ?? false
+        hasAutoCutter = (try? c.decode(Bool.self, forKey: .hasAutoCutter)) ?? false
     }
 }
 

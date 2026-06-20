@@ -13,7 +13,7 @@ public extension PrinterDevice {
     /// A `PrinterStatusEntry` for this printer, given its detected cassette (if
     /// any) and the number of jobs currently active on it.
     func asStatusEntry(cassette: CassetteStatus?, activeJobCount: Int,
-                       supportsTelemetry: Bool = false) -> PrinterStatusEntry {
+                       supportsTelemetry: Bool = false, hasAutoCutter: Bool = false) -> PrinterStatusEntry {
         PrinterStatusEntry(
             id: id,
             name: name,
@@ -22,7 +22,8 @@ public extension PrinterDevice {
             status: status.rawValue,
             cassette: cassette,
             activeJobCount: activeJobCount,
-            supportsTelemetry: supportsTelemetry
+            supportsTelemetry: supportsTelemetry,
+            hasAutoCutter: hasAutoCutter
         )
     }
 }
@@ -33,11 +34,12 @@ public extension PrinterManager {
     /// counts. `engineRunning` reflects that this in-process manager is live.
     func currentStatusFile() -> PrinterStatusFile {
         let entries = printers.map { dev in
-            dev.asStatusEntry(
+            let caps = PrinterModuleRegistry.shared.module(forModel: dev.model)?.capabilities
+            return dev.asStatusEntry(
                 cassette: cassettes[dev.id],
                 activeJobCount: activeJobs.filter { $0.printerID == dev.id && !$0.isComplete }.count,
-                supportsTelemetry: PrinterModuleRegistry.shared.module(forModel: dev.model)?
-                    .capabilities.hasLiveTelemetry ?? false
+                supportsTelemetry: caps?.hasLiveTelemetry ?? false,
+                hasAutoCutter: caps?.hasAutoCutter ?? false
             )
         }
         // Publish each in-flight (cross-process) job so a front-end can show live
