@@ -1,5 +1,6 @@
 import XCTest
 import Compression
+import VectorLabelCore
 @testable import PrinterM611
 
 /// Golden / round-trip tests for the M611 bitmap encoder. These run offline in the
@@ -72,5 +73,21 @@ final class M611BitmapTests: XCTestCase {
         }
         XCTAssertEqual(n, expected.count)
         XCTAssertEqual(dst, expected)
+    }
+
+    /// Pins the M611's physical-cut trigger: the PostPrintOperations JSON must follow
+    /// the job's cutMode, not fire unconditionally. (The analogous M610/VGL mapping is
+    /// covered in FoundationTests; this is the M611 equivalent.)
+    func testPostPrintOpsCutModes() {
+        // never → defer to the printer (no shear), regardless of page position.
+        XCTAssertEqual(M611Bitmap.postPrintOps(cut: .never, isLastPage: true)[0]["SetByPrinter"] as? String, "SetByPrinter")
+        XCTAssertNil(M611Bitmap.postPrintOps(cut: .never, isLastPage: true)[0]["Cut"])
+        // eachLabel → shear on every page.
+        XCTAssertEqual(M611Bitmap.postPrintOps(cut: .eachLabel, isLastPage: false)[0]["Cut"] as? String, "Shear")
+        XCTAssertEqual(M611Bitmap.postPrintOps(cut: .eachLabel, isLastPage: true)[0]["Cut"] as? String, "Shear")
+        // afterJobLast → shear only on the last page, defer otherwise.
+        XCTAssertEqual(M611Bitmap.postPrintOps(cut: .afterJobLast, isLastPage: true)[0]["Cut"] as? String, "Shear")
+        XCTAssertNil(M611Bitmap.postPrintOps(cut: .afterJobLast, isLastPage: false)[0]["Cut"])
+        XCTAssertEqual(M611Bitmap.postPrintOps(cut: .afterJobLast, isLastPage: false)[0]["SetByPrinter"] as? String, "SetByPrinter")
     }
 }

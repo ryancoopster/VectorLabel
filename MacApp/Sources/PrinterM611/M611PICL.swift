@@ -115,6 +115,9 @@ enum M611PICL {
         for r in responses {
             guard let guid = r["GUID"] as? String else { continue }
             if let v = r["Value"] as? String { map[guid] = v }
+            else if let n = r["Value"] as? NSNumber, CFGetTypeID(n) == CFBooleanGetTypeID() {
+                map[guid] = n.boolValue ? "true" : "false"   // JSON true/false → canonical string, never "1"/"0"
+            }
             else if let v = r["Value"] { map[guid] = "\(v)" }
         }
         return map.isEmpty ? nil : map

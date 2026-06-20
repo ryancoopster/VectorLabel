@@ -516,14 +516,14 @@ let P={
   activePrinter: "m610-001",
   view: "print", // "print" | "editor"
   // Cut SETTING for the print job (Phase 6). null ⇒ use the per-stock default
-  // (continuous → eachLabel; die-cut → never; else afterJobLast). One of
+  // (continuous → eachLabel; else afterJobLast). One of
   // "afterJobLast" | "eachLabel" | "never", carried in PrintJobFile.cutMode.
   cutMode: null,
 };
 
 // The default cut mode for a given supply part number: continuous tape is cut
 // after every label (so each printed length is separated); die-cut stock is
-// pre-cut so the cutter never fires. Anything else cuts once at end of job.
+// cut once at end of job. Anything else cuts once at end of job.
 function defaultCutMode(specN){
   // Prefer the printer-reported supply type (isContinuous, via M611 telemetry); else
   // the catalog type. Continuous → cut every label; die-cut → cut at end of job.
@@ -1520,7 +1520,10 @@ function cassettePreflightError(){
 }
 function preflightHTML(){
   const e=cassettePreflightError();
-  return e ? `<div title="Fix this on the printer, then re-detect the supply" style="font-size:11px;color:var(--red);font-weight:600;white-space:nowrap">⚠ ${e}</div>` : "";
+  if(!e) return "";
+  return `<div style="display:flex;align-items:center;gap:6px">`
+       + `<span title="Fix this on the printer, then re-detect the supply" style="font-size:11px;color:var(--red);font-weight:600;white-space:nowrap">⚠ ${e}</span>`
+       + `<button class="btn" onclick="detectCassette()" title="Re-read the loaded supply from the printer" style="padding:2px 8px;font-size:10px">Re-detect</button></div>`;
 }
 
 // BM (bulk box) and M6 (small roll) are the same label in different packaging,

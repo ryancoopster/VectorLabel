@@ -1,22 +1,37 @@
 import Foundation
 
 /// A control message a front-end writes for the Engine (which owns the device):
-/// today only `cancel` of an in-flight job. The Engine watches `control/`, acts
-/// on each request, and deletes the file.
+/// `cancel` an in-flight job, or `detectCassette` to force an on-demand cassette
+/// re-read. The Engine watches `control/`, acts on each request, and deletes the file.
 public struct ControlRequest: Codable {
     public enum Action: String, Codable {
         case cancel
+        case detectCassette
     }
     public var schema: Int
     public var requestId: String   // unique; also the control filename stem
     public var action: Action
-    public var jobId: String       // the PrintJobFile id to act on
+    public var jobId: String       // for .cancel — the PrintJobFile id to act on
+    public var printerID: String   // for .detectCassette — the printer to re-read
 
-    public init(requestId: String = UUID().uuidString, action: Action, jobId: String) {
+    public init(requestId: String = UUID().uuidString, action: Action,
+                jobId: String = "", printerID: String = "") {
         self.schema = 1
         self.requestId = requestId
         self.action = action
         self.jobId = jobId
+        self.printerID = printerID
+    }
+
+    enum CodingKeys: String, CodingKey { case schema, requestId, action, jobId, printerID }
+    // Tolerant decode so a control file written before `printerID` existed still decodes.
+    public init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        schema    = (try? c.decode(Int.self, forKey: .schema)) ?? 1
+        requestId = (try? c.decode(String.self, forKey: .requestId)) ?? UUID().uuidString
+        action    = try c.decode(Action.self, forKey: .action)
+        jobId     = (try? c.decode(String.self, forKey: .jobId)) ?? ""
+        printerID = (try? c.decode(String.self, forKey: .printerID)) ?? ""
     }
 }
 

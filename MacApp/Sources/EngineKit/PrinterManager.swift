@@ -299,6 +299,28 @@ public final class PrinterManager: ObservableObject {
                 job.markFailed(); finishOnMain(); return
             }
 
+            // Pre-flight (authoritative, device-owner side). For telemetry-capable
+            // drivers (M611) re-read live status so the check — and the encode below —
+            // use current media flags, not a possibly-stale cache. A failed read falls
+            // back to the cached status so a network blip never blocks a legit print.
+            var liveStatus = status
+            if module.capabilities.hasLiveTelemetry, let fresh = module.readStatus(device) {
+                liveStatus = fresh
+                Task { @MainActor in
+                    self.cassettes[printerID] = fresh
+                    self.cassetteFetchedAt[printerID] = Date()
+                }
+            }
+            if let s = liveStatus,
+               s.printheadOpen == true || s.substrateInvalid == true || s.ribbonInvalid == true {
+                let why = [s.printheadOpen    == true ? "printhead open"  : nil,
+                           s.substrateInvalid == true ? "invalid supply"  : nil,
+                           s.ribbonInvalid    == true ? "invalid ribbon"  : nil]
+                          .compactMap { $0 }.joined(separator: ", ")
+                print("[PrinterManager] Pre-flight blocked '\(title)': \(why)")
+                job.markFailed(); finishOnMain(); return
+            }
+
             do {
                 let conn = try module.open(device)
                 defer { module.close(conn) }
@@ -314,7 +336,7 @@ public final class PrinterManager: ObservableObject {
                     // time estimate. Cancel stops the remaining labels.
                     for (i, label) in labels.enumerated() {
                         if job.isCancelled { break }
-                        let bytes = module.encode(label: label, status: status,
+                        let bytes = module.encode(label: label, status: liveStatus,
                                                   cut: cutMode, isLastLabel: i == count - 1)
                         try module.send(bytes, on: conn)
                         var waited = 0
@@ -351,7 +373,7 @@ public final class PrinterManager: ObservableObject {
                     // off it; otherwise the job is coarse — the menu shows just "Printing".
                     var batch: [UInt8] = []
                     for (i, label) in labels.enumerated() {
-                        batch += module.encode(label: label, status: status,
+                        batch += module.encode(label: label, status: liveStatus,
                                                cut: cutMode, isLastLabel: i == count - 1)
                     }
                     if !job.isCancelled { try module.send(batch, on: conn) }

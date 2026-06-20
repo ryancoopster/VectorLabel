@@ -1330,6 +1330,14 @@ extension DesignerWindowController: WKScriptMessageHandler {
                 (printBackend as? IPCPrintBackend)?.cancel(jobId: jobId)
             }
 
+        case "detectCassette":
+            // Custom Designer only — force an on-demand cassette re-read so a stale
+            // pre-flight error can clear without a physical reconnect. Best-effort over IPC.
+            if mode == .custom {
+                let id = (body["payload"] as? [String: Any])?["printerID"] as? String ?? ""
+                if !id.isEmpty { printBackend?.requestCassetteRefresh(printerID: id) }
+            }
+
         case "setDirty":
             // The web designer mirrors its unsaved-changes state here.
             isDirty = (body["payload"] as? [String: Any])?["dirty"] as? Bool ?? false

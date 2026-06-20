@@ -518,6 +518,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                let printJob = PrinterManager.shared.activeJobs.first(where: { $0.id == pair.key }) {
                 PrinterManager.shared.cancel(printJob)
             }
+        case .detectCassette:
+            // Force an on-demand cassette re-read; the republished status clears any
+            // stale pre-flight error in the front-ends (printhead-open etc.).
+            if !req.printerID.isEmpty {
+                PrinterManager.shared.refreshCassette(for: req.printerID, force: true)
+            }
         }
         queue.deleteControl(url)
     }

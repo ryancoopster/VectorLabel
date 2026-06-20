@@ -74,9 +74,11 @@ public final class IPCPrintBackend: PrintBackend {
     }
 
     public func requestCassetteRefresh(printerID: String?) {
-        // No-op for now: the Engine owns the device and re-reads cassettes on its
-        // own schedule. A control message to ask for an on-demand re-read will be
-        // added when the Engine grows a control channel.
-        // TODO: control-message to Engine to force a cassette re-detect.
+        // Ask the Engine (device owner) to force an on-demand cassette re-read over the
+        // IPC control channel. The Engine republishes printers.json, which our
+        // FolderWatcher picks up — refreshing status and clearing any stale pre-flight
+        // error so the print button can re-enable without a physical reconnect.
+        guard let id = printerID, !id.isEmpty else { return }
+        try? queue.writeControl(ControlRequest(action: .detectCassette, printerID: id))
     }
 }

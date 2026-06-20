@@ -264,7 +264,7 @@ let S={
   // watch and cancel a print from within the Custom Designer (#12b).
   _activeJobId:null, _jobStatus:null, _jobSeen:false,
   // Cut SETTING for the print job (Phase 6). null ⇒ use the per-stock default
-  // (continuous → eachLabel; die-cut → never). One of
+  // (continuous → eachLabel; die-cut → afterJobLast). One of
   // "afterJobLast" | "eachLabel" | "never", carried in PrintJobFile.cutMode.
   cutMode:null,
   // Continuous-supply label length (inches); null ⇒ use the catalog default.
@@ -342,7 +342,7 @@ function normSel(){
 function specIsContinuous(specN){ const s=blBy(specN); return !!(s&&s.ty==="continuous"); }
 function dContinuous(){ return specIsContinuous(S.spec.n); }
 // Default cut mode for a supply: continuous tape cuts after every label; die-cut
-// stock is pre-cut so the cutter never fires (Phase 6).
+// stock cuts once at end of job (Phase 6).
 function dDefaultCutMode(specN){
   // Prefer the printer-reported supply type (isContinuous, via M611 telemetry); else
   // the catalog type. Continuous → cut every label; die-cut → cut at end of job.
@@ -2472,7 +2472,15 @@ function dCassettePreflightError(){
 }
 function dPreflightHTML(){
   const e=dCassettePreflightError();
-  return e ? `<span title="Fix this on the printer, then re-detect the supply" style="font-size:11px;color:var(--red);font-weight:600;white-space:nowrap">⚠ ${e}</span>` : "";
+  if(!e) return "";
+  return `<span title="Fix this on the printer, then re-detect the supply" style="font-size:11px;color:var(--red);font-weight:600;white-space:nowrap">⚠ ${e}</span>`
+       + `<button class="btn" onclick="dDetectCassette()" title="Re-read the loaded supply from the printer" style="padding:2px 8px;font-size:10px">Re-detect</button>`;
+}
+// Ask the Engine to force an on-demand cassette re-read (clears a stale pre-flight error).
+function dDetectCassette(){
+  const id=dPrinter().id; if(!id) return;
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"detectCassette",payload:{printerID:id}});
 }
 
 // Strip the model prefix so "BM-32-427" (catalog) matches "M6-32-427" (SmartCell).

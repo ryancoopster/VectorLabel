@@ -177,9 +177,9 @@ public final class M611Module: PrinterModule {
         func i(_ g: String, _ p: String) -> Int? { v(g, p).flatMap { Int($0) } }
         func b(_ g: String, _ p: String) -> Bool? {
             switch (v(g, p) ?? "").lowercased() {
-            case "true":  return true
-            case "false": return false
-            default:      return nil
+            case "true", "1", "yes":  return true
+            case "false", "0", "no":  return false
+            default:                  return nil
             }
         }
         // PICL reports substrate dimensions in thousandths of an inch (mils) — use as-is
@@ -199,7 +199,7 @@ public final class M611Module: PrinterModule {
         let h  = mils(M611PICL.P.substrateGroup, M611PICL.P.substrateHeight)
         let pw = mils(M611PICL.P.substrateGroup, M611PICL.P.printableWidth)
         let ph = mils(M611PICL.P.substrateGroup, M611PICL.P.printableHeight)
-        let dieCut = (v(M611PICL.P.substrateGroup, M611PICL.P.isDieCut) ?? "").lowercased() == "true"
+        let dieCut = b(M611PICL.P.substrateGroup, M611PICL.P.isDieCut) ?? false
         func px(_ m: Int) -> Int { Int((Double(m) / 1000.0 * Double(dpi)).rounded()) }
         return CassetteStatus(
             partNumber: part,
