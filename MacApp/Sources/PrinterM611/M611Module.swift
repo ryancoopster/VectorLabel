@@ -8,7 +8,8 @@ import Darwin
 /// port (9100). The M611 prints by streaming the bitmap-job segments to this socket.
 final class TCPConnection: PrinterConnection {
     let fd: Int32
-    init(fd: Int32) { self.fd = fd }
+    let host: String   // kept so a job can open a SEPARATE telemetry socket (9102) mid-print
+    init(fd: Int32, host: String) { self.fd = fd; self.host = host }
 }
 
 /// The M611 printer module: bitmap/LZ4 encoder (`M611Bitmap`) + TCP transport
@@ -75,10 +76,10 @@ public final class M611Module: PrinterModule {
     public func open(_ device: PrinterDevice) throws -> PrinterConnection {
         // Network device → TCP socket to 9100; otherwise a USB-connected M611.
         if let host = device.host, !host.isEmpty {
-            return TCPConnection(fd: try Self.connect(host: host, port: Self.printPort))
+            return TCPConnection(fd: try Self.connect(host: host, port: Self.printPort), host: host)
         }
         #if canImport(CLibUSB)
-        return M611USBConnection(try M611USB.open(deviceID: device.id))
+        return M611USBConnection(try M611USB.open(deviceID: device.id), deviceID: device.id)
         #else
         throw NetError.noHost
         #endif
@@ -102,82 +103,131 @@ public final class M611Module: PrinterModule {
     // a full-job batch is coarse ("Printing…").
     public func reportsCounter(singleLabel: Bool) -> Bool { singleLabel }
 
-    /// Run a job. Single-label: stream one framed job per label, pipelining a couple ahead
-    /// (no idle) but keeping the queue shallow, then DRAIN so the in-flight labels finish
-    /// before the Engine closes the connection (closing mid-print leaves the M611 'waiting').
-    /// Cancel stops the stream — the in-flight labels finish, the rest are never sent. Full
-    /// job: one batched send (fastest; no per-label progress, no mid-job cancel — the M611
-    /// firmware has no cancel command).
+    /// Run a job, then BLOCK until the printer reports it has actually finished printing —
+    /// PICL "External Job Status" == "Print Complete", matched by the job's UNIQUE ExternalId
+    /// on the telemetry channel (separate from the print pipe, so it can be polled mid-print).
+    /// This keeps the menu status accurate to the real print instead of a time estimate; a
+    /// generous time cap is the only fallback if job telemetry is unavailable.
+    ///
+    /// Full job: ONE multi-page job (continuous feed, one end-of-job cut), coarse "Printing…".
+    /// One at a time: a separate job per label (per-label counter + look-ahead pacing so the
+    /// printer never idles); cancel stops the stream and the in-flight labels still print.
     public func run(_ job: DriverJob) throws {
         let conn = job.connection
         let count = job.pages.count
         let perLabelMs = max(150, job.estLabelMs)
-        func bytes(_ p: DriverPage) -> [UInt8] {
-            encode(label: p.label, status: job.status, cut: p.cut, isLastLabel: p.isLast)
-        }
+        let host = (conn as? TCPConnection)?.host
+        #if canImport(CLibUSB)
+        let deviceID = (conn as? M611USBConnection)?.deviceID ?? ""
+        #else
+        let deviceID = ""
+        #endif
+        let rotation = job.status?.areaRotation ?? 270
+        // Unique-per-run token so a status poll never matches a PRIOR job of the same id still
+        // sitting "Print Complete" in the printer's slot ring (which would report done at once).
+        let token = String(UUID().uuidString.replacingOccurrences(of: "-", with: "").uppercased().prefix(24))
+
         if !job.singleLabel {
-            // FULL JOB: build ONE multi-page M611 job (NumberOfPages = N) so the printer
-            // prints it as a single job — continuous feed, one end-of-job cut for die-cut —
-            // instead of N back-to-back single-label jobs. No mid-job cancel (the firmware
-            // has none); progress is coarse ("Printing…").
+            // FULL JOB: ONE multi-page M611 job (NumberOfPages = N) → the printer prints it as a
+            // single job (continuous feed, one end-of-job cut for die-cut), not N back-to-back
+            // single-label jobs. No mid-job cancel (the firmware has none); coarse "Printing…".
             if job.isCancelled() { return }
-            let rotation = job.status?.areaRotation ?? 270
+            let jobID = "VL" + token + "PRNT"   // 30 chars, unique per run
             let mpages = job.pages.map { p in
                 M611Bitmap.Page(pixels: p.label.bytes, width: p.label.width, height: p.label.height,
                                 cut: mapCut(p.cut), isLast: p.isLast)
             }
             let part = job.pages.first?.label.partNumber ?? ""
             job.progress(.printing)
-            try send(M611Bitmap.buildMultiPageJob(pages: mpages, areaRotation: rotation, substratePart: part),
-                     on: conn)
-            // Keep "Printing…" in the menu for ~the print duration. send() returns when the
-            // BYTES reach the printer (fast); the printer then prints N labels over several
-            // seconds. Without this hold, the job would leave the menu while it's still
-            // physically printing. Bounded by the estimate; nothing to cancel at this point.
-            let printMs = count * perLabelMs + 1500
-            let end = DispatchTime.now().uptimeNanoseconds &+ UInt64(printMs) * 1_000_000
-            while DispatchTime.now().uptimeNanoseconds < end { usleep(200_000) }
+            try send(M611Bitmap.buildMultiPageJob(pages: mpages, areaRotation: rotation,
+                                                  substratePart: part, jobID: jobID), on: conn)
+            // Hold the menu on "Printing…" until the printer reports the job complete — send()
+            // returns when the bytes arrive, but it then prints for several seconds.
+            awaitJobComplete(externalId: jobID, host: host, deviceID: deviceID,
+                             capMs: count * perLabelMs * 3 + 8000, tick: { job.progress(.printing) })
             job.progress(.done)
             return
         }
-        // ONE AT A TIME: time-paced look-ahead, then DRAIN so the labels we already sent
-        // finish printing before we return. The Engine closes the connection on return AND
-        // on a thrown error; closing mid-print leaves the M611 'waiting' (the firmware has no
-        // cancel command). The drain runs from `defer` so it covers a normal finish, a cancel,
-        // AND a transport error partway through the stream.
+
+        // ONE AT A TIME: a separate job per label, paced by a wall-clock estimate so the printer
+        // pipelines ~maxAhead ahead without idling. Cancel stops sending; sent labels still print.
         let t0 = DispatchTime.now().uptimeNanoseconds
-        func elapsedMs() -> Int { Int((DispatchTime.now().uptimeNanoseconds &- t0) / 1_000_000) }
-        func printedEst() -> Int { elapsedMs() / perLabelMs }   // from the print-time calibration
-        let maxAhead = 2   // pipeline up to 2 labels so the printer never idles, but keep the
-                           // queue shallow so Cancel only lets ~the in-flight labels finish.
+        func printedEst() -> Int { Int((DispatchTime.now().uptimeNanoseconds &- t0) / 1_000_000) / perLabelMs }
+        let maxAhead = 2
         var sent = 0
-        defer {
-            // Wait ~the in-flight labels' print time before returning, bounded. On cancel,
-            // drop the safety pad and the cosmetic progress spin (the user abandoned the job)
-            // but still let the physically-in-flight labels finish — closing early would
-            // strand the M611 'waiting'. This frees the per-printer queue promptly on cancel.
-            let cancelled = job.isCancelled()
-            let inFlight = max(0, sent - printedEst())
-            let drainMs = cancelled ? inFlight * perLabelMs + 300
-                                    : inFlight * perLabelMs * 13 / 10 + 1500
-            let drainEnd = DispatchTime.now().uptimeNanoseconds &+ UInt64(drainMs) * 1_000_000
-            while DispatchTime.now().uptimeNanoseconds < drainEnd {
-                if !cancelled { job.progress(.counter(done: min(sent, printedEst()), of: count)) }
-                usleep(150_000)
-            }
-            if !cancelled { job.progress(.counter(done: sent, of: count)) }
-        }
+        var lastID = ""
         for (i, page) in job.pages.enumerated() {
             if job.isCancelled() { break }
             while !job.isCancelled() && (i - printedEst()) >= maxAhead { usleep(30_000) }
             if job.isCancelled() { break }
-            try send(bytes(page), on: conn)
-            sent = i + 1
+            let id = "VL" + token + String(format: "%04d", i)   // 30 chars, unique per label
+            try send(M611Bitmap.buildPrintJob(pixels: page.label.bytes, width: page.label.width,
+                                              height: page.label.height, areaRotation: rotation,
+                                              substratePart: page.label.partNumber,
+                                              cut: mapCut(page.cut), isLastPage: page.isLast,
+                                              jobID: id), on: conn)
+            sent = i + 1; lastID = id
             job.progress(.counter(done: min(sent, max(0, printedEst())), of: count))
             if job.interLabelDelayMs > 0 && i < count - 1 {
                 var slept = 0
                 while slept < job.interLabelDelayMs && !job.isCancelled() { usleep(20_000); slept += 20 }
             }
+        }
+        // DRAIN: wait for the LAST label we sent to ACTUALLY finish printing (real status), so
+        // the menu stays until the final in-flight label is done and the Engine's connection
+        // close never aborts a label mid-print. Real-status polling ends this as soon as the
+        // in-flight labels finish (even on cancel); the cap only matters if telemetry is down.
+        if sent > 0 {
+            let s = sent
+            // Cap scales with the whole job: when the estimate under-predicts, the unprinted
+            // backlog at loop end grows with the label count, so a fixed few-label cap would
+            // fire while the printer is still going and close the socket mid-print. Real status
+            // ends the wait as soon as the last label finishes; this is only the fallback.
+            awaitJobComplete(externalId: lastID, host: host, deviceID: deviceID,
+                             capMs: count * perLabelMs * 3 + 8000,
+                             tick: { job.progress(.counter(done: min(s, max(0, printedEst())), of: count)) })
+            job.progress(.counter(done: s, of: count))
+        }
+    }
+
+    /// Block until the printer reports the job with this ExternalId has finished printing, or
+    /// `capMs` elapses (the safety net for when job telemetry is unavailable). Polls the
+    /// telemetry channel (TCP:9102 / USB vendor iface) — separate from the print pipe, so it's
+    /// safe mid-print — and calls `tick` each poll so the caller can refresh progress.
+    ///
+    /// Completion is concluded ONLY from a SUCCESSFUL poll: either the slot reports complete,
+    /// or (after we've seen the job at least once) it's absent from a valid response for a few
+    /// consecutive polls (it aged out of the ring = finished). A failed/empty round-trip is
+    /// "unknown" — it never advances completion, so a single telemetry hiccup can't end the
+    /// wait early and close the connection while the printer is still printing.
+    func awaitJobComplete(externalId: String, host: String?, deviceID: String,
+                          capMs: Int, tick: () -> Void) {
+        let start = DispatchTime.now().uptimeNanoseconds
+        var everFound = false
+        var absentStreak = 0
+        var loggedSlots = false
+        while Int((DispatchTime.now().uptimeNanoseconds &- start) / 1_000_000) < capMs {
+            // Bounded connect + read so a stalled telemetry port can't hang the device queue.
+            let resp = piclRoundTrip(M611PICL.jobStatusRequest(), host: host, deviceID: deviceID,
+                                     connectTimeoutMs: 1200)
+            if let map = M611PICL.parse(resp) {            // successful round-trip
+                let state = M611PICL.jobState(in: map, externalId: externalId)
+                if state == .complete { return }           // finished — done
+                if state == .printing { everFound = true; absentStreak = 0 }
+                else if everFound {                        // .absent after being seen → aging out
+                    absentStreak += 1
+                    if absentStreak >= 3 { return }        // gone for 3 valid polls → finished
+                } else if !loggedSlots {                   // never seen: help diagnose an id/slot mismatch
+                    loggedSlots = true
+                    let slots = Set(map.keys.compactMap {
+                        $0.hasPrefix("Job ") ? String($0.prefix { $0 != ":" }) : nil })
+                    if !slots.isEmpty { NSLog("[M611] job \(externalId) not found; live slots \(slots.sorted())") }
+                }
+            }
+            // else: transient failure (empty/partial response) — leave completion state untouched
+            // so a single telemetry hiccup never ends the wait early (cap is the only fallback).
+            tick()
+            usleep(700_000)
         }
     }
 
@@ -185,55 +235,77 @@ public final class M611Module: PrinterModule {
         // Issue a PICL PropertyGetRequest for supply / ribbon / battery / substrate and
         // parse the response into CassetteStatus. Runs on the per-printer device queue,
         // so a short blocking round-trip is fine.
-        let req = M611PICL.getRequest()
-        guard !req.isEmpty else { return nil }
-        // USB-connected M611 → PICL over the VENDOR interface (iface 1, EP 0x03/0x84), the
-        // USB analog of network TCP:9102 (the FirmwareDriver/telemetry channel, separate
-        // from the print pipe). Same request + parse as the network path — confirmed live.
-        guard let host = device.host, !host.isEmpty else {
-            #if canImport(CLibUSB)
-            return M611PICL.parse(M611USB.readTelemetry(deviceID: device.id, request: req))
-                .flatMap(Self.cassetteStatus(from:))
-            #else
-            return nil
-            #endif
-        }
-        // PICL telemetry rides TCP 9102 — CONFIRMED on M611 hardware: 9102 resolves the
-        // FirmwareDriver properties; 9100 (the print datastream) echoes the frame but
-        // returns "Invalid Value". Request and response are the same
-        // [16-byte magic][uint32-LE len][plain JSON] envelope (no compression).
-        guard let fd = try? Self.connect(host: host, port: Self.telemetryPort) else { return nil }
-        defer { Darwin.close(fd) }
-        guard (try? Self.writeAll(fd: fd, bytes: req)) != nil else { return nil }
-        let resp = Self.readResponse(fd: fd, timeoutMs: 1500)
+        let resp = piclRoundTrip(M611PICL.getRequest(), host: device.host, deviceID: device.id)
         guard !resp.isEmpty else { return nil }
         if let map = M611PICL.parse(resp) { return Self.cassetteStatus(from: map) }
         // Bytes but no plain JSON (unexpected — confirmed plain on hardware). Log a hex
         // preview so any future firmware that compresses can be decoded from the sample.
         let hex = resp.prefix(48).map { String(format: "%02X", $0) }.joined(separator: " ")
-        NSLog("[M611] PICL status on :9102 → \(resp.count) bytes, no plain JSON. First 48: \(hex)")
+        NSLog("[M611] PICL status → \(resp.count) bytes, no plain JSON. First 48: \(hex)")
         return nil
+    }
+
+    /// Send a PICL request on the telemetry channel and return the raw response bytes (empty
+    /// on failure). Network → TCP:9102 (CONFIRMED: 9102 resolves the FirmwareDriver/spooler
+    /// components; 9100 is the print datastream and returns "Invalid Value"). USB → the VENDOR
+    /// interface (iface 1, EP 0x03/0x84), the USB analog of 9102. Either way it's SEPARATE from
+    /// the print pipe, so it's safe to poll during a print. Same envelope as a print segment
+    /// but a different magic: `[16-byte magic][uint32-LE len][plain JSON]`.
+    func piclRoundTrip(_ request: [UInt8], host: String?, deviceID: String,
+                       connectTimeoutMs: Int = 4000) -> [UInt8] {
+        guard !request.isEmpty else { return [] }
+        if let host, !host.isEmpty {
+            guard let fd = try? Self.connect(host: host, port: Self.telemetryPort,
+                                             timeoutMs: connectTimeoutMs) else { return [] }
+            defer { Darwin.close(fd) }
+            guard (try? Self.writeAll(fd: fd, bytes: request)) != nil else { return [] }
+            return Self.readResponse(fd: fd, timeoutMs: 1500)
+        }
+        #if canImport(CLibUSB)
+        return M611USB.readTelemetry(deviceID: deviceID, request: request)
+        #else
+        return []
+        #endif
     }
 
     // MARK: – Synchronous TCP (runs on the per-printer serial queue, so blocking is fine)
 
     enum NetError: Error { case noHost, connectFailed, writeFailed }
 
-    static func connect(host: String, port: UInt16) throws -> Int32 {
+    /// Connect with a BOUNDED wait (non-blocking connect + poll), so a stalled printer port
+    /// can never block the per-printer serial queue on the OS default (~75s) — important now
+    /// that a print polls the telemetry port every ~700ms while the printer is busy. Also sets
+    /// SO_NOSIGPIPE so a write to a peer-closed socket throws instead of killing the process.
+    static func connect(host: String, port: UInt16, timeoutMs: Int = 4000) throws -> Int32 {
         let fd = socket(AF_INET, SOCK_STREAM, 0)
         guard fd >= 0 else { throw NetError.connectFailed }
+        var on: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
         var addr = sockaddr_in()
         addr.sin_family = sa_family_t(AF_INET)
         addr.sin_port = port.bigEndian
         guard inet_pton(AF_INET, host, &addr.sin_addr) == 1 else {
             Darwin.close(fd); throw NetError.connectFailed
         }
+        let flags = fcntl(fd, F_GETFL, 0)
+        _ = fcntl(fd, F_SETFL, flags | O_NONBLOCK)
         let rc = withUnsafePointer(to: &addr) { p in
             p.withMemoryRebound(to: sockaddr.self, capacity: 1) { sp in
                 Darwin.connect(fd, sp, socklen_t(MemoryLayout<sockaddr_in>.size))
             }
         }
-        guard rc == 0 else { Darwin.close(fd); throw NetError.connectFailed }
+        if rc != 0 {
+            guard errno == EINPROGRESS else { Darwin.close(fd); throw NetError.connectFailed }
+            var pfd = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+            guard poll(&pfd, 1, Int32(timeoutMs)) > 0, (pfd.revents & Int16(POLLOUT)) != 0 else {
+                Darwin.close(fd); throw NetError.connectFailed
+            }
+            var soErr: Int32 = 0
+            var len = socklen_t(MemoryLayout<Int32>.size)
+            getsockopt(fd, SOL_SOCKET, SO_ERROR, &soErr, &len)
+            guard soErr == 0 else { Darwin.close(fd); throw NetError.connectFailed }
+        }
+        _ = fcntl(fd, F_SETFL, flags)   // restore blocking mode for writeAll / readResponse
         return fd
     }
 
@@ -264,7 +336,11 @@ public final class M611Module: PrinterModule {
             let r = buf.withUnsafeMutableBytes { Darwin.read(fd, $0.baseAddress, $0.count) }
             if r <= 0 { break }   // EOF / error
             out += buf.prefix(r)
-            if out.count > 24, out.last == UInt8(ascii: "}"), M611PICL.parse(out) != nil { break }
+            // Stop as soon as a complete PICL object has arrived. parse() brace-matches, so it
+            // succeeds even if there are trailing bytes after the closing '}' — don't gate on
+            // the last byte being '}', or a frame with trailing padding would stall the full
+            // timeout on every poll (the job-status frame is ~64 properties).
+            if out.count > 24, M611PICL.parse(out) != nil { break }
             if out.count > 1_000_000 { break }   // safety cap
         }
         return out

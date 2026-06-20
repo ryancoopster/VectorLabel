@@ -21,6 +21,29 @@ enum M611PICL {
     /// All telemetry lives under this component (the printer's FirmwareDriver).
     static let firmwareDriver = "B80EB2EA-4F49-423A-875C-8ACB1ACB9734"
 
+    /// The print-spooler component (job queue + per-job status). Confirmed reachable on the
+    /// SAME channel as telemetry — TCP:9102 and USB vendor iface (probe read TotalJobsQueued
+    /// here mid-print). Jobs live in numbered slots named by the literal string "Job N".
+    static let printSpooler = "90AF7DE7-6DB1-45AF-A46F-C66605612E61"
+
+    /// Per-job property GUIDs (group = the slot name "Job N").
+    enum Job {
+        static let externalId = "09ADF412-B765-4E71-A202-E93762F4442F"   // == our print's JobID
+        static let status     = "B32A3258-62D1-4E43-8D73-3B352B61B6C8"   // ""→Streaming→Printing→Print Complete
+        static let complete   = "Print Complete"
+        static let gone       = "Property No Longer Available"           // slot releasing → also finished
+    }
+    /// Job lifecycle reading for one matched slot.
+    enum JobState: Equatable {
+        case absent          // no slot currently holds this ExternalId (queued-not-yet, or aged out)
+        case printing        // present + still streaming/printing
+        case complete        // present + "Print Complete" / status released → finished
+    }
+    /// The printer keeps a small ring of recent job slots (observed "Job 4"/"Job 5" with
+    /// hundreds queued), so scanning 1…N and matching by ExternalId finds ours regardless
+    /// of the slot number it lands in.
+    static let jobSlotScan = 32
+
     /// group:property GUIDs (under `firmwareDriver`).
     enum P {
         static let substrateGroup   = "41B87577-BD88-48CE-BF21-BF5A6BFC9FE3"
@@ -74,6 +97,42 @@ enum M611PICL {
     /// A framed `PropertyGetRequest` for all the telemetry properties above.
     static func getRequest() -> [UInt8] {
         let reqs = requested.map { ["Component": firmwareDriver, "GUID": "\($0.group):\($0.prop)"] }
+        return request(reqs)
+    }
+
+    /// A framed `PropertyGetRequest` that scans the job-slot ring for both ExternalId and
+    /// status, so a parse of the response can find OUR job (by its unique ExternalId) and
+    /// read whether it has finished printing.
+    static func jobStatusRequest() -> [UInt8] {
+        var reqs: [[String: String]] = []
+        for n in 1...jobSlotScan {
+            reqs.append(["Component": printSpooler, "GUID": "Job \(n):\(Job.externalId)"])
+            reqs.append(["Component": printSpooler, "GUID": "Job \(n):\(Job.status)"])
+        }
+        return request(reqs)
+    }
+
+    /// The lifecycle state of our job in a parsed PICL response. Scans whatever job slots the
+    /// response actually returned (matched by ExternalId, case-insensitively) rather than
+    /// assuming a slot-number range, so it's robust to however the firmware names slots. A
+    /// matched slot whose status property is missing or "Property No Longer Available" counts
+    /// as `.complete` (the slot is releasing after the job finished). Returns `.absent` when no
+    /// returned slot holds our ExternalId — the CALLER must distinguish that from a failed
+    /// round-trip (parse == nil), which is transient and means "unknown", not "done".
+    static func jobState(in map: [String: String], externalId: String) -> JobState {
+        let suffix = ":\(Job.externalId)"
+        for (key, value) in map where key.hasSuffix(suffix)
+            && value.caseInsensitiveCompare(externalId) == .orderedSame {
+            let group = String(key.dropLast(suffix.count))         // the slot name, e.g. "Job 5"
+            let status = map["\(group):\(Job.status)"]
+            if status == nil || status == Job.complete || status == Job.gone { return .complete }
+            return .printing
+        }
+        return .absent
+    }
+
+    /// Frame a list of PropertyGetRequest elements: `[magic][uint32-LE len][JSON]`.
+    private static func request(_ reqs: [[String: String]]) -> [UInt8] {
         guard let json = try? JSONSerialization.data(withJSONObject: ["PropertyGetRequests": reqs]) else { return [] }
         let len = UInt32(json.count)
         var out = magic

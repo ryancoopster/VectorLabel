@@ -8,7 +8,8 @@ import CLibUSB
 /// Opaque connection token wrapping the libusb handle for an M611 USB device.
 final class M611USBConnection: PrinterConnection {
     let handle: OpaquePointer
-    init(_ handle: OpaquePointer) { self.handle = handle }
+    let deviceID: String   // kept so a job can poll telemetry (vendor iface) mid-print
+    init(_ handle: OpaquePointer, deviceID: String) { self.handle = handle; self.deviceID = deviceID }
 }
 #endif
 

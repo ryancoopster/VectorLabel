@@ -18,6 +18,46 @@ final class M611PICLTests: XCTestCase {
         XCTAssertTrue(json.contains(M611PICL.firmwareDriver))
     }
 
+    func testJobStatusRequestFramingScansSlots() {
+        let req = M611PICL.jobStatusRequest()
+        XCTAssertEqual(Array(req.prefix(16)), M611PICL.magic)
+        let json = String(bytes: req[20...], encoding: .utf8) ?? ""
+        XCTAssertTrue(json.contains("PropertyGetRequests"))
+        XCTAssertTrue(json.contains(M611PICL.printSpooler))           // spooler component, not telemetry
+        XCTAssertTrue(json.contains("Job 1:\(M611PICL.Job.externalId)"))
+        XCTAssertTrue(json.contains("Job \(M611PICL.jobSlotScan):\(M611PICL.Job.status)"))
+    }
+
+    func testJobStateMatchesByExternalId() {
+        // Two job slots; matching is by ExternalId (case-insensitive), independent of slot number.
+        let mine = "VLABC0000000000000000000000PRNT"
+        let json = """
+        {"PropertyGetResponses":[\
+        {"GUID":"Job 4:\(M611PICL.Job.externalId)","Value":"OTHER000000000000000000000000000"},\
+        {"GUID":"Job 4:\(M611PICL.Job.status)","Value":"Print Complete"},\
+        {"GUID":"Job 5:\(M611PICL.Job.externalId)","Value":"\(mine.lowercased())"},\
+        {"GUID":"Job 5:\(M611PICL.Job.status)","Value":"Printing"}]}
+        """
+        let map = M611PICL.parse(Array(json.utf8))!
+        XCTAssertEqual(M611PICL.jobState(in: map, externalId: mine), .printing)          // case-insensitive match
+        XCTAssertEqual(M611PICL.jobState(in: map, externalId: "OTHER000000000000000000000000000"), .complete)
+        XCTAssertEqual(M611PICL.jobState(in: map, externalId: "NOTPRESENT"), .absent)    // no slot → absent (not "done")
+    }
+
+    func testJobStateMissingOrReleasedStatusCountsComplete() {
+        // A matched slot whose status property is absent, or "Property No Longer Available",
+        // means the job finished and the slot is releasing — treat as complete, not stuck.
+        let mine = "VLXYZ0000000000000000000000PRNT"
+        let absent = "{\"PropertyGetResponses\":[{\"GUID\":\"Job 7:\(M611PICL.Job.externalId)\",\"Value\":\"\(mine)\"}]}"
+        XCTAssertEqual(M611PICL.jobState(in: M611PICL.parse(Array(absent.utf8))!, externalId: mine), .complete)
+        let released = """
+        {"PropertyGetResponses":[\
+        {"GUID":"Job 7:\(M611PICL.Job.externalId)","Value":"\(mine)"},\
+        {"GUID":"Job 7:\(M611PICL.Job.status)","Value":"Property No Longer Available"}]}
+        """
+        XCTAssertEqual(M611PICL.jobState(in: M611PICL.parse(Array(released.utf8))!, externalId: mine), .complete)
+    }
+
     func testParseExtractsJSONFromFramedResponse() {
         let sg = M611PICL.P.substrateGroup
         let json = """

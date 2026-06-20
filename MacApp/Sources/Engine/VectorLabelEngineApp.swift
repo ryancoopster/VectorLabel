@@ -87,6 +87,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // A write to a printer socket the device closed (mid-print telemetry polling opens many
+        // short-lived sockets) would otherwise raise SIGPIPE and kill the Engine. Ignore it so
+        // the write surfaces as a normal EPIPE error instead. (Sockets also set SO_NOSIGPIPE.)
+        signal(SIGPIPE, SIG_IGN)
         if Bundle.main.bundleIdentifier == nil || Bundle.main.bundleIdentifier!.isEmpty {
             UserDefaults.standard.set("com.sai.vectorlabel.engine", forKey: "CFBundleIdentifier")
         }
