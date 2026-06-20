@@ -2792,9 +2792,34 @@ function buildCustomPrintHeader(){
   const jobLabelCount=dJobLabelCount();
   const dot=pr.status==="ready"?"var(--green)":pr.status==="busy"?"var(--warn)":"var(--red)";
   const statusLbl=pr.status==="ready"?"Ready":pr.status==="busy"?"Busy":"Offline";
+  // "Multi-label": a data source is bound AND a field on the canvas pulls from it, so the
+  // job prints more than one label (and the All/Selected/Range control is active). When
+  // multi, Cut + Copies share the top row and the range control sits bottom-right by the
+  // Print button; otherwise Cut stays top, Copies + Feed stay bottom (as before).
+  const multi = hasBoundData() && labelUsesData();
+  const cutCtl=`<div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
+        <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px" title="When to cut the supply">Cut</span>
+        <div style="position:relative">
+          <select class="inp" style="width:160px;padding:4px 24px 4px 8px;font-size:11px;appearance:none;-webkit-appearance:none;cursor:pointer"
+            title="When to cut the supply for this job" onchange="S.cutMode=this.value;R()">
+            <option value="afterJobLast"${dEffCutMode()==="afterJobLast"?" selected":""}>Cut at end of job</option>
+            <option value="eachLabel"${dEffCutMode()==="eachLabel"?" selected":""}>Cut after every label</option>
+            <option value="never"${dEffCutMode()==="never"?" selected":""}>No cut</option>
+          </select>
+          <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:9px;pointer-events:none">▼</div>
+        </div>
+      </div>`;
+  const copiesCtl=`<div style="display:flex;align-items:center;gap:6px">
+        <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Copies</span>
+        <input type="number" class="inp" min="1" max="999" value="${copies}" style="width:58px;padding:4px 6px;font-size:12px" onchange="S.copies=Math.max(1,Math.min(999,parseInt(this.value)||1));R()">
+      </div>`;
+  const feedCtl=`<label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:var(--text2)" title="Feed a blank lead label before the job to clear/advance the supply — die-cut: one label (cut per your setting); continuous: 1 inch, always cut">
+        <input type="checkbox" ${S.feedToClear?"checked":""} onchange="dSetFeedToClear(this.checked)" style="cursor:pointer">
+        Feed to clear
+      </label>`;
   // Two-row bar so the window needn't be as wide: LEFT = printer + status (top) over
-  // supply level (bottom); RIGHT = cut (top) over copies + feed (bottom); the Print
-  // button is anchored far right, spanning both rows.
+  // supply level (bottom); RIGHT = cut [+ copies when multi] (top) over [copies when
+  // single] + feed + range (bottom); the Print button is anchored far right, both rows.
   return`<div style="background:var(--surface);border-bottom:1px solid var(--bd2);padding:6px 14px;display:flex;align-items:stretch;flex-wrap:wrap;gap:8px 14px;min-height:42px;flex-shrink:0">
 
     <!-- LEFT column: printer + status + job status (top) / supply level (bottom) -->
@@ -2825,39 +2850,23 @@ function buildCustomPrintHeader(){
             :dCassetteMismatch()?`<span title="Loaded ${escAttr(dLoadedCassette().partNumber)} doesn't match — the label may print misaligned or cropped" style="color:var(--red);font-size:12px;line-height:1;white-space:nowrap">⚠ mismatch</span>`:""}
           ${buyMoreControl()}
         </div>
-        ${buildPrintRangeControl()}
       </div>
     </div>
 
     <div style="flex:1;min-width:8px"></div>
 
-    <!-- RIGHT column: cut (top) / copies + feed (bottom) -->
+    <!-- RIGHT column. Top: Cut (+ Copies when multi-label). Bottom: Copies (single only) +
+         Feed + the All/Selected/Range control (only active when multi-label), range nearest
+         the Print button. -->
     <div style="display:flex;flex-direction:column;gap:6px;justify-content:center;align-items:flex-end">
-      <!-- Cut option — always selectable. The M611 actuates its built-in cutter; a
-           manual-cutter printer stops and prompts at the chosen point (future). -->
-      <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
-        <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px" title="When to cut the supply">Cut</span>
-        <div style="position:relative">
-          <select class="inp" style="width:160px;padding:4px 24px 4px 8px;font-size:11px;appearance:none;-webkit-appearance:none;cursor:pointer"
-            title="When to cut the supply for this job" onchange="S.cutMode=this.value;R()">
-            <option value="afterJobLast"${dEffCutMode()==="afterJobLast"?" selected":""}>Cut at end of job</option>
-            <option value="eachLabel"${dEffCutMode()==="eachLabel"?" selected":""}>Cut after every label</option>
-            <option value="never"${dEffCutMode()==="never"?" selected":""}>No cut</option>
-          </select>
-          <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:9px;pointer-events:none">▼</div>
-        </div>
+      <div style="display:flex;align-items:center;gap:12px;justify-content:flex-end">
+        ${cutCtl}
+        ${multi?copiesCtl:""}
       </div>
       <div style="display:flex;align-items:center;gap:12px;justify-content:flex-end">
-        <!-- Copies -->
-        <div style="display:flex;align-items:center;gap:6px">
-          <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Copies</span>
-          <input type="number" class="inp" min="1" max="999" value="${copies}" style="width:58px;padding:4px 6px;font-size:12px" onchange="S.copies=Math.max(1,Math.min(999,parseInt(this.value)||1));R()">
-        </div>
-        <!-- Feed to clear before printing -->
-        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:var(--text2)" title="Feed a blank lead label before the job to clear/advance the supply — die-cut: one label (cut per your setting); continuous: 1 inch, always cut">
-          <input type="checkbox" ${S.feedToClear?"checked":""} onchange="dSetFeedToClear(this.checked)" style="cursor:pointer">
-          Feed to clear
-        </label>
+        ${multi?"":copiesCtl}
+        ${feedCtl}
+        ${buildPrintRangeControl()}
       </div>
     </div>
 
