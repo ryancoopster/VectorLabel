@@ -96,23 +96,20 @@ public final class M611Module: PrinterModule {
         guard let host = device.host, !host.isEmpty else { return nil }
         let req = M611PICL.getRequest()
         guard !req.isEmpty else { return nil }
-        // The PICL-over-TCP port is unconfirmed (Brady's SDK carries PICL over BLE), so
-        // try the control port (9102) first, then the bidirectional print socket (9100).
-        for port in [Self.telemetryPort, Self.printPort] {
-            guard let fd = try? Self.connect(host: host, port: port) else { continue }
-            defer { Darwin.close(fd) }
-            guard (try? Self.writeAll(fd: fd, bytes: req)) != nil else { continue }
-            let resp = Self.readResponse(fd: fd, timeoutMs: 1500)
-            if resp.isEmpty { continue }
-            if let map = M611PICL.parse(resp), let status = Self.cassetteStatus(from: map) {
-                return status
-            }
-            // Got bytes but no plain-text JSON — likely an LZ4-framed response whose exact
-            // framing isn't confirmed yet. Log a hex preview so we can decode it from a
-            // real-hardware sample, then try the next port.
-            let hex = resp.prefix(48).map { String(format: "%02X", $0) }.joined(separator: " ")
-            NSLog("[M611] PICL status on :\(port) → \(resp.count) bytes, no plain JSON (likely compressed). First 48: \(hex)")
-        }
+        // PICL telemetry rides TCP 9102 — CONFIRMED on M611 hardware: 9102 resolves the
+        // FirmwareDriver properties; 9100 (the print datastream) echoes the frame but
+        // returns "Invalid Value". Request and response are the same
+        // [16-byte magic][uint32-LE len][plain JSON] envelope (no compression).
+        guard let fd = try? Self.connect(host: host, port: Self.telemetryPort) else { return nil }
+        defer { Darwin.close(fd) }
+        guard (try? Self.writeAll(fd: fd, bytes: req)) != nil else { return nil }
+        let resp = Self.readResponse(fd: fd, timeoutMs: 1500)
+        guard !resp.isEmpty else { return nil }
+        if let map = M611PICL.parse(resp) { return Self.cassetteStatus(from: map) }
+        // Bytes but no plain JSON (unexpected — confirmed plain on hardware). Log a hex
+        // preview so any future firmware that compresses can be decoded from the sample.
+        let hex = resp.prefix(48).map { String(format: "%02X", $0) }.joined(separator: " ")
+        NSLog("[M611] PICL status on :9102 → \(resp.count) bytes, no plain JSON. First 48: \(hex)")
         return nil
     }
 
@@ -176,11 +173,11 @@ public final class M611Module: PrinterModule {
     static func cassetteStatus(from map: [String: String]) -> CassetteStatus? {
         func v(_ g: String, _ p: String) -> String? { map["\(g):\(p)"] }
         func i(_ g: String, _ p: String) -> Int? { v(g, p).flatMap { Int($0) } }
-        // Dimensions: units unconfirmed (the SDK getters return inches). Treat a small
-        // value as inches → mils, a large one as already-mils. Confirm on capture.
+        // PICL reports substrate dimensions in thousandths of an inch (mils) — use as-is
+        // (confirmed on hardware: a 1.5" label reports "1500").
         func mils(_ g: String, _ p: String) -> Int {
             guard let s = v(g, p), let d = Double(s), d > 0 else { return 0 }
-            return Int((d < 100 ? d * 1000 : d).rounded())
+            return Int(d.rounded())
         }
         let part    = v(M611PICL.P.substrateGroup, M611PICL.P.partNumber) ?? ""
         let supply  = i(M611PICL.P.substrateGroup, M611PICL.P.supplyRemaining)
@@ -188,7 +185,7 @@ public final class M611Module: PrinterModule {
         let battery = i(M611PICL.P.batteryGroup,   M611PICL.P.batteryCharge)
         guard supply != nil || ribbon != nil || battery != nil || !part.isEmpty else { return nil }
 
-        let dpi = i(M611PICL.P.substrateGroup, M611PICL.P.dpi) ?? 300
+        let dpi = 300   // M611 is fixed 300 dpi (a DPI property isn't exposed over PICL)
         let w  = mils(M611PICL.P.substrateGroup, M611PICL.P.substrateWidth)
         let h  = mils(M611PICL.P.substrateGroup, M611PICL.P.substrateHeight)
         let pw = mils(M611PICL.P.substrateGroup, M611PICL.P.printableWidth)
@@ -203,7 +200,7 @@ public final class M611Module: PrinterModule {
             supplyRemainingPct: supply ?? 0,
             labelsPerRoll: BradyCatalog.labelsPerRoll(forPartNumber: part),
             pixelWidth: px(w), pixelHeight: px(h),
-            areaRotation: nil,   // per-area group GUID needs the boot packet → encode keeps 270
+            areaRotation: i(M611PICL.P.areaGroup, M611PICL.P.areaRotation),  // real value from telemetry
             ribbonRemainingPct: ribbon,
             ribbonPartNumber: nil,
             batteryPct: battery

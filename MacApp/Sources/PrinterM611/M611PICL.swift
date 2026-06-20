@@ -31,11 +31,14 @@ enum M611PICL {
         static let printableWidth   = "921C0E3E-45F4-466E-B748-CA1509E75C9D"
         static let printableHeight  = "FCD0EDDD-3D48-427D-B27C-0D2D7BBC8AC2"
         static let isDieCut         = "1BC6EE50-5F32-4CAA-8D32-D70167E0792D"
-        static let dpi              = "890AF444-4F6B-44E9-B3F6-EA0239DE6317"
         static let ribbonGroup      = "CC359C57-F0F2-44E3-9940-3F1BFF1685BC"
         static let ribbonRemaining  = "5DA4C82D-C498-4DB2-A87A-D65499E225A0"  // %
         static let batteryGroup     = "FDA4C5D4-8C46-45E5-80E4-48504451C7B5"
         static let batteryCharge    = "62160CE4-7FED-4F3B-BE27-9D773CFB84DC"  // %
+        // AreaRotation's group is the literal string "Substrate Area 0" — confirmed on
+        // hardware to resolve directly (no boot-packet handshake needed).
+        static let areaGroup        = "Substrate Area 0"
+        static let areaRotation     = "E7CBB620-9556-4979-AEF0-76DAB1FBAC8E"  // degrees
     }
 
     /// The (group, property) pairs we query. (AreaRotation is intentionally omitted —
@@ -45,8 +48,9 @@ enum M611PICL {
         (P.substrateGroup, P.supplyRemaining), (P.substrateGroup, P.partNumber),
         (P.substrateGroup, P.substrateWidth),  (P.substrateGroup, P.substrateHeight),
         (P.substrateGroup, P.printableWidth),  (P.substrateGroup, P.printableHeight),
-        (P.substrateGroup, P.isDieCut),        (P.substrateGroup, P.dpi),
+        (P.substrateGroup, P.isDieCut),
         (P.ribbonGroup, P.ribbonRemaining),    (P.batteryGroup, P.batteryCharge),
+        (P.areaGroup, P.areaRotation),
     ]
 
     /// A framed `PropertyGetRequest` for all the telemetry properties above.

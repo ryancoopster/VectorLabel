@@ -41,7 +41,8 @@ final class M611PICLTests: XCTestCase {
             "\(sg):\(M611PICL.P.supplyRemaining)": "62",
             "\(M611PICL.P.ribbonGroup):\(M611PICL.P.ribbonRemaining)": "45",
             "\(sg):\(M611PICL.P.partNumber)": "M6-32-427",
-            "\(sg):\(M611PICL.P.substrateWidth)": "1.5",   // inches → 1500 mils
+            "\(sg):\(M611PICL.P.substrateWidth)": "1500",   // mils (thousandths of inch)
+            "\(M611PICL.P.areaGroup):\(M611PICL.P.areaRotation)": "270",
         ]
         let cs = M611Module.cassetteStatus(from: map)
         XCTAssertEqual(cs?.batteryPct, 80)
@@ -49,6 +50,7 @@ final class M611PICLTests: XCTestCase {
         XCTAssertEqual(cs?.ribbonRemainingPct, 45)
         XCTAssertEqual(cs?.partNumber, "M6-32-427")
         XCTAssertEqual(cs?.labelWidthMils, 1500)
+        XCTAssertEqual(cs?.areaRotation, 270)
     }
 
     func testParseReturnsNilForOpaqueResponse() {
