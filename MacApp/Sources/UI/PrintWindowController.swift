@@ -400,6 +400,7 @@ public final class PrintWindowController: NSObject {
               cassettes: \(cassettesJSONString()),
               columnConfig: \(AppSettings.shared.columnConfigJSON()),
               filterSortPresets: \(AppSettings.shared.filterSortPresetsJSON),
+              feedToClear: \(AppSettings.shared.feedToClearBeforePrint),
               reprint: \(reprintJSON)
             });
           }
@@ -573,6 +574,11 @@ extension PrintWindowController: WKScriptMessageHandler {
         case "ready":
             sendInitialState()
 
+        case "setFeedToClear":
+            // Persist the "feed to clear before printing" tick box so it survives reopen.
+            AppSettings.shared.feedToClearBeforePrint =
+                ((body["payload"] as? [String: Any])?["value"] as? Bool) ?? false
+
         default:
             break
         }
@@ -659,6 +665,8 @@ extension PrintWindowController: WKScriptMessageHandler {
         // printer module stamps the per-label cut at ENCODE time — this front-end ships
         // printer-agnostic rasters, not VGL.
         let cutMode = CutMode(rawValue: (payload["cutMode"] as? String) ?? "") ?? .afterJobLast
+        // "Feed to clear before printing" — prepend a blank lead label (built below).
+        let feedToClear = (payload["feedToClear"] as? Bool) ?? false
 
         // Capture the print-time state (main actor) so a later Reprint can re-open
         // this window with the same source, selection, and filter/sort.
@@ -705,6 +713,12 @@ extension PrintWindowController: WKScriptMessageHandler {
                 renderedLabels.append(RenderedLabel(pixels: rendered.pixels, width: rendered.width,
                                                     height: rendered.height, partNumber: part))
             }
+            // Feed-to-clear: prepend a blank lead label (die-cut → one label pitch;
+            // continuous → 1" feed). The Engine cuts it per the user's setting for die-cut,
+            // and always for continuous.
+            if feedToClear, let size = template.labelSize {
+                renderedLabels.insert(RenderedLabel.feedClearBlank(size: size, partNumber: part), at: 0)
+            }
             // Estimate per-label print time from the label's print length. Calibrated
             // to measured hardware: a 1.5" label (~450 px @ 300 dpi) prints in ~0.85 s.
             let estLabelMs = RenderedLabel.estimatedPrintMs(maxDimensionPx: labelPx)
@@ -724,7 +738,8 @@ extension PrintWindowController: WKScriptMessageHandler {
                     cutMode: cutMode,
                     estLabelMs: estLabelMs,
                     renderedLabels: renderedLabels,
-                    reprint: reprintInfo
+                    reprint: reprintInfo,
+                    feedToClear: feedToClear
                 )
                 do {
                     try self.backend?.submit(job)

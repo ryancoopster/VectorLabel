@@ -266,7 +266,8 @@ public final class PrinterManager: ObservableObject {
         cutMode: CutMode = .afterJobLast,
         estLabelMs: Int = 1000,
         ipcJobID: String = "",
-        sourceApp: String = ""
+        sourceApp: String = "",
+        feedToClear: Bool = false
     ) -> PrintJob {
         // Resolve the target device, its driver module, and the model's per-model print
         // settings up front (main-actor state). The driver's progress capability +
@@ -340,6 +341,14 @@ public final class PrinterManager: ObservableObject {
                 job.markFailed(); finishOnMain(); return
             }
 
+            // Feed-to-clear: the front-end prepended a blank lead label (labels[0]).
+            // Continuous tape is ALWAYS cut after the 1" feed; die-cut follows the user's
+            // cut setting (the lead label is just a normal first label).
+            let continuous = (liveStatus?.isContinuous == true) || (liveStatus.map { !$0.isDieCut } ?? false)
+            func cutFor(_ i: Int) -> CutMode {
+                (feedToClear && i == 0 && continuous) ? .eachLabel : cutMode
+            }
+
             do {
                 let conn = try module.open(device)
                 defer { module.close(conn) }
@@ -356,7 +365,7 @@ public final class PrinterManager: ObservableObject {
                     for (i, label) in labels.enumerated() {
                         if job.isCancelled { break }
                         let bytes = module.encode(label: label, status: liveStatus,
-                                                  cut: cutMode, isLastLabel: i == count - 1)
+                                                  cut: cutFor(i), isLastLabel: i == count - 1)
                         try module.send(bytes, on: conn)
                         var waited = 0
                         while waited < perLabelMs && !job.isCancelled {
@@ -393,7 +402,7 @@ public final class PrinterManager: ObservableObject {
                     var batch: [UInt8] = []
                     for (i, label) in labels.enumerated() {
                         batch += module.encode(label: label, status: liveStatus,
-                                               cut: cutMode, isLastLabel: i == count - 1)
+                                               cut: cutFor(i), isLastLabel: i == count - 1)
                     }
                     if !job.isCancelled { try module.send(batch, on: conn) }
                     if pacesByLabels && !job.isCancelled {

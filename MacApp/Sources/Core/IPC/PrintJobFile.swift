@@ -60,6 +60,11 @@ public struct PrintJobFile: Codable {
     /// Kept so an in-flight pre-upgrade job file still decodes.
     public var labels: [Data]
     public var reprint: ReprintInfo?      // print-time state for "reopen on reprint"
+    /// "Feed to clear before printing": the front-end has prepended a blank lead label
+    /// (renderedLabels[0]) — die-cut: one label pitch; continuous: a 1" feed. The Engine
+    /// force-cuts that lead label for continuous tape (always), and cuts it per `cutMode`
+    /// for die-cut. Default false.
+    public var feedToClear: Bool
 
     public init(id: String,
                 createdAt: String,
@@ -72,7 +77,8 @@ public struct PrintJobFile: Codable {
                 estLabelMs: Int = 1000,
                 renderedLabels: [RenderedLabel] = [],
                 labels: [Data] = [],
-                reprint: ReprintInfo? = nil) {
+                reprint: ReprintInfo? = nil,
+                feedToClear: Bool = false) {
         self.schema = 2
         self.id = id
         self.createdAt = createdAt
@@ -86,6 +92,7 @@ public struct PrintJobFile: Codable {
         self.renderedLabels = renderedLabels
         self.labels = labels
         self.reprint = reprint
+        self.feedToClear = feedToClear
     }
 
     // Tolerant decode: a job file written before `renderedLabels` (or `labels`)
@@ -93,7 +100,7 @@ public struct PrintJobFile: Codable {
     // the queue on an undecodable file.
     enum CodingKeys: String, CodingKey {
         case schema, id, createdAt, sourceApp, title, templateName, printerID
-        case copies, cutMode, estLabelMs, renderedLabels, labels, reprint
+        case copies, cutMode, estLabelMs, renderedLabels, labels, reprint, feedToClear
     }
     /// The highest `schema` this build understands. A file declaring a newer schema
     /// is rejected (routed to failed/) rather than silently mis-decoded by an older
@@ -152,5 +159,6 @@ public struct PrintJobFile: Codable {
         }
         labels  = (try? c.decode([Data].self, forKey: .labels)) ?? []
         reprint = try? c.decode(ReprintInfo.self, forKey: .reprint)
+        feedToClear = (try? c.decode(Bool.self, forKey: .feedToClear)) ?? false
     }
 }

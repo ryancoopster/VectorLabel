@@ -267,6 +267,7 @@ let S={
   // (continuous → eachLabel; die-cut → afterJobLast). One of
   // "afterJobLast" | "eachLabel" | "never", carried in PrintJobFile.cutMode.
   cutMode:null,
+  feedToClear:false,   // "Feed to clear before printing" — persisted; injected at init
   // Continuous-supply label length (inches); null ⇒ use the catalog default.
   // Ignored for die-cut supplies.
   labelLen:null,
@@ -303,6 +304,14 @@ function initDesignerPrefs(p){
   if(typeof p.recH==='number'&&p.recH>0)S.recH=p.recH;
   if(typeof p.dbH==='number'&&p.dbH>0)S.dbH=p.dbH;
   if(typeof p.propW==='number'&&p.propW>0)S.propW=Math.max(PROP_MIN,Math.min(PROP_MAX,p.propW));
+  if(typeof p.feedToClear==='boolean')S.feedToClear=p.feedToClear;
+  R();
+}
+// "Feed to clear before printing" — toggle + persist (AppSettings) via the bridge.
+function dSetFeedToClear(v){
+  S.feedToClear=!!v;
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"setFeedToClear",payload:{value:S.feedToClear}});
   R();
 }
 function saveDesignerPrefs(){
@@ -402,6 +411,17 @@ function setLabelLen(v){
   S.labelLen=(isFinite(n)&&n>0)?Math.min(LEN_MAX,Math.max(LEN_MIN,n)):null;
   markDirty();
   R();
+}
+// "Use currently installed" (supply picker): select the defined supply whose part
+// numbers include the loaded cassette's part number (exact, or by bulk-box/cartridge
+// core). No match → a pop-up telling the user to add one in settings.
+function dUseInstalledSupply(){
+  const pn=(dLoadedCassette()||{}).partNumber||"";
+  if(!pn){ S._infoTitle="No supply installed"; S._infoMsg="The printer doesn't report a loaded part number."; S.modal="info"; renderModal(); return; }
+  const match=BL.find(l=>(l.parts||[]).some(p=>dPartEq(p.pn,pn)));
+  if(!match){ S._infoTitle="No matching supply"; S._infoMsg="No defined supply matches the installed part number ("+pn+"). Add one in settings."; S.modal="info"; renderModal(); return; }
+  pickSupply(match.n);
+  closeModal();
 }
 // Toggle the continuous-label canvas between portrait (0°) and landscape (90°).
 // #14 — the Swift renderer rotates the printed raster to match (LabelRenderer).
@@ -1648,15 +1668,29 @@ function renderModal(){
       </div>`;
   }
 
+  // Generic info pop-up (e.g. "no defined supply matches the installed part number").
+  if(S.modal==="info"){
+    overlay.innerHTML=`
+      <div class="modal" style="width:420px">
+        <div class="modal-title" style="display:flex;align-items:center;gap:8px"><span style="color:var(--warn)">⚠</span> ${esc(S._infoTitle||"Notice")}</div>
+        <div style="color:var(--text2);font-size:13px;line-height:1.6;margin:6px 0 18px">${esc(S._infoMsg||"")}</div>
+        <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px">
+          <button class="btn" onclick="closeModal()">OK</button>
+        </div>
+      </div>`;
+  }
+
   if(S.modal==="supply"){
     const fi=v=>dFmtIn(v);
+    const instPN=(dLoadedCassette()||{}).partNumber||"";
+    const isInstalled=l=> instPN && (l.parts||[]).some(p=>dPartEq(p.pn,instPN));
     // Continuous tapes have no fixed length — the user sets it — so show "W × definable".
     const sizeCell=l=> l.ty==="continuous" ? (fi(l.tw)+" × definable") : (fi(l.tw)+" × "+fi(l.th));
     const printCell=l=> l.ty==="continuous" ? (fi(l.pw)+" × definable") : (fi(l.pw)+" × "+fi(l.ph));
     const rowHtml=l=>{
       const sel=S.spec.n===l.n;
       return `<tr class="sup-row${sel?' sup-sel':''}" onclick="pickSupply('${jesc(l.n)}');closeModal()">
-        <td style="white-space:nowrap">${sel?'● ':''}${esc(supplyName(l))}</td>
+        <td style="white-space:nowrap">${sel?'● ':''}${esc(supplyName(l))}${isInstalled(l)?' <span title="Matches the loaded cassette" style="color:var(--green);font-size:10px;font-weight:700">● installed</span>':''}</td>
         <td>${esc(supplyTypeFull(l))}</td>
         <td style="white-space:nowrap">${sizeCell(l)}</td>
         <td style="white-space:nowrap">${printCell(l)}</td>
@@ -1693,7 +1727,10 @@ function renderModal(){
           <tbody>${body}</tbody>
         </table>
       </div>
-      <div class="modal-footer"><button class="btn" onclick="closeModal()">Close</button></div>
+      <div class="modal-footer" style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+        ${instPN?`<button class="btn" onclick="dUseInstalledSupply()" title="Select the defined supply matching the loaded cassette (${escAttr(instPN)})" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Use currently installed</button>`:`<span style="color:var(--text3);font-size:11px">No cassette detected</span>`}
+        <button class="btn" onclick="closeModal()">Close</button>
+      </div>
     </div>`;
   }
 
@@ -2785,11 +2822,10 @@ function buildCustomPrintHeader(){
 
     <div style="flex:1"></div>
 
-    <!-- Cut option (Phase 6) — only printers with a built-in auto cutter expose a
-         cut-timing control; others (e.g. M610) are cut by hand. -->
-    ${dPrinter().hasAutoCutter ? `
+    <!-- Cut option (Phase 6) — always selectable. The M611 actuates its built-in cutter;
+         a manual-cutter printer stops and prompts at the chosen point (future). -->
     <div style="display:flex;align-items:center;gap:6px">
-      <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px" title="When to actuate the printer's cutter">Cut</span>
+      <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px" title="When to cut the supply">Cut</span>
       <div style="position:relative">
         <select class="inp" style="width:160px;padding:4px 24px 4px 8px;font-size:11px;appearance:none;-webkit-appearance:none;cursor:pointer"
           title="When to cut the supply for this job" onchange="S.cutMode=this.value;R()">
@@ -2799,17 +2835,19 @@ function buildCustomPrintHeader(){
         </select>
         <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:9px;pointer-events:none">▼</div>
       </div>
-    </div>` : `
-    <div style="display:flex;align-items:center;gap:6px" title="This printer has no automatic cutter — cut by hand between labels">
-      <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Cut</span>
-      <span style="color:var(--text2);font-size:11px">Manual</span>
-    </div>`}
+    </div>
 
     <!-- Copies -->
     <div style="display:flex;align-items:center;gap:6px">
       <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Copies</span>
       <input type="number" class="inp" min="1" max="999" value="${copies}" style="width:58px;padding:4px 6px;font-size:12px" onchange="S.copies=Math.max(1,Math.min(999,parseInt(this.value)||1));R()">
     </div>
+
+    <!-- Feed to clear before printing -->
+    <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:var(--text2)" title="Feed a blank lead label before the job to clear/advance the supply — die-cut: one label (cut per your setting); continuous: 1 inch, always cut">
+      <input type="checkbox" ${S.feedToClear?"checked":""} onchange="dSetFeedToClear(this.checked)" style="cursor:pointer">
+      Feed to clear
+    </label>
 
     <!-- Print button — ⌘Return -->
     <button class="btn primary" onclick="doCustomPrint()" style="padding:6px 20px;font-size:13px;display:flex;flex-direction:column;align-items:center;line-height:1.1;gap:1px"${canPrint?"":" disabled"}>
@@ -2878,6 +2916,7 @@ function doCustomPrint(){
     copies:Math.max(1,S.copies||1),
     printerID:S.activePrinter||"",
     cutMode:dEffCutMode(),   // Phase 6 cut setting → PrintJobFile.cutMode
+    feedToClear:!!S.feedToClear,   // prepend a blank lead label to clear the supply
     record:customPrintRecord()
   };
   // When a data source is bound, send the chosen subset of bound-row indices so

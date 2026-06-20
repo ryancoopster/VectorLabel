@@ -398,7 +398,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             cutMode: job.cutMode,
             estLabelMs: job.estLabelMs,
             ipcJobID: job.id,
-            sourceApp: job.sourceApp
+            sourceApp: job.sourceApp,
+            feedToClear: job.feedToClear
         )
 
         // RECENTS OWNERSHIP: the Engine is the only process that prints, so it is

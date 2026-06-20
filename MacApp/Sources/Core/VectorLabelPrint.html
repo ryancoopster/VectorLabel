@@ -519,6 +519,8 @@ let P={
   // (continuous → eachLabel; else afterJobLast). One of
   // "afterJobLast" | "eachLabel" | "never", carried in PrintJobFile.cutMode.
   cutMode: null,
+  // "Feed to clear before printing" — persisted; injected from AppSettings at init.
+  feedToClear: false,
 };
 
 // The default cut mode for a given supply part number: continuous tape is cut
@@ -540,6 +542,13 @@ function effCutMode(){
   if(P.cutMode)return P.cutMode;
   const t=tpl();
   return defaultCutMode(t?t.specN:"");
+}
+// "Feed to clear before printing" — toggle + persist (AppSettings) via the bridge.
+function setFeedToClear(v){
+  P.feedToClear=!!v;
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"setFeedToClear",payload:{value:P.feedToClear}});
+  R();
 }
 function printer(){
   const pool=window._swiftPrinters||PRINTERS;
@@ -1693,11 +1702,10 @@ function buildPrintBar(){
       ${preflightHTML()}
     </div>
 
-    <!-- Cut option (Phase 6) — only printers with a built-in auto cutter expose a
-         cut-timing control; others (e.g. M610) are cut by hand. -->
-    ${printer().hasAutoCutter ? `
+    <!-- Cut option (Phase 6) — always selectable. The M611 actuates its built-in cutter;
+         a manual-cutter printer stops and prompts at the chosen point (future). -->
     <div style="display:flex;align-items:center;gap:6px">
-      <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px" title="When to actuate the printer's cutter">Cut</span>
+      <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px" title="When to cut the supply">Cut</span>
       <div style="position:relative">
         <select class="inp" style="width:160px;padding:4px 24px 4px 8px;font-size:11px;appearance:none;-webkit-appearance:none;cursor:pointer"
           title="When to cut the supply for this job" onchange="P.cutMode=this.value;R()">
@@ -1707,11 +1715,13 @@ function buildPrintBar(){
         </select>
         <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:9px;pointer-events:none">▼</div>
       </div>
-    </div>` : `
-    <div style="display:flex;align-items:center;gap:6px" title="This printer has no automatic cutter — cut by hand between labels">
-      <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Cut</span>
-      <span style="color:var(--text2);font-size:11px">Manual</span>
-    </div>`}
+    </div>
+
+    <!-- Feed to clear before printing -->
+    <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:var(--text2)" title="Feed a blank lead label before the job to clear/advance the supply — die-cut: one label (cut per your setting); continuous: 1 inch, always cut">
+      <input type="checkbox" ${P.feedToClear?"checked":""} onchange="setFeedToClear(this.checked)" style="cursor:pointer">
+      Feed to clear
+    </label>
 
     <!-- Print button — goes straight to printing, no confirmation -->
     <button class="btn primary" onclick="doPrint()" style="padding:6px 22px;font-size:13px;display:flex;flex-direction:column;align-items:center;line-height:1.1;gap:1px" ${canPrint?"":"disabled"}>
@@ -1797,6 +1807,7 @@ function buildPrintPayloadBody(indices){
     filter: P.filter,
     sort: P.sort,
     cutMode: effCutMode(),   // Phase 6 cut setting → PrintJobFile.cutMode
+    feedToClear: !!P.feedToClear,   // prepend a blank lead label to clear the supply
   };
 }
 
@@ -2456,6 +2467,9 @@ function initPrintWindow(opts){
   // Saved filter/sort presets (persisted in AppSettings).
   if(Array.isArray(opts.filterSortPresets)) window._presets=opts.filterSortPresets;
   if(!window._presets) window._presets=[];
+
+  // "Feed to clear before printing" (persisted in AppSettings).
+  if(opts.feedToClear!==undefined) P.feedToClear=!!opts.feedToClear;
 
   // Real data has arrived from Swift — safe to render now.
   P._ready=true;

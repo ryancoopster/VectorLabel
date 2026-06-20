@@ -77,4 +77,18 @@ public struct RenderedLabel: Codable, Equatable {
     public static func estimatedPrintMs(maxDimensionPx px: Int) -> Int {
         Int(Double(max(0, px)) / 300.0 * 370.0) + 300
     }
+
+    /// A blank (all-white) "feed to clear" label for a supply size: one full label pitch
+    /// for die-cut, or a 1-inch feed for continuous tape. Same orientation as a rendered
+    /// label (width = printable width, height = feed length), so the per-printer encoder
+    /// handles it identically to a real label. The Engine prepends this to a job when the
+    /// user enables "Feed to clear before printing".
+    public static func feedClearBlank(size: BradyLabelSize, partNumber: String) -> RenderedLabel {
+        let dpi = size.dpi
+        let w = max(1, size.printablePixelWidth)
+        let h = max(1, size.isContinuous ? vlInchesToPixels(1.0, dpi: dpi)
+                                         : vlInchesToPixels(size.printableHeightInches, dpi: dpi))
+        return RenderedLabel(pixels: [UInt8](repeating: 0, count: w * h),
+                             width: w, height: h, partNumber: partNumber)
+    }
 }

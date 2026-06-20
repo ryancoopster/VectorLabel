@@ -475,7 +475,7 @@ public final class DesignerWindowController: NSObject {
         guard let wv = webView else { return }
         let s = AppSettings.shared
         wv.evaluateJavaScript(
-            "if(typeof initDesignerPrefs==='function')initDesignerPrefs({snapGrid:\(s.designerSnapGrid),snapObjects:\(s.designerSnapObjects),gridSize:\(s.designerGridSize),recH:\(s.designerRecordsHeight),propW:\(s.designerPropsWidth),dbH:\(s.designerDatabaseHeight)});",
+            "if(typeof initDesignerPrefs==='function')initDesignerPrefs({snapGrid:\(s.designerSnapGrid),snapObjects:\(s.designerSnapObjects),gridSize:\(s.designerGridSize),recH:\(s.designerRecordsHeight),propW:\(s.designerPropsWidth),dbH:\(s.designerDatabaseHeight),feedToClear:\(s.feedToClearBeforePrint)});",
             completionHandler: nil
         )
     }
@@ -831,6 +831,8 @@ public final class DesignerWindowController: NSObject {
         // into PrintJobFile.cutMode; the Engine's printer module stamps the per-label
         // cut at ENCODE time — this front-end ships printer-agnostic rasters, not VGL.
         let cutMode = CutMode(rawValue: (payload["cutMode"] as? String) ?? "") ?? .afterJobLast
+        // "Feed to clear before printing" — prepend a blank lead label (built below).
+        let feedToClear = (payload["feedToClear"] as? Bool) ?? false
 
         // One record per label, honoring the print-range subset (Phase 6). When a
         // data source is bound, the page sends `recordIndices` — the rows chosen by
@@ -880,8 +882,12 @@ public final class DesignerWindowController: NSObject {
             // Printer-agnostic rasters; the Engine encodes per target printer + stamps
             // the per-label cut from `cutMode` at print time.
             let part = loadedPN ?? template.labelSize?.partNumber ?? ""
-            let renderedLabels = rasters.map {
+            var renderedLabels = rasters.map {
                 RenderedLabel(pixels: $0.pixels, width: $0.width, height: $0.height, partNumber: part)
+            }
+            // Feed-to-clear: prepend a blank lead label (die-cut → one pitch; continuous → 1").
+            if feedToClear, let size = template.labelSize {
+                renderedLabels.insert(RenderedLabel.feedClearBlank(size: size, partNumber: part), at: 0)
             }
             // Same pacing estimate the print window uses.
             let estLabelMs = RenderedLabel.estimatedPrintMs(maxDimensionPx: maxLabelPx)
@@ -898,7 +904,8 @@ public final class DesignerWindowController: NSObject {
                     copies: 1,            // copies are expanded into `renderedLabels` above
                     cutMode: cutMode,     // user-chosen cut setting (Phase 6)
                     estLabelMs: estLabelMs,
-                    renderedLabels: renderedLabels
+                    renderedLabels: renderedLabels,
+                    feedToClear: feedToClear
                 )
                 do { try backend.submit(job) }
                 catch {
@@ -1360,6 +1367,11 @@ extension DesignerWindowController: WKScriptMessageHandler {
                 if let v = p["propW"] as? Double { AppSettings.shared.designerPropsWidth = v }
                 if let v = p["dbH"] as? Double { AppSettings.shared.designerDatabaseHeight = v }
             }
+
+        case "setFeedToClear":
+            // Persist the "feed to clear before printing" tick box so it survives reopen.
+            AppSettings.shared.feedToClearBeforePrint =
+                ((body["payload"] as? [String: Any])?["value"] as? Bool) ?? false
 
         case "editReturn":
             // Save first (if requested) so the print window refreshes with the

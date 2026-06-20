@@ -48,6 +48,13 @@ public final class AppSettings: ObservableObject {
         didSet { UserDefaults.standard.set(refreshIntervalSec, forKey: "refreshIntervalSec") }
     }
 
+    /// "Feed to clear before printing": prepend a blank lead label to each job (die-cut:
+    /// one label pitch; continuous: a 1" feed, always cut) to advance/clear the supply
+    /// before the real labels. Persisted; surfaced as a tick box by the print + designer.
+    @Published public var feedToClearBeforePrint: Bool {
+        didSet { UserDefaults.standard.set(feedToClearBeforePrint, forKey: "feedToClearBeforePrint") }
+    }
+
     /// Default print range mode: "all", "selected", or "range".
     @Published public var defaultPrintRange: String {
         didSet { UserDefaults.standard.set(defaultPrintRange, forKey: "defaultPrintRange") }
@@ -242,6 +249,7 @@ public final class AppSettings: ObservableObject {
         templatesFolderPath = defaults.string(forKey: "templatesFolderPath")
                            ?? ((base as NSString).appendingPathComponent("Templates"))
         refreshIntervalSec = defaults.object(forKey: "refreshIntervalSec") as? Int ?? 5
+        feedToClearBeforePrint = defaults.object(forKey: "feedToClearBeforePrint") as? Bool ?? false
         defaultPrintRange = defaults.string(forKey: "defaultPrintRange") ?? "all"
         defaultTemplateID = defaults.string(forKey: "defaultTemplateID") ?? ""
         recordColumnOrder = (defaults.array(forKey: "recordColumnOrder") as? [String]) ?? []
@@ -292,6 +300,7 @@ public final class AppSettings: ObservableObject {
         maxExportsPerProject = 15
         templatesFolderPath  = (base as NSString).appendingPathComponent("Templates")
         refreshIntervalSec   = 5
+        feedToClearBeforePrint = false
         defaultPrintRange    = "all"
         defaultTemplateID    = ""
         recordColumnOrder    = []
