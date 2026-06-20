@@ -2802,7 +2802,7 @@ function buildCustomPrintHeader(){
         <div style="position:relative">
           <select class="inp" style="width:auto;padding:4px 24px 4px 8px;font-size:11px;appearance:none;-webkit-appearance:none;cursor:pointer"
             title="When to cut the supply for this job" onchange="S.cutMode=this.value;R()">
-            <option value="eachLabel"${dEffCutMode()==="eachLabel"?" selected":""}>End of Label</option>
+            <option value="eachLabel"${dEffCutMode()==="eachLabel"?" selected":""}>Every Label</option>
             <option value="afterJobLast"${dEffCutMode()==="afterJobLast"?" selected":""}>End of Job</option>
             <option value="never"${dEffCutMode()==="never"?" selected":""}>None</option>
           </select>
