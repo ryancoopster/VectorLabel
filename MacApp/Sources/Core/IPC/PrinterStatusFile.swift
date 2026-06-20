@@ -54,11 +54,34 @@ public struct PrinterStatusEntry: Codable {
     public var status: String         // "ready" | "busy" | "offline"
     public var cassette: CassetteStatus?
     public var activeJobCount: Int
+    /// Whether this printer's driver reports live telemetry (battery / labels / ribbon
+    /// percentages). The M611 does; the M610 doesn't. Front-ends gate the telemetry
+    /// display on this so the readouts only show for printers that can supply them.
+    public var supportsTelemetry: Bool
 
     public init(id: String, name: String, model: String, serial: String,
-                status: String, cassette: CassetteStatus?, activeJobCount: Int) {
+                status: String, cassette: CassetteStatus?, activeJobCount: Int,
+                supportsTelemetry: Bool = false) {
         self.id = id; self.name = name; self.model = model; self.serial = serial
         self.status = status; self.cassette = cassette; self.activeJobCount = activeJobCount
+        self.supportsTelemetry = supportsTelemetry
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, model, serial, status, cassette, activeJobCount, supportsTelemetry
+    }
+    // Tolerant decode so a status file written before `supportsTelemetry` existed still
+    // decodes (default false) rather than dropping the whole printers array.
+    public init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = (try? c.decode(String.self, forKey: .name)) ?? ""
+        model = (try? c.decode(String.self, forKey: .model)) ?? ""
+        serial = (try? c.decode(String.self, forKey: .serial)) ?? ""
+        status = (try? c.decode(String.self, forKey: .status)) ?? "offline"
+        cassette = try? c.decode(CassetteStatus.self, forKey: .cassette)
+        activeJobCount = (try? c.decode(Int.self, forKey: .activeJobCount)) ?? 0
+        supportsTelemetry = (try? c.decode(Bool.self, forKey: .supportsTelemetry)) ?? false
     }
 }
 

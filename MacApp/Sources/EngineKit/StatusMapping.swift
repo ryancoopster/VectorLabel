@@ -12,7 +12,8 @@ import VectorLabelCore
 public extension PrinterDevice {
     /// A `PrinterStatusEntry` for this printer, given its detected cassette (if
     /// any) and the number of jobs currently active on it.
-    func asStatusEntry(cassette: CassetteStatus?, activeJobCount: Int) -> PrinterStatusEntry {
+    func asStatusEntry(cassette: CassetteStatus?, activeJobCount: Int,
+                       supportsTelemetry: Bool = false) -> PrinterStatusEntry {
         PrinterStatusEntry(
             id: id,
             name: name,
@@ -20,7 +21,8 @@ public extension PrinterDevice {
             serial: serial,
             status: status.rawValue,
             cassette: cassette,
-            activeJobCount: activeJobCount
+            activeJobCount: activeJobCount,
+            supportsTelemetry: supportsTelemetry
         )
     }
 }
@@ -33,7 +35,9 @@ public extension PrinterManager {
         let entries = printers.map { dev in
             dev.asStatusEntry(
                 cassette: cassettes[dev.id],
-                activeJobCount: activeJobs.filter { $0.printerID == dev.id && !$0.isComplete }.count
+                activeJobCount: activeJobs.filter { $0.printerID == dev.id && !$0.isComplete }.count,
+                supportsTelemetry: PrinterModuleRegistry.shared.module(forModel: dev.model)?
+                    .capabilities.hasLiveTelemetry ?? false
             )
         }
         // Publish each in-flight (cross-process) job so a front-end can show live

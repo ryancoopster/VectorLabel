@@ -2412,7 +2412,8 @@ function templateData(){
 // cassettes (updateDesignerCassettes), the same JSON the print window consumes.
 function updateDesignerPrinters(printers){
   window._dprinters=(printers||[]).map(p=>({
-    id:p.id, name:p.name, model:p.model||"M6xx", status:p.status||"ready", serial:p.serial||""
+    id:p.id, name:p.name, model:p.model||"M6xx", status:p.status||"ready", serial:p.serial||"",
+    supportsTelemetry:!!p.supportsTelemetry
   }));
   // Keep the current selection if still present; else pick a ready printer.
   if(!window._dprinters.find(p=>p.id===S.activePrinter)){
@@ -2437,6 +2438,18 @@ function updateDesignerCassettes(map){
 function dPrinters(){ return window._dprinters||[]; }
 function dPrinter(){ return dPrinters().find(p=>p.id===S.activePrinter)||{id:null,name:"",status:"offline"}; }
 function dLoadedCassette(){ return (window._dcassettes||{})[S.activePrinter]||null; }
+// Live telemetry (battery / labels / ribbon %) for the active printer — only for
+// drivers that report it (M611, not M610) and only the metrics with a reading.
+function dTelemetryHTML(){
+  const pr=dPrinter(); if(!pr||!pr.supportsTelemetry) return "";
+  const c=dLoadedCassette(); if(!c) return "";
+  const parts=[];
+  if(typeof c.batteryPct==='number')         parts.push(`Battery ${c.batteryPct}%`);
+  if(typeof c.supplyRemainingPct==='number') parts.push(`Labels ${c.supplyRemainingPct}%`);
+  if(typeof c.ribbonRemainingPct==='number') parts.push(`Ribbon ${c.ribbonRemainingPct}%`);
+  if(!parts.length) return "";
+  return `<span title="Live printer telemetry" style="font-size:11px;color:var(--text2);white-space:nowrap">${parts.join(" · ")}</span>`;
+}
 
 // Strip the model prefix so "BM-32-427" (catalog) matches "M6-32-427" (SmartCell).
 // BM-109-427 is the bulk box for M6-33-427 — same supply. (Same logic as the
@@ -2656,6 +2669,7 @@ function buildCustomPrintHeader(){
       <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:9px;pointer-events:none">▼</div>
     </div>
     <span style="font-size:11px;color:${dot}">${statusLbl}</span>
+    ${dTelemetryHTML()}
 
     <!-- Cassette match / mismatch indicator -->
     <div style="display:flex;align-items:center;gap:7px">

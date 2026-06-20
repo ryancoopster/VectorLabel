@@ -1491,6 +1491,19 @@ function supplyEstimate(){
           perRoll:c.labelsPerRoll, pct:c.supplyRemainingPct};
 }
 
+// Live telemetry (battery / labels / ribbon %) for the active printer. Only for
+// drivers that report it (M611, not M610) and only the metrics with a reading.
+function telemetryHTML(){
+  const pr=printer(); if(!pr||!pr.supportsTelemetry) return "";
+  const c=loadedCassette(); if(!c) return "";
+  const parts=[];
+  if(typeof c.batteryPct==='number')         parts.push(`Battery ${c.batteryPct}%`);
+  if(typeof c.supplyRemainingPct==='number') parts.push(`Labels ${c.supplyRemainingPct}%`);
+  if(typeof c.ribbonRemainingPct==='number') parts.push(`Ribbon ${c.ribbonRemainingPct}%`);
+  if(!parts.length) return "";
+  return `<div title="Live printer telemetry" style="font-size:11px;color:var(--text2);white-space:nowrap">${parts.join(" · ")}</div>`;
+}
+
 // BM (bulk box) and M6 (small roll) are the same label in different packaging,
 // so show the required supply as "BM/M6-<core>" and treat either as a match.
 function requiredSupplyDisplay(specN){
@@ -1612,6 +1625,7 @@ function buildPrintBar(){
         if(!c||!c.partNumber)return `<button class="btn" onclick="detectCassette()" style="padding:3px 8px;font-size:10px">Detect supply</button>`;
         return `<div onclick="detectCassette()" title="${c.partNumber} — click to re-detect" style="cursor:pointer;font-size:11px;color:var(--text2);white-space:nowrap">${c.partNumber}</div>`;
       })()}
+      ${telemetryHTML()}
     </div>
 
     <!-- Cut option (Phase 6) -->
@@ -2375,7 +2389,8 @@ function initPrintWindow(opts){
       name: p.name,
       model: p.model||"M6xx",
       status: p.status||"ready",
-      serial: p.serial||""
+      serial: p.serial||"",
+      supportsTelemetry: !!p.supportsTelemetry
     }));
     P.activePrinter=window._swiftPrinters.find(p=>p.status==="ready")?.id
                    ||window._swiftPrinters[0]?.id
@@ -2425,7 +2440,8 @@ function updatePrinters(printers){
     name: p.name,
     model: p.model||"M6xx",
     status: p.status||"ready",
-    serial: p.serial||""
+    serial: p.serial||"",
+    supportsTelemetry: !!p.supportsTelemetry
   }));
   // Keep the current selection if that printer is still present; otherwise pick
   // a ready printer (or the first available one).

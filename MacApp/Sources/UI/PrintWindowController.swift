@@ -321,10 +321,10 @@ public final class PrintWindowController: NSObject {
 
     /// The printers from the latest backend status as [id,name,model,serial,status]
     /// dicts — the same shape the page consumes via updatePrinters / initPrintWindow.
-    private func printerDicts() -> [[String: String]] {
+    private func printerDicts() -> [[String: Any]] {
         (lastStatus?.printers ?? []).map { p in
             ["id": p.id, "name": p.name, "model": p.model, "serial": p.serial,
-             "status": p.status]
+             "status": p.status, "supportsTelemetry": p.supportsTelemetry]
         }
     }
 
@@ -357,6 +357,9 @@ public final class PrintWindowController: NSObject {
                 "pixelWidth": c.pixelWidth,
                 "pixelHeight": c.pixelHeight,
             ]
+            // M611-only live telemetry (nil for the M610): include only when present.
+            if let b = c.batteryPct { entry["batteryPct"] = b }
+            if let r = c.ribbonRemainingPct { entry["ribbonRemainingPct"] = r }
             // Prefer the value the Engine already resolved; fall back to the local
             // catalog so the field is present even on an older status file.
             if let perRoll = c.labelsPerRoll ?? BradyCatalog.labelsPerRoll(forPartNumber: c.partNumber) {

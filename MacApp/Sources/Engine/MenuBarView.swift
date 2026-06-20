@@ -273,6 +273,23 @@ struct PrinterRow: View {
         }
     }
 
+    /// The printer's driver reports live telemetry (battery/labels/ribbon). M611 yes,
+    /// M610 no — gated on the driver capability so it only shows where supported.
+    private var showsTelemetry: Bool {
+        PrinterModuleRegistry.shared.module(forModel: printer.model)?.capabilities.hasLiveTelemetry ?? false
+    }
+    /// "Battery 80% · Labels 60% · Ribbon 45%" from the cassette telemetry, or nil if
+    /// there's no reading yet. Battery/Ribbon appear only when present; Labels is the
+    /// supply-remaining percentage.
+    private var telemetryLine: String? {
+        guard let c = cassette else { return nil }
+        var parts: [String] = []
+        if let b = c.batteryPct { parts.append("Battery \(b)%") }
+        parts.append("Labels \(c.supplyRemainingPct)%")
+        if let r = c.ribbonRemainingPct { parts.append("Ribbon \(r)%") }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
@@ -293,6 +310,11 @@ struct PrinterRow: View {
                         Text(c.partNumber + (c.ribbonPartNumber.map { " · \($0)" } ?? ""))
                             .font(.system(size: 10))
                             .foregroundColor(.vlAccent)
+                    }
+                    if showsTelemetry, let line = telemetryLine {
+                        Text(line)
+                            .font(.system(size: 10))
+                            .foregroundColor(.vlSecondary)
                     }
                 }
 
