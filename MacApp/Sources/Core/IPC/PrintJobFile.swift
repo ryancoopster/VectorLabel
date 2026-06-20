@@ -60,10 +60,10 @@ public struct PrintJobFile: Codable {
     /// Kept so an in-flight pre-upgrade job file still decodes.
     public var labels: [Data]
     public var reprint: ReprintInfo?      // print-time state for "reopen on reprint"
-    /// "Feed to clear before printing": the front-end has prepended a blank lead label
-    /// (renderedLabels[0]) — die-cut: one label pitch; continuous: a 1" feed. The Engine
-    /// force-cuts that lead label for continuous tape (always), and cuts it per `cutMode`
-    /// for die-cut. Default false.
+    /// "Feed to clear before printing": when set, the Engine synthesizes + prepends a blank
+    /// lead label at print time — die-cut: one label pitch; continuous: a 1" feed — built
+    /// from live media + the real label geometry, and force-cut for continuous tape (always)
+    /// or cut per `cutMode` for die-cut. The front-end only sets this flag. Default false.
     public var feedToClear: Bool
 
     public init(id: String,

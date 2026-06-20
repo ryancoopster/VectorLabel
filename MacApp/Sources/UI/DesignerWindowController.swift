@@ -882,13 +882,11 @@ public final class DesignerWindowController: NSObject {
             // Printer-agnostic rasters; the Engine encodes per target printer + stamps
             // the per-label cut from `cutMode` at print time.
             let part = loadedPN ?? template.labelSize?.partNumber ?? ""
-            var renderedLabels = rasters.map {
+            let renderedLabels = rasters.map {
                 RenderedLabel(pixels: $0.pixels, width: $0.width, height: $0.height, partNumber: part)
             }
-            // Feed-to-clear: prepend a blank lead label (die-cut → one pitch; continuous → 1").
-            if feedToClear, let size = template.labelSize {
-                renderedLabels.insert(RenderedLabel.feedClearBlank(size: size, partNumber: part), at: 0)
-            }
+            // Feed-to-clear: the Engine synthesizes + prepends the blank lead label at print
+            // time (from live media + the real label geometry); we only flag the job here.
             // Same pacing estimate the print window uses.
             let estLabelMs = RenderedLabel.estimatedPrintMs(maxDimensionPx: maxLabelPx)
 

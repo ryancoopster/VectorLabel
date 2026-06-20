@@ -713,12 +713,8 @@ extension PrintWindowController: WKScriptMessageHandler {
                 renderedLabels.append(RenderedLabel(pixels: rendered.pixels, width: rendered.width,
                                                     height: rendered.height, partNumber: part))
             }
-            // Feed-to-clear: prepend a blank lead label (die-cut → one label pitch;
-            // continuous → 1" feed). The Engine cuts it per the user's setting for die-cut,
-            // and always for continuous.
-            if feedToClear, let size = template.labelSize {
-                renderedLabels.insert(RenderedLabel.feedClearBlank(size: size, partNumber: part), at: 0)
-            }
+            // Feed-to-clear: the Engine synthesizes + prepends the blank lead label at print
+            // time (from live media + the real label geometry), so we only flag the job here.
             // Estimate per-label print time from the label's print length. Calibrated
             // to measured hardware: a 1.5" label (~450 px @ 300 dpi) prints in ~0.85 s.
             let estLabelMs = RenderedLabel.estimatedPrintMs(maxDimensionPx: labelPx)

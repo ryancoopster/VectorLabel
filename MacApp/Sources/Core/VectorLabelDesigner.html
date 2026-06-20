@@ -415,10 +415,13 @@ function setLabelLen(v){
 // "Use currently installed" (supply picker): select the defined supply whose part
 // numbers include the loaded cassette's part number (exact, or by bulk-box/cartridge
 // core). No match → a pop-up telling the user to add one in settings.
+// A supply's part numbers, falling back to its own name when it carries no parts array
+// (matches dCassetteMatchesSupply / buyButtons), so "installed" detection stays consistent.
+function dSupplyParts(l){ return (l&&l.parts&&l.parts.length)?l.parts:[{pn:(l&&l.n)||""}]; }
 function dUseInstalledSupply(){
   const pn=(dLoadedCassette()||{}).partNumber||"";
   if(!pn){ S._infoTitle="No supply installed"; S._infoMsg="The printer doesn't report a loaded part number."; S.modal="info"; renderModal(); return; }
-  const match=BL.find(l=>(l.parts||[]).some(p=>dPartEq(p.pn,pn)));
+  const match=BL.find(l=>dSupplyParts(l).some(p=>dPartEq(p.pn,pn)));
   if(!match){ S._infoTitle="No matching supply"; S._infoMsg="No defined supply matches the installed part number ("+pn+"). Add one in settings."; S.modal="info"; renderModal(); return; }
   pickSupply(match.n);
   closeModal();
@@ -1683,7 +1686,7 @@ function renderModal(){
   if(S.modal==="supply"){
     const fi=v=>dFmtIn(v);
     const instPN=(dLoadedCassette()||{}).partNumber||"";
-    const isInstalled=l=> instPN && (l.parts||[]).some(p=>dPartEq(p.pn,instPN));
+    const isInstalled=l=> instPN && dSupplyParts(l).some(p=>dPartEq(p.pn,instPN));
     // Continuous tapes have no fixed length — the user sets it — so show "W × definable".
     const sizeCell=l=> l.ty==="continuous" ? (fi(l.tw)+" × definable") : (fi(l.tw)+" × "+fi(l.th));
     const printCell=l=> l.ty==="continuous" ? (fi(l.pw)+" × definable") : (fi(l.pw)+" × "+fi(l.ph));

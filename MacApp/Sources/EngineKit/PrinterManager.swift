@@ -284,7 +284,8 @@ public final class PrinterManager: ObservableObject {
 
         let job = PrintJob(
             title: title,
-            labelCount: labels.count,
+            // +1 when a feed-to-clear blank lead label will be prepended (below).
+            labelCount: labels.count + (feedToClear && !labels.isEmpty ? 1 : 0),
             templateName: templateName,
             printerID: printerID,
             ipcJobID: ipcJobID,
@@ -341,19 +342,29 @@ public final class PrinterManager: ObservableObject {
                 job.markFailed(); finishOnMain(); return
             }
 
-            // Feed-to-clear: the front-end prepended a blank lead label (labels[0]).
-            // Continuous tape is ALWAYS cut after the 1" feed; die-cut follows the user's
-            // cut setting (the lead label is just a normal first label).
+            // Feed-to-clear: synthesize the blank lead label HERE (one source of truth
+            // with the cut decision, and after copy-expansion so exactly one is added).
+            // Geometry comes from the actual first label: die-cut → one label pitch (its
+            // feed height); continuous → a 1" feed (300 dpi). Continuous tape is ALWAYS cut
+            // after the feed; die-cut follows the user's cut setting.
             let continuous = (liveStatus?.isContinuous == true) || (liveStatus.map { !$0.isDieCut } ?? false)
+            var jobLabels = labels
+            let feedClearLead = feedToClear && !labels.isEmpty   // jobLabels[0] is the blank
+            if feedClearLead, let first = labels.first {
+                let h = continuous ? 300 : first.height   // 1" @ 300 dpi vs one die-cut pitch
+                jobLabels.insert(RenderedLabel(pixels: Data(count: first.width * h),
+                                               width: first.width, height: h,
+                                               partNumber: first.partNumber), at: 0)
+            }
             func cutFor(_ i: Int) -> CutMode {
-                (feedToClear && i == 0 && continuous) ? .eachLabel : cutMode
+                (feedClearLead && i == 0 && continuous) ? .eachLabel : cutMode
             }
 
             do {
                 let conn = try module.open(device)
                 defer { module.close(conn) }
 
-                let count = labels.count
+                let count = jobLabels.count
                 let perLabelMs = max(150, estLabelMs)
                 let initialRem = pacesByLabels ? module.labelsRemaining(on: conn) : -1
 
@@ -362,7 +373,7 @@ public final class PrinterManager: ObservableObject {
                     // progress and honoring the model's inter-label delay. The M610 paces
                     // off its SmartCell counter; a transport without one falls back to the
                     // time estimate. Cancel stops the remaining labels.
-                    for (i, label) in labels.enumerated() {
+                    for (i, label) in jobLabels.enumerated() {
                         if job.isCancelled { break }
                         let bytes = module.encode(label: label, status: liveStatus,
                                                   cut: cutFor(i), isLastLabel: i == count - 1)
@@ -400,7 +411,7 @@ public final class PrinterManager: ObservableObject {
                     // gap). If the driver reports a counter (M610), drive detailed progress
                     // off it; otherwise the job is coarse — the menu shows just "Printing".
                     var batch: [UInt8] = []
-                    for (i, label) in labels.enumerated() {
+                    for (i, label) in jobLabels.enumerated() {
                         batch += module.encode(label: label, status: liveStatus,
                                                cut: cutFor(i), isLastLabel: i == count - 1)
                     }
