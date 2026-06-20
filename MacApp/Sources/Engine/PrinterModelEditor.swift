@@ -134,16 +134,26 @@ struct PrinterModelEditorView: View {
     // actually take effect (PrinterCapabilities.supportedTransports); enabling one the
     // driver doesn't support is a harmless no-op.
     private func connectionsRow(_ mid: UUID) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        let name = draft.models.first { $0.id == mid }?.name ?? ""
+        let supported = supportedTransports(forModelNamed: name)
+        return VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 14) {
                 Text("Connections").font(.system(size: 11)).foregroundStyle(.secondary)
-                ForEach(PrinterTransport.allCases, id: \.self) { t in
+                ForEach(supported, id: \.self) { t in
                     Toggle(t.displayName, isOn: transportBinding(mid, t)).toggleStyle(.checkbox)
                 }
             }
-            Text("Only methods the printer's driver supports take effect.")
+            Text("Connection methods this printer's driver supports.")
                 .font(.system(size: 10)).foregroundStyle(.secondary)
         }
+    }
+
+    /// Transports the registered driver for `name` supports, in display order. Falls back
+    /// to all methods for a custom printer with no matching driver (so it isn't blocked).
+    private func supportedTransports(forModelNamed name: String) -> [PrinterTransport] {
+        let set = PrinterModuleRegistry.shared.module(forModel: name)?.capabilities.supportedTransports
+            ?? Set(PrinterTransport.allCases)
+        return PrinterTransport.allCases.filter { set.contains($0) }
     }
     private func transportBinding(_ mid: UUID, _ t: PrinterTransport) -> Binding<Bool> {
         Binding(

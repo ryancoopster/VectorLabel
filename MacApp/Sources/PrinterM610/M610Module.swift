@@ -46,9 +46,11 @@ public final class M610Module: PrinterModule {
     // handled here — the M611 speaks ECP, not VGL — so it's filtered out (M611 USB
     // support is a separate effort; the M611 is driven over the network for now).
     public func enumerate() -> [PrinterDevice] {
-        // Only enumerate over transports the user has enabled for this printer (the
-        // M610 driver supports USB only).
-        guard PrinterModelStore.enabledTransports(forName: capabilities.model, productIDs: ["010B"]).contains(.usb) else { return [] }
+        // Enumerate only over transports BOTH enabled by the user AND supported by this
+        // driver (M610 = USB only).
+        let active = PrinterModelStore.enabledTransports(forName: capabilities.model, productIDs: ["010B"])
+            .intersection(capabilities.supportedTransports)
+        guard active.contains(.usb) else { return [] }
         return BradyUSB.enumeratePrinters().filter { $0.model == "M610" }
     }
 

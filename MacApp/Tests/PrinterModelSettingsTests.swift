@@ -74,7 +74,8 @@ final class PrinterModelSettingsTests: XCTestCase {
     }
 
     func testM611DriverReportsSupportedTransports() {
-        // The driver reports what it can drive — M611 = USB + network (not Bluetooth).
-        XCTAssertEqual(M611Module().capabilities.supportedTransports, [.usb, .network])
+        // The driver reports what it can drive — M611 = network only for now (USB is
+        // written but parked/unverified; add .usb when the capture confirms it).
+        XCTAssertEqual(M611Module().capabilities.supportedTransports, [.network])
     }
 }

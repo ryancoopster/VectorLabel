@@ -16,27 +16,32 @@ final class TCPConnection: PrinterConnection {
 public final class M611Module: PrinterModule {
     public init() {}
 
+    // M611 currently supports NETWORK only. The USB transport (M611USB) is written but
+    // unverified/parked — add `.usb` here (and it lights up everywhere automatically)
+    // once the M611 USB capture confirms the PID/interface/endpoints/framing.
     public let capabilities = PrinterCapabilities(
-        model: "M611", supportedTransports: [.usb, .network], hasLiveTelemetry: true, pacesByLabelsRemaining: false)
+        model: "M611", supportedTransports: [.network], hasLiveTelemetry: true, pacesByLabelsRemaining: false)
 
     static let printPort: UInt16 = 9100
     static let telemetryPort: UInt16 = 9102
 
     public func enumerate() -> [PrinterDevice] {
-        // Enumerate only over transports the user has enabled for this printer (the
-        // M611 driver supports network + USB). Each enabled network printer's control
-        // port (9102) is probed so an unreachable / powered-off / unplugged one reports
-        // .offline instead of a permanent .ready. Runs on the background scan task
-        // (PrinterManager.performScan), so a short blocking connect is fine here.
+        // Enumerate only over transports that are BOTH enabled by the user AND supported
+        // by this driver. The M611 currently supports network only, so `active` won't
+        // include .usb until capabilities.supportedTransports gains it. Each enabled
+        // network printer's control port (9102) is probed so an unreachable one reports
+        // .offline instead of a permanent .ready. Runs on the background scan task, so a
+        // short blocking connect is fine here.
         let enabled = PrinterModelStore.enabledTransports(forName: capabilities.model, productIDs: ["010C"])
-        let net: [PrinterDevice] = enabled.contains(.network)
+        let active = enabled.intersection(capabilities.supportedTransports)
+        let net: [PrinterDevice] = active.contains(.network)
             ? NetworkPrinterStore.list().map { e -> PrinterDevice in
                 let online = NetworkDiscovery.tcpReachable(host: e.host, port: Self.telemetryPort, timeoutMs: 600)
                 return PrinterDevice(id: "net:\(e.host)", name: e.name, model: e.model,
                                      serial: e.host, status: online ? .ready : .offline, host: e.host)
               }
             : []
-        let usb = enabled.contains(.usb) ? M611USB.enumerate() : []
+        let usb = active.contains(.usb) ? M611USB.enumerate() : []
         return net + usb
     }
 
