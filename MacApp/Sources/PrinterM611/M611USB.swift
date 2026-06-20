@@ -13,16 +13,18 @@ final class M611USBConnection: PrinterConnection {
 #endif
 
 /// USB transport for the M611 composite device (VID 0x0E2E, PID 0x13). The M611
-/// speaks the SAME PICL/bitmap protocol over USB as over the network — confirmed on
-/// hardware — on its **vendor interface (iface 1, bulk ep 0x03/0x84)**. So this is a
-/// transparent byte pipe for `M611Bitmap` print jobs and PICL packets, exactly like
-/// the network transport; only the open/read/write plumbing differs.
+/// speaks the SAME bitmap/PICL protocol over USB as over the network — no USB-specific
+/// reframing — on its **printer-class interface 0 (07/01/02), bulk OUT 0x01 / IN 0x82**
+/// (matches the M610's BradyUSB and the recovered ETW capture of Brady Workstation;
+/// endpoints inferred from the capture + descriptors, pending a live on-device print).
+/// A transparent byte pipe for `M611Bitmap` jobs + PICL packets; only the open/read/
+/// write plumbing differs from the network transport.
 enum M611USB {
     static let vendorID: UInt16 = 0x0E2E
     static let productID: UInt16 = 0x13      // M611 composite device
-    static let iface: Int32 = 1               // vendor-specific interface
-    static let epOut: UInt8 = 0x03            // bulk OUT
-    static let epIn: UInt8 = 0x84             // bulk IN
+    static let iface: Int32 = 0               // printer-class interface (07/01/02)
+    static let epOut: UInt8 = 0x01            // bulk OUT
+    static let epIn: UInt8 = 0x82             // bulk IN
     static let chunkSize = 512
     static let chunkTimeoutMs: UInt32 = 10_000
 
@@ -68,8 +70,13 @@ enum M611USB {
             var h: OpaquePointer?
             guard libusb_open(dev, &h) == 0, let handle = h else { throw USBError.openFailed }
             if wantSerial != "usb", readSerial(dev, desc: d) != wantSerial { libusb_close(handle); continue }
-            _ = libusb_detach_kernel_driver(handle, iface)   // detach any OS driver
+            // Auto-detach the OS/CUPS driver on claim and RE-ATTACH it on release/close,
+            // so we never strand the printer for other apps (mirrors M610 BradyUSB).
+            _ = libusb_set_auto_detach_kernel_driver(handle, 1)
             guard libusb_claim_interface(handle, iface) == 0 else { libusb_close(handle); throw USBError.claimFailed }
+            // Recover any stalled bulk endpoints before streaming a job.
+            _ = libusb_clear_halt(handle, epOut)
+            _ = libusb_clear_halt(handle, epIn)
             return handle
         }
         throw USBError.notFound
@@ -87,7 +94,11 @@ enum M611USB {
                                      Int32(end - off), &transferred, chunkTimeoutMs)
             }
             guard rc == 0 else { throw USBError.transferFailed(rc) }
-            off = end
+            // Advance by bytes ACTUALLY transferred — libusb may report a short transfer on
+            // success; skipping the unsent tail would punch a hole in the segment stream.
+            // Treat zero progress as a stall so we don't spin forever.
+            guard transferred > 0 else { throw USBError.transferFailed(rc) }
+            off += Int(transferred)
         }
     }
 

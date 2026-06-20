@@ -16,11 +16,12 @@ final class TCPConnection: PrinterConnection {
 public final class M611Module: PrinterModule {
     public init() {}
 
-    // M611 currently supports NETWORK only. The USB transport (M611USB) is written but
-    // unverified/parked — add `.usb` here (and it lights up everywhere automatically)
-    // once the M611 USB capture confirms the PID/interface/endpoints/framing.
+    // Network + USB. USB transport (M611USB) targets printer-class interface 0, bulk
+    // OUT 0x01 / IN 0x82, same bitmap framing as network — recovered from the ETW capture
+    // + descriptors (high confidence; pending a live on-device print). Telemetry over USB
+    // is still TODO (readStatus is network-only), so a USB-only M611 prints without live %s.
     public let capabilities = PrinterCapabilities(
-        model: "M611", supportedTransports: [.network], hasLiveTelemetry: true,
+        model: "M611", supportedTransports: [.network, .usb], hasLiveTelemetry: true,
         pacesByLabelsRemaining: false, hasAutoCutter: true,   // M611 has a built-in cutter
         ribbonLengthInches: 75 * 12)                          // 75 ft ribbon
 
