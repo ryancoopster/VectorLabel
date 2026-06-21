@@ -159,7 +159,7 @@ extension SupplyCatalog {
 
         let group = SupplyGroup(name: "Brady M6", printerModels: ["M610", "M611"],
                                 categories: categories)
-        return SupplyCatalog(version: 2, groups: [group, brotherPTouchGroup()],
+        return SupplyCatalog(version: 3, groups: [group, brotherPTouchGroup()],
                              coreEquivalences: ["109-427": "33-427"])
     }
 
@@ -180,13 +180,17 @@ extension SupplyCatalog {
             (18,  112, "TZe-241"),
             (24,  128, "TZe-251"),
         ]
+        // Sizes are rounded to 2 decimals for a clean display in the supply picker
+        // (the exact tape is recovered by the encoder's nearest-printable-width snap,
+        // so the small rounding doesn't affect which tape is selected). TZe tapes are
+        // laminated → marked self-laminating so the type reads "Continuous Self
+        // Laminating" (the clear-wrap overlay is gated to die-cut self-laminating).
+        func r2(_ v: Double) -> Double { (v * 100).rounded() / 100 }
         let supplies: [Supply] = tapes.map { t in
-            let widthIn = t.mm / 25.4
-            let printableIn = Double(t.pins) / 180.0
             return Supply(
-                name: "\(fmtMM(t.mm)) continuous", kind: .continuous, selfLaminating: false,
-                materialFamily: "TZe", widthInches: widthIn, heightInches: 1.0,
-                printableWidthInches: printableIn, printableHeightInches: 1.0,
+                name: "\(fmtMM(t.mm)) continuous", kind: .continuous, selfLaminating: true,
+                materialFamily: "TZe", widthInches: r2(t.mm / 25.4), heightInches: 1.0,
+                printableWidthInches: r2(Double(t.pins) / 180.0), printableHeightInches: 1.0,
                 parts: [SupplyPartNumber(partNumber: t.pn, rollLengthFeet: 26.2,
                                          materialLabel: "Laminated")])
         }

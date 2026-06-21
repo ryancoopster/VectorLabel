@@ -819,7 +819,10 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
   const bw=pw+2*B, bh=ph+2*B;
 
   // Clear wrap zone shown directly under the printable area (not in the bleed).
-  const wrapZone=wrap&&(cw>0||ch>0)?`
+  // ONLY for die-cut self-laminating labels (the clear over-laminate tail) — never
+  // for continuous tape, whose printable<label gap is just the unprintable head
+  // margin, not a wrap flap.
+  const wrapZone=wrap&&spec.lm&&spec.ty!=="continuous"&&(cw>0||ch>0)?`
     <div style="position:absolute;left:${B}px;top:${B+ph}px;width:${pw}px;height:${ch>0?ch:ph}px;background:rgba(140,140,180,0.12);border:1px dashed var(--text3);display:flex;align-items:center;justify-content:center;pointer-events:none">
       <span style="color:var(--text2);font-size:9px;white-space:nowrap">clear wrap zone</span>
     </div>`:"";
@@ -2666,7 +2669,7 @@ function supplyButtonDims(l){
 }
 function dSupplyTypeDesc(l){
   if(!l)return "";
-  if(l.ty==="continuous"){ const m=supplyMaterials(l); return m.length?("available as "+m.join(", ")):""; }
+  if(l.ty==="continuous"){ if(l.lm)return "Continuous Self Laminating"; const m=supplyMaterials(l); return m.length?("available as "+m.join(", ")):""; }
   if(l.lm)return "Self-laminating wire wrap";
   return "Die-cut label";
 }
@@ -2674,7 +2677,7 @@ function dSupplyTypeDesc(l){
 // it's available in (any material of the listed width matches the loaded cassette).
 function supplyTypeFull(l){
   if(!l)return "";
-  if(l.ty==="continuous"){ const m=supplyMaterials(l); return m.length?("Continuous tape available as: "+m.join(", ")):"Continuous tape"; }
+  if(l.ty==="continuous"){ if(l.lm)return "Continuous Self Laminating"; const m=supplyMaterials(l); return m.length?("Continuous tape available as: "+m.join(", ")):"Continuous tape"; }
   if(l.lm)return "Self-laminating wire wrap";
   return "Die-cut label";
 }

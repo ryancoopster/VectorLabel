@@ -211,18 +211,27 @@ public struct SupplyCatalog: Codable, Hashable {
         groups.first { $0.serves(model: model) } ?? groups.first
     }
 
-    /// Non-destructively upgrade a loaded catalog. v1→v2 ADDS the factory Brother
-    /// P-touch group if the install has no group serving a Brother model, preserving
-    /// every existing (possibly user-edited) group. No-op for v2+.
+    /// Non-destructively upgrade a loaded catalog. Other (user-editable) groups are
+    /// always preserved; only the factory-managed Brother P-touch group is touched.
+    /// v1→v2 ADDS that group if absent. v2→v3 REPLACES it with the current factory
+    /// definition (corrected sizes + self-laminating type) so an existing install
+    /// picks up the fix without a manual "Restore defaults". No-op for v3+.
     public func migrated() -> SupplyCatalog {
-        guard version < 2 else { return self }
+        guard version < 3 else { return self }
         var c = self
         let brotherModels: Set<String> = ["pt-e550w", "pt-p750w", "pt-e560bt"]
-        let hasBrother = c.groups.contains { g in
+        func servesBrother(_ g: SupplyGroup) -> Bool {
             g.printerModels.contains { brotherModels.contains($0.trimmingCharacters(in: .whitespaces).lowercased()) }
         }
-        if !hasBrother { c.groups.append(SupplyCatalog.brotherPTouchGroup()) }
-        c.version = 2
+        if c.version < 2 {
+            if !c.groups.contains(where: servesBrother) { c.groups.append(SupplyCatalog.brotherPTouchGroup()) }
+        }
+        if c.version < 3 {
+            // Refresh the auto-generated Brother group to the factory definition.
+            c.groups.removeAll(where: servesBrother)
+            c.groups.append(SupplyCatalog.brotherPTouchGroup())
+        }
+        c.version = 3
         return c
     }
 }
