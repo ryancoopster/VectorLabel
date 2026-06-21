@@ -362,8 +362,21 @@ function dDefaultCutMode(specN){
   if(s&&s.ty==="dieCut")return "afterJobLast";
   return "afterJobLast";
 }
-// Effective cut mode: explicit choice, else per-stock default for the current supply.
-function dEffCutMode(){ return S.cutMode||dDefaultCutMode(S.spec&&S.spec.n); }
+// The cut options the SELECTED printer advertises (relayed from the driver via the
+// Engine status); falls back to the Brady standard set if none are present.
+function dCutOptions(){
+  const p=dPrinter();
+  const o=p&&p.cutOptions&&p.cutOptions.length?p.cutOptions:null;
+  return o||[{mode:"eachLabel",label:"Every Label"},{mode:"afterJobLast",label:"End of Job"},{mode:"never",label:"None"}];
+}
+// Effective cut mode: explicit choice, else per-stock default — but always clamped to
+// one of the current printer's advertised options (falls back to the first if the
+// chosen mode isn't offered, e.g. after switching to a printer with a different set).
+function dEffCutMode(){
+  const want=S.cutMode||dDefaultCutMode(S.spec&&S.spec.n);
+  const opts=dCutOptions();
+  return opts.some(o=>o.mode===want)?want:(opts[0]?opts[0].mode:"afterJobLast");
+}
 // Bounds for the chosen length (inches). Generous range; default to the catalog ph.
 const LEN_MIN=0.25, LEN_MAX=24;
 function dDefaultLen(specN){ const s=blBy(specN); return s?s.ph:1; }
@@ -2805,9 +2818,7 @@ function buildCustomPrintHeader(){
         <div style="position:relative">
           <select class="inp" style="width:auto;padding:4px 24px 4px 8px;font-size:11px;appearance:none;-webkit-appearance:none;cursor:pointer"
             title="When to cut the supply for this job" onchange="S.cutMode=this.value;R()">
-            <option value="eachLabel"${dEffCutMode()==="eachLabel"?" selected":""}>Every Label</option>
-            <option value="afterJobLast"${dEffCutMode()==="afterJobLast"?" selected":""}>End of Job</option>
-            <option value="never"${dEffCutMode()==="never"?" selected":""}>None</option>
+            ${dCutOptions().map(o=>`<option value="${escAttr(o.mode)}"${dEffCutMode()===o.mode?" selected":""}>${esc(o.label)}</option>`).join("")}
           </select>
           <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:9px;pointer-events:none">▼</div>
         </div>

@@ -66,7 +66,9 @@ public final class M610Module: PrinterModule {
         switch cut {
         case .never:        vglCut = .never
         case .eachLabel:    vglCut = .eachLabel
-        case .afterJobLast: vglCut = isLastLabel ? .afterJob : .never
+        // The M610 shear cutter is full-cut only (no half-cut), so a half-cut mode
+        // degrades to a single full cut at the end of the job. (Not advertised.)
+        case .afterJobLast, .halfEachFullEnd: vglCut = isLastLabel ? .afterJob : .never
         }
         // Downscale the master-DPI raster to the M610's native 300 dpi before VGL
         // packs it (one wire pixel = one print-head dot); VGL itself is DPI-agnostic.

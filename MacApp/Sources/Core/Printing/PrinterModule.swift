@@ -20,6 +20,25 @@ public enum PrinterTransport: String, Codable, Hashable, CaseIterable {
     }
 }
 
+/// One selectable cut option a driver advertises for its printer. `mode` is the
+/// Core `CutMode` the job carries; `label` is the printer-specific display text
+/// (the same `.afterJobLast` reads "End of Job" on a Brady but "Full cut at end of
+/// job" on a Brother). The Engine relays these through the status file so each
+/// front-end's cut dropdown matches the SELECTED printer's real capabilities.
+public struct CutOption: Codable, Equatable, Hashable {
+    public let mode: CutMode
+    public let label: String
+    public init(mode: CutMode, label: String) { self.mode = mode; self.label = label }
+
+    /// The standard Brady set (M610/M611): full cut after each label, one cut at the
+    /// end of the job, or no cut. No half-cut (the Brady shear cutter is full-cut only).
+    public static let bradyStandard: [CutOption] = [
+        CutOption(mode: .eachLabel, label: "Every Label"),
+        CutOption(mode: .afterJobLast, label: "End of Job"),
+        CutOption(mode: .never, label: "None"),
+    ]
+}
+
 /// Static capabilities of a printer model, so the Engine/UI route and gate features
 /// without branching on the model string everywhere.
 public struct PrinterCapabilities {
@@ -45,17 +64,24 @@ public struct PrinterCapabilities {
     /// is irrelevant and the UI greys it out — a future printer with proper feedback ships
     /// this in its driver with no engine changes.
     public let sendMode: SendModeSupport
+    /// The cut options this printer offers, in display order. The Engine relays them
+    /// to the front-ends so the per-job cut dropdown matches the selected printer
+    /// (Brady = `bradyStandard`; Brother adds half-cut). Defaults to the Brady set so
+    /// existing drivers need no change.
+    public let cutOptions: [CutOption]
 
     public init(model: String, supportedTransports: Set<PrinterTransport>,
                 hasLiveTelemetry: Bool,
                 hasAutoCutter: Bool = false, ribbonLengthInches: Double = 0,
-                sendMode: SendModeSupport = .selectable(defaultSingle: false)) {
+                sendMode: SendModeSupport = .selectable(defaultSingle: false),
+                cutOptions: [CutOption] = CutOption.bradyStandard) {
         self.model = model
         self.supportedTransports = supportedTransports
         self.hasLiveTelemetry = hasLiveTelemetry
         self.hasAutoCutter = hasAutoCutter
         self.ribbonLengthInches = ribbonLengthInches
         self.sendMode = sendMode
+        self.cutOptions = cutOptions
     }
 }
 

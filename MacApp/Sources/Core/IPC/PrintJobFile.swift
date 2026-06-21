@@ -4,9 +4,10 @@ import Foundation
 /// front-end's print settings to the Engine; the cut bytes themselves are wired
 /// into BradyVGL in a later phase (continuous/M611 cutter work).
 public enum CutMode: String, Codable {
-    case afterJobLast   // one cut at the end of the whole job
-    case eachLabel      // cut after every label (needed for continuous stock)
-    case never          // no cut (e.g. die-cut labels are pre-cut)
+    case afterJobLast     // one full cut at the end of the whole job
+    case eachLabel        // full cut after every label (needed for continuous stock)
+    case never            // no cut (e.g. die-cut labels are pre-cut)
+    case halfEachFullEnd  // half-cut (score) between labels, full cut at job end (Brother)
 }
 
 /// State a front-end captures at print time so a later "Reprint" can RE-OPEN the

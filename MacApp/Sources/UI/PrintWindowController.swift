@@ -325,7 +325,8 @@ public final class PrintWindowController: NSObject {
         (lastStatus?.printers ?? []).map { p in
             ["id": p.id, "name": p.name, "model": p.model, "serial": p.serial,
              "status": p.status, "supportsTelemetry": p.supportsTelemetry,
-             "hasAutoCutter": p.hasAutoCutter, "ribbonLengthInches": p.ribbonLengthInches]
+             "hasAutoCutter": p.hasAutoCutter, "ribbonLengthInches": p.ribbonLengthInches,
+             "cutOptions": p.cutOptions.map { ["mode": $0.mode.rawValue, "label": $0.label] }]
         }
     }
 

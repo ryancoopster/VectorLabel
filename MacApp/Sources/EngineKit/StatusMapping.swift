@@ -14,7 +14,8 @@ public extension PrinterDevice {
     /// any) and the number of jobs currently active on it.
     func asStatusEntry(cassette: CassetteStatus?, activeJobCount: Int,
                        supportsTelemetry: Bool = false, hasAutoCutter: Bool = false,
-                       ribbonLengthInches: Double = 0) -> PrinterStatusEntry {
+                       ribbonLengthInches: Double = 0,
+                       cutOptions: [CutOption] = []) -> PrinterStatusEntry {
         PrinterStatusEntry(
             id: id,
             name: name,
@@ -25,7 +26,8 @@ public extension PrinterDevice {
             activeJobCount: activeJobCount,
             supportsTelemetry: supportsTelemetry,
             hasAutoCutter: hasAutoCutter,
-            ribbonLengthInches: ribbonLengthInches
+            ribbonLengthInches: ribbonLengthInches,
+            cutOptions: cutOptions
         )
     }
 }
@@ -42,7 +44,8 @@ public extension PrinterManager {
                 activeJobCount: activeJobs.filter { $0.printerID == dev.id && !$0.isComplete }.count,
                 supportsTelemetry: caps?.hasLiveTelemetry ?? false,
                 hasAutoCutter: caps?.hasAutoCutter ?? false,
-                ribbonLengthInches: caps?.ribbonLengthInches ?? 0
+                ribbonLengthInches: caps?.ribbonLengthInches ?? 0,
+                cutOptions: caps?.cutOptions ?? CutOption.bradyStandard
             )
         }
         // Publish each in-flight (cross-process) job so a front-end can show live

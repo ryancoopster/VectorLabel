@@ -87,21 +87,26 @@ public struct PrinterStatusEntry: Codable {
     /// ribbon). Front-ends extrapolate remaining ribbon length from the telemetry ribbon %
     /// to forecast whether a job will exhaust the ribbon.
     public var ribbonLengthInches: Double
+    /// The cut options this printer's driver advertises (Brady standard / Brother +
+    /// half-cut). Front-ends build the per-job cut dropdown from these so it matches
+    /// the selected printer. Empty for a status file written before this field existed.
+    public var cutOptions: [CutOption]
 
     public init(id: String, name: String, model: String, serial: String,
                 status: String, cassette: CassetteStatus?, activeJobCount: Int,
                 supportsTelemetry: Bool = false, hasAutoCutter: Bool = false,
-                ribbonLengthInches: Double = 0) {
+                ribbonLengthInches: Double = 0, cutOptions: [CutOption] = []) {
         self.id = id; self.name = name; self.model = model; self.serial = serial
         self.status = status; self.cassette = cassette; self.activeJobCount = activeJobCount
         self.supportsTelemetry = supportsTelemetry
         self.hasAutoCutter = hasAutoCutter
         self.ribbonLengthInches = ribbonLengthInches
+        self.cutOptions = cutOptions
     }
 
     enum CodingKeys: String, CodingKey {
         case id, name, model, serial, status, cassette, activeJobCount
-        case supportsTelemetry, hasAutoCutter, ribbonLengthInches
+        case supportsTelemetry, hasAutoCutter, ribbonLengthInches, cutOptions
     }
     // Tolerant decode so a status file written before `supportsTelemetry` existed still
     // decodes (default false) rather than dropping the whole printers array.
@@ -117,6 +122,7 @@ public struct PrinterStatusEntry: Codable {
         supportsTelemetry = (try? c.decode(Bool.self, forKey: .supportsTelemetry)) ?? false
         hasAutoCutter = (try? c.decode(Bool.self, forKey: .hasAutoCutter)) ?? false
         ribbonLengthInches = (try? c.decode(Double.self, forKey: .ribbonLengthInches)) ?? 0
+        cutOptions = (try? c.decode([CutOption].self, forKey: .cutOptions)) ?? []
     }
 }
 

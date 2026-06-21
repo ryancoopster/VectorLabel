@@ -24,7 +24,16 @@ public final class PTE550WModule: PrinterModule {
         ribbonLengthInches: 0,          // TZe tape — no separate ribbon gauge
         // No hardware label counter / no live job ack: user picks one-at-a-time
         // (per-label cut + counter) vs one fast half-cut strip (coarse progress).
-        sendMode: .selectable(defaultSingle: false))
+        sendMode: .selectable(defaultSingle: false),
+        // The PT-series cutter does full AND half (score) cuts, so it offers more cut
+        // options than the Brady shear cutter. The selected cut mode drives the print
+        // strategy in run() (full-cut-each = separate jobs; half/no-cut = one strip).
+        cutOptions: [
+            CutOption(mode: .eachLabel,       label: "Full cut every label"),
+            CutOption(mode: .halfEachFullEnd, label: "Half cut every label, full cut at end"),
+            CutOption(mode: .afterJobLast,    label: "Full cut at end of job"),
+            CutOption(mode: .never,           label: "None"),
+        ])
 
     // Tape-frame orientation flips. The reading-orientation master raster is mapped
     // into the printer's tape frame here; if a hardware test prints mirrored or
@@ -46,7 +55,14 @@ public final class PTE550WModule: PrinterModule {
     public func encode(label: RenderedLabel, status: CassetteStatus?,
                        cut: CutMode, isLastLabel: Bool) -> [UInt8] {
         guard let tr = tapeRaster(for: label) else { return [] }
-        let wantsCut = cut == .eachLabel || (cut == .afterJobLast && isLastLabel)
+        // A single standalone label: full-cut every label / at the end (no half-cut
+        // applies to a lone label), never cut for .never.
+        let wantsCut: Bool
+        switch cut {
+        case .eachLabel:                     wantsCut = true
+        case .afterJobLast, .halfEachFullEnd: wantsCut = isLastLabel
+        case .never:                         wantsCut = false
+        }
         return BrotherPT.buildPrintJob(rasterData: tr.raster, tapeMm: tr.tapeMm,
                                        autocut: wantsCut, halfCut: false,
                                        nocut: !wantsCut, isLastPage: true)
@@ -147,52 +163,70 @@ public final class PTE550WModule: PrinterModule {
 
     // MARK: – Run
 
-    // One-at-a-time mode reports a per-label counter (each send blocks until the
-    // printer accepts the bytes, by which point the label is essentially printed);
-    // the full-job half-cut strip is coarse "Printing…".
+    // A per-label counter is only meaningful for the full-cut-every-label strategy
+    // (separate jobs); the connected-strip strategies (half / no inter-label cut)
+    // are one stream and report coarse "Printing…".
     public func reportsCounter(singleLabel: Bool) -> Bool { singleLabel }
 
+    /// The cut MODE drives the print strategy (the send-mode toggle only affects
+    /// progress granularity, and for these connected-strip cuts it can't be per-label):
+    ///   • Full cut every label (`.eachLabel`) → each label as its own standalone
+    ///     full-cut job → per-label counter + responsive cancel.
+    ///   • Half cut every label, full cut end (`.halfEachFullEnd`) → ONE batch stream,
+    ///     half-cut scored between labels, full cut at the end.
+    ///   • Full cut at end only (`.afterJobLast`) → ONE batch stream, no inter-label
+    ///     cut, full cut at the end.
+    ///   • None (`.never`) → ONE batch stream, no cut at all (strip stays on the roll).
+    /// A feed-to-clear blank lead (page 0 forced to a full cut by the Engine while the
+    /// job cut isn't every-label) is sent as its own full-cut job first.
     public func run(_ job: DriverJob) throws {
         #if canImport(CLibUSB)
         guard let conn = job.connection as? BrotherConnection else { return }
         let count = job.pages.count
         guard count > 0 else { job.progress(.done); return }
         let perLabelMs = max(150, job.estLabelMs)
+        // The real job cut is the LAST page's cut (a feed-to-clear lead is page 0).
+        let jobCut = job.pages.last?.cut ?? .afterJobLast
 
-        if job.singleLabel {
-            // Each label as its own job, with a real counter. Gate the cut by page
-            // role, matching the M610/M611 contract: eachLabel → cut every label;
-            // afterJobLast → cut only the final label; never → no cut. (Cut
-            // SUPPRESSION on the classic dialect — the nocut bit — is hardware-
-            // unverified; the 0x1A terminator may still feed+cut. Verify on a unit.)
+        func sendStandaloneFullCut(_ label: RenderedLabel) throws {
+            guard let tr = tapeRaster(for: label) else { return }
+            try BrotherUSB.send(BrotherPT.buildPrintJob(rasterData: tr.raster, tapeMm: tr.tapeMm,
+                                                        autocut: true, halfCut: false,
+                                                        isLastPage: true), on: conn)
+        }
+
+        if jobCut == .eachLabel {
+            // Full cut every label → one standalone full-cut job per label, with a
+            // real per-label counter and responsive cancel between labels.
             for (i, page) in job.pages.enumerated() {
                 if job.isCancelled() { break }
-                guard let tr = tapeRaster(for: page.label) else { continue }
-                let wantsCut = page.cut == .eachLabel || (page.cut == .afterJobLast && page.isLast)
-                let bytes = BrotherPT.buildPrintJob(rasterData: tr.raster, tapeMm: tr.tapeMm,
-                                                    autocut: wantsCut, halfCut: false,
-                                                    nocut: !wantsCut, isLastPage: true)
-                try BrotherUSB.send(bytes, on: conn)
+                try sendStandaloneFullCut(page.label)
                 job.progress(.counter(done: i + 1, of: count))
             }
-            // Drain so the last label finishes before the Engine closes the port.
             BrotherUSB.drainStatus(on: conn, maxMs: perLabelMs * 3 + 6000)
             if !job.isCancelled() { job.progress(.done) }
             return
         }
 
-        // Full job: ONE classic batch stream (init once, half-cut scored between
-        // labels when the cut mode asks for per-label cuts, one feed+cut at the end).
+        // Connected-strip strategies → ONE batch stream. Send any feed-to-clear lead
+        // (page 0 forced to a full cut while the job cut isn't every-label) first.
         if job.isCancelled() { return }
-        let rasters = job.pages.compactMap { tapeRaster(for: $0.label) }
-        guard let tapeMm = rasters.first?.tapeMm else { job.progress(.done); return }
-        let betweenHalfCut = job.pages.contains { $0.cut == .eachLabel }
-        // Leave the strip on the roll only if EVERY page asked for no cut; otherwise
-        // the trailing 0x1A releases the finished strip (the normal continuous case).
-        let suppressEndCut = job.pages.allSatisfy { $0.cut == .never }
+        var pages = job.pages
+        if pages.count > 1, pages.first?.cut == .eachLabel {
+            try sendStandaloneFullCut(pages[0].label)
+            pages.removeFirst()
+        }
+        let rasters = pages.compactMap { tapeRaster(for: $0.label) }
+        guard let tapeMm = rasters.first?.tapeMm else {
+            if !job.isCancelled() { job.progress(.done) }
+            return
+        }
+        // Cut SUPPRESSION on the classic dialect (the nocut bit, for `.never`) is
+        // hardware-unverified — the 0x1A terminator may still feed+cut. Verify on a unit.
         let stream = BrotherPT.buildBatchStream(labelRasters: rasters.map { $0.raster },
-                                                tapeMm: tapeMm, betweenHalfCut: betweenHalfCut,
-                                                suppressEndCut: suppressEndCut)
+                                                tapeMm: tapeMm,
+                                                betweenHalfCut: jobCut == .halfEachFullEnd,
+                                                suppressEndCut: jobCut == .never)
         job.progress(.printing)
         try BrotherUSB.send(stream, on: conn)
         // Hold "Printing…" and drain until the strip finishes printing + cuts.

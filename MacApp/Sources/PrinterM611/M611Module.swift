@@ -81,7 +81,9 @@ public final class M611Module: PrinterModule {
         switch cut {
         case .never:        return .never
         case .eachLabel:    return .eachLabel
-        case .afterJobLast: return .afterJobLast
+        // The M611 shear cutter is full-cut only — a half-cut mode degrades to a
+        // single full cut at the end of the job. (Not advertised by the M611.)
+        case .afterJobLast, .halfEachFullEnd: return .afterJobLast
         }
     }
 
