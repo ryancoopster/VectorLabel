@@ -1,5 +1,13 @@
 # Adding a New Printer Type to VectorLabel
 
+> ⚠️ **The driver layer has been refactored since this doc was written.** Printers are now
+> self-contained `PrinterModule` drivers (one per model, under `MacApp/Sources/PrinterXXX/`)
+> registered with `PrinterModuleRegistry` — there is no longer a central `BradyUSB` in
+> `EngineKit`, and the Engine contains no printer-specific send/pacing logic. For the **current
+> driver contract, the engine↔driver data structures, and how to implement `run()`, read
+> `docs/WRITING-A-PRINTER-DRIVER.md` first.** The end-to-end context below (IPC queue, supply
+> catalog, UI wiring) is still broadly accurate; treat its *driver-layer* specifics as historical.
+
 This document is written **for an AI coding agent** (Claude Code) running inside the
 VectorLabel repository. A human contributor will hand you this file and ask you to
 add support for a **new printer type/model** — either another Brady model or a
