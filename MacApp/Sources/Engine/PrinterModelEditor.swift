@@ -12,15 +12,7 @@ import VectorLabelUI
 struct PrinterModelEditorView: View {
     @ObservedObject private var store = PrinterModelStore.shared
     @State private var draft: PrinterModelList
-    @State private var pendingDelete: PendingDelete?
     let onClose: () -> Void
-
-    /// A model deletion awaiting confirmation.
-    struct PendingDelete: Identifiable {
-        let modelID: UUID
-        let name: String
-        var id: UUID { modelID }
-    }
 
     init(onClose: @escaping () -> Void) {
         self.onClose = onClose
@@ -29,19 +21,17 @@ struct PrinterModelEditorView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
+            VStack(alignment: .leading, spacing: 2) {
                 Text("Per-Printer Settings").font(.system(size: 14, weight: .semibold))
-                Spacer()
-                Button { addModel() } label: { Label("Add printer", systemImage: "plus") }
-            }.padding(12)
+                Text("The printers VectorLabel has drivers for. Edit each one's USB IDs, connection methods, and print mode.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(draft.models) { m in modelCard(m.id) }
-                    if draft.models.isEmpty {
-                        Text("No printers configured. Add one to make it available in the supply catalog.")
-                            .font(.system(size: 12)).foregroundStyle(.secondary).padding(.vertical, 8)
-                    }
                 }.padding(12)
             }
             Divider()
@@ -55,14 +45,6 @@ struct PrinterModelEditorView: View {
             }.padding(12)
         }
         .frame(minWidth: 540, minHeight: 440)
-        .alert(item: $pendingDelete) { d in
-            Alert(title: Text("Delete the “\(d.name)” printer?"),
-                  message: Text("This can’t be undone. The supply catalog will no longer be able to link supplies to it."),
-                  primaryButton: .destructive(Text("Delete")) {
-                      draft.models.removeAll { $0.id == d.modelID }
-                  },
-                  secondaryButton: .cancel())
-        }
     }
 
     private func modelCard(_ mid: UUID) -> some View {
@@ -72,11 +54,6 @@ struct PrinterModelEditorView: View {
                 Text("Printer").font(.system(size: 11)).foregroundStyle(.secondary)
                 TextField("e.g. M611", text: modelName(mid)).frame(width: 140)
                 Spacer()
-                Button(role: .destructive) {
-                    let nm = (m?.name).map { $0.isEmpty ? "this model" : $0 } ?? "this model"
-                    pendingDelete = PendingDelete(modelID: mid, name: nm)
-                } label: { Label("Delete", systemImage: "trash") }
-                    .buttonStyle(.borderless)
             }
             ForEach(m?.usbIDs ?? []) { u in
                 HStack(spacing: 6) {
@@ -176,9 +153,6 @@ struct PrinterModelEditorView: View {
         let name = draft.models.first { $0.id == mid }?.name ?? ""
         if case .fixed = PrinterModuleRegistry.shared.module(forModel: name)?.capabilities.sendMode { return true }
         return false
-    }
-    private func addModel() {
-        draft.models.append(PrinterModel(name: "New printer", usbIDs: [PrinterUSBID(vendorID: "0E2E", productID: "")]))
     }
     private func addUSB(_ mid: UUID) {
         guard let i = draft.models.firstIndex(where: { $0.id == mid }) else { return }
