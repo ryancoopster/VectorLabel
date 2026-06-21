@@ -175,21 +175,29 @@ public final class PrinterManager: ObservableObject {
         performScan()
     }
 
-    /// Scan the local subnet for Brady network printers (port 9102), add any new ones,
-    /// then rescan.
+    /// Scan the local subnet for network printers (raw print port 9100), classify each
+    /// by PORT SIGNATURE, add any new ones, then rescan. The Brother PT exposes only
+    /// 9100; the Brady M611 also exposes the PICL control port 9102 — so an open 9102
+    /// distinguishes an M611 from a Brother. (A non-Brother raw-9100 printer would be
+    /// guessed as a PT-E550W since that's the only Brother driver; the user can remove a
+    /// wrong match. We can't confirm "Brother" over the wire — it gives no status on 9100.)
     public func scanNetwork() {
         guard !isScanningNetwork else { return }
         isScanningNetwork = true
         networkScanMessage = "Scanning the local network…"
         Task.detached {
-            let hosts = NetworkDiscovery.scanSubnet()
+            // Find raw-print hosts, then classify each off-main (blocking 9102 probe).
+            let rawHosts = NetworkDiscovery.scanSubnet(port: 9100)
+            var toAdd: [(host: String, model: String)] = []
+            for host in rawHosts where !NetworkPrinterStore.contains(host: host) {
+                let isM611 = NetworkDiscovery.tcpReachable(host: host, port: 9102, timeoutMs: 600)
+                toAdd.append((host, isM611 ? "M611" : "PT-E550W"))
+            }
             await MainActor.run {
-                var added = 0
-                for host in hosts where !NetworkPrinterStore.contains(host: host) {
-                    // TODO: PICL-verify the model; all supported network models are M611.
-                    NetworkPrinterStore.add(name: "Brady M611 (\(host))", host: host)
-                    added += 1
+                for e in toAdd {
+                    NetworkPrinterStore.add(name: "\(e.model) (\(e.host))", host: e.host, model: e.model)
                 }
+                let added = toAdd.count
                 self.isScanningNetwork = false
                 self.networkScanMessage = added > 0
                     ? "Found \(added) new network printer\(added == 1 ? "" : "s")."

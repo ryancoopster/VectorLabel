@@ -109,8 +109,10 @@ public enum NetworkDiscovery {
         return Array(bases)
     }
 
-    /// Single-host non-blocking TCP connect with a timeout (via poll).
-    static func tcpReachable(host: String, port: UInt16, timeoutMs: Int) -> Bool {
+    /// Single-host non-blocking TCP connect with a timeout (via poll). Public so the
+    /// Engine can classify a discovered raw-print host (e.g. probe 9102 to tell an
+    /// M611 from a Brother PT during a subnet scan).
+    public static func tcpReachable(host: String, port: UInt16, timeoutMs: Int) -> Bool {
         let fd = socket(AF_INET, SOCK_STREAM, 0)
         guard fd >= 0 else { return false }
         defer { Darwin.close(fd) }

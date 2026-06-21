@@ -352,17 +352,19 @@ struct PreferencesView: View {
                 PrefRow(label: "Add network printer", caption: "Enter the printer's IP address and pick its model (raw TCP)") {
                     HStack(spacing: 8) {
                         TextField("192.168.1.50", text: $newPrinterHost)
-                            .textFieldStyle(.roundedBorder).frame(width: 150)
+                            .textFieldStyle(.roundedBorder).frame(width: 130)
                             .font(.system(size: 12, design: .monospaced))
                             .onSubmit { addNetworkPrinter() }
                         Picker("", selection: $newPrinterModel) {
                             ForEach(printerManager.networkPrinterModels, id: \.self) { Text($0).tag($0) }
                         }
-                        .labelsHidden().frame(width: 130)
+                        .labelsHidden().frame(width: 112)
                         Button("Add") { addNetworkPrinter() }
                             .buttonStyle(VLButtonStyle())
+                            .fixedSize()   // keep its natural size — don't let the row compress it to nothing
                             .disabled(newPrinterHost.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
+                    .fixedSize()
                 }
                 if !printerManager.printers.isEmpty {
                     PrefDivider()
