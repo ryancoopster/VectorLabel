@@ -71,16 +71,19 @@ public enum LabelRenderer {
         // template renders via the normal landscape path; die-cut→die-cut is untouched.)
         let dieCutToContinuous = (continuousTargetWidthInches ?? 0) > 0 && !size.isContinuous
         let pw: Int, ph: Int
-        let remapScale: CGFloat        // extra scale on the die-cut design (1 = none)
+        let remapCenterPx: CGFloat     // across-centering shift for the die-cut→continuous re-map (0 = none)
         let landscape: Bool
         if dieCutToContinuous {
             let tw = continuousTargetWidthInches!                               // tape printable width (across), in
             let hd = template.effectivePrintableHeightInches ?? size.printableHeightInches  // die-cut printable height
             let wd = size.printableWidthInches                                 // die-cut printable width
-            let s = hd > 0 ? tw / hd : 1                                        // fill the tape width with the design height
+            // Keep the design at NATIVE size — never scale the text. The continuous
+            // label's length becomes the die-cut width; the design's native height is
+            // centered across the loaded tape's printable width (white margins if it's
+            // narrower than the tape, clipped if taller).
             pw = vlInchesToPixels(tw, dpi: dpi)                                // across = tape printable width
-            ph = vlInchesToPixels(wd * s, dpi: dpi)                            // length = die-cut width × scale (aspect kept)
-            remapScale = CGFloat(s)
+            ph = vlInchesToPixels(wd, dpi: dpi)                                // length = die-cut width (native)
+            remapCenterPx = (CGFloat(pw) - CGFloat(vlInchesToPixels(hd, dpi: dpi))) / 2
             landscape = true
         } else {
             pw = size.printablePixelWidth
@@ -89,7 +92,7 @@ public enum LabelRenderer {
             // supplies keep the catalog's fixed printable height.
             let phInches = template.effectivePrintableHeightInches ?? size.printableHeightInches
             ph = vlInchesToPixels(phInches, dpi: dpi)
-            remapScale = 1
+            remapCenterPx = 0
             // Continuous stock renders LANDSCAPE by default (design width runs along the
             // tape); canvasRot == 90 is the portrait opt-out. Die-cut never rotates. #14.
             landscape = size.isContinuous && (template.canvasRot ?? 0) != 90
@@ -144,11 +147,10 @@ public enum LabelRenderer {
             ctx.translateBy(x: CGFloat(pw), y: 0)
             ctx.rotate(by: .pi / 2)
         }
-        // Die-cut→continuous re-map: scale the design (in the post-rotation landscape
-        // frame) so its height fills the tape width and it fills [0,pw]×[0,ph] like a
-        // native continuous design.
-        if remapScale != 1 {
-            ctx.scaleBy(x: remapScale, y: remapScale)
+        // Die-cut→continuous re-map: center the native-size design across the tape. In
+        // the post-rotation frame the across axis is y, so shift along y.
+        if remapCenterPx != 0 {
+            ctx.translateBy(x: 0, y: remapCenterPx)
         }
 
         for obj in template.objs {
