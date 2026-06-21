@@ -415,8 +415,9 @@ function normSpec(){
 function pickSupply(specN){
   S.spec=blBy(specN)||blDefault();
   S.labelLen=specIsContinuous(specN)?dDefaultLen(specN):null;
-  // Drop any explicit cut override so the new stock's sensible default applies.
-  S.cutMode=null;
+  // Keep any explicit cut choice so it PERSISTS across supply changes (e.g. after a
+  // cassette swap + reselecting the supply). A null cutMode still follows the per-stock
+  // default, and dEffCutMode clamps the kept choice to the new printer's options.
   // Reset orientation to the default (button off). Continuous renders LANDSCAPE by
   // default in the engine, so canvasRot 0 = landscape for continuous; 90 is the
   // portrait override. (#14)
