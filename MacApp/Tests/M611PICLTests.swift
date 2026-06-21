@@ -18,14 +18,28 @@ final class M611PICLTests: XCTestCase {
         XCTAssertTrue(json.contains(M611PICL.firmwareDriver))
     }
 
-    func testJobStatusRequestFramingScansSlots() {
+    func testJobStatusRequestIsEnumerateAll() {
+        // Job slots are dynamic — a targeted get returns "Invalid Value" — so the request must
+        // ask the printer to enumerate ALL properties, framed [magic][LE len][JSON].
         let req = M611PICL.jobStatusRequest()
         XCTAssertEqual(Array(req.prefix(16)), M611PICL.magic)
+        let len = Int(req[16]) | Int(req[17]) << 8 | Int(req[18]) << 16 | Int(req[19]) << 24
+        XCTAssertEqual(len, req.count - 20)
         let json = String(bytes: req[20...], encoding: .utf8) ?? ""
-        XCTAssertTrue(json.contains("PropertyGetRequests"))
-        XCTAssertTrue(json.contains(M611PICL.printSpooler))           // spooler component, not telemetry
-        XCTAssertTrue(json.contains("Job 1:\(M611PICL.Job.externalId)"))
-        XCTAssertTrue(json.contains("Job \(M611PICL.jobSlotScan):\(M611PICL.Job.status)"))
+        XCTAssertTrue(json.contains("SubscribeAllCurrentAndNewProperties"))
+    }
+
+    func testParseReadsGetAllPropertiesResponseArray() {
+        // The enumerate reply carries items under GetAllPropertiesResponse (and/or
+        // PropertyGetResponses) — parse must pick job slots out of either.
+        let mine = "VLENUM0000000000000000000PRNT"
+        let json = """
+        {"GetAllPropertiesResponse":[\
+        {"GUID":"Job 9:\(M611PICL.Job.externalId)","Value":"\(mine)"},\
+        {"GUID":"Job 9:\(M611PICL.Job.status)","Value":"Printing"}]}
+        """
+        let map = M611PICL.parse(Array(json.utf8))!
+        XCTAssertEqual(M611PICL.jobState(in: map, externalId: mine), .printing)
     }
 
     func testJobStateMatchesByExternalId() {

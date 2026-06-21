@@ -113,6 +113,79 @@ enum M611USB {
         }
     }
 
+    /// Open a PERSISTENT job-status subscription on the vendor interface (iface 1): claim it and
+    /// write the "subscribe to all" request. The printer then PUSHES small status frames (read
+    /// via `readSubFrame`) as jobs change state — far lighter than re-polling the full enumerate.
+    /// Returns the open handle (caller must `closeSubscription`), or nil on failure.
+    static func openSubscription(deviceID: String, request: [UInt8]) -> OpaquePointer? {
+        guard let ctx else { return nil }
+        let wantSerial = deviceID.hasPrefix("usb:") ? String(deviceID.dropFirst(4)) : deviceID
+        var list: UnsafeMutablePointer<OpaquePointer?>?
+        let n = libusb_get_device_list(ctx, &list)
+        defer { libusb_free_device_list(list, 1) }
+        guard n > 0, let devs = list else { return nil }
+        for i in 0 ..< n {
+            guard let dev = devs[Int(i)] else { continue }
+            var d = libusb_device_descriptor()
+            guard libusb_get_device_descriptor(dev, &d) == 0,
+                  d.idVendor == vendorID, d.idProduct == productID else { continue }
+            var h: OpaquePointer?
+            guard libusb_open(dev, &h) == 0, let handle = h else { return nil }
+            if wantSerial != "usb", readSerial(dev, desc: d) != wantSerial { libusb_close(handle); continue }
+            _ = libusb_set_auto_detach_kernel_driver(handle, 1)
+            guard libusb_claim_interface(handle, telIface) == 0 else { libusb_close(handle); return nil }
+            _ = libusb_clear_halt(handle, telEpOut)
+            _ = libusb_clear_halt(handle, telEpIn)
+            var out = request, off = 0
+            while off < out.count {
+                let end = min(off + chunkSize, out.count); var sent: Int32 = 0
+                let rc = out.withUnsafeMutableBufferPointer {
+                    libusb_bulk_transfer(handle, telEpOut, $0.baseAddress?.advanced(by: off),
+                                         Int32(end - off), &sent, chunkTimeoutMs)
+                }
+                guard rc == 0, sent > 0 else {
+                    libusb_release_interface(handle, telIface); libusb_close(handle); return nil
+                }
+                off += Int(sent)
+            }
+            return handle
+        }
+        return nil
+    }
+
+    /// Read one pushed PICL frame ([16 magic][4 LE len][JSON]) from the subscription, waiting up
+    /// to ~`capMs` for a push to begin. [] if none arrives in time. The first frame after
+    /// `openSubscription` is the (large) initial snapshot; subsequent frames are small deltas.
+    static func readSubFrame(handle: OpaquePointer, capMs: Int) -> [UInt8] {
+        var resp: [UInt8] = []
+        var rbuf = [UInt8](repeating: 0, count: 16384)
+        var waited = 0
+        while true {
+            var got: Int32 = 0
+            let rc = rbuf.withUnsafeMutableBufferPointer {
+                libusb_bulk_transfer(handle, telEpIn, $0.baseAddress, Int32($0.count), &got, 300)
+            }
+            if got > 0 {
+                resp += rbuf.prefix(Int(got))
+                if resp.count >= 20, Array(resp.prefix(16)) == M611PICL.magic {
+                    let len = Int(resp[16]) | Int(resp[17]) << 8 | Int(resp[18]) << 16 | Int(resp[19]) << 24
+                    if len > 0 && resp.count >= 20 + len { return Array(resp.prefix(20 + len)) }
+                }
+            } else {
+                if !resp.isEmpty { break }            // mid-frame gap → return what we have
+                waited += 300
+                if waited >= capMs { break }           // no push started in time
+            }
+            if rc != 0 && rc != -7 { break }
+        }
+        return resp
+    }
+
+    static func closeSubscription(_ handle: OpaquePointer) {
+        libusb_release_interface(handle, telIface)
+        libusb_close(handle)
+    }
+
     /// One PICL request/response over the M611's VENDOR interface (iface 1, EP 0x03/0x84)
     /// — the USB analog of network TCP:9102 (the FirmwareDriver/telemetry channel, separate
     /// from the print pipe on iface 0). Self-contained: open → claim iface 1 → write request
@@ -149,17 +222,39 @@ enum M611USB {
                 guard rc == 0, sent > 0 else { return [] }
                 off += Int(sent)
             }
-            // Read the response. The bidirectional channel may need a couple of reads to
-            // populate; the full PICL frame (≈300 B) fits one read once it's ready.
-            var rbuf = [UInt8](repeating: 0, count: 8192)
-            for _ in 0 ..< 8 {
+            // Read the response, ACCUMULATING bulk packets until a complete PICL frame has
+            // arrived. A small telemetry reply fits one read, but the job-status reply (many
+            // slots) spans several reads and exceeds a single buffer — a one-shot read
+            // truncates it and the JSON won't parse. Return as soon as the accumulated bytes
+            // parse (mirrors the network readResponse), or on a timeout/error.
+            var resp: [UInt8] = []
+            var rbuf = [UInt8](repeating: 0, count: 16384)
+            var idle = 0
+            for _ in 0 ..< 60 {
                 var got: Int32 = 0
                 let rc = rbuf.withUnsafeMutableBufferPointer { b in
-                    libusb_bulk_transfer(handle, telEpIn, b.baseAddress, Int32(b.count), &got, 1000)
+                    libusb_bulk_transfer(handle, telEpIn, b.baseAddress, Int32(b.count), &got, 300)
                 }
-                if rc == 0 && got > 0 { return Array(rbuf.prefix(Int(got))) }
+                if got > 0 {
+                    resp += rbuf.prefix(Int(got)); idle = 0
+                    // Complete via the frame's length prefix ([16 magic][4 LE len][JSON]) — robust
+                    // for the large enumerate reply; trim any trailing pushed bytes. Else once a
+                    // full JSON object has accumulated.
+                    if resp.count >= 20, Array(resp.prefix(16)) == M611PICL.magic {
+                        let len = Int(resp[16]) | Int(resp[17]) << 8 | Int(resp[18]) << 16 | Int(resp[19]) << 24
+                        if len > 0 && resp.count >= 20 + len { return Array(resp.prefix(20 + len)) }
+                    } else if resp.count > 24, M611PICL.parse(resp) != nil {
+                        return resp
+                    }
+                } else {
+                    idle += 1
+                    if idle >= 6 { break }   // ~1.8s with no data → stop
+                }
+                // A timeout (-7) is EXPECTED between bursts of a large reply — keep reading;
+                // only a real transfer error aborts. (Bailing on -7 truncated the reply before.)
+                if rc != 0 && rc != -7 { break }
             }
-            return []
+            return resp
         }
         return []
     }

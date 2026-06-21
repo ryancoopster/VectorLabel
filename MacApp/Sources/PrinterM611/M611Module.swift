@@ -149,85 +149,128 @@ public final class M611Module: PrinterModule {
             return
         }
 
-        // ONE AT A TIME: a separate job per label, and report the counter from the printer's
-        // REAL per-label completion — the menu ticks up as each label's job reaches "Print
-        // Complete", not on a clock. Sending is gated on confirmed completions so at most
-        // `maxAhead` labels are unconfirmed-in-flight (responsive cancel, no printer idle). If
-        // job telemetry turns out unavailable, it falls back to time pacing so all labels still
-        // print and the counter still advances (best effort).
+        // ONE AT A TIME: PIPELINE the prints (printer prints continuously, as fast as a full job)
+        // and track REAL per-label completion from the printer's live status PUSHES. We open a
+        // PERSISTENT subscription (USB iface 1 / TCP 9102); after the initial snapshot the printer
+        // streams small status frames as each job prints — far lighter than re-polling the 66 KB
+        // enumerate. Merge the frames into a running view and count completions from it. Cancel
+        // stops sending the rest. If the subscription can't open, fall back to a time pace.
         let t0 = DispatchTime.now().uptimeNanoseconds
         func elapsedMs() -> Int { Int((DispatchTime.now().uptimeNanoseconds &- t0) / 1_000_000) }
         func printedEst() -> Int { elapsedMs() / perLabelMs }
-        let ids = (0..<count).map { "VL" + token + String(format: "%04d", $0) }   // 30 chars each, unique
-        let maxAhead = 3
-        let capMs = count * perLabelMs * 3 + 8000      // safety net only (telemetry unavailable)
-        var nextToSend = 0
-        var completed = 0                              // labels confirmed printed (monotonic)
-        var started = Set<Int>()                       // indices seen actively printing / complete
-        var observed = Set<Int>()                      // indices seen in ANY slot state (incl. queued)
-        var telemetryDead = false
-        var firstSendMs = -1
-        var lastPollMs = -100_000      // forces a poll on the first iteration; NOT Int.min,
-                                       // or `elapsedMs() - lastPollMs` overflows Int and traps
+        let ids = (0..<count).map { "VL" + token + String(format: "%04d", $0) }   // unique per label
+        let capMs = count * perLabelMs * 4 + 8000
 
-        func sendLabel(_ i: Int) throws {
-            let p = job.pages[i]
-            try send(M611Bitmap.buildPrintJob(pixels: p.label.bytes, width: p.label.width,
-                                              height: p.label.height, areaRotation: rotation,
-                                              substratePart: p.label.partNumber,
-                                              cut: mapCut(p.cut), isLastPage: p.isLast,
-                                              jobID: ids[i]), on: conn)
+        // Open the live-status subscription (USB iface 1 / TCP 9102).
+        var subFD: Int32 = -1
+        if let host, !host.isEmpty,
+           let fd = try? Self.connect(host: host, port: Self.telemetryPort, timeoutMs: 1500),
+           (try? Self.writeAll(fd: fd, bytes: M611PICL.jobStatusRequest())) != nil {
+            subFD = fd
         }
+        #if canImport(CLibUSB)
+        let subUSB: OpaquePointer? = (host?.isEmpty ?? true)
+            ? M611USB.openSubscription(deviceID: deviceID, request: M611PICL.jobStatusRequest()) : nil
+        #endif
+        func readPush(_ capMs: Int) -> [UInt8] {
+            #if canImport(CLibUSB)
+            if let h = subUSB { return M611USB.readSubFrame(handle: h, capMs: capMs) }
+            #endif
+            if subFD >= 0 { return Self.readFrame(fd: subFD, capMs: capMs) }
+            return []
+        }
+        var haveSub = subFD >= 0
+        #if canImport(CLibUSB)
+        haveSub = haveSub || (subUSB != nil)
+        #endif
+        defer {
+            if subFD >= 0 { Darwin.close(subFD) }
+            #if canImport(CLibUSB)
+            if let h = subUSB { M611USB.closeSubscription(h) }
+            #endif
+        }
+
+        var merged: [String: String] = [:]
+        var started = Set<Int>(), observed = Set<Int>()
+        var nextToSend = 0, completed = 0
+        var lastDoneMs = 0                       // when `completed` last advanced (job start = 0)
+        var labelMs = max(perLabelMs, 2500)      // running real per-label print time (calibrated from pushes)
+        // Drain the (large) initial snapshot once so the merged view is seeded before our jobs appear.
+        if haveSub, let m = M611PICL.parse(readPush(2500)) { for (k, v) in m { merged[k] = v } }
 
         while true {
-            // SEND: keep at most maxAhead labels beyond the confirmed-printed frontier (the time
-            // frontier when telemetry is dead) so a backlog never builds and cancel stays prompt.
-            let pace = telemetryDead ? printedEst() : completed
-            while nextToSend < count && !job.isCancelled() && (nextToSend - pace) < maxAhead {
-                try sendLabel(nextToSend)
-                if firstSendMs < 0 { firstSendMs = elapsedMs() }
+            // SEND the next label when nothing is in flight (start / avoid idle), or once one is
+            // printing, when it's ~HALFWAY done — so the next is queued before the current finishes
+            // (printer never idles) but at most ~2 labels are in flight, so Cancel stops within a
+            // label or two. "Halfway" is measured against the REAL per-label time (calibrated from
+            // the status pushes); without a subscription, fall back to a time pace ~2 ahead.
+            let canSend: Bool
+            if haveSub {
+                let inFlight = nextToSend - completed
+                canSend = inFlight <= 0 || (inFlight == 1 && elapsedMs() >= lastDoneMs + labelMs / 2)
+            } else {
+                canSend = (nextToSend - printedEst()) < 2
+            }
+            if nextToSend < count && !job.isCancelled() && canSend {
+                let p = job.pages[nextToSend]
+                try send(M611Bitmap.buildPrintJob(pixels: p.label.bytes, width: p.label.width,
+                                                  height: p.label.height, areaRotation: rotation,
+                                                  substratePart: p.label.partNumber,
+                                                  cut: mapCut(p.cut), isLastPage: p.isLast,
+                                                  jobID: ids[nextToSend]), on: conn)
                 nextToSend += 1
                 if job.interLabelDelayMs > 0 && nextToSend < count {
-                    var slept = 0
-                    while slept < job.interLabelDelayMs && !job.isCancelled() { usleep(20_000); slept += 20 }
+                    var s = 0; while s < job.interLabelDelayMs && !job.isCancelled() { usleep(20_000); s += 20 }
                 }
             }
-            // POLL real per-label status (rate-limited) and advance the confirmed count.
-            if elapsedMs() - lastPollMs >= 500 {
-                lastPollMs = elapsedMs()
-                if let map = M611PICL.parse(piclRoundTrip(M611PICL.jobStatusRequest(), host: host,
-                                                          deviceID: deviceID, connectTimeoutMs: 1000)) {
-                    completed = max(completed, M611PICL.completedCount(in: map, ids: ids,
-                                                                      started: &started, observed: &observed))
+            // Read a pushed status frame (small), merge it, recount; calibrate labelMs on advance.
+            if haveSub {
+                if let m = M611PICL.parse(readPush(300)) {
+                    for (k, v) in m { merged[k] = v }
+                    let nc = max(completed, M611PICL.completedCount(in: merged, ids: ids,
+                                                                   started: &started, observed: &observed))
+                    if nc > completed {
+                        let gap = elapsedMs() - lastDoneMs
+                        if gap > 300 { labelMs = min(20000, gap) }   // real time for the label that just finished
+                        lastDoneMs = elapsedMs()
+                        completed = nc
+                    }
                 }
-                // Sent labels but never saw ANY of our jobs (in any slot state) after a few
-                // seconds → job telemetry isn't reporting; fall back to the time estimate.
-                if !telemetryDead && firstSendMs >= 0 && observed.isEmpty
-                    && elapsedMs() - firstSendMs > max(4000, perLabelMs * 2) {
-                    telemetryDead = true
-                    NSLog("[M611] job status not reported — single-label progress falls back to time estimate")
-                }
+            } else {
+                usleep(120_000)
             }
-            // COUNTER: real completed when telemetry works, else the time estimate.
-            let shown = telemetryDead ? min(nextToSend, printedEst()) : completed
+            let shown = haveSub ? completed : min(nextToSend, printedEst())
             job.progress(.counter(done: min(count, max(0, shown)), of: count))
-            // DONE when every label we committed to (all of them, or up to a cancel) has finished.
             let committed = nextToSend
-            if job.isCancelled() || nextToSend >= count {
-                if telemetryDead { if printedEst() >= committed { break } }
-                else if completed >= committed { break }
-            }
+            if (job.isCancelled() || nextToSend >= count)
+                && (haveSub ? (completed >= committed) : (printedEst() >= committed)) { break }
             if elapsedMs() >= capMs { break }
-            usleep(60_000)
         }
-        // Clean finish → fill the bar to 100% (the job is done even if the last label's slot
-        // aged out before a poll caught it). Cancelled → leave the real partial count.
         if job.isCancelled() {
-            let shown = telemetryDead ? min(nextToSend, printedEst()) : completed
+            let shown = haveSub ? completed : min(nextToSend, printedEst())
             job.progress(.counter(done: min(count, max(0, shown)), of: count))
-        } else {
-            job.progress(.done)
+        } else { job.progress(.done) }
+    }
+
+    /// Read one framed PICL message ([16 magic][4 LE len][JSON]) from a socket, waiting up to
+    /// `capMs` for it to start. [] if none arrives. Used for the persistent network subscription.
+    static func readFrame(fd: Int32, capMs: Int) -> [UInt8] {
+        var out: [UInt8] = []
+        var buf = [UInt8](repeating: 0, count: 16384)
+        let deadline = Date().addingTimeInterval(Double(capMs) / 1000.0)
+        while deadline.timeIntervalSinceNow > 0 || !out.isEmpty {
+            let waitMs = out.isEmpty ? Int32(max(1, deadline.timeIntervalSinceNow * 1000)) : 300
+            var pfd = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+            guard poll(&pfd, 1, waitMs) > 0, (pfd.revents & Int16(POLLIN)) != 0 else { break }
+            let r = buf.withUnsafeMutableBytes { Darwin.read(fd, $0.baseAddress, $0.count) }
+            if r <= 0 { break }
+            out += buf.prefix(r)
+            if out.count >= 20, Array(out.prefix(16)) == M611PICL.magic {
+                let len = Int(out[16]) | Int(out[17]) << 8 | Int(out[18]) << 16 | Int(out[19]) << 24
+                if len > 0 && out.count >= 20 + len { return Array(out.prefix(20 + len)) }
+            }
         }
+        return out
     }
 
     /// Block until the printer reports the job with this ExternalId has finished printing, or

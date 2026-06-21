@@ -102,16 +102,19 @@ enum M611PICL {
         return request(reqs)
     }
 
-    /// A framed `PropertyGetRequest` that scans the job-slot ring for both ExternalId and
-    /// status, so a parse of the response can find OUR job (by its unique ExternalId) and
-    /// read whether it has finished printing.
+    /// Request the printer enumerate ALL current properties. Job slots are DYNAMIC — a
+    /// targeted property-get of `Job N:<prop>` returns "Invalid Value" — so the only way to
+    /// read job status is this "subscribe to all" call (the model Brady's own software uses).
+    /// The reply lists every property, including the live job slots, which `jobState`/
+    /// `completedCount` pick out by ExternalId. (Confirmed against the M611 packet capture.)
     static func jobStatusRequest() -> [UInt8] {
-        var reqs: [[String: String]] = []
-        for n in 1...jobSlotScan {
-            reqs.append(["Component": printSpooler, "GUID": "Job \(n):\(Job.externalId)"])
-            reqs.append(["Component": printSpooler, "GUID": "Job \(n):\(Job.status)"])
-        }
-        return request(reqs)
+        guard let json = try? JSONSerialization.data(
+            withJSONObject: ["SubscribeAllCurrentAndNewProperties": [String]()]) else { return [] }
+        let len = UInt32(json.count)
+        var out = magic
+        out += [UInt8(len & 0xFF), UInt8((len >> 8) & 0xFF), UInt8((len >> 16) & 0xFF), UInt8((len >> 24) & 0xFF)]
+        out += [UInt8](json)
+        return out
     }
 
     /// The lifecycle state of our job in a parsed PICL response. Scans whatever job slots the
@@ -166,19 +169,13 @@ enum M611PICL {
         return out
     }
 
-    /// Parse a PICL response into `["group:prop": value]`. Resilient to the unconfirmed
-    /// transport framing: it locates the `PropertyGetResponses` JSON object inside the
-    /// raw bytes (whatever magic/length/header precedes it) and brace-matches it out.
-    /// Returns nil if no plain-text JSON is present (e.g. an LZ4-compressed response —
-    /// readStatus logs the raw bytes in that case so the exact framing can be decoded
-    /// from a real-hardware sample).
+    /// Parse a PICL response into `["group:prop": value]`. Finds the OUTERMOST JSON object
+    /// (the frame's magic/length header contains no `{`, so the first `{` starts it) and merges
+    /// the response items from both `PropertyGetResponses` (targeted gets) and
+    /// `GetAllPropertiesResponse` (the enumerate/subscribe reply). Returns nil if no plain JSON
+    /// object is present (e.g. an LZ4-compressed BLE response, or a still-incomplete frame).
     static func parse(_ bytes: [UInt8]) -> [String: String]? {
-        let needle = Array("PropertyGetResponses".utf8)
-        guard let m = firstIndex(of: needle, in: bytes) else { return nil }
-        var start = m
-        while start > 0 && bytes[start] != UInt8(ascii: "{") { start -= 1 }
-        guard bytes[start] == UInt8(ascii: "{") else { return nil }
-
+        guard let start = bytes.firstIndex(of: UInt8(ascii: "{")) else { return nil }
         var depth = 0, end = -1, inStr = false, esc = false, i = start
         while i < bytes.count {
             let ch = bytes[i]
@@ -192,28 +189,21 @@ enum M611PICL {
             i += 1
         }
         guard end >= start,
-              let obj = try? JSONSerialization.jsonObject(with: Data(bytes[start...end])) as? [String: Any],
-              let responses = obj["PropertyGetResponses"] as? [[String: Any]] else { return nil }
+              let obj = try? JSONSerialization.jsonObject(with: Data(bytes[start...end])) as? [String: Any]
+        else { return nil }
 
         var map: [String: String] = [:]
-        for r in responses {
-            guard let guid = r["GUID"] as? String else { continue }
-            if let v = r["Value"] as? String { map[guid] = v }
-            else if let n = r["Value"] as? NSNumber, CFGetTypeID(n) == CFBooleanGetTypeID() {
-                map[guid] = n.boolValue ? "true" : "false"   // JSON true/false → canonical string, never "1"/"0"
+        for key in ["PropertyGetResponses", "GetAllPropertiesResponse"] {
+            guard let responses = obj[key] as? [[String: Any]] else { continue }
+            for r in responses {
+                guard let guid = r["GUID"] as? String else { continue }
+                if let v = r["Value"] as? String { map[guid] = v }
+                else if let n = r["Value"] as? NSNumber, CFGetTypeID(n) == CFBooleanGetTypeID() {
+                    map[guid] = n.boolValue ? "true" : "false"   // JSON true/false → canonical string
+                }
+                else if let v = r["Value"] { map[guid] = "\(v)" }
             }
-            else if let v = r["Value"] { map[guid] = "\(v)" }
         }
         return map.isEmpty ? nil : map
-    }
-
-    private static func firstIndex(of needle: [UInt8], in hay: [UInt8]) -> Int? {
-        guard !needle.isEmpty, hay.count >= needle.count else { return nil }
-        for s in 0...(hay.count - needle.count) {
-            var ok = true
-            for k in 0 ..< needle.count where hay[s + k] != needle[k] { ok = false; break }
-            if ok { return s }
-        }
-        return nil
     }
 }
