@@ -80,29 +80,45 @@ public struct PrinterModelList: Codable, Hashable {
     /// single-label printing (it reports a hardware label counter and historically
     /// printed one label at a time); the M611 defaults to one full job.
     public static func makeDefault() -> PrinterModelList {
-        PrinterModelList(version: 2, models: [
+        PrinterModelList(version: 3, models: [
             PrinterModel(name: "M611", usbIDs: [PrinterUSBID(vendorID: "0E2E", productID: "010C")],
                          singleLabelPrinting: false),
             PrinterModel(name: "M610", usbIDs: [PrinterUSBID(vendorID: "0E2E", productID: "010B")],
                          singleLabelPrinting: true),
+            // Brother P-touch PT-E550W (classic raster dialect over USB).
+            PrinterModel(name: "PT-E550W", usbIDs: [PrinterUSBID(vendorID: "04F9", productID: "2060")],
+                         singleLabelPrinting: false),
         ])
     }
 
-    /// Upgrade a pre-print-settings (v1) list: seed per-model defaults by name so an
+    /// Upgrade an older list. v1→v2 seeds per-model send-mode defaults by name so an
     /// existing install keeps M610's one-label-at-a-time behavior while the M611
-    /// defaults to a single full job. No-op for v2+.
+    /// defaults to a single full job. v2→v3 adds the Brother PT-E550W entry to
+    /// existing installs (fresh installs get it from makeDefault). No-op for v3+.
     public func migrated() -> PrinterModelList {
-        guard version < 2 else { return self }
+        guard version < 3 else { return self }
         var l = self
-        for i in l.models.indices {
-            // Identify the M610 by its hardware PID (0x010B) OR name, so a RENAMED M610
-            // entry still keeps single-label printing — its SmartCell label counter is
-            // what makes per-label progress meaningful.
-            let isM610 = l.models[i].name.uppercased() == "M610"
-                || l.models[i].usbIDs.contains { $0.productID.uppercased() == "010B" }
-            l.models[i].singleLabelPrinting = isM610
+        if version < 2 {
+            for i in l.models.indices {
+                // Identify the M610 by its hardware PID (0x010B) OR name, so a RENAMED
+                // M610 entry still keeps single-label printing — its SmartCell label
+                // counter is what makes per-label progress meaningful.
+                let isM610 = l.models[i].name.uppercased() == "M610"
+                    || l.models[i].usbIDs.contains { $0.productID.uppercased() == "010B" }
+                l.models[i].singleLabelPrinting = isM610
+            }
         }
-        l.version = 2
+        // v2→v3: ensure the Brother PT-E550W model exists (matched by name or PID).
+        let hasBrother = l.models.contains { m in
+            m.name.uppercased() == "PT-E550W"
+                || m.usbIDs.contains { $0.productID.uppercased() == "2060" }
+        }
+        if !hasBrother {
+            l.models.append(PrinterModel(name: "PT-E550W",
+                usbIDs: [PrinterUSBID(vendorID: "04F9", productID: "2060")],
+                singleLabelPrinting: false))
+        }
+        l.version = 3
         return l
     }
 }
@@ -128,7 +144,7 @@ public final class PrinterModelStore: ObservableObject {
             let upgraded = decoded.migrated()
             list = upgraded
             Self.setSnapshot(upgraded)
-            if decoded.version < 2 { save() }   // persist the v1→v2 upgrade once
+            if decoded.version < 3 { save() }   // persist the v1→v2 / v2→v3 upgrade once
         } else {
             let def = PrinterModelList.makeDefault()
             list = def

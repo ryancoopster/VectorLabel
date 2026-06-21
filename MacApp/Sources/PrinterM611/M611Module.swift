@@ -32,6 +32,17 @@ public final class M611Module: PrinterModule {
     static let printPort: UInt16 = 9100
     static let telemetryPort: UInt16 = 9102
 
+    /// The M611 print head's native resolution (fixed 300 dpi). Labels are rendered
+    /// at the master render DPI (`RenderDPI.master`) and downscaled to this before
+    /// the bitmap encoder packs them, so the printed label is the correct size.
+    static let nativeDPI = 300
+
+    /// Downscale a master-DPI rendered label to the M611's native 300 dpi.
+    private func native(_ label: RenderedLabel) -> (pixels: [UInt8], width: Int, height: Int) {
+        MonoRaster.downscale(pixels: label.bytes, width: label.width, height: label.height,
+                             fromDPI: label.dpi, toDPI: Self.nativeDPI)
+    }
+
     public func enumerate() -> [PrinterDevice] {
         // Enumerate only over transports that are BOTH enabled by the user AND supported
         // by this driver. The M611 currently supports network only, so `active` won't
@@ -58,8 +69,9 @@ public final class M611Module: PrinterModule {
         // Rotation comes from the printer's reported Area Rotation when known;
         // 270 is the M6 die-cut default until Phase-3 telemetry fills it in.
         let rotation = status?.areaRotation ?? 270
+        let n = native(label)   // master DPI → native 300 before bitmap encode
         return M611Bitmap.buildPrintJob(
-            pixels: label.bytes, width: label.width, height: label.height,
+            pixels: n.pixels, width: n.width, height: n.height,
             areaRotation: rotation, substratePart: label.partNumber,
             cut: mapCut(cut), isLastPage: isLastLabel)
     }
@@ -133,9 +145,10 @@ public final class M611Module: PrinterModule {
             // single-label jobs. No mid-job cancel (the firmware has none); coarse "Printing…".
             if job.isCancelled() { return }
             let jobID = "VL" + token + "PRNT"   // 30 chars, unique per run
-            let mpages = job.pages.map { p in
-                M611Bitmap.Page(pixels: p.label.bytes, width: p.label.width, height: p.label.height,
-                                cut: mapCut(p.cut), isLast: p.isLast)
+            let mpages = job.pages.map { p -> M611Bitmap.Page in
+                let n = native(p.label)   // master DPI → native 300
+                return M611Bitmap.Page(pixels: n.pixels, width: n.width, height: n.height,
+                                       cut: mapCut(p.cut), isLast: p.isLast)
             }
             let part = job.pages.first?.label.partNumber ?? ""
             job.progress(.printing)
@@ -213,8 +226,9 @@ public final class M611Module: PrinterModule {
             }
             if nextToSend < count && !job.isCancelled() && canSend {
                 let p = job.pages[nextToSend]
-                try send(M611Bitmap.buildPrintJob(pixels: p.label.bytes, width: p.label.width,
-                                                  height: p.label.height, areaRotation: rotation,
+                let n = native(p.label)   // master DPI → native 300
+                try send(M611Bitmap.buildPrintJob(pixels: n.pixels, width: n.width,
+                                                  height: n.height, areaRotation: rotation,
                                                   substratePart: p.label.partNumber,
                                                   cut: mapCut(p.cut), isLastPage: p.isLast,
                                                   jobID: ids[nextToSend]), on: conn)

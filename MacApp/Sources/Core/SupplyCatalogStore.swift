@@ -45,9 +45,13 @@ public final class SupplyCatalogStore: ObservableObject {
     }
 
     private init() {
-        let loaded = Self.loadFromDisk() ?? SupplyCatalog.makeDefault()
+        let raw = Self.loadFromDisk()
+        let loaded = raw?.migrated() ?? SupplyCatalog.makeDefault()
         catalog = loaded
         Self.setSnapshot(loaded)
+        // Persist the additive migration once (e.g. the Brother group added to an
+        // existing install) so it survives without a manual "Restore defaults".
+        if let raw, raw.version < loaded.version { writeToDisk() }
     }
 
     // MARK: – Disk
@@ -60,7 +64,7 @@ public final class SupplyCatalogStore: ObservableObject {
     /// modules polling for Engine edits. Returns true when the catalog changed.
     @discardableResult
     public static func reloadSnapshotFromDisk() -> Bool {
-        guard let loaded = loadFromDisk(), loaded != snapshot else { return false }
+        guard let loaded = loadFromDisk()?.migrated(), loaded != snapshot else { return false }
         setSnapshot(loaded)
         return true
     }
@@ -110,7 +114,7 @@ public final class SupplyCatalogStore: ObservableObject {
         snapLock.lock()
         if let s = _snapshot { snapLock.unlock(); return s }
         snapLock.unlock()
-        let loaded = loadFromDisk() ?? SupplyCatalog.makeDefault()
+        let loaded = loadFromDisk()?.migrated() ?? SupplyCatalog.makeDefault()
         setSnapshot(loaded)
         return loaded
     }

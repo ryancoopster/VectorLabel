@@ -95,9 +95,29 @@ public struct RenderedLabel: Codable, Equatable {
     public var width: Int
     public var height: Int
     public var partNumber: String   // loaded supply part #, "" if unknown
+    public var dpi: Int             // the MASTER render DPI this raster was produced at
 }
 ```
 The front-end renders to this; **your `encode()` turns it into your printer's wire format.**
+Over IPC the `pixels` buffer rides DEFLATE-compressed (`pixelsZ`); in memory it's the raw
+mono raster. Legacy job files without `dpi` decode as 300.
+
+### Render DPI vs printer-native DPI — **downscale in your driver**
+The app renders **every** label at one high **master DPI** — `RenderDPI.master` (currently
+**900**, the LCM of 300 and 180) — regardless of printer. Your printer's head is almost
+certainly lower-resolution (Brady = 300, Brother = 180), so **your encoder must downscale the
+master raster to your printer's native DPI before packing wire bytes**, or the label prints at
+the wrong physical size. Use the shared, validated resampler:
+```swift
+static let nativeDPI = 300   // your head's resolution
+let d = MonoRaster.downscale(pixels: label.bytes, width: label.width, height: label.height,
+                             fromDPI: label.dpi, toDPI: Self.nativeDPI)
+// hand d.pixels / d.width / d.height to your byte-exact encoder
+```
+Do the downscale in the **module** (`encode()` / your `run()` page builds), not in the
+byte-exact low-level encoder — that keeps the encoder's own native-DPI mils/dimension math and
+its golden-vector tests valid. 900 → 300 is an exact ÷3 box-filter, 900 → 180 an exact ÷5.
+The M610, M611, and PT-E550W modules all follow this pattern.
 
 ### `CutMode` — per-page cut intent (`Core/IPC/PrintJobFile.swift`)
 ```swift

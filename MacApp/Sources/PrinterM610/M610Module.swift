@@ -44,6 +44,10 @@ public final class M610Module: PrinterModule {
         ribbonLengthInches: 75 * 12,                   // 75 ft ribbon
         sendMode: .selectable(defaultSingle: true))    // single-label = per-label progress via SmartCell counter
 
+    /// The M610 print head's native resolution. Labels are rendered at the master
+    /// render DPI (`RenderDPI.master`) and downscaled to this in `encode()`.
+    static let nativeDPI = 300
+
     // Only claim M610 USB devices. A USB-connected M611 (composite, PID 0x13) is NOT
     // handled here — the M611 speaks ECP, not VGL — so it's filtered out (M611 USB
     // support is a separate effort; the M611 is driven over the network for now).
@@ -64,8 +68,12 @@ public final class M610Module: PrinterModule {
         case .eachLabel:    vglCut = .eachLabel
         case .afterJobLast: vglCut = isLastLabel ? .afterJob : .never
         }
-        return BradyVGL.buildPrintJob(pixels: label.bytes, width: label.width,
-                                      height: label.height, cutMode: vglCut)
+        // Downscale the master-DPI raster to the M610's native 300 dpi before VGL
+        // packs it (one wire pixel = one print-head dot); VGL itself is DPI-agnostic.
+        let d = MonoRaster.downscale(pixels: label.bytes, width: label.width,
+                                     height: label.height, fromDPI: label.dpi, toDPI: Self.nativeDPI)
+        return BradyVGL.buildPrintJob(pixels: d.pixels, width: d.width,
+                                      height: d.height, cutMode: vglCut)
     }
 
     public func open(_ device: PrinterDevice) throws -> PrinterConnection {

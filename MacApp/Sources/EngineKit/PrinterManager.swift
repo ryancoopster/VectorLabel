@@ -4,6 +4,7 @@ import AppKit
 import VectorLabelCore
 import PrinterM610   // M610 driver module (VGL/USB)
 import PrinterM611   // M611 driver module (bitmap/LZ4 over TCP)
+import PrinterBrother // Brother P-touch driver modules (classic raster/USB)
 
 // MARK: – Models
 
@@ -82,6 +83,7 @@ public final class PrinterManager: ObservableObject {
         // transport, status) routes by model through the registry from here on.
         PrinterModuleRegistry.shared.register(M610Module())
         PrinterModuleRegistry.shared.register(M611Module())
+        PrinterModuleRegistry.shared.register(PTE550WModule())
     }
 
     // One serial queue per printer, serializing all device access (prints + status
@@ -357,10 +359,12 @@ public final class PrinterManager: ObservableObject {
             var jobLabels = labels
             let feedClearLead = feedToClear && !labels.isEmpty   // jobLabels[0] is the blank
             if feedClearLead, let first = labels.first {
-                let h = continuous ? 300 : first.height   // 1" @ 300 dpi vs one die-cut pitch
+                // 1" feed at the master render DPI (the surrounding labels' scale) vs
+                // one die-cut pitch. The driver downscales this lead like any label.
+                let h = continuous ? RenderDPI.master : first.height
                 jobLabels.insert(RenderedLabel(pixels: Data(count: first.width * h),
                                                width: first.width, height: h,
-                                               partNumber: first.partNumber), at: 0)
+                                               partNumber: first.partNumber, dpi: first.dpi), at: 0)
             }
             func cutFor(_ i: Int) -> CutMode {
                 (feedClearLead && i == 0 && continuous) ? .eachLabel : cutMode

@@ -48,7 +48,7 @@ let package = Package(
         ),
         .target(
             name: "VectorLabelEngineKit",
-            dependencies: ["VectorLabelCore", "PrinterM610", "PrinterM611"],
+            dependencies: ["VectorLabelCore", "PrinterM610", "PrinterM611", "PrinterBrother"],
             path: "MacApp/Sources/EngineKit"
         ),
         .target(
@@ -71,12 +71,19 @@ let package = Package(
             dependencies: ["VectorLabelCore", "CLibUSB"],
             path: "MacApp/Sources/PrinterM611"
         ),
+        // Brother P-touch (PT-series) — classic raster dialect over USB. PT-E550W
+        // first; sibling models (PT-P750W, PT-E560BT/D460BT dialect) add modules here.
+        .target(
+            name: "PrinterBrother",
+            dependencies: ["VectorLabelCore", "CLibUSB"],
+            path: "MacApp/Sources/PrinterBrother"
+        ),
 
         // MARK: – Executables (one @main each)
 
         .executableTarget(
             name: "VectorLabelEngine",
-            dependencies: ["VectorLabelCore", "VectorLabelEngineKit", "VectorLabelUI", "PrinterM610", "PrinterM611"],
+            dependencies: ["VectorLabelCore", "VectorLabelEngineKit", "VectorLabelUI", "PrinterM610", "PrinterM611", "PrinterBrother"],
             path: "MacApp/Sources/Engine",
             linkerSettings: appLinkerSettings
         ),
@@ -101,7 +108,7 @@ let package = Package(
 
         .testTarget(
             name: "VectorLabelTests",
-            dependencies: ["VectorLabelCore", "PrinterM611", "PrinterM610"],
+            dependencies: ["VectorLabelCore", "PrinterM611", "PrinterM610", "PrinterBrother"],
             path: "MacApp/Tests",
             resources: [
                 // Tiny inline-string .xlsx (no xl/sharedStrings.xml) used to verify

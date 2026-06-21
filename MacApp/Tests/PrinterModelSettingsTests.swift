@@ -8,11 +8,15 @@ final class PrinterModelSettingsTests: XCTestCase {
 
     func testMakeDefaultSeedsPerModelPrintSettings() {
         let d = PrinterModelList.makeDefault()
-        XCTAssertEqual(d.version, 2)
+        XCTAssertEqual(d.version, 3)
         // M610 reports a hardware counter + historically printed one label at a time.
         XCTAssertEqual(d.models.first { $0.name == "M610" }?.singleLabelPrinting, true)
         // M611 defaults to one full job (coarse "Printing" unless it reports progress).
         XCTAssertEqual(d.models.first { $0.name == "M611" }?.singleLabelPrinting, false)
+        // Brother PT-E550W seeded with its USB id (VID 0x04F9 / PID 0x2060).
+        let brother = d.models.first { $0.name == "PT-E550W" }
+        XCTAssertEqual(brother?.usbIDs.first?.productID, "2060")
+        XCTAssertEqual(brother?.usbIDs.first?.vendorID, "04F9")
     }
 
     func testTolerantDecodeDefaultsForMissingFields() throws {
@@ -35,13 +39,15 @@ final class PrinterModelSettingsTests: XCTestCase {
         XCTAssertEqual(decoded.models.first { $0.name == "M610" }?.singleLabelPrinting, false)
 
         let migrated = decoded.migrated()
-        XCTAssertEqual(migrated.version, 2)
+        XCTAssertEqual(migrated.version, 3)
         XCTAssertEqual(migrated.models.first { $0.name == "M610" }?.singleLabelPrinting, true)
         XCTAssertEqual(migrated.models.first { $0.name == "M611" }?.singleLabelPrinting, false)
+        // v2→v3 also appends the Brother PT-E550W entry to existing installs.
+        XCTAssertNotNil(migrated.models.first { $0.name == "PT-E550W" })
     }
 
     func testMigratedIsNoopForCurrentVersion() {
-        let d = PrinterModelList.makeDefault()   // already v2
+        let d = PrinterModelList.makeDefault()   // already v3
         XCTAssertEqual(d.migrated(), d)
     }
 

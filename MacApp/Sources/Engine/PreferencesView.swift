@@ -281,7 +281,10 @@ struct PreferencesView: View {
     /// on the label. Offsets are keyed by serial so they follow the printer.
     @ViewBuilder
     private func calibrationControls(for printer: PrinterDevice) -> some View {
-        let dpi = printerManager.calibrationSize(for: printer.id).dpi
+        // Offsets are entered/stored in calibration-reference pixels (the renderer
+        // scales them to the master DPI), so the hint must show that reference DPI,
+        // not the master render DPI.
+        let dpi = RenderDPI.calibrationReference
         let dxB = Binding<Double>(
             get: { settings.calibrationOffset(forSerial: printer.serial).dx },
             set: { settings.setCalibrationOffset(forSerial: printer.serial, dx: $0,

@@ -210,4 +210,19 @@ public struct SupplyCatalog: Codable, Hashable {
     public func group(forModel model: String) -> SupplyGroup? {
         groups.first { $0.serves(model: model) } ?? groups.first
     }
+
+    /// Non-destructively upgrade a loaded catalog. v1→v2 ADDS the factory Brother
+    /// P-touch group if the install has no group serving a Brother model, preserving
+    /// every existing (possibly user-edited) group. No-op for v2+.
+    public func migrated() -> SupplyCatalog {
+        guard version < 2 else { return self }
+        var c = self
+        let brotherModels: Set<String> = ["pt-e550w", "pt-p750w", "pt-e560bt"]
+        let hasBrother = c.groups.contains { g in
+            g.printerModels.contains { brotherModels.contains($0.trimmingCharacters(in: .whitespaces).lowercased()) }
+        }
+        if !hasBrother { c.groups.append(SupplyCatalog.brotherPTouchGroup()) }
+        c.version = 2
+        return c
+    }
 }

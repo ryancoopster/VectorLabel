@@ -18,7 +18,11 @@ import AppKit
 func vlInchesToPixels(_ inches: Double, dpi: Int) -> Int {
     let v = (inches * Double(dpi)).rounded()
     guard v.isFinite else { return 1 }
-    return Int(min(max(v, 1), 20_000))
+    // Ceiling scales with the master render DPI so a long continuous strip isn't
+    // silently truncated at high DPI: 20_000 px was ~66" at 300 dpi but only ~22"
+    // at 900. 200_000 keeps ~222" of headroom at the 900-dpi master (and far more
+    // than any real label) while still guarding against absurd/overflowing values.
+    return Int(min(max(v, 1), 200_000))
 }
 
 // MARK: – Brady label geometry
@@ -101,8 +105,13 @@ public enum LabelRenderer {
             ctx.rotate(by: .pi / 2)
         }
 
-        // Per-printer calibration shift (in top-left pixel space).
-        ctx.translateBy(x: CGFloat(offset.dx), y: CGFloat(offset.dy))
+        // Per-printer calibration shift (in top-left pixel space). The stored offset
+        // is in calibrationReference-dpi pixels (what the Preferences UI shows and
+        // what existing saved calibrations used), so scale it to the master render
+        // DPI to preserve its physical shift; the driver's downscale then carries it
+        // to the printer's native resolution.
+        let calScale = Double(dpi) / Double(RenderDPI.calibrationReference)
+        ctx.translateBy(x: CGFloat(offset.dx * calScale), y: CGFloat(offset.dy * calScale))
 
         for obj in template.objs {
             // Rotation is clockwise about the object's center, matching the
@@ -413,29 +422,35 @@ public enum LabelRenderer {
         ctx.fill(CGRect(x: 0, y: 0, width: pw, height: ph))
 
         ctx.translateBy(x: 0, y: CGFloat(ph)); ctx.scaleBy(x: 1, y: -1)
-        ctx.translateBy(x: CGFloat(offset.dx), y: CGFloat(offset.dy))
+        // Offset is in calibrationReference-dpi px (see render()); scale to master DPI.
+        let calScale = dpi / Double(RenderDPI.calibrationReference)
+        ctx.translateBy(x: CGFloat(offset.dx * calScale), y: CGFloat(offset.dy * calScale))
         ctx.setFillColor(gray: 0.0, alpha: 1.0)
 
         let step  = dpi / 8.0          // 1/8" grid
         let inset = dpi / 16.0         // 1/16" margin inside each printable edge
         let x0 = inset, y0 = inset
         let x1 = Double(pw) - inset, y1 = Double(ph) - inset
+        // Line weights scale with the master DPI (thin ≈ 1 native px, heavy = 3×)
+        // so they don't render as hairlines that vanish when the driver downscales.
+        let thin  = max(1.0, (dpi / 300.0).rounded())
+        let heavy = thin * 3
         // Lines are clipped to the inset rectangle [x0,x1] × [y0,y1].
         func vline(_ x: Double, _ w: Double) { ctx.fill(CGRect(x: x, y: y0, width: w, height: y1 - y0)) }
         func hline(_ y: Double, _ h: Double) { ctx.fill(CGRect(x: x0, y: y, width: x1 - x0, height: h)) }
 
-        // 1/8" grid (1px), with every 8th line (= 1") drawn at 3px, starting
+        // 1/8" grid (thin), with every 8th line (= 1") drawn heavy, starting
         // from the inset origin.
         var i = 0
         var x = x0
-        while x <= x1 + 0.5 { vline(x.rounded(), (i % 8 == 0) ? 3 : 1); x += step; i += 1 }
+        while x <= x1 + 0.5 { vline(x.rounded(), (i % 8 == 0) ? heavy : thin); x += step; i += 1 }
         i = 0
         var y = y0
-        while y <= y1 + 0.5 { hline(y.rounded(), (i % 8 == 0) ? 3 : 1); y += step; i += 1 }
+        while y <= y1 + 0.5 { hline(y.rounded(), (i % 8 == 0) ? heavy : thin); y += step; i += 1 }
 
         // Border inset 1/16" from the printable bounds.
-        vline(x0, 3); vline(x1 - 3, 3)
-        hline(y0, 3); hline(y1 - 3, 3)
+        vline(x0, heavy); vline(x1 - heavy, heavy)
+        hline(y0, heavy); hline(y1 - heavy, heavy)
 
         // Solid 1/8" square at the inset origin corner.
         ctx.fill(CGRect(x: x0, y: y0, width: step, height: step))

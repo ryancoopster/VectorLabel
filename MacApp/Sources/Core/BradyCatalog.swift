@@ -15,9 +15,11 @@ public struct BradyLabelSize: Identifiable, Codable, Hashable {
     public let partNumber: String      // e.g. "M6-32-427"
     public let widthInches: Double
     public let heightInches: Double
-    // dpi is constant — excluded from Codable to avoid "immutable property will not
-    // be decoded" warning (Swift can't decode a let with a default into Codable).
-    public var dpi: Int { 300 }
+    // The MASTER render DPI (RenderDPI.master), not the printer-native DPI. The
+    // whole render path is DPI-relative and keys off this; each driver downscales
+    // the master raster to its own native resolution (Brady 300, Brother 180) in
+    // encode(). Excluded from Codable (a computed property; nothing to decode).
+    public var dpi: Int { RenderDPI.master }
 
     /// Brady material/part family, e.g. "B-427". "" when unknown.
     public var material: String = ""

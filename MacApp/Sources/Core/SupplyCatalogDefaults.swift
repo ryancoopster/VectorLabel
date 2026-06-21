@@ -159,11 +159,47 @@ extension SupplyCatalog {
 
         let group = SupplyGroup(name: "Brady M6", printerModels: ["M610", "M611"],
                                 categories: categories)
-        return SupplyCatalog(version: 1, groups: [group],
+        return SupplyCatalog(version: 2, groups: [group, brotherPTouchGroup()],
                              coreEquivalences: ["109-427": "33-427"])
+    }
+
+    /// The Brother P-touch supply group: continuous TZe laminated tapes in every
+    /// supported width. These printers have NO die-cut supplies — only continuous
+    /// tape — and the printable WIDTH (across the head) is less than the tape width
+    /// because each width has an unprintable margin on both sides of the 128-pin,
+    /// 180-DPI head (printable px = `128 - margin*2` → inches = px / 180). Length is
+    /// user-set at print time. Part numbers are the default black-on-white laminated
+    /// SKUs where known and are editable in Preferences ▸ Supplies.
+    static func brotherPTouchGroup() -> SupplyGroup {
+        // (tape mm, printable pins per BrotherPT.printWidth, default part number)
+        let tapes: [(mm: Double, pins: Int, pn: String)] = [
+            (3.5, 24,  "TZe-3.5mm"),
+            (6,   32,  "TZe-211"),
+            (9,   50,  "TZe-221"),
+            (12,  70,  "TZe-231"),
+            (18,  112, "TZe-241"),
+            (24,  128, "TZe-251"),
+        ]
+        let supplies: [Supply] = tapes.map { t in
+            let widthIn = t.mm / 25.4
+            let printableIn = Double(t.pins) / 180.0
+            return Supply(
+                name: "\(fmtMM(t.mm)) continuous", kind: .continuous, selfLaminating: false,
+                materialFamily: "TZe", widthInches: widthIn, heightInches: 1.0,
+                printableWidthInches: printableIn, printableHeightInches: 1.0,
+                parts: [SupplyPartNumber(partNumber: t.pn, rollLengthFeet: 26.2,
+                                         materialLabel: "Laminated")])
+        }
+        return SupplyGroup(name: "Brother P-touch",
+                           printerModels: ["PT-E550W", "PT-P750W", "PT-E560BT"],
+                           categories: [SupplyCategory(name: "TZe Laminated Tapes", supplies: supplies)])
     }
 
     private static func fmtIn(_ v: Double) -> String {
         (v == v.rounded() ? "\(Int(v))" : String(format: "%g", v)) + "\""
+    }
+
+    private static func fmtMM(_ v: Double) -> String {
+        (v == v.rounded() ? "\(Int(v))" : String(format: "%g", v)) + " mm"
     }
 }
