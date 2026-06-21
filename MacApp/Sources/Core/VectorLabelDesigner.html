@@ -2979,6 +2979,8 @@ function doCustomPrint(){
   }
   if(data.labelLengthInches) payload.labelLengthInches=data.labelLengthInches;
   if(typeof data.canvasRot==='number') payload.canvasRot=data.canvasRot;   // portrait override (90) → renderer skips its default landscape rotation
+  payload.supplyID=data.supplyID;            // capture the supply so a Reprint reopens the exact design
+  payload.supplyGeometry=data.supplyGeometry;
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
     window.webkit.messageHandlers.vectorlabel.postMessage({action:"printCustom",payload});
   }

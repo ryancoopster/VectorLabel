@@ -102,8 +102,13 @@ public final class DesignerWindowController: NSObject {
     /// Mirrors the web designer's unsaved-changes state (setDirty messages).
     private var isDirty = false
     /// What to do once a save triggered from the close prompt completes.
-    private enum AfterSave { case none, close, terminate }
+    private enum AfterSave { case none, close, terminate, openCustomDoc }
     private var afterSave: AfterSave = .none
+
+    /// True once the designer webview has finished loading (didFinish). A reopen must
+    /// not push a doc into an un-loaded page (initCustomDocument is undefined then and
+    /// the doc would be silently dropped) — it waits for didFinish instead.
+    private var webViewReady = false
     /// Polls the Engine's on-disk supply catalog (this designer is a separate
     /// process) and pushes changes into the web UI live.
     private var catalogPollTimer: Timer?
@@ -152,15 +157,41 @@ public final class DesignerWindowController: NSObject {
     /// mode — used by the Custom Designer's Finder ".vlcus" open handler).
     public func openCustomDocument(_ doc: CustomLabelDocument) {
         guard mode == .custom else { return }
-        pendingOpenCustomDoc = doc
-        if window != nil {
-            NSApp.activate(ignoringOtherApps: true)
-            window?.makeKeyAndOrderFront(nil)
-            window?.makeFirstResponder(webView)
-            applyPendingOpenCustomDoc()
-        } else {
+        // Cold: create the window; didFinish loads the doc once the page is ready.
+        guard window != nil else {
+            pendingOpenCustomDoc = doc
             present(editTemplateIndex: nil)
+            return
         }
+        NSApp.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
+        window?.makeFirstResponder(webView)
+        // Warm window: opening replaces the canvas, so don't silently clobber unsaved
+        // work — prompt first. (Both Reprint and a Finder ".vlcus" open land here.)
+        if isDirty {
+            pendingOpenCustomDoc = doc
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Save the changes to this custom label first?"
+            alert.informativeText = "Opening this design replaces what’s on the canvas. Your unsaved changes will be lost if you don’t save them."
+            alert.addButton(withTitle: "Save…")
+            alert.addButton(withTitle: "Don’t Save")
+            alert.addButton(withTitle: "Cancel")
+            switch alert.runModal() {
+            case .alertFirstButtonReturn:  triggerSave(saveAs: true, then: .openCustomDoc)  // save → finishSave loads it
+            case .alertSecondButtonReturn: applyPendingOpenCustomDocIfReady()                // Don't Save → load now
+            default:                       pendingOpenCustomDoc = nil                        // Cancel → abort
+            }
+            return
+        }
+        pendingOpenCustomDoc = doc
+        applyPendingOpenCustomDocIfReady()
+    }
+
+    /// Apply a pending Custom Designer reopen only if the page has finished loading;
+    /// otherwise leave it pending so `didFinish` applies it once ready.
+    private func applyPendingOpenCustomDocIfReady() {
+        if webViewReady { applyPendingOpenCustomDoc() }
     }
 
     private func present(editTemplateIndex: Int?) {
@@ -291,6 +322,7 @@ public final class DesignerWindowController: NSObject {
                 self.webView?.configuration.userContentController
                     .removeScriptMessageHandler(forName: "vectorlabel")
                 self.webView = nil
+                self.webViewReady = false
                 self.window = nil
                 self.catalogPollTimer?.invalidate(); self.catalogPollTimer = nil   // stop the 2s disk poll
                 self.cancellables.removeAll()
@@ -825,6 +857,10 @@ public final class DesignerWindowController: NSObject {
         // absent/0 = the renderer's default landscape. #14.
         if let rot = payload["canvasRot"] as? Int { tplDict["canvasRot"] = rot }
         else if let rotN = payload["canvasRot"] as? NSNumber { tplDict["canvasRot"] = rotN.intValue }
+        // Supply identity + geometry snapshot, so a Reprint reopens the exact design
+        // (mirrors the Save path; keeps the canvas size if the supply is later removed).
+        if let sid = payload["supplyID"] as? String, !sid.isEmpty { tplDict["supplyID"] = sid }
+        if let geom = payload["supplyGeometry"] as? [String: Any] { tplDict["supplyGeometry"] = geom }
         // A template with no objects (or an unknown spec) can't render — bail.
         guard let objs = tplDict["objs"] as? [Any], !objs.isEmpty,
               let data = try? JSONSerialization.data(withJSONObject: tplDict),
@@ -842,6 +878,17 @@ public final class DesignerWindowController: NSObject {
         let cutMode = CutMode(rawValue: (payload["cutMode"] as? String) ?? "") ?? .afterJobLast
         // "Feed to clear before printing" — prepend a blank lead label (built below).
         let feedToClear = (payload["feedToClear"] as? Bool) ?? false
+
+        // Capture the full design (the ".vlcus" model) so a later Reprint REOPENS it in
+        // the Custom Designer (Stage B) instead of blindly re-submitting. Serialized into
+        // reprint.customDocJSON on the job and retained in done/. Built here on the main
+        // actor (it reads the in-memory bound data source).
+        let reprintInfo: ReprintInfo? = {
+            let doc = customLabelDocument(from: template, copies: copies, cutMode: cutMode)
+            guard let data = try? JSONEncoder().encode(doc),
+                  let json = String(data: data, encoding: .utf8) else { return nil }
+            return ReprintInfo(customDocJSON: json)
+        }()
 
         // One record per label, honoring the print-range subset (Phase 6). When a
         // data source is bound, the page sends `recordIndices` — the rows chosen by
@@ -912,6 +959,7 @@ public final class DesignerWindowController: NSObject {
                     cutMode: cutMode,     // user-chosen cut setting (Phase 6)
                     estLabelMs: estLabelMs,
                     renderedLabels: renderedLabels,
+                    reprint: reprintInfo,
                     feedToClear: feedToClear
                 )
                 do { try backend.submit(job) }
@@ -936,6 +984,33 @@ public final class DesignerWindowController: NSObject {
                 self.injectActiveJobs()
             }
         }
+    }
+
+    /// Build the ".vlcus" document model from the current canvas `template` + the
+    /// in-memory bound data snapshot (headers / rows / source path). Shared by Save
+    /// (writes it to a file) and the Reprint capture (serialized into the job's
+    /// `reprint.customDocJSON`) so a reprint reopens the exact printed design.
+    private func customLabelDocument(from template: VLTemplate, copies: Int, cutMode: CutMode) -> CustomLabelDocument {
+        var rows: [[String: String]] = []
+        var headers: [String] = []
+        var srcPath = ""
+        var headerRow = true
+        if let ds = dataSource {
+            headers = ds.columns
+            rows = ds.records.map { $0.fields }
+            srcPath = ds.path.path
+            headerRow = ds.headerRow
+        }
+        return CustomLabelDocument(
+            name: template.name,
+            template: template,
+            headers: headers,
+            rows: rows,
+            dataSourcePath: srcPath,
+            dataSourceHeaderRow: headerRow,
+            labelLengthInches: template.labelLengthInches ?? 0,
+            cutMode: cutMode,
+            copies: copies)
     }
 
     /// Save the current Custom Designer canvas + embedded data as a ".vlcus"
@@ -974,28 +1049,7 @@ public final class DesignerWindowController: NSObject {
         // default in PrintJobFile / PrinterManager).
         let cutMode = CutMode(rawValue: (payload["cutMode"] as? String) ?? "") ?? .afterJobLast
 
-        // Embedded data snapshot from the in-memory bound source (if any).
-        var rows: [[String: String]] = []
-        var headers: [String] = []
-        var srcPath = ""
-        var headerRow = true
-        if let ds = dataSource {
-            headers = ds.columns
-            rows = ds.records.map { $0.fields }
-            srcPath = ds.path.path
-            headerRow = ds.headerRow
-        }
-
-        let doc = CustomLabelDocument(
-            name: name,
-            template: template,
-            headers: headers,
-            rows: rows,
-            dataSourcePath: srcPath,
-            dataSourceHeaderRow: headerRow,
-            labelLengthInches: template.labelLengthInches ?? 0,
-            cutMode: cutMode,
-            copies: copies)
+        let doc = customLabelDocument(from: template, copies: copies, cutMode: cutMode)
 
         let panel = NSSavePanel()
         if let type = UTType(filenameExtension: CustomLabelStore.fileExtension) {
@@ -1072,9 +1126,10 @@ public final class DesignerWindowController: NSObject {
         webView?.evaluateJavaScript("if(typeof markClean==='function')markClean()", completionHandler: nil)
         let action = afterSave; afterSave = .none
         switch action {
-        case .close:     window?.close()
-        case .terminate: NSApp.terminate(nil)
-        case .none:      break
+        case .close:         window?.close()
+        case .terminate:     NSApp.terminate(nil)
+        case .openCustomDoc: applyPendingOpenCustomDocIfReady()   // saved → now load the reopened design
+        case .none:          break
         }
     }
 
@@ -1205,6 +1260,7 @@ extension DesignerWindowController: WKNavigationDelegate {
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         // Only handle our designer webview
         guard webView === self.webView else { return }
+        webViewReady = true   // page loaded — warm reopens may inject directly now
         // Apply the current light/dark theme.
         webView.evaluateJavaScript("if(typeof setTheme==='function')setTheme('\(AppSettings.shared.effectiveTheme)')", completionHandler: nil)
         // Inject the most recent CSV with ≥10 records — TEMPLATE MODE ONLY. The

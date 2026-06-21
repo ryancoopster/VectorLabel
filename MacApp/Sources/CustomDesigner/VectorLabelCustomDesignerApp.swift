@@ -30,6 +30,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// A ".vlcus" file the OS asked us to open before the designer existed.
     private var pendingOpenURLs: [URL] = []
 
+    /// Watches the IPC reprint channel — the Engine posts here when the user taps
+    /// "Reprint" on a Custom Designer job in the menu bar; we reopen its saved design.
+    private var reprintWatcher: FolderWatcher?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         if Bundle.main.bundleIdentifier == nil || Bundle.main.bundleIdentifier!.isEmpty {
             UserDefaults.standard.set("com.sai.vectorlabel.customdesigner", forKey: "CFBundleIdentifier")
@@ -51,14 +55,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // launch. Leaving the singleton untouched means it's never created for the
         // Custom Designer, so ~/Documents is not read on launch.
         designer = DesignerWindowController(mode: .custom)
-        // If Finder handed us a ".vlcus" before launch finished, open it directly;
-        // otherwise open the empty Custom Designer.
+
+        // Watch the IPC reprint channel: the Engine posts a request when the user taps
+        // "Reprint" on a Custom Designer job, and we reopen the saved design (captured
+        // in the job's reprint.customDocJSON) so the user can edit + re-print it.
+        let queue = PrintQueue()
+        queue.ensureDirs()
+        let rw = FolderWatcher(root: queue.reprintCustomDir, suffix: ".json", latency: 0.2) { [weak self] url in
+            Task { @MainActor in self?.handleReprintRequest(url) }
+        }
+        rw.start()
+        self.reprintWatcher = rw
+
+        // Decide the first window: a Finder-opened ".vlcus" wins; else honor a reprint
+        // request the Engine wrote just before this (possibly cold) launch — DRAIN it,
+        // don't discard it; else open the empty Custom Designer.
+        let pendingReprints = queue.pendingCustomReprintURLs()
         if let url = pendingOpenURLs.last {
             pendingOpenURLs.removeAll()
             openCustomDocument(at: url)
+        } else if let first = pendingReprints.first {
+            // Only one window can show a reprint; open the first and drain the extras so
+            // they don't linger (each handleReprintRequest reopens into the single window,
+            // so processing them all would just clobber down to the last one).
+            for extra in pendingReprints.dropFirst() { queue.deleteReprint(extra) }
+            handleReprintRequest(first)
         } else {
             designer.open()
         }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        reprintWatcher?.stop()
+    }
+
+    /// Reopen the saved design for a queued Custom Designer reprint, then delete the
+    /// request. The design is the ".vlcus" model captured at print time in the job's
+    /// reprint.customDocJSON (retained in done/); if it's no longer available, inform
+    /// the user and open the empty designer.
+    private func handleReprintRequest(_ url: URL) {
+        let q = PrintQueue()
+        defer { q.deleteReprint(url) }
+        guard let recent = q.readReprintRequest(url), recent.sourceApp == "customdesigner" else { return }
+        guard let job = q.readDoneJob(id: recent.jobId),
+              let json = job.reprint?.customDocJSON,
+              let data = json.data(using: .utf8),
+              let doc = try? JSONDecoder().decode(CustomLabelDocument.self, from: data)
+        else {
+            designer.open()
+            NSApp.activate(ignoringOtherApps: true)
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Can’t reopen “\(recent.title)”"
+            alert.informativeText = "The original design for this print is no longer available to edit."
+            alert.runModal()
+            return
+        }
+        designer.openCustomDocument(doc)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     /// Quit fully when the (only) designer window closes — don't linger in the Dock.

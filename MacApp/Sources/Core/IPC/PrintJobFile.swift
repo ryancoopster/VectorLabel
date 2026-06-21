@@ -22,7 +22,7 @@ public struct ReprintInfo: Codable {
     public var rangeTo: Int?
     public var filterJSON: String?
     public var sortJSON: String?
-    public var customDocJSON: String?       // RESERVED for Stage B (Custom Designer reopen); not written or read by any code today.
+    public var customDocJSON: String?       // The Custom Designer's design (the ".vlcus" model as JSON): written at print time, read on Reprint to reopen the exact printed design.
 
     public init(sourceFileName: String = "", selectedIndices: [Int] = [],
                 printRange: String = "all", rangeFrom: Int? = nil, rangeTo: Int? = nil,

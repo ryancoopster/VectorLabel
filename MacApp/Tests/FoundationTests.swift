@@ -447,6 +447,91 @@ final class FoundationTests: XCTestCase {
         XCTAssertEqual(q.readStatus()?.engineRunning, true)
     }
 
+    /// Custom Designer reprint (Stage B): a "customdesigner" reprint request routes to
+    /// the designer's OWN channel (never Auto Print's), and the design captured at print
+    /// time in reprint.customDocJSON round-trips out of the done job so the Custom
+    /// Designer can reopen the exact printed design.
+    func testCustomDesignerReprintRoutingAndDesignRoundTrip() throws {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("vlqueue-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let q = PrintQueue(root: tmp)
+
+        // The design captured at print time (the ".vlcus" model), serialized onto the job.
+        let tpl = VLTemplate(id: "t1", version: 1, name: "Loop", specN: "BM-32-427",
+                             objs: [TemplateObject(t: "tx")])
+        let doc = CustomLabelDocument(name: "Loop", template: tpl, cutMode: .eachLabel, copies: 3)
+        let docJSON = String(data: try JSONEncoder().encode(doc), encoding: .utf8)!
+
+        // Land a done job carrying the captured design (write → claim → complete).
+        let job = PrintJobFile(id: "JOB1", createdAt: "t", sourceApp: "customdesigner",
+                               title: "Loop", templateName: "Loop",
+                               labels: [Data([1, 2, 3])],
+                               reprint: ReprintInfo(customDocJSON: docJSON))
+        let written = try q.write(job)
+        guard let claimed = q.claim(written) else { return XCTFail("claim failed") }
+        q.complete(claimed.processingURL, success: true)
+
+        // A customdesigner reprint request must route to the DESIGNER channel only.
+        let recent = RecentPrint(date: Date(), title: "Loop", sourceFileName: "",
+                                 templateName: "Loop", printerName: "M611", labelCount: 3,
+                                 printRange: .all, selectedIndices: [], jobId: "JOB1",
+                                 sourceApp: "customdesigner")
+        try q.writeReprintRequest(recent)
+        XCTAssertEqual(q.pendingCustomReprintURLs().count, 1, "should land in the designer channel")
+        XCTAssertEqual(q.pendingReprintURLs().count, 0, "must NOT land in Auto Print's channel")
+
+        // The designer reads the request → reads the done job → decodes the design.
+        let reqURL = q.pendingCustomReprintURLs()[0]
+        let readRecent = try XCTUnwrap(q.readReprintRequest(reqURL))
+        XCTAssertEqual(readRecent.sourceApp, "customdesigner")
+        let doneJob = try XCTUnwrap(q.readDoneJob(id: readRecent.jobId))
+        let restoredJSON = try XCTUnwrap(doneJob.reprint?.customDocJSON)
+        let restored = try JSONDecoder().decode(CustomLabelDocument.self, from: Data(restoredJSON.utf8))
+        XCTAssertEqual(restored.name, "Loop")
+        XCTAssertEqual(restored.specN, "BM-32-427")
+        XCTAssertEqual(restored.copies, 3)
+        XCTAssertEqual(restored.cutMode, .eachLabel)
+        XCTAssertEqual(restored.template.objs.count, 1)
+
+        // An autoprint reprint still routes to Auto Print's channel, untouched.
+        let apRecent = RecentPrint(date: Date(), title: "AP", sourceFileName: "x.csv",
+                                   templateName: "t", printerName: "M611", labelCount: 1,
+                                   printRange: .all, selectedIndices: [], jobId: "JOB2",
+                                   sourceApp: "autoprint")
+        try q.writeReprintRequest(apRecent)
+        XCTAssertEqual(q.pendingReprintURLs().count, 1, "autoprint routes to Auto Print's channel")
+        XCTAssertEqual(q.pendingCustomReprintURLs().count, 1, "designer channel unchanged by an autoprint reprint")
+    }
+
+    /// done/ is retained for reprint but must be bounded so it can't grow without limit
+    /// (custom-design jobs now embed the full .vlcus design). pruneDoneJobs(keep:) keeps
+    /// the most-recent `keep` files and drops the rest; it's a no-op at/under `keep`.
+    func testPruneDoneJobsBoundsArchive() throws {
+        let tmp = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("vlqueue-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let q = PrintQueue(root: tmp)
+        func doneCount() -> Int {
+            ((try? FileManager.default.contentsOfDirectory(at: q.doneDir, includingPropertiesForKeys: nil)) ?? [])
+                .filter { $0.pathExtension == "json" }.count
+        }
+        for i in 0..<6 {
+            let job = PrintJobFile(id: "JOB\(i)", createdAt: "t", sourceApp: "autoprint",
+                                   title: "x", templateName: "y", labels: [Data([UInt8(i)])])
+            let w = try q.write(job)
+            let c = try XCTUnwrap(q.claim(w))
+            q.complete(c.processingURL, success: true)
+        }
+        XCTAssertEqual(doneCount(), 6)
+        q.pruneDoneJobs(keep: 10)            // under the cap → no-op
+        XCTAssertEqual(doneCount(), 6)
+        q.pruneDoneJobs(keep: 3)             // bound it
+        XCTAssertEqual(doneCount(), 3)
+        q.pruneDoneJobs(keep: 0)
+        XCTAssertEqual(doneCount(), 0)
+    }
+
     // MARK: – Phase 4 file types (.vltmp / .vlcus)
 
     /// A custom-label document must survive JSON encode→decode with its canvas,

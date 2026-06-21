@@ -60,11 +60,15 @@ public struct PrintQueue {
     public var statusDir: URL     { root.appendingPathComponent("status", isDirectory: true) }
     public var statusFile: URL    { statusDir.appendingPathComponent("printers.json") }
     public var reprintDir: URL    { root.appendingPathComponent("reprint", isDirectory: true) }
+    /// Reprint requests targeted at the Custom Designer. Kept separate from `reprintDir`
+    /// (which Auto Print watches) so the two front-ends don't race over one channel and
+    /// mis-handle each other's requests.
+    public var reprintCustomDir: URL { root.appendingPathComponent("reprint-custom", isDirectory: true) }
     public var cancelledDir: URL  { root.appendingPathComponent("cancelled", isDirectory: true) }
 
     public func ensureDirs() {
         let fm = FileManager.default
-        for d in [queueDir, processingDir, doneDir, failedDir, controlDir, statusDir, reprintDir, cancelledDir] {
+        for d in [queueDir, processingDir, doneDir, failedDir, controlDir, statusDir, reprintDir, reprintCustomDir, cancelledDir] {
             try? fm.createDirectory(at: d, withIntermediateDirectories: true)
         }
     }
@@ -195,6 +199,27 @@ public struct PrintQueue {
 
     // MARK: – Reprint (read a finished job's rendered labels back)
 
+    /// Bound the done/ archive: keep the most-recent `keep` finished job files (by
+    /// modification time) and delete older ones. Done files are retained so a job can be
+    /// reopened/re-submitted, but only the newest `RecentPrintsStore.maxHistory` are ever
+    /// reachable from the menu — so keeping a comfortable margin above that reclaims
+    /// orphaned files (including the larger custom-design jobs, which now embed the full
+    /// .vlcus design) while never dropping the backing file of a reachable recent. Safe
+    /// to call on Engine startup. No-op when at/under `keep`.
+    public func pruneDoneJobs(keep: Int) {
+        guard keep >= 0 else { return }
+        let fm = FileManager.default
+        let key: URLResourceKey = .contentModificationDateKey
+        let items = (try? fm.contentsOfDirectory(at: doneDir, includingPropertiesForKeys: [key])) ?? []
+        let jsons = items.filter { $0.pathExtension == "json" }
+        guard jsons.count > keep else { return }
+        let mtime: (URL) -> Date = {
+            (try? $0.resourceValues(forKeys: [key]).contentModificationDate) ?? .distantPast
+        }
+        let sorted = jsons.sorted { mtime($0) > mtime($1) }   // newest first
+        for url in sorted.dropFirst(keep) { try? fm.removeItem(at: url) }
+    }
+
     /// Read a finished job's `PrintJobFile` from done/ (by its id == filename
     /// stem). Returns nil if the file is missing or undecodable. Used by reprint
     /// to re-submit the same rendered VGL labels as a fresh job.
@@ -234,13 +259,18 @@ public struct PrintQueue {
 
     /// Engine asks a front-end (Auto Print / Custom Designer) to RE-OPEN the source
     /// window in this job's print-time state. Written atomically; the front-end's
-    /// watcher reads, acts, and deletes it.
+    /// watcher reads, acts, and deletes it. Routed by `sourceApp` to the matching
+    /// channel so each front-end only sees its own requests.
     @discardableResult
     public func writeReprintRequest(_ recent: RecentPrint) throws -> URL {
-        try atomicWrite(recent, to: reprintDir, id: recent.id.uuidString)
+        let dir = recent.sourceApp == "customdesigner" ? reprintCustomDir : reprintDir
+        return try atomicWrite(recent, to: dir, id: recent.id.uuidString)
     }
 
     public func pendingReprintURLs() -> [URL] { pendingJSON(in: reprintDir) }
+
+    /// Pending reprint requests targeted at the Custom Designer.
+    public func pendingCustomReprintURLs() -> [URL] { pendingJSON(in: reprintCustomDir) }
 
     public func readReprintRequest(_ url: URL) -> RecentPrint? { decodeJSON(url) }
 

@@ -128,6 +128,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         startControlWatcher()
         startCancelledWatcher()
         startStatusPublisher()
+
+        // Bound the done/ archive so it can't grow without limit (custom-design jobs now
+        // embed the full .vlcus design for reprint). Keeps a comfortable margin above the
+        // menu's recent-history cap so every reachable recent keeps its backing done file.
+        PrintQueue().pruneDoneJobs(keep: 1000)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -210,14 +215,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         let sourceApp = recent.sourceApp.isEmpty
             ? (queue.readDoneJob(id: recent.jobId)?.sourceApp ?? "")
             : recent.sourceApp
-        // Only the print window (AutoPrint) has a reopen front end today. Custom
-        // Designer reopen isn't wired yet, and an unknown source has nowhere to
-        // reopen — re-submit the rendered labels directly (which fails cleanly with
-        // one notification if the done file is gone) rather than mis-routing.
-        guard sourceApp == "autoprint" else { reprintImmediately(recent); return }
+        // Route to the front-end that can RE-OPEN this job in its print-time state:
+        // Auto Print (the print window) or the Custom Designer (the saved design). Any
+        // other source has no reopen path → re-submit the rendered labels directly
+        // (which fails cleanly with one notification if the done file is gone).
+        let target: DesignerAppLauncher.Target
+        switch sourceApp {
+        case "autoprint":      target = .autoPrint
+        case "customdesigner": target = .custom
+        default:               reprintImmediately(recent); return
+        }
+        // Stamp the resolved sourceApp so the request routes to the matching channel and
+        // the target front-end's filter accepts it (handles the legacy empty-sourceApp
+        // record whose source we recovered from the done file above).
+        var req = recent
+        req.sourceApp = sourceApp
         do {
-            try queue.writeReprintRequest(recent)         // Auto Print reopens the print window
-            DesignerAppLauncher.ensureRunning(.autoPrint) // wake the headless host if it's down
+            try queue.writeReprintRequest(req)         // routed by sourceApp; front-end reopens
+            DesignerAppLauncher.ensureRunning(target)  // wake the front-end if it's down
         } catch {
             print("[Engine] reprint: couldn't post reprint request: \(error) — re-submitting directly")
             reprintImmediately(recent)
