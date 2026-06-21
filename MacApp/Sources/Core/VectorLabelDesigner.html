@@ -422,6 +422,7 @@ function pickSupply(specN){
   // default in the engine, so canvasRot 0 = landscape for continuous; 90 is the
   // portrait override. (#14)
   S.canvasRot=0;
+  _centerCanvasNext=true;   // a new supply changes the label size → recenter it in the view
   markDirty();
   R();
 }
@@ -1338,6 +1339,22 @@ function centerCanvas(){
   el.scrollTop=Math.max(0,(el.scrollHeight-el.clientHeight)/2);
 }
 
+// Scroll preservation across full R() rebuilds: innerHTML wipes scrollTop/Left of
+// every pane, so capture them before the rebuild and restore them after — otherwise
+// every click jumps the canvas and resets the properties panel to the top. Callers
+// that WANT to recenter the canvas instead (e.g. choosing a new supply) set
+// _centerCanvasNext, which overrides the canvas restore with centerCanvas().
+const _SCROLLERS=['canvas-scroll','props-pane','rec-panel','db-panel'];
+let _centerCanvasNext=false;
+function _captureScroll(){
+  const m={};
+  for(const id of _SCROLLERS){ const el=document.getElementById(id); if(el) m[id]=[el.scrollLeft,el.scrollTop]; }
+  return m;
+}
+function _restoreScroll(m){
+  for(const id of _SCROLLERS){ const el=document.getElementById(id),s=m[id]; if(el&&s){ el.scrollLeft=s[0]; el.scrollTop=s[1]; } }
+}
+
 function R(){
   if(!S.spec||typeof S.spec!=="object")S.spec=blDefault();   // never render an undefined supply
   normSel();
@@ -1345,6 +1362,7 @@ function R(){
   const rec=(window._editorRecords||RX)[S.recIdx];
   const selObj=S.selId?gobj(S.selId):null;
 
+  const _savedScroll=_captureScroll();   // preserve pane scroll across the rebuild (restored at the end)
   document.getElementById("app").innerHTML=`
     <!-- Top bar -->
     <div style="background:var(--surface);border-bottom:1px solid var(--bd2);padding:0 14px;display:flex;align-items:center;gap:10px;height:44px;flex-shrink:0">
@@ -1542,6 +1560,18 @@ function R(){
 
   // Apply column CSS variables for the editor record table
   applyEdColVars();
+
+  // Restore the pane scroll positions wiped by the innerHTML rebuild — or recenter the
+  // canvas if a caller asked for it (e.g. a new supply was selected). The canvas needs
+  // a frame for the new size to lay out before centering.
+  if(_centerCanvasNext){
+    _centerCanvasNext=false;
+    delete _savedScroll['canvas-scroll'];
+    _restoreScroll(_savedScroll);
+    requestAnimationFrame(centerCanvas);
+  }else{
+    _restoreScroll(_savedScroll);
+  }
 
   // Render modal if active
   renderModal();
