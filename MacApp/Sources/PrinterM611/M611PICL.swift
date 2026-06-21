@@ -135,20 +135,22 @@ enum M611PICL {
     }
 
     /// How many labels in `ids` (in send order) the printer has confirmed printed, from one
-    /// status snapshot. Uses FIFO print order: a label is done if its slot reports complete,
-    /// OR it was seen earlier and is now gone (aged out of the ring), AND every label before
-    /// one that has merely STARTED printing is also done. `seen` accumulates the indices ever
-    /// observed in a slot, so a label that printed and aged out between polls still counts.
-    /// Monotonic source — callers should keep the running max (a transient snapshot can omit
-    /// a slot). A label not yet observed and never seen contributes nothing.
-    static func completedCount(in map: [String: String], ids: [String], seen: inout Set<Int>) -> Int {
+    /// status snapshot, using FIFO print order. A label is done if its slot reports complete,
+    /// or it actually STARTED printing earlier and its slot has since aged out; every label
+    /// before one that has started is also done. `started` tracks only indices seen .printing
+    /// or .complete — a merely-queued (.pending) label is NOT credited if its slot transiently
+    /// vanishes (that would over-count and end the job early). `observed` tracks ANY slot we
+    /// saw (incl. queued), for the caller's "is job telemetry reporting our jobs at all?" check.
+    /// Monotonic source — callers keep the running max (a transient snapshot can omit a slot).
+    static func completedCount(in map: [String: String], ids: [String],
+                               started: inout Set<Int>, observed: inout Set<Int>) -> Int {
         var done = 0
         for (i, id) in ids.enumerated() {
             switch jobState(in: map, externalId: id) {
-            case .complete: seen.insert(i); done = max(done, i + 1)   // finished → i+1 done
-            case .printing: seen.insert(i); done = max(done, i)       // started → 0..i-1 done
-            case .pending:  seen.insert(i)                            // queued, not started → no advance
-            case .absent:   if seen.contains(i) { done = max(done, i + 1) }   // aged out → done
+            case .complete: started.insert(i); observed.insert(i); done = max(done, i + 1)
+            case .printing: started.insert(i); observed.insert(i); done = max(done, i)
+            case .pending:  observed.insert(i)                                 // queued, not started
+            case .absent:   if started.contains(i) { done = max(done, i + 1) } // aged out AFTER starting
             }
         }
         return done

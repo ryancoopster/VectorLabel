@@ -284,9 +284,10 @@ public final class PrinterManager: ObservableObject {
         if case .selectable = module?.capabilities.sendMode { singleLabel = settings.singleLabelPrinting }
         else { singleLabel = false }
         let reportsProgress = module?.reportsCounter(singleLabel: singleLabel) ?? false
-        print("[PrinterManager] submit \(labels.count) label(s) cut=\(cutMode.rawValue) " +
-              "mode=\(singleLabel ? "single-label" : "full-job") " +
-              "progress=\(reportsProgress ? "counter" : "coarse") → \(title)")
+        NSLog("[PrinterManager] submit '\(title)': \(labels.count) label(s) printer=\(printerID) " +
+              "model=\(device?.model ?? "?") sendMode=\(String(describing: module?.capabilities.sendMode)) " +
+              "setting.singleLabelPrinting=\(settings.singleLabelPrinting) → " +
+              "mode=\(singleLabel ? "SINGLE" : "FULL") progress=\(reportsProgress ? "counter" : "coarse")")
 
         let job = PrintJob(
             title: title,

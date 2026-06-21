@@ -162,6 +162,8 @@ public final class PrinterModelStore: ObservableObject {
 
     public func save() {
         Self.setSnapshot(list)
+        NSLog("[PrinterModelStore] save → " + list.models.map {
+            "\($0.name):\($0.singleLabelPrinting ? "single" : "full")/\($0.interLabelDelayMs)ms" }.joined(separator: ", "))
         let enc = JSONEncoder(); enc.outputFormatting = [.prettyPrinted, .sortedKeys]
         if let data = try? enc.encode(list) { try? data.write(to: Self.fileURL, options: .atomic) }
     }

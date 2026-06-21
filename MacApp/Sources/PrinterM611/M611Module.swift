@@ -163,7 +163,8 @@ public final class M611Module: PrinterModule {
         let capMs = count * perLabelMs * 3 + 8000      // safety net only (telemetry unavailable)
         var nextToSend = 0
         var completed = 0                              // labels confirmed printed (monotonic)
-        var seen = Set<Int>()                          // label indices ever observed in a slot
+        var started = Set<Int>()                       // indices seen actively printing / complete
+        var observed = Set<Int>()                      // indices seen in ANY slot state (incl. queued)
         var telemetryDead = false
         var firstSendMs = -1
         var lastPollMs = Int.min
@@ -195,11 +196,13 @@ public final class M611Module: PrinterModule {
                 lastPollMs = elapsedMs()
                 if let map = M611PICL.parse(piclRoundTrip(M611PICL.jobStatusRequest(), host: host,
                                                           deviceID: deviceID, connectTimeoutMs: 1000)) {
-                    completed = max(completed, M611PICL.completedCount(in: map, ids: ids, seen: &seen))
+                    completed = max(completed, M611PICL.completedCount(in: map, ids: ids,
+                                                                      started: &started, observed: &observed))
                 }
-                // Sent labels but never saw ANY of our jobs after a few seconds → job telemetry
-                // isn't reporting; fall back to the time estimate for pacing + the counter.
-                if !telemetryDead && firstSendMs >= 0 && seen.isEmpty && elapsedMs() - firstSendMs > 4000 {
+                // Sent labels but never saw ANY of our jobs (in any slot state) after a few
+                // seconds → job telemetry isn't reporting; fall back to the time estimate.
+                if !telemetryDead && firstSendMs >= 0 && observed.isEmpty
+                    && elapsedMs() - firstSendMs > max(4000, perLabelMs * 2) {
                     telemetryDead = true
                     NSLog("[M611] job status not reported — single-label progress falls back to time estimate")
                 }
@@ -216,8 +219,14 @@ public final class M611Module: PrinterModule {
             if elapsedMs() >= capMs { break }
             usleep(60_000)
         }
-        let finalDone = telemetryDead ? min(count, max(printedEst(), completed)) : completed
-        job.progress(.counter(done: min(count, max(0, finalDone)), of: count))
+        // Clean finish → fill the bar to 100% (the job is done even if the last label's slot
+        // aged out before a poll caught it). Cancelled → leave the real partial count.
+        if job.isCancelled() {
+            let shown = telemetryDead ? min(nextToSend, printedEst()) : completed
+            job.progress(.counter(done: min(count, max(0, shown)), of: count))
+        } else {
+            job.progress(.done)
+        }
     }
 
     /// Block until the printer reports the job with this ExternalId has finished printing, or

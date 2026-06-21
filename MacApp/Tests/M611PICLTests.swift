@@ -68,16 +68,24 @@ final class M611PICLTests: XCTestCase {
             }
             return M611PICL.parse(Array("{\"PropertyGetResponses\":[\(items.dropLast())]}".utf8))!
         }
-        var seen = Set<Int>()
-        // Label 0 printing, 1 queued → 0 done so far (0 in progress).
-        XCTAssertEqual(M611PICL.completedCount(in: snap([(0, "Printing"), (1, "")]), ids: ids, seen: &seen), 0)
+        var started = Set<Int>(), observed = Set<Int>()
+        func count(_ m: [String: String]) -> Int {
+            M611PICL.completedCount(in: m, ids: ids, started: &started, observed: &observed)
+        }
+        // Label 0 printing, 1 queued → 0 done so far (0 in progress, 1 not started).
+        XCTAssertEqual(count(snap([(0, "Printing"), (1, "")])), 0)
         // 0 complete, 1 printing → 1 done.
-        XCTAssertEqual(M611PICL.completedCount(in: snap([(0, "Print Complete"), (1, "Printing")]), ids: ids, seen: &seen), 1)
-        // 0 aged out (absent, but was seen), 1 complete, 2 printing → 2 done (FIFO order).
-        XCTAssertEqual(M611PICL.completedCount(in: snap([(1, "Print Complete"), (2, "Printing")]), ids: ids, seen: &seen), 2)
-        // All slots aged out (empty snapshot) but all were seen → stays at the max seen frontier.
-        var seen2 = Set([0, 1, 2, 3, 4])
-        XCTAssertEqual(M611PICL.completedCount(in: M611PICL.parse(Array("{\"PropertyGetResponses\":[]}".utf8)) ?? [:], ids: ids, seen: &seen2), 5)
+        XCTAssertEqual(count(snap([(0, "Print Complete"), (1, "Printing")])), 1)
+        // 0 aged out (absent, but was STARTED), 1 complete, 2 printing → 2 done (FIFO order).
+        XCTAssertEqual(count(snap([(1, "Print Complete"), (2, "Printing")])), 2)
+        // A queued (.pending) label that then transiently vanishes must NOT be counted printed.
+        var st = Set<Int>(), ob = Set<Int>()
+        _ = M611PICL.completedCount(in: snap([(3, "")]), ids: ids, started: &st, observed: &ob)  // 3 queued
+        let goneAfterQueued = M611PICL.parse(Array("{\"PropertyGetResponses\":[]}".utf8)) ?? [:]
+        XCTAssertEqual(M611PICL.completedCount(in: goneAfterQueued, ids: ids, started: &st, observed: &ob), 0)
+        // All slots aged out (empty snapshot) but all had STARTED → stays at the frontier.
+        var st2 = Set([0, 1, 2, 3, 4]), ob2 = Set<Int>()
+        XCTAssertEqual(M611PICL.completedCount(in: goneAfterQueued, ids: ids, started: &st2, observed: &ob2), 5)
     }
 
     func testParseExtractsJSONFromFramedResponse() {
