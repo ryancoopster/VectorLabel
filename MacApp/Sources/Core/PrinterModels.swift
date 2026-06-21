@@ -80,23 +80,30 @@ public struct PrinterModelList: Codable, Hashable {
     /// single-label printing (it reports a hardware label counter and historically
     /// printed one label at a time); the M611 defaults to one full job.
     public static func makeDefault() -> PrinterModelList {
-        PrinterModelList(version: 3, models: [
+        PrinterModelList(version: 4, models: [
             PrinterModel(name: "M611", usbIDs: [PrinterUSBID(vendorID: "0E2E", productID: "010C")],
                          singleLabelPrinting: false),
             PrinterModel(name: "M610", usbIDs: [PrinterUSBID(vendorID: "0E2E", productID: "010B")],
                          singleLabelPrinting: true),
-            // Brother P-touch PT-E550W (classic raster dialect over USB).
+            // Brother P-touch — classic raster dialect (PT-E550W / PT-P750W) and the
+            // D460BT dialect (PT-E560BT). All driven over USB (the W models also over
+            // raw TCP 9100); routed to the right dialect by USB product id.
             PrinterModel(name: "PT-E550W", usbIDs: [PrinterUSBID(vendorID: "04F9", productID: "2060")],
+                         singleLabelPrinting: false),
+            PrinterModel(name: "PT-P750W", usbIDs: [PrinterUSBID(vendorID: "04F9", productID: "2062")],
+                         singleLabelPrinting: false),
+            PrinterModel(name: "PT-E560BT", usbIDs: [PrinterUSBID(vendorID: "04F9", productID: "2203")],
                          singleLabelPrinting: false),
         ])
     }
 
     /// Upgrade an older list. v1→v2 seeds per-model send-mode defaults by name so an
     /// existing install keeps M610's one-label-at-a-time behavior while the M611
-    /// defaults to a single full job. v2→v3 adds the Brother PT-E550W entry to
-    /// existing installs (fresh installs get it from makeDefault). No-op for v3+.
+    /// defaults to a single full job. v2→v3 adds the Brother PT-E550W entry; v3→v4 adds
+    /// the PT-P750W (classic) + PT-E560BT (D460BT) entries to existing installs (fresh
+    /// installs get them from makeDefault). No-op for v4+.
     public func migrated() -> PrinterModelList {
-        guard version < 3 else { return self }
+        guard version < 4 else { return self }
         var l = self
         if version < 2 {
             for i in l.models.indices {
@@ -108,18 +115,25 @@ public struct PrinterModelList: Codable, Hashable {
                 l.models[i].singleLabelPrinting = isM610
             }
         }
-        // v2→v3: ensure the Brother PT-E550W model exists (matched by name or PID).
-        let hasBrother = l.models.contains { m in
-            m.name.uppercased() == "PT-E550W"
-                || m.usbIDs.contains { $0.productID.uppercased() == "2060" }
-        }
-        if !hasBrother {
-            l.models.append(PrinterModel(name: "PT-E550W",
-                usbIDs: [PrinterUSBID(vendorID: "04F9", productID: "2060")],
-                singleLabelPrinting: false))
-        }
-        l.version = 3
+        // v2→v3: PT-E550W; v3→v4: PT-P750W + PT-E560BT. Matched by name OR PID so a
+        // renamed entry isn't duplicated.
+        Self.ensureModel(&l, name: "PT-E550W", pid: "2060")
+        Self.ensureModel(&l, name: "PT-P750W", pid: "2062")
+        Self.ensureModel(&l, name: "PT-E560BT", pid: "2203")
+        l.version = 4
         return l
+    }
+
+    /// Append a Brother (VID 0x04F9) model unless an entry already matches by name or PID.
+    private static func ensureModel(_ l: inout PrinterModelList, name: String, pid: String) {
+        let exists = l.models.contains { m in
+            m.name.uppercased() == name.uppercased()
+                || m.usbIDs.contains { $0.productID.uppercased() == pid.uppercased() }
+        }
+        guard !exists else { return }
+        l.models.append(PrinterModel(name: name,
+            usbIDs: [PrinterUSBID(vendorID: "04F9", productID: pid)],
+            singleLabelPrinting: false))
     }
 }
 
@@ -144,7 +158,7 @@ public final class PrinterModelStore: ObservableObject {
             let upgraded = decoded.migrated()
             list = upgraded
             Self.setSnapshot(upgraded)
-            if decoded.version < 3 { save() }   // persist the v1→v2 / v2→v3 upgrade once
+            if decoded.version < 4 { save() }   // persist the v1→v2 / v2→v3 / v3→v4 upgrade once
         } else {
             let def = PrinterModelList.makeDefault()
             list = def

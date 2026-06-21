@@ -8,7 +8,7 @@ final class PrinterModelSettingsTests: XCTestCase {
 
     func testMakeDefaultSeedsPerModelPrintSettings() {
         let d = PrinterModelList.makeDefault()
-        XCTAssertEqual(d.version, 3)
+        XCTAssertEqual(d.version, 4)
         // M610 reports a hardware counter + historically printed one label at a time.
         XCTAssertEqual(d.models.first { $0.name == "M610" }?.singleLabelPrinting, true)
         // M611 defaults to one full job (coarse "Printing" unless it reports progress).
@@ -17,6 +17,9 @@ final class PrinterModelSettingsTests: XCTestCase {
         let brother = d.models.first { $0.name == "PT-E550W" }
         XCTAssertEqual(brother?.usbIDs.first?.productID, "2060")
         XCTAssertEqual(brother?.usbIDs.first?.vendorID, "04F9")
+        // v4 also seeds the PT-P750W (classic, 0x2062) and PT-E560BT (D460BT, 0x2203).
+        XCTAssertEqual(d.models.first { $0.name == "PT-P750W" }?.usbIDs.first?.productID, "2062")
+        XCTAssertEqual(d.models.first { $0.name == "PT-E560BT" }?.usbIDs.first?.productID, "2203")
     }
 
     func testTolerantDecodeDefaultsForMissingFields() throws {
@@ -39,15 +42,18 @@ final class PrinterModelSettingsTests: XCTestCase {
         XCTAssertEqual(decoded.models.first { $0.name == "M610" }?.singleLabelPrinting, false)
 
         let migrated = decoded.migrated()
-        XCTAssertEqual(migrated.version, 3)
+        XCTAssertEqual(migrated.version, 4)
         XCTAssertEqual(migrated.models.first { $0.name == "M610" }?.singleLabelPrinting, true)
         XCTAssertEqual(migrated.models.first { $0.name == "M611" }?.singleLabelPrinting, false)
-        // v2→v3 also appends the Brother PT-E550W entry to existing installs.
+        // The migration appends the Brother entries to existing installs:
+        // v2→v3 PT-E550W, v3→v4 PT-P750W + PT-E560BT.
         XCTAssertNotNil(migrated.models.first { $0.name == "PT-E550W" })
+        XCTAssertNotNil(migrated.models.first { $0.name == "PT-P750W" })
+        XCTAssertNotNil(migrated.models.first { $0.name == "PT-E560BT" })
     }
 
     func testMigratedIsNoopForCurrentVersion() {
-        let d = PrinterModelList.makeDefault()   // already v3
+        let d = PrinterModelList.makeDefault()   // already v4
         XCTAssertEqual(d.migrated(), d)
     }
 

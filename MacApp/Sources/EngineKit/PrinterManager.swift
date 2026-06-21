@@ -83,7 +83,9 @@ public final class PrinterManager: ObservableObject {
         // transport, status) routes by model through the registry from here on.
         PrinterModuleRegistry.shared.register(M610Module())
         PrinterModuleRegistry.shared.register(M611Module())
-        PrinterModuleRegistry.shared.register(PTE550WModule())
+        PrinterModuleRegistry.shared.register(PTE550WModule())     // Brother classic (USB + net)
+        PrinterModuleRegistry.shared.register(PTP750WModule())     // Brother classic (USB + net)
+        PrinterModuleRegistry.shared.register(PTE560BTModule())    // Brother D460BT dialect (USB)
     }
 
     // One serial queue per printer, serializing all device access (prints + status
