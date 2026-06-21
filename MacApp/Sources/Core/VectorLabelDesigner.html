@@ -415,7 +415,10 @@ function pickSupply(specN){
   S.labelLen=specIsContinuous(specN)?dDefaultLen(specN):null;
   // Drop any explicit cut override so the new stock's sensible default applies.
   S.cutMode=null;
-  S.canvasRot=0;   // reset orientation when switching supplies (#14)
+  // Continuous stock DEFAULTS to landscape (length horizontal, tape width vertical) —
+  // the common label orientation, and it lets a die-cut template's layout carry over
+  // onto continuous tape. Die-cut resets to portrait. (#14)
+  S.canvasRot=specIsContinuous(specN)?90:0;
   markDirty();
   R();
 }
@@ -467,7 +470,10 @@ function applyLoadedSpec(specN,lenInches,rot,supplyId,supplyGeom){
   if(sp.ty==="continuous"){
     const n=parseFloat(lenInches);
     S.labelLen=(isFinite(n)&&n>0)?Math.min(LEN_MAX,Math.max(LEN_MIN,n)):(sp.ph||1);
-    S.canvasRot=(parseInt(rot)===90)?90:0;
+    // Respect an explicitly-saved orientation (0 or 90); a continuous template with
+    // none recorded defaults to landscape — the new default for continuous stock.
+    const r=parseInt(rot);
+    S.canvasRot=(r===0||r===90)?r:90;
   }else{
     S.labelLen=null;
     S.canvasRot=0;
@@ -2481,7 +2487,9 @@ function templateData(){
   d.supplyID=(S.spec&&S.spec.id)||base.id||"";
   d.supplyGeometry={widthInches:base.tw,heightInches:base.th,printableWidthInches:base.pw,printableHeightInches:base.ph,isContinuous:base.ty==="continuous"};
   // Continuous supplies persist the chosen label length (inches); die-cut omit it.
-  if(dContinuous()){ const len=dEffLen(); if(len) d.labelLengthInches=len; if(S.canvasRot===90) d.canvasRot=90; }
+  // Record the orientation for continuous (both 0 and 90) so the print render and the
+  // saved .vlcus round-trip faithfully — and default-absent loads as landscape.
+  if(dContinuous()){ const len=dEffLen(); if(len) d.labelLengthInches=len; d.canvasRot=S.canvasRot; }
   return d;
 }
 
@@ -2922,6 +2930,7 @@ function saveCustomDocument(){
     supplyGeometry:data.supplyGeometry
   };
   if(data.labelLengthInches) payload.labelLengthInches=data.labelLengthInches;
+  if(typeof data.canvasRot==='number') payload.canvasRot=data.canvasRot;   // persist orientation in the .vlcus
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
     window.webkit.messageHandlers.vectorlabel.postMessage({action:"saveCustomDocument",payload});
   }
@@ -2967,6 +2976,7 @@ function doCustomPrint(){
     payload.rangeTo=S.rangeTo;
   }
   if(data.labelLengthInches) payload.labelLengthInches=data.labelLengthInches;
+  if(typeof data.canvasRot==='number') payload.canvasRot=data.canvasRot;   // landscape continuous → renderer rotates
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
     window.webkit.messageHandlers.vectorlabel.postMessage({action:"printCustom",payload});
   }
