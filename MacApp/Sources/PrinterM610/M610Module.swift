@@ -42,7 +42,7 @@ public final class M610Module: PrinterModule {
     public let capabilities = PrinterCapabilities(
         model: "M610", supportedTransports: [.usb], hasLiveTelemetry: false,
         ribbonLengthInches: 75 * 12,                   // 75 ft ribbon
-        sendMode: .selectable(defaultSingle: true))    // single-label honors the inter-label delay
+        sendMode: .selectable(defaultSingle: true))    // single-label = per-label progress via SmartCell counter
 
     // Only claim M610 USB devices. A USB-connected M611 (composite, PID 0x13) is NOT
     // handled here — the M611 speaks ECP, not VGL — so it's filtered out (M611 USB
@@ -97,7 +97,7 @@ public final class M610Module: PrinterModule {
     // counter in BOTH send modes.
     public func reportsCounter(singleLabel: Bool) -> Bool { true }
 
-    /// Run a job: one label at a time (counter-paced, honoring the inter-label delay) or one
+    /// Run a job: one label at a time (counter-paced via the SmartCell labels-remaining read) or one
     /// batched send, then settle on the counter so the connection isn't closed mid-print.
     public func run(_ job: DriverJob) throws {
         let conn = job.connection
@@ -130,10 +130,6 @@ public final class M610Module: PrinterModule {
                 }
                 if job.isCancelled() { break }
                 job.progress(.counter(done: i + 1, of: count))
-                if job.interLabelDelayMs > 0 && i < count - 1 {
-                    var slept = 0
-                    while slept < job.interLabelDelayMs && !job.isCancelled() { usleep(20_000); slept += 20 }
-                }
             }
         } else {
             var batch: [UInt8] = []

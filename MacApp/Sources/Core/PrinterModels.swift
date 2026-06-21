@@ -32,38 +32,32 @@ public struct PrinterModel: Codable, Hashable, Identifiable {
     public var id: UUID
     public var name: String          // e.g. "M611"
     public var usbIDs: [PrinterUSBID]
-    /// Per-model print settings (built into the driver, not a global setting).
-    ///
-    /// `interLabelDelayMs`: pause between consecutive labels when sending one label at
-    /// a time; ignored in full-job mode (there's no inter-label gap).
-    /// `singleLabelPrinting`: send each label as its own print (true) vs. one batched
-    /// full job (false). Single-label gives per-label progress + honors the delay; full
-    /// job is one send. Together with the driver's progress capability this decides
-    /// whether the menu shows live per-label progress or just "Printing".
-    public var interLabelDelayMs: Int
+    /// Per-model print setting (built into the driver, not a global setting).
+    /// `singleLabelPrinting`: send each label as its own print (true) vs. one batched full
+    /// job (false). Single-label gives per-label progress + mid-run cancel; full job is one
+    /// send. Together with the driver's progress capability this decides whether the menu
+    /// shows live per-label progress or just "Printing". Printing always runs at full speed.
     public var singleLabelPrinting: Bool
     /// Communication methods enabled for this printer (USB / Network / Bluetooth), all
     /// enabled by default. The Engine drives the printer only over a transport that is
     /// both enabled here and supported by the driver (see PrinterCapabilities).
     public var enabledTransports: Set<PrinterTransport>
     public init(name: String, usbIDs: [PrinterUSBID],
-                interLabelDelayMs: Int = 0, singleLabelPrinting: Bool = false,
+                singleLabelPrinting: Bool = false,
                 enabledTransports: Set<PrinterTransport> = Set(PrinterTransport.allCases),
                 id: UUID = UUID()) {
         self.id = id; self.name = name; self.usbIDs = usbIDs
-        self.interLabelDelayMs = interLabelDelayMs
         self.singleLabelPrinting = singleLabelPrinting
         self.enabledTransports = enabledTransports
     }
     private enum CodingKeys: String, CodingKey {
-        case id, name, usbIDs, interLabelDelayMs, singleLabelPrinting, enabledTransports
+        case id, name, usbIDs, singleLabelPrinting, enabledTransports
     }
     public init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
         id = (try? c.decode(UUID.self, forKey: .id)) ?? UUID()
         name = try c.decode(String.self, forKey: .name)
         usbIDs = (try? c.decode([PrinterUSBID].self, forKey: .usbIDs)) ?? []
-        interLabelDelayMs = (try? c.decode(Int.self, forKey: .interLabelDelayMs)) ?? 0
         singleLabelPrinting = (try? c.decode(Bool.self, forKey: .singleLabelPrinting)) ?? false
         enabledTransports = (try? c.decode(Set<PrinterTransport>.self, forKey: .enabledTransports))
             ?? Set(PrinterTransport.allCases)
@@ -88,9 +82,9 @@ public struct PrinterModelList: Codable, Hashable {
     public static func makeDefault() -> PrinterModelList {
         PrinterModelList(version: 2, models: [
             PrinterModel(name: "M611", usbIDs: [PrinterUSBID(vendorID: "0E2E", productID: "010C")],
-                         interLabelDelayMs: 0, singleLabelPrinting: false),
+                         singleLabelPrinting: false),
             PrinterModel(name: "M610", usbIDs: [PrinterUSBID(vendorID: "0E2E", productID: "010B")],
-                         interLabelDelayMs: 0, singleLabelPrinting: true),
+                         singleLabelPrinting: true),
         ])
     }
 
@@ -99,12 +93,6 @@ public struct PrinterModelList: Codable, Hashable {
     /// defaults to a single full job. No-op for v2+.
     public func migrated() -> PrinterModelList {
         guard version < 2 else { return self }
-        // Carry over the user's OLD global inter-label delay if they explicitly set it
-        // (UserDefaults only holds the key once changed), so an upgrade doesn't silently
-        // drop a value tuned to stop dropped/misprinted labels. Default 0 otherwise —
-        // which restores the pre-separation M610 behavior (the old global default was
-        // never actually applied to the M610 before the module split).
-        let carriedDelay = max(0, (UserDefaults.standard.object(forKey: "interLabelDelayMs") as? Int) ?? 0)
         var l = self
         for i in l.models.indices {
             // Identify the M610 by its hardware PID (0x010B) OR name, so a RENAMED M610
@@ -113,7 +101,6 @@ public struct PrinterModelList: Codable, Hashable {
             let isM610 = l.models[i].name.uppercased() == "M610"
                 || l.models[i].usbIDs.contains { $0.productID.uppercased() == "010B" }
             l.models[i].singleLabelPrinting = isM610
-            l.models[i].interLabelDelayMs = carriedDelay
         }
         l.version = 2
         return l
@@ -163,7 +150,7 @@ public final class PrinterModelStore: ObservableObject {
     public func save() {
         Self.setSnapshot(list)
         NSLog("[PrinterModelStore] save → " + list.models.map {
-            "\($0.name):\($0.singleLabelPrinting ? "single" : "full")/\($0.interLabelDelayMs)ms" }.joined(separator: ", "))
+            "\($0.name):\($0.singleLabelPrinting ? "single" : "full")" }.joined(separator: ", "))
         let enc = JSONEncoder(); enc.outputFormatting = [.prettyPrinted, .sortedKeys]
         if let data = try? enc.encode(list) { try? data.write(to: Self.fileURL, options: .atomic) }
     }
@@ -199,24 +186,18 @@ public final class PrinterModelStore: ObservableObject {
     /// All registered model names, in order.
     public static var modelNames: [String] { snapshot.models.map { $0.name } }
 
-    /// Per-model print settings (inter-label delay + single-label mode) resolved by
-    /// model NAME. Reads the thread-safe snapshot, so it's safe off the main thread
-    /// (the Engine resolves it on the per-printer device queue). Unknown model → no
-    /// delay, full-job.
+    /// Per-model print setting (single-label vs full-job mode) resolved by model NAME. Reads
+    /// the thread-safe snapshot, so it's safe off the main thread (the Engine resolves it on
+    /// the per-printer device queue). Unknown model → full-job.
     public struct PrintSettings: Equatable {
-        public let interLabelDelayMs: Int
         public let singleLabelPrinting: Bool
-        public init(interLabelDelayMs: Int, singleLabelPrinting: Bool) {
-            self.interLabelDelayMs = interLabelDelayMs
-            self.singleLabelPrinting = singleLabelPrinting
-        }
+        public init(singleLabelPrinting: Bool) { self.singleLabelPrinting = singleLabelPrinting }
     }
     public static func printSettings(forName name: String) -> PrintSettings {
         if let m = snapshot.models.first(where: { $0.name == name }) {
-            return PrintSettings(interLabelDelayMs: max(0, m.interLabelDelayMs),
-                                 singleLabelPrinting: m.singleLabelPrinting)
+            return PrintSettings(singleLabelPrinting: m.singleLabelPrinting)
         }
-        return PrintSettings(interLabelDelayMs: 0, singleLabelPrinting: false)
+        return PrintSettings(singleLabelPrinting: false)
     }
 
     /// Communication methods enabled for a printer, matched by model NAME or by any of

@@ -39,8 +39,8 @@ public struct PrinterCapabilities {
     /// telemetry ribbon % against this, to forecast whether a job will run the ribbon out.
     public let ribbonLengthInches: Double
     /// Whether the user's "one label at a time vs full job" choice applies to this driver.
-    /// `.selectable` → the per-printer UI offers it (M611: single = per-label progress +
-    /// mid-run cancel; M610: single honors the inter-label delay). `.fixed` → the driver
+    /// `.selectable` → the per-printer UI offers it (single = per-label progress + mid-run
+    /// cancel; full = one fast send). `.fixed` → the driver
     /// always reports good progress (hardware counter / live job telemetry), so the choice
     /// is irrelevant and the UI greys it out — a future printer with proper feedback ships
     /// this in its driver with no engine changes.
@@ -92,16 +92,15 @@ public struct DriverJob {
     public let pages: [DriverPage]
     public let status: CassetteStatus?
     public let singleLabel: Bool          // user preference (ignored when sendMode == .fixed)
-    public let interLabelDelayMs: Int
     public let estLabelMs: Int            // per-label print-time estimate (pacing fallback)
     public let connection: PrinterConnection
     public let isCancelled: () -> Bool
     public let progress: (JobProgress) -> Void
     public init(pages: [DriverPage], status: CassetteStatus?, singleLabel: Bool,
-                interLabelDelayMs: Int, estLabelMs: Int, connection: PrinterConnection,
+                estLabelMs: Int, connection: PrinterConnection,
                 isCancelled: @escaping () -> Bool, progress: @escaping (JobProgress) -> Void) {
         self.pages = pages; self.status = status; self.singleLabel = singleLabel
-        self.interLabelDelayMs = interLabelDelayMs; self.estLabelMs = estLabelMs
+        self.estLabelMs = estLabelMs
         self.connection = connection; self.isCancelled = isCancelled; self.progress = progress
     }
 }

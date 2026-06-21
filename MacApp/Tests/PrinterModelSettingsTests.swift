@@ -13,14 +13,12 @@ final class PrinterModelSettingsTests: XCTestCase {
         XCTAssertEqual(d.models.first { $0.name == "M610" }?.singleLabelPrinting, true)
         // M611 defaults to one full job (coarse "Printing" unless it reports progress).
         XCTAssertEqual(d.models.first { $0.name == "M611" }?.singleLabelPrinting, false)
-        XCTAssertEqual(d.models.first { $0.name == "M610" }?.interLabelDelayMs, 0)
     }
 
     func testTolerantDecodeDefaultsForMissingFields() throws {
-        // A model written before the fields existed decodes to safe defaults.
+        // A model written before the field existed decodes to a safe default.
         let json = #"{"id":"33333333-3333-3333-3333-333333333333","name":"X","usbIDs":[]}"#
         let m = try JSONDecoder().decode(PrinterModel.self, from: Data(json.utf8))
-        XCTAssertEqual(m.interLabelDelayMs, 0)
         XCTAssertFalse(m.singleLabelPrinting)
     }
 

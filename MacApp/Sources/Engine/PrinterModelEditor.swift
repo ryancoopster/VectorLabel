@@ -6,7 +6,7 @@ import VectorLabelUI
 // MARK: – Per-printer settings editor (Engine ▸ Preferences ▸ Printers ▸ Per-Printer Settings…)
 //
 // Edits the PrinterModelStore: each printer (name + USB IDs), the connection methods
-// to use, and the print behavior (inter-label delay, full-job vs single-label). The
+// to use, and the print behavior (full-job vs single-label). The
 // supply catalog's groups link to these printers. Works on a DRAFT — Apply / Cancel.
 
 struct PrinterModelEditorView: View {
@@ -110,16 +110,9 @@ struct PrinterModelEditorView: View {
             }
             Text(sendModeFixed(mid)
                  ? "This printer reports live print progress on its own, so it always streams as one job."
-                 : "One at a time: each label is its own print job — per-label progress, the inter-label delay applies, and you can cancel mid-run (the in-flight label finishes, the rest are dropped). Full job: the whole job is sent at once — fastest, but the M611 can’t be cancelled once it starts and shows only “Printing”.")
+                 : "One at a time: each label is its own print job — per-label progress, and you can cancel mid-run (the in-flight labels finish, the rest are dropped). Full job: the whole job is sent at once — fastest, but the M611 can’t be cancelled once it starts and shows only “Printing”. Both run at full speed.")
                 .font(.system(size: 10)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 6) {
-                Text("Inter-label delay").font(.system(size: 11)).foregroundStyle(.secondary)
-                Stepper("", value: delayBinding(mid), in: 0...2000, step: 5).labelsHidden()
-                Text("\(m?.interLabelDelayMs ?? 0) ms")
-                    .font(.system(.body, design: .monospaced)).frame(width: 60, alignment: .trailing)
-            }
-            .disabled(!(m?.singleLabelPrinting ?? false) || sendModeFixed(mid))
         }
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.06)))
@@ -183,10 +176,6 @@ struct PrinterModelEditorView: View {
         let name = draft.models.first { $0.id == mid }?.name ?? ""
         if case .fixed = PrinterModuleRegistry.shared.module(forModel: name)?.capabilities.sendMode { return true }
         return false
-    }
-    private func delayBinding(_ mid: UUID) -> Binding<Int> {
-        Binding(get: { draft.models.first { $0.id == mid }?.interLabelDelayMs ?? 0 },
-                set: { v in if let i = draft.models.firstIndex(where: { $0.id == mid }) { draft.models[i].interLabelDelayMs = max(0, v) } })
     }
     private func addModel() {
         draft.models.append(PrinterModel(name: "New printer", usbIDs: [PrinterUSBID(vendorID: "0E2E", productID: "")]))

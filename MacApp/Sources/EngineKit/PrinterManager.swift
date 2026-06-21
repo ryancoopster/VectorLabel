@@ -270,9 +270,8 @@ public final class PrinterManager: ObservableObject {
         feedToClear: Bool = false
     ) -> PrintJob {
         // Resolve the target device, its driver module, and the model's per-model print
-        // settings up front (main-actor state). The driver's progress capability +
-        // the single-label setting decide whether this job reports per-label progress;
-        // the model's inter-label delay replaces the old global setting.
+        // setting up front (main-actor state). The driver's progress capability + the
+        // single-label setting decide whether this job reports per-label progress.
         let device = printers.first { $0.id == printerID }
         let module = device.flatMap { PrinterModuleRegistry.shared.module(forModel: $0.model) }
         let settings = PrinterModelStore.printSettings(forName: device?.model ?? "")
@@ -380,7 +379,7 @@ public final class PrinterManager: ObservableObject {
                 }
                 try module.run(DriverJob(
                     pages: pages, status: liveStatus, singleLabel: singleLabel,
-                    interLabelDelayMs: settings.interLabelDelayMs, estLabelMs: max(150, estLabelMs),
+                    estLabelMs: max(150, estLabelMs),
                     connection: conn, isCancelled: { job.isCancelled },
                     progress: { upd in
                         Task { @MainActor in

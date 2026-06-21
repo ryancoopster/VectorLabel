@@ -219,9 +219,6 @@ public final class M611Module: PrinterModule {
                                                   cut: mapCut(p.cut), isLastPage: p.isLast,
                                                   jobID: ids[nextToSend]), on: conn)
                 nextToSend += 1
-                if job.interLabelDelayMs > 0 && nextToSend < count {
-                    var s = 0; while s < job.interLabelDelayMs && !job.isCancelled() { usleep(20_000); s += 20 }
-                }
             }
             // Read a pushed status frame (small), merge it, recount; calibrate labelMs on advance.
             if haveSub {

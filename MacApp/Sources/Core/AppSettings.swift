@@ -38,8 +38,8 @@ public final class AppSettings: ObservableObject {
 
     // MARK: – Printing
 
-    // Inter-label delay moved to per-printer settings (PrinterModelStore /
-    // PrinterModel.interLabelDelayMs), set under Printers ▸ Per-Printer Settings…
+    // There is no inter-label delay setting — printing always runs at full speed. The only
+    // per-printer print setting is single-label vs full-job mode (PrinterModelStore).
 
     /// How often (seconds) the Engine scans for connected printers and re-reads their
     /// live status/telemetry (battery / ribbon / labels / supply / errors). Default 5s;
