@@ -58,15 +58,42 @@ public enum LabelRenderer {
     /// of label orientation — matching the calibration grid the user tunes against.
     public static func render(template: VLTemplate, record: WireRecord,
                        offset: (dx: Double, dy: Double) = (0, 0),
-                       loadedPartNumber: String? = nil) -> (pixels: [UInt8], width: Int, height: Int)? {
+                       loadedPartNumber: String? = nil,
+                       continuousTargetWidthInches: Double? = nil) -> (pixels: [UInt8], width: Int, height: Int)? {
         guard let size = template.labelSize else { return nil }
         let dpi = size.dpi
-        let pw  = size.printablePixelWidth
-        // Continuous supplies have no fixed height — the printable height is the
-        // user-chosen label length (effectivePrintableHeightInches); die-cut
-        // supplies keep the catalog's fixed printable height.
-        let phInches = template.effectivePrintableHeightInches ?? size.printableHeightInches
-        let ph  = vlInchesToPixels(phInches, dpi: dpi)
+
+        // Re-map a DIE-CUT design onto loaded CONTINUOUS tape (Auto Print printing a
+        // die-cut template to a continuous printer): rotate it to run ALONG the feed and
+        // scale it to fill the tape's printable width, the length growing to preserve the
+        // design's aspect. Triggered only when the caller passes the loaded continuous
+        // tape's printable width AND the template's own supply is die-cut. (A continuous
+        // template renders via the normal landscape path; die-cut→die-cut is untouched.)
+        let dieCutToContinuous = (continuousTargetWidthInches ?? 0) > 0 && !size.isContinuous
+        let pw: Int, ph: Int
+        let remapScale: CGFloat        // extra scale on the die-cut design (1 = none)
+        let landscape: Bool
+        if dieCutToContinuous {
+            let tw = continuousTargetWidthInches!                               // tape printable width (across), in
+            let hd = template.effectivePrintableHeightInches ?? size.printableHeightInches  // die-cut printable height
+            let wd = size.printableWidthInches                                 // die-cut printable width
+            let s = hd > 0 ? tw / hd : 1                                        // fill the tape width with the design height
+            pw = vlInchesToPixels(tw, dpi: dpi)                                // across = tape printable width
+            ph = vlInchesToPixels(wd * s, dpi: dpi)                            // length = die-cut width × scale (aspect kept)
+            remapScale = CGFloat(s)
+            landscape = true
+        } else {
+            pw = size.printablePixelWidth
+            // Continuous supplies have no fixed height — the printable height is the
+            // user-chosen label length (effectivePrintableHeightInches); die-cut
+            // supplies keep the catalog's fixed printable height.
+            let phInches = template.effectivePrintableHeightInches ?? size.printableHeightInches
+            ph = vlInchesToPixels(phInches, dpi: dpi)
+            remapScale = 1
+            // Continuous stock renders LANDSCAPE by default (design width runs along the
+            // tape); canvasRot == 90 is the portrait opt-out. Die-cut never rotates. #14.
+            landscape = size.isContinuous && (template.canvasRot ?? 0) != 90
+        }
 
         let colorSpace = CGColorSpaceCreateDeviceGray()
         guard let ctx = CGContext(
@@ -97,10 +124,11 @@ public enum LabelRenderer {
         // Some DIE-CUT supplies (e.g. the 33-427 / BM-109-427) feed rotated relative to
         // the designer layout, so the whole label is rotated to match. The angle comes
         // from the catalog (feedRotationDeg); its printable area is square, so a 90°
-        // rotation stays in bounds. GATED to die-cut: a continuous supply's raster is
-        // highly non-square, so rotating it about its center would push content off the
-        // bitmap (blank label) — continuous orientation is handled by landscape below.
-        let feedRotation = size.isContinuous ? 0
+        // rotation stays in bounds. GATED to die-cut on its own stock: a continuous
+        // raster (or a die-cut→continuous re-map) is non-square, so rotating it about its
+        // center would push content off the bitmap — continuous orientation is the
+        // landscape rotation below.
+        let feedRotation = (size.isContinuous || dieCutToContinuous) ? 0
             : BradyCatalog.effectiveFeedRotationDeg(selected: size.partNumber, loaded: loadedPartNumber)
         if abs(feedRotation) > 0.0001 {
             let cx = CGFloat(pw) / 2, cy = CGFloat(ph) / 2
@@ -109,16 +137,18 @@ public enum LabelRenderer {
             ctx.translateBy(x: -cx, y: -cy)
         }
 
-        // Continuous stock renders LANDSCAPE by default (the design's width runs along
-        // the tape length, the tape width vertically) — the natural label orientation,
-        // and what lets a die-cut layout reused on continuous tape come out the right
-        // direction. This is the ENGINE default, applied to every printer here (not a
-        // per-designer toggle). `canvasRot == 90` is the opt-out to portrait. Die-cut
-        // never rotates. NOTE: orientation/handedness — verify with a test print. #14.
-        let landscapeContinuous = size.isContinuous && (template.canvasRot ?? 0) != 90
-        if landscapeContinuous {
+        // Landscape rotation: continuous stock (the natural label orientation, the engine
+        // default for every printer) and the die-cut→continuous re-map both run the
+        // design's width ALONG the tape. NOTE: orientation/handedness — verify on tape. #14.
+        if landscape {
             ctx.translateBy(x: CGFloat(pw), y: 0)
             ctx.rotate(by: .pi / 2)
+        }
+        // Die-cut→continuous re-map: scale the design (in the post-rotation landscape
+        // frame) so its height fills the tape width and it fills [0,pw]×[0,ph] like a
+        // native continuous design.
+        if remapScale != 1 {
+            ctx.scaleBy(x: remapScale, y: remapScale)
         }
 
         for obj in template.objs {

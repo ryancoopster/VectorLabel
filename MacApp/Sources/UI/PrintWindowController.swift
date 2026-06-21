@@ -658,7 +658,16 @@ extension PrintWindowController: WKScriptMessageHandler {
         let offset = AppSettings.shared.calibrationOffset(forSerial: serial)
         // Loaded part number, so the renderer can pick its feed rotation when two
         // parts of one supply rotate differently on the roll.
-        let loadedPN = backend?.status?.printers.first(where: { $0.id == printerID })?.cassette?.partNumber
+        let loadedCassette = backend?.status?.printers.first(where: { $0.id == printerID })?.cassette
+        let loadedPN = loadedCassette?.partNumber
+        // When the loaded stock is CONTINUOUS but the template is die-cut, hand the
+        // renderer the loaded tape's printable width so it re-maps the die-cut design
+        // onto the tape (rotate along the feed + scale to fill the width). nil otherwise
+        // (die-cut→die-cut and continuous templates render normally).
+        let continuousTargetWidthInches: Double? = {
+            guard let c = loadedCassette, c.isContinuous == true, c.printableWidthMils > 0 else { return nil }
+            return Double(c.printableWidthMils) / 1000.0
+        }()
 
         // Cut SETTING chosen in the print header (Phase 6). Falls back to the
         // sensible default the JS picks per stock (continuous → eachLabel; die-cut
@@ -700,7 +709,9 @@ extension PrintWindowController: WKScriptMessageHandler {
             var rasters: [(pixels: [UInt8], width: Int, height: Int)] = []
             var labelPx = 0   // longest rendered dimension (px) → print-length estimate
             for record in selectedRecords {
-                guard let rendered = LabelRenderer.render(template: template, record: record, offset: offset, loadedPartNumber: loadedPN) else { continue }
+                guard let rendered = LabelRenderer.render(template: template, record: record, offset: offset,
+                                                          loadedPartNumber: loadedPN,
+                                                          continuousTargetWidthInches: continuousTargetWidthInches) else { continue }
                 labelPx = max(labelPx, max(rendered.width, rendered.height))
                 rasters.append(rendered)
             }
