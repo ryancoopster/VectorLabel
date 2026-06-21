@@ -1338,6 +1338,14 @@ function centerCanvas(){
   el.scrollLeft=Math.max(0,(el.scrollWidth-el.clientWidth)/2);
   el.scrollTop=Math.max(0,(el.scrollHeight-el.clientHeight)/2);
 }
+// Center once the canvas container has actually been laid out. On initial open the
+// webview can fire our centering frame before it has a width (so scrollWidth/clientWidth
+// are 0 and centering is a no-op) — retry a few frames until it's sized.
+function centerCanvasWhenReady(tries){
+  const el=document.getElementById('canvas-scroll'); if(!el)return;
+  if(el.clientWidth===0 && (tries||0)<20){ requestAnimationFrame(function(){ centerCanvasWhenReady((tries||0)+1); }); return; }
+  centerCanvas();
+}
 
 // Scroll preservation across full R() rebuilds: innerHTML wipes scrollTop/Left of
 // every pane, so capture them before the rebuild and restore them after — otherwise
@@ -1568,7 +1576,7 @@ function R(){
     _centerCanvasNext=false;
     delete _savedScroll['canvas-scroll'];
     _restoreScroll(_savedScroll);
-    requestAnimationFrame(centerCanvas);
+    requestAnimationFrame(function(){ centerCanvasWhenReady(0); });
   }else{
     _restoreScroll(_savedScroll);
   }
@@ -3246,6 +3254,7 @@ function newBlankCustomDesign(){
   S.copies=1;S.cutMode=null;
   clearDataSourceCustom(true);   // empty database pane, single-label canvas
   markClean();
+  _centerCanvasNext=true;   // center the fresh canvas in the view on open
   R();
 }
 
@@ -3575,6 +3584,7 @@ function initCustomDocument(doc){
     S._dbEditCell=null; S._dbEditVal=undefined;
     S.printRange="all"; S.rangeFrom=1; S.rangeTo=1;
   }
+  _centerCanvasNext=true;   // center the opened design in the view
   R();
   markClean();showToast("Opened: "+S.tplName);
 }
