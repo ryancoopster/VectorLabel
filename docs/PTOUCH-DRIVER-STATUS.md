@@ -45,11 +45,24 @@ provenance, the half-cut trophy, the one-job-hang footgun).
 
 Legend: ✅ verified on hardware · 🟡 implemented, not yet hardware-tested · ⬜ not started · ➖ n/a
 
-| Model | PID | Dialect | Driver | Enumerate (USB) | Status read | Print 1 label | Half-cut strip | Orientation | Cut behavior |
-|-------|-----|---------|--------|------|------|------|------|------|------|
-| **PT-E550W** | `04F9:2060` | classic | 🟡 `PTE550WModule` | 🟡 | 🟡 | 🟡 | 🟡 | 🟡 *unverified* | 🟡 *unverified* |
-| PT-P750W | `04F9:2062` | classic | ⬜ (shares `BrotherPT`) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
-| PT-E560BT | `04F9:2203` | **D460BT** | ⬜ (needs `BrotherPT` D460BT path) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| Model | PID | Dialect | Driver | Enumerate (USB) | Network (TCP 9100) | Status read | Print 1 label | Half-cut strip | Orientation | Cut behavior |
+|-------|-----|---------|--------|------|------|------|------|------|------|------|
+| **PT-E550W** | `04F9:2060` | classic | 🟡 `PTE550WModule` | 🟡 | 🟡 *9100 confirmed open; print untested* | 🟡 (USB only) | 🟡 | 🟡 | 🟡 *unverified* | 🟡 *unverified* |
+| PT-P750W | `04F9:2062` | classic | ⬜ (shares `BrotherPT`) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+| PT-E560BT | `04F9:2203` | **D460BT** | ⬜ (needs `BrotherPT` D460BT path) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ |
+
+### Network (TCP 9100)
+
+`BrotherNet.swift` streams the same classic raster bytes to raw port **9100** (confirmed
+open on a 550W's Wi-Fi at 192.168.86.32). Add a network PT in Preferences ▸ Printers ▸
+**Add network printer** — enter the IP and pick **PT-E550W** as the model (the model field
+routes the entry to the right driver; the M611 enumerate now filters to its own model so
+the two don't collide). Limitations vs USB:
+- **Print-only** — media/tape auto-detect (ESC i S) reads the USB IN endpoint, not exposed
+  over the network. A network PT derives its tape from the rendered raster, so there's no
+  loaded-cassette readout and the **die-cut→continuous re-map doesn't trigger** (it needs
+  the loaded tape width). Use a continuous template, or USB, for that case.
+- **Drain** is a short flush wait (TCP close doesn't abort a buffered job), not a status drain.
 
 ### What is verified *offline* (unit tests, no hardware)
 

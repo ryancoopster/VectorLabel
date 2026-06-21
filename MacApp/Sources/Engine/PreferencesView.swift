@@ -74,6 +74,7 @@ struct PreferencesView: View {
     @State private var showResetConfirm       = false
     @State private var showClearRecentConfirm = false
     @State private var newPrinterHost = ""
+    @State private var newPrinterModel = "M611"
 
     private let tabs = ["Export", "Printing", "Templates", "Recent", "Printers", "Advanced"]
     private let icons = ["arrow.down.doc", "printer", "doc.richtext", "clock", "cable.connector", "gearshape.2"]
@@ -255,7 +256,9 @@ struct PreferencesView: View {
     private func addNetworkPrinter() {
         let host = newPrinterHost.trimmingCharacters(in: .whitespaces)
         guard !host.isEmpty else { return }
-        PrinterManager.shared.addNetworkPrinter(name: "Brady M611 (\(host))", host: host)
+        // The chosen model decides which driver enumerates this network printer.
+        PrinterManager.shared.addNetworkPrinter(name: "\(newPrinterModel) (\(host))",
+                                                host: host, model: newPrinterModel)
         newPrinterHost = ""
     }
 
@@ -344,13 +347,18 @@ struct PreferencesView: View {
                     }
                     .fixedSize()
                 }
-                // Manually add a network printer by IP / hostname.
-                PrefRow(label: "Add network printer", caption: "Enter the printer's IP address (port 9100/9102)") {
+                // Manually add a network printer by IP / hostname + its model (the model
+                // decides which driver drives it — e.g. M611 vs Brother PT-E550W).
+                PrefRow(label: "Add network printer", caption: "Enter the printer's IP address and pick its model (raw TCP)") {
                     HStack(spacing: 8) {
                         TextField("192.168.1.50", text: $newPrinterHost)
                             .textFieldStyle(.roundedBorder).frame(width: 150)
                             .font(.system(size: 12, design: .monospaced))
                             .onSubmit { addNetworkPrinter() }
+                        Picker("", selection: $newPrinterModel) {
+                            ForEach(printerManager.networkPrinterModels, id: \.self) { Text($0).tag($0) }
+                        }
+                        .labelsHidden().frame(width: 130)
                         Button("Add") { addNetworkPrinter() }
                             .buttonStyle(VLButtonStyle())
                             .disabled(newPrinterHost.trimmingCharacters(in: .whitespaces).isEmpty)

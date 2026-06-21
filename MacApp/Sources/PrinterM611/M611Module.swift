@@ -53,7 +53,7 @@ public final class M611Module: PrinterModule {
         let enabled = PrinterModelStore.enabledTransports(forName: capabilities.model, productIDs: ["010C"])
         let active = enabled.intersection(capabilities.supportedTransports)
         let net: [PrinterDevice] = active.contains(.network)
-            ? NetworkPrinterStore.list().map { e -> PrinterDevice in
+            ? NetworkPrinterStore.list().filter { $0.model == capabilities.model }.map { e -> PrinterDevice in
                 let online = NetworkDiscovery.tcpReachable(host: e.host, port: Self.telemetryPort, timeoutMs: 600)
                 let name = Self.friendlyName(host: e.host, model: e.model) ?? e.name
                 return PrinterDevice(id: "net:\(e.host)", name: name, model: e.model,

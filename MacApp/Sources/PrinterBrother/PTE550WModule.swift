@@ -19,7 +19,7 @@ public final class PTE550WModule: PrinterModule {
     static let productIDs: [UInt16: String] = [0x2060: "PT-E550W"]
 
     public let capabilities = PrinterCapabilities(
-        model: "PT-E550W", supportedTransports: [.usb], hasLiveTelemetry: false,
+        model: "PT-E550W", supportedTransports: [.usb, .network], hasLiveTelemetry: false,
         hasAutoCutter: true,            // built-in cutter (full + half cut)
         ribbonLengthInches: 0,          // TZe tape — no separate ribbon gauge
         // No hardware label counter / no live job ack: user picks one-at-a-time
@@ -49,8 +49,21 @@ public final class PTE550WModule: PrinterModule {
         let active = PrinterModelStore.enabledTransports(forName: capabilities.model,
                                                          productIDs: ["2060"])
             .intersection(capabilities.supportedTransports)
-        guard active.contains(.usb) else { return [] }
-        return BrotherUSB.enumerate(supportedPIDs: Self.productIDs)
+        var out: [PrinterDevice] = []
+        // Network printers: NetworkPrinterStore entries whose model is one of OURS
+        // (so the M611 module doesn't also claim them, and vice-versa). Raw TCP 9100.
+        if active.contains(.network) {
+            let brotherModels = Set(Self.productIDs.values)
+            out += NetworkPrinterStore.list()
+                .filter { brotherModels.contains($0.model) }
+                .map { e in
+                    let online = BrotherNet.reachable(host: e.host)
+                    return PrinterDevice(id: "net:\(e.host)", name: e.name, model: capabilities.model,
+                                         serial: e.host, status: online ? .ready : .offline, host: e.host)
+                }
+        }
+        if active.contains(.usb) { out += BrotherUSB.enumerate(supportedPIDs: Self.productIDs) }
+        return out
     }
 
     // MARK: – Encode (master raster → classic-dialect single-label job)
@@ -106,28 +119,36 @@ public final class PTE550WModule: PrinterModule {
     // MARK: – Transport
 
     public func open(_ device: PrinterDevice) throws -> PrinterConnection {
+        // Network device → TCP 9100; otherwise USB.
+        if let host = device.host, !host.isEmpty {
+            return BrotherNetConnection(fd: try BrotherNet.connect(host: host), host: host)
+        }
         #if canImport(CLibUSB)
         return try BrotherUSB.open(deviceID: device.id, supportedPIDs: Self.productIDs)
         #else
-        throw BrotherUSB.USBError.noContext
+        throw BrotherNet.NetError.connectFailed
         #endif
     }
 
     public func send(_ bytes: [UInt8], on connection: PrinterConnection) throws {
+        if let c = connection as? BrotherNetConnection { try BrotherNet.writeAll(fd: c.fd, bytes: bytes); return }
         #if canImport(CLibUSB)
-        guard let c = connection as? BrotherConnection else { return }
-        try BrotherUSB.send(bytes, on: c)
+        if let c = connection as? BrotherConnection { try BrotherUSB.send(bytes, on: c) }
         #endif
     }
 
     public func close(_ connection: PrinterConnection) {
+        if let c = connection as? BrotherNetConnection { BrotherNet.close(c.fd); return }
         #if canImport(CLibUSB)
-        guard let c = connection as? BrotherConnection else { return }
-        BrotherUSB.close(c)
+        if let c = connection as? BrotherConnection { BrotherUSB.close(c) }
         #endif
     }
 
     public func readStatus(_ device: PrinterDevice) -> CassetteStatus? {
+        // Media auto-detect (ESC i S) reads the USB IN endpoint, which isn't exposed
+        // over the network. A network PT derives its tape from the rendered raster, so
+        // there's no cassette status to report.
+        if let host = device.host, !host.isEmpty { return nil }
         #if canImport(CLibUSB)
         guard let conn = try? BrotherUSB.open(deviceID: device.id, supportedPIDs: Self.productIDs) else {
             return nil
@@ -183,8 +204,7 @@ public final class PTE550WModule: PrinterModule {
     /// A feed-to-clear blank lead (page 0 forced to a full cut by the Engine while the
     /// job cut isn't every-label) is sent as its own full-cut job first.
     public func run(_ job: DriverJob) throws {
-        #if canImport(CLibUSB)
-        guard let conn = job.connection as? BrotherConnection else { return }
+        let conn = job.connection
         let count = job.pages.count
         guard count > 0 else { job.progress(.done); return }
         let perLabelMs = max(150, job.estLabelMs)
@@ -193,9 +213,8 @@ public final class PTE550WModule: PrinterModule {
 
         func sendStandaloneFullCut(_ label: RenderedLabel) throws {
             guard let tr = tapeRaster(for: label) else { return }
-            try BrotherUSB.send(BrotherPT.buildPrintJob(rasterData: tr.raster, tapeMm: tr.tapeMm,
-                                                        autocut: true, halfCut: false,
-                                                        isLastPage: true), on: conn)
+            try send(BrotherPT.buildPrintJob(rasterData: tr.raster, tapeMm: tr.tapeMm,
+                                             autocut: true, halfCut: false, isLastPage: true), on: conn)
         }
 
         if jobCut == .eachLabel {
@@ -206,7 +225,7 @@ public final class PTE550WModule: PrinterModule {
                 try sendStandaloneFullCut(page.label)
                 job.progress(.counter(done: i + 1, of: count))
             }
-            BrotherUSB.drainStatus(on: conn, maxMs: perLabelMs * 3 + 6000)
+            drain(conn, maxMs: perLabelMs * 3 + 6000)
             if !job.isCancelled() { job.progress(.done) }
             return
         }
@@ -231,10 +250,20 @@ public final class PTE550WModule: PrinterModule {
                                                 betweenHalfCut: jobCut == .halfEachFullEnd,
                                                 suppressEndCut: jobCut == .never)
         job.progress(.printing)
-        try BrotherUSB.send(stream, on: conn)
+        try send(stream, on: conn)
         // Hold "Printing…" and drain until the strip finishes printing + cuts.
-        BrotherUSB.drainStatus(on: conn, maxMs: count * perLabelMs * 3 + 8000)
+        drain(conn, maxMs: count * perLabelMs * 3 + 8000)
         job.progress(.done)
+    }
+
+    /// Drain in-flight printing before the Engine closes the connection (the drain
+    /// rule). USB: read the status channel until the printer goes quiet (closing the
+    /// interface mid-print would abort it). Network: TCP close does NOT abort a job the
+    /// printer has already buffered, so a short flush wait is enough.
+    private func drain(_ connection: PrinterConnection, maxMs: Int) {
+        #if canImport(CLibUSB)
+        if let c = connection as? BrotherConnection { BrotherUSB.drainStatus(on: c, maxMs: maxMs); return }
         #endif
+        usleep(800_000)
     }
 }

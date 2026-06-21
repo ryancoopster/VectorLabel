@@ -151,11 +151,21 @@ public final class PrinterManager: ObservableObject {
     @Published public var networkScanMessage: String?
 
     /// Add a network printer by IP/hostname, then rescan so it appears.
-    public func addNetworkPrinter(name: String, host: String) {
-        if NetworkPrinterStore.add(name: name, host: host) {
+    public func addNetworkPrinter(name: String, host: String, model: String = "M611") {
+        if NetworkPrinterStore.add(name: name, host: host, model: model) {
             networkScanMessage = "Added \(host)."
             performScan()
         }
+    }
+
+    /// Registered printer models whose driver can be driven over the network — the
+    /// choices for the "Add network printer" model picker. A network entry's model
+    /// decides which driver enumerates it, so it must be picked when adding.
+    public var networkPrinterModels: [String] {
+        PrinterModuleRegistry.shared.all()
+            .filter { $0.capabilities.supportedTransports.contains(.network) }
+            .map { $0.capabilities.model }
+            .sorted()
     }
 
     /// Remove a network printer and forget its cassette.
