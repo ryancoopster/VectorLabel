@@ -225,7 +225,7 @@ public final class PTE550WModule: PrinterModule {
                 try sendStandaloneFullCut(page.label)
                 job.progress(.counter(done: i + 1, of: count))
             }
-            drain(conn, maxMs: perLabelMs * 3 + 6000)
+            drain(conn, count: count, perLabelMs: perLabelMs)
             if !job.isCancelled() { job.progress(.done) }
             return
         }
@@ -252,18 +252,25 @@ public final class PTE550WModule: PrinterModule {
         job.progress(.printing)
         try send(stream, on: conn)
         // Hold "Printing…" and drain until the strip finishes printing + cuts.
-        drain(conn, maxMs: count * perLabelMs * 3 + 8000)
+        drain(conn, count: count, perLabelMs: perLabelMs)
         job.progress(.done)
     }
 
     /// Drain in-flight printing before the Engine closes the connection (the drain
-    /// rule). USB: read the status channel until the printer goes quiet (closing the
-    /// interface mid-print would abort it). Network: TCP close does NOT abort a job the
-    /// printer has already buffered, so a short flush wait is enough.
-    private func drain(_ connection: PrinterConnection, maxMs: Int) {
+    /// rule), sized to the job (`count` × `perLabelMs`).
+    /// USB: closing the interface mid-print ABORTS the job, so read the status channel
+    /// until the printer goes quiet, bounded by a generous cap (it exits early).
+    /// Network: after `writeAll` the whole job is buffered in the printer and a TCP
+    /// close won't abort it, so we only hold "Printing…" ~the print duration so `.done`
+    /// isn't premature — capped so a huge job can't block the device queue indefinitely.
+    private func drain(_ connection: PrinterConnection, count: Int, perLabelMs: Int) {
         #if canImport(CLibUSB)
-        if let c = connection as? BrotherConnection { BrotherUSB.drainStatus(on: c, maxMs: maxMs); return }
+        if let c = connection as? BrotherConnection {
+            BrotherUSB.drainStatus(on: c, maxMs: count * perLabelMs * 3 + 8000)
+            return
+        }
         #endif
-        usleep(800_000)
+        let waitMs = min(max(count * perLabelMs + 1500, 800), 30_000)
+        Thread.sleep(forTimeInterval: Double(waitMs) / 1000.0)
     }
 }
