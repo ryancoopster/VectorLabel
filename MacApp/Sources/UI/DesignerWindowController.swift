@@ -821,7 +821,8 @@ public final class DesignerWindowController: NSObject {
         } else if let lenN = payload["labelLengthInches"] as? NSNumber, lenN.doubleValue > 0 {
             tplDict["labelLengthInches"] = lenN.doubleValue
         }
-        // Landscape canvas rotation (continuous only) → renderer rotates the raster. #14.
+        // Continuous orientation (continuous only): canvasRot 90 = portrait override;
+        // absent/0 = the renderer's default landscape. #14.
         if let rot = payload["canvasRot"] as? Int { tplDict["canvasRot"] = rot }
         else if let rotN = payload["canvasRot"] as? NSNumber { tplDict["canvasRot"] = rotN.intValue }
         // A template with no objects (or an unknown spec) can't render — bail.
@@ -956,7 +957,8 @@ public final class DesignerWindowController: NSObject {
         } else if let lenN = payload["labelLengthInches"] as? NSNumber, lenN.doubleValue > 0 {
             tplDict["labelLengthInches"] = lenN.doubleValue
         }
-        // Landscape canvas rotation (continuous only) → renderer rotates the raster. #14.
+        // Continuous orientation (continuous only): canvasRot 90 = portrait override;
+        // absent/0 = the renderer's default landscape. #14.
         if let rot = payload["canvasRot"] as? Int { tplDict["canvasRot"] = rot }
         else if let rotN = payload["canvasRot"] as? NSNumber { tplDict["canvasRot"] = rotN.intValue }
         // Supply identity + geometry snapshot (keep the canvas size if the supply is

@@ -52,9 +52,10 @@ public enum LabelRenderer {
     /// SC is the coordinate scale used by the HTML designer: 185 px per inch-unit.
     /// Template object coordinates are in 0…1 relative to the printable area.
     /// We map those onto the actual print DPI here.
-    /// `offset` shifts all drawn content by (dx, dy) printer pixels — the
-    /// per-printer calibration offset. dx is along the label width, dy along
-    /// the label height (same sense as the designer's x/y).
+    /// `offset` shifts all drawn content by (dx, dy) printer pixels — the per-printer
+    /// calibration offset. Applied in the un-rotated raster frame (before feed/landscape
+    /// rotation), so dx is always across the print head and dy along the feed regardless
+    /// of label orientation — matching the calibration grid the user tunes against.
     public static func render(template: VLTemplate, record: WireRecord,
                        offset: (dx: Double, dy: Double) = (0, 0),
                        loadedPartNumber: String? = nil) -> (pixels: [UInt8], width: Int, height: Int)? {
@@ -83,11 +84,24 @@ public enum LabelRenderer {
         ctx.translateBy(x: 0, y: CGFloat(ph))
         ctx.scaleBy(x: 1, y: -1)
 
-        // Some supplies (e.g. the 33-427 / BM-109-427) feed rotated relative to
-        // the designer layout, so the whole label is rotated to match. The angle
-        // comes from the catalog (feedRotationDeg); its printable area is square,
-        // so a 90° rotation stays in bounds.
-        let feedRotation = BradyCatalog.effectiveFeedRotationDeg(selected: size.partNumber, loaded: loadedPartNumber)
+        // Per-printer calibration shift (in top-left pixel space). Applied BEFORE any
+        // feed/orientation rotation so dx/dy keep a fixed physical sense (dx across the
+        // head, dy along the feed) — the same un-rotated frame `renderCalibrationGrid`
+        // tunes against, so the grid and the print agree regardless of orientation. The
+        // stored offset is in calibrationReference-dpi pixels (what the Preferences UI
+        // shows and what existing saved calibrations used), scaled to the master render
+        // DPI to preserve its physical shift; the driver's downscale carries it to native.
+        let calScale = Double(dpi) / Double(RenderDPI.calibrationReference)
+        ctx.translateBy(x: CGFloat(offset.dx * calScale), y: CGFloat(offset.dy * calScale))
+
+        // Some DIE-CUT supplies (e.g. the 33-427 / BM-109-427) feed rotated relative to
+        // the designer layout, so the whole label is rotated to match. The angle comes
+        // from the catalog (feedRotationDeg); its printable area is square, so a 90°
+        // rotation stays in bounds. GATED to die-cut: a continuous supply's raster is
+        // highly non-square, so rotating it about its center would push content off the
+        // bitmap (blank label) — continuous orientation is handled by landscape below.
+        let feedRotation = size.isContinuous ? 0
+            : BradyCatalog.effectiveFeedRotationDeg(selected: size.partNumber, loaded: loadedPartNumber)
         if abs(feedRotation) > 0.0001 {
             let cx = CGFloat(pw) / 2, cy = CGFloat(ph) / 2
             ctx.translateBy(x: cx, y: cy)
@@ -95,23 +109,17 @@ public enum LabelRenderer {
             ctx.translateBy(x: -cx, y: -cy)
         }
 
-        // Custom Designer landscape canvas (continuous only): the user authored the
-        // design rotated 90° (length horizontal), so rotate the raster to match. The
-        // context stays the physical width×length; this maps the length×width design
-        // onto it. NOTE: orientation/handedness is set here — verify with a test
-        // print on real tape before production use. #14.
-        if (template.canvasRot ?? 0) == 90 {
+        // Continuous stock renders LANDSCAPE by default (the design's width runs along
+        // the tape length, the tape width vertically) — the natural label orientation,
+        // and what lets a die-cut layout reused on continuous tape come out the right
+        // direction. This is the ENGINE default, applied to every printer here (not a
+        // per-designer toggle). `canvasRot == 90` is the opt-out to portrait. Die-cut
+        // never rotates. NOTE: orientation/handedness — verify with a test print. #14.
+        let landscapeContinuous = size.isContinuous && (template.canvasRot ?? 0) != 90
+        if landscapeContinuous {
             ctx.translateBy(x: CGFloat(pw), y: 0)
             ctx.rotate(by: .pi / 2)
         }
-
-        // Per-printer calibration shift (in top-left pixel space). The stored offset
-        // is in calibrationReference-dpi pixels (what the Preferences UI shows and
-        // what existing saved calibrations used), so scale it to the master render
-        // DPI to preserve its physical shift; the driver's downscale then carries it
-        // to the printer's native resolution.
-        let calScale = Double(dpi) / Double(RenderDPI.calibrationReference)
-        ctx.translateBy(x: CGFloat(offset.dx * calScale), y: CGFloat(offset.dy * calScale))
 
         for obj in template.objs {
             // Rotation is clockwise about the object's center, matching the
