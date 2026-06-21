@@ -167,7 +167,8 @@ public final class M611Module: PrinterModule {
         var observed = Set<Int>()                      // indices seen in ANY slot state (incl. queued)
         var telemetryDead = false
         var firstSendMs = -1
-        var lastPollMs = Int.min
+        var lastPollMs = -100_000      // forces a poll on the first iteration; NOT Int.min,
+                                       // or `elapsedMs() - lastPollMs` overflows Int and traps
 
         func sendLabel(_ i: Int) throws {
             let p = job.pages[i]
