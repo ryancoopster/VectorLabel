@@ -35,12 +35,15 @@ public final class PTE550WModule: PrinterModule {
             CutOption(mode: .never,           label: "None"),
         ])
 
-    // Tape-frame orientation flips. The reading-orientation master raster is mapped
-    // into the printer's tape frame here; if a hardware test prints mirrored or
-    // upside-down along/across the tape, flip the corresponding flag. (Verify on a
-    // real PT-E550W before production — orientation is the one thing tests can't pin.)
+    // Tape-frame orientation flips. `tapeRaster` transposes the rendered raster into
+    // the printer's tape frame; a bare transpose is a REFLECTION, so exactly one axis
+    // must be reversed to make it a clean 90° rotation (else the label prints mirrored).
+    // mirrorAcross reverses the across-tape (pin) axis to undo that reflection. If a
+    // hardware test instead shows the label upside-down, move the reversal to
+    // mirrorAlong (the other clean rotation). Orientation is the one thing tests can't
+    // pin — verify on a real PT-E550W.
     static let mirrorAlong = false      // reverse tape-feed (raster-line) order
-    static let mirrorAcross = false     // reverse across-tape (pin) order
+    static let mirrorAcross = true      // reverse across-tape (pin) order — undoes the transpose reflection
 
     public func enumerate() -> [PrinterDevice] {
         let active = PrinterModelStore.enabledTransports(forName: capabilities.model,
