@@ -6,6 +6,11 @@ import VectorLabelEngineKit
 
 // Design tokens (Color.vl*) live in Theme.swift, shared with the menu bar.
 
+extension Notification.Name {
+    /// Posted (object = tab index) to switch the already-open Preferences window's tab.
+    static let vlSelectPreferencesTab = Notification.Name("vlSelectPreferencesTab")
+}
+
 // MARK: – Shared row/section components
 
 private struct PrefSection<Content: View>: View {
@@ -70,11 +75,16 @@ struct PreferencesView: View {
     @ObservedObject var recentPrints    = RecentPrintsStore.shared
     @ObservedObject var printerManager  = PrinterManager.shared
 
-    @State private var selectedTab = 0
+    @State private var selectedTab: Int
     @State private var showResetConfirm       = false
     @State private var showClearRecentConfirm = false
     @State private var newPrinterHost = ""
     @State private var newPrinterModel = "M611"
+
+    /// Open on a specific tab (e.g. the menu's Printers shortcut → Printers tab).
+    init(initialTab: Int = 0) {
+        _selectedTab = State(initialValue: initialTab)
+    }
 
     private let tabs = ["Export", "Printing", "Templates", "Recent", "Printers", "Advanced"]
     private let icons = ["arrow.down.doc", "printer", "doc.richtext", "clock", "cable.connector", "gearshape.2"]
@@ -122,8 +132,16 @@ struct PreferencesView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color.vlBackground)
         }
-        .frame(width: 600, height: 480)
+        // Flexible (not a fixed 600×480) so the content fills the window — the window's
+        // taller default (set in openPreferences) then shows the Printers tab without
+        // scrolling, and the ScrollView only scrolls if the user shrinks the window.
+        .frame(minWidth: 600, idealWidth: 700, maxWidth: .infinity,
+               minHeight: 480, idealHeight: 800, maxHeight: .infinity)
         .background(Color.vlBackground)
+        // The menu's Printers shortcut can switch tabs on an already-open window.
+        .onReceive(NotificationCenter.default.publisher(for: .vlSelectPreferencesTab)) { note in
+            if let tab = note.object as? Int, tabs.indices.contains(tab) { selectedTab = tab }
+        }
         // Respect the chosen appearance (was hardcoded .preferredColorScheme(.dark),
         // which kept Preferences dark in light mode). Tie identity to the appearance
         // so the whole window re-themes on a flip (the vl* tokens are global reads).

@@ -77,7 +77,24 @@ struct MenuBarView: View {
 
     private var printersSection: some View {
         Group {
-            sectionHeader("Printers")
+            // Section header with a right-justified shortcut into Printer preferences.
+            HStack(spacing: 0) {
+                Text("Printers".uppercased())
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.vlDim)
+                Spacer(minLength: 8)
+                Button { appDelegate.openPreferences(selectTab: 4) } label: {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.vlSecondary)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Printer preferences")
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 12)
+            .padding(.bottom, 4)
 
             if printerManager.printers.isEmpty {
                 emptyState("No printers connected")

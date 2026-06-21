@@ -206,7 +206,10 @@ final class PrinterModelEditorWindow {
         win.styleMask = [.titled, .closable, .resizable, .miniaturizable]
         win.isReleasedWhenClosed = false
         win.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 2)
-        win.applyVLSizing(autosaveName: "VLPrinterModelsWindow", defaultContentSize: NSSize(width: 560, height: 460))
+        // Default tall enough to show two printer cards without scrolling; capped to the
+        // screen and persisted on resize. Autosave key bumped (…Window2) so a stale saved
+        // frame from the earlier (shorter) default doesn't override the new height.
+        win.applyVLSizing(autosaveName: "VLPrinterModelsWindow2", defaultContentSize: NSSize(width: 560, height: 700))
         NSApp.activate(ignoringOtherApps: true)
         win.makeKeyAndOrderFront(nil)
         window = win

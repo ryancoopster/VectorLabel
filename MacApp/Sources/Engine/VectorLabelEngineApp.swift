@@ -273,21 +273,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         NSWorkspace.shared.open(url)
     }
 
-    func openPreferences() {
+    func openPreferences(selectTab: Int? = nil) {
         if let win = preferencesWindow {
+            // Already open: switch to the requested tab (if any) and bring it forward.
+            if let tab = selectTab {
+                NotificationCenter.default.post(name: .vlSelectPreferencesTab, object: tab)
+            }
             NSApp.activate(ignoringOtherApps: true)
             win.makeKeyAndOrderFront(nil)
             return
         }
-        let controller = NSHostingController(rootView: PreferencesView())
+        let controller = NSHostingController(rootView: PreferencesView(initialTab: selectTab ?? 0))
         let win = NSPanel(contentViewController: controller)
         win.title = "VectorLabel Preferences"
         win.styleMask = [.titled, .closable, .nonactivatingPanel]
         win.hidesOnDeactivate = false
         win.isReleasedWhenClosed = false
         win.level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
-        win.applyVLSizing(autosaveName: "VLPreferencesWindow",
-                          defaultContentSize: NSSize(width: 680, height: 560))
+        // Default tall enough to show the Printers tab without scrolling; capped to the
+        // screen and persisted on resize by applyVLSizing. The autosave key is bumped
+        // (…Window2) so a stale saved frame from an earlier default doesn't override it.
+        win.applyVLSizing(autosaveName: "VLPreferencesWindow2",
+                          defaultContentSize: NSSize(width: 700, height: 800))
         NSApp.activate(ignoringOtherApps: true)
         win.makeKeyAndOrderFront(nil)
         preferencesWindow = win
