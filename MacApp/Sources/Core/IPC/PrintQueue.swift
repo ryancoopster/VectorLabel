@@ -28,7 +28,9 @@ public struct ControlRequest: Codable {
     public init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
         schema    = (try? c.decode(Int.self, forKey: .schema)) ?? 1
-        requestId = (try? c.decode(String.self, forKey: .requestId)) ?? UUID().uuidString
+        // requestId is the control filename stem; a MISSING one is empty, not a fabricated
+        // random UUID that wouldn't correspond to any file (delete is by URL regardless).
+        requestId = (try? c.decode(String.self, forKey: .requestId)) ?? ""
         action    = try c.decode(Action.self, forKey: .action)
         jobId     = (try? c.decode(String.self, forKey: .jobId)) ?? ""
         printerID = (try? c.decode(String.self, forKey: .printerID)) ?? ""

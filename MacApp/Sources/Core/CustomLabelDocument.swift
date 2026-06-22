@@ -125,9 +125,14 @@ public enum CustomLabelStore {
 
     /// Decode a `.vlcus` document from `url`. The file stem overrides the stored
     /// name (so renaming the file renames the label). Returns nil on failure.
+    /// The highest document `schema` this build understands. A `.vlcus` declaring a
+    /// newer schema is rejected (not silently mis-decoded against unknown field semantics).
+    public static let currentSchema = 1
+
     public static func load(from url: URL) -> CustomLabelDocument? {
         guard let data = try? Data(contentsOf: url),
-              var doc = try? JSONDecoder().decode(CustomLabelDocument.self, from: data)
+              var doc = try? JSONDecoder().decode(CustomLabelDocument.self, from: data),
+              doc.schema <= currentSchema
         else { return nil }
         let stem = stem(url)
         if !stem.isEmpty {

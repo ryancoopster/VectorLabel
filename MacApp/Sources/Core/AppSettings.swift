@@ -134,8 +134,9 @@ public final class AppSettings: ObservableObject {
 
     /// Print-alignment offset in printer pixels, keyed by the printer's serial
     /// number so it persists across disconnect/reconnect and survives relaunch.
-    /// Value is [dx, dy]; dx shifts along the tape feed, dy across the tape.
-    /// Keyed by serial (not the full USB id) so it follows the physical printer.
+    /// Value is [dx, dy]; matching the renderer (LabelTemplate.render): dx shifts ACROSS
+    /// the print head, dy shifts ALONG the tape feed (applied before any orientation
+    /// rotation). Keyed by serial (not the full USB id) so it follows the physical printer.
     @Published public var printerCalibration: [String: [Double]] {
         didSet {
             // Drop any entry with a non-finite component (a single NaN/Inf would make the
