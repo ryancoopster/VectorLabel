@@ -493,7 +493,7 @@ function buildColumnsMenu(){
   if(!window._colMenuOpen)return '';
   const cols=recordColumns(currentRecords());
   const hidden=new Set(window._hiddenColumns||[]);
-  return `<div onclick="event.stopPropagation()" style="position:absolute;right:16px;top:26px;z-index:30;background:var(--surface);border:1px solid var(--bd4);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.5);padding:5px;max-height:300px;overflow-y:auto;min-width:200px">
+  return `<div id="vl-cols-menu-scroll" onclick="event.stopPropagation()" style="position:absolute;right:16px;top:26px;z-index:30;background:var(--surface);border:1px solid var(--bd4);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.5);padding:5px;max-height:300px;overflow-y:auto;min-width:200px">
     <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;padding:3px 6px 5px">Columns</div>
     ${cols.map(c=>`<div draggable="true" ondragstart="colDragStart(event,'${jsAttr(c)}')" ondragover="colDragOver(event,this)" ondragend="colDragEnd(event)" ondrop="colDrop(event,'${jsAttr(c)}')" style="display:flex;align-items:center;gap:7px;padding:3px 6px;border-radius:4px">
       <span title="Drag to reorder" style="cursor:grab;color:var(--text2);font-size:12px;user-select:none">⋮⋮</span>
@@ -2290,6 +2290,9 @@ function R(){
   const _prevScroll=(document.getElementById("recScroll")||{}).scrollTop||0;
   const _prevClientH=(document.getElementById("recScroll")||{}).clientHeight||0;
   const _prevPreviewScroll=(document.getElementById("vl-preview-scroll")||{}).scrollTop||0;
+  // Preserve the Columns ▾ menu's own scroll, so toggling a column doesn't snap its
+  // (often long) checklist back to the top each click.
+  const _prevColsScroll=(document.getElementById("vl-cols-menu-scroll")||{}).scrollTop||0;
   // Preserve the inline cell-edit input's focus + caret across the rebuild, so a
   // background re-render (printer/cassette poll, job updates) doesn't kick the
   // user out of the text box mid-typing.
@@ -2396,6 +2399,8 @@ function R(){
   }
   const _pvEl=document.getElementById("vl-preview-scroll");
   if(_pvEl) _pvEl.scrollTop=_prevPreviewScroll;
+  const _colsEl=document.getElementById("vl-cols-menu-scroll");
+  if(_colsEl) _colsEl.scrollTop=_prevColsScroll;
   if(_editCaret){ const _ei=document.getElementById("cell-edit-input");
     if(_ei){ _ei.focus(); try{ _ei.setSelectionRange(_editCaret[0],_editCaret[1]); }catch(_){} } }
   fitPreviewLabel();
