@@ -545,8 +545,14 @@ function jsAttr(s){
 }
 
 // Full column list (incl. hidden): saved order first, then friendly, then rest.
+// In custom mode the bound data carries an authoritative, ORDERED column list
+// (window._boundData.columns) — record field keys arrive via a Swift [String:String]
+// dictionary, which is unordered, so deriving order from keys scrambles it (e.g.
+// "Column 9, Column 16, Column 12, …"). Seed from the bound column order first.
 function recordColumns(records){
   const present=[];
+  const bdCols=(typeof isCustomMode==='function'&&isCustomMode()&&window._boundData&&Array.isArray(window._boundData.columns))?window._boundData.columns:null;
+  if(bdCols) bdCols.forEach(k=>{ if(!present.includes(k)) present.push(k); });
   records.forEach(r=>Object.keys(r).forEach(k=>{ if(!present.includes(k)) present.push(k); }));
   const out=(window._columnOrder||[]).filter(k=>present.includes(k));
   ['_Side','Number','Cable','Signal','Device_Name','Socket_Name'].forEach(k=>{ if(present.includes(k)&&!out.includes(k)) out.push(k); });
