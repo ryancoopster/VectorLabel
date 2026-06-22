@@ -294,6 +294,10 @@ public final class DesignerWindowController: NSObject {
             .sink { [weak self] _ in self?.injectColumnConfig() }.store(in: &cancellables)
         AppSettings.shared.$recordColumnWidths.dropFirst().receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.injectColumnConfig() }.store(in: &cancellables)
+        // Keep filter/sort presets in sync with the shared store (so a preset saved
+        // in the Print window — or another designer window — appears here live).
+        AppSettings.shared.$filterSortPresetsJSON.dropFirst().receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.injectFilterSortPresets() }.store(in: &cancellables)
         // Push the light/dark theme to the designer webview when it changes.
         // Re-theme the web view on any appearance change, including the OS flipping
         // while in "system" mode. Push the EFFECTIVE light/dark, not the raw mode.
@@ -519,6 +523,16 @@ public final class DesignerWindowController: NSObject {
         guard let wv = webView else { return }
         wv.evaluateJavaScript(
             "if(typeof applyColumnConfig==='function')applyColumnConfig(\(AppSettings.shared.columnConfigJSON()));",
+            completionHandler: nil
+        )
+    }
+
+    /// Push the shared filter/sort presets into the designer (same store as the
+    /// Print window), so presets saved in either window appear in both.
+    private func injectFilterSortPresets() {
+        guard let wv = webView else { return }
+        wv.evaluateJavaScript(
+            "if(typeof applyFilterSortPresets==='function')applyFilterSortPresets(\(AppSettings.shared.filterSortPresetsJSON));",
             completionHandler: nil
         )
     }
@@ -1281,6 +1295,7 @@ extension DesignerWindowController: WKNavigationDelegate {
             injectDesignerTemplates()
         }
         injectColumnConfig()
+        injectFilterSortPresets()
         injectDesignerPrefs()
         // Custom mode: seed the print header with the latest printer/cassette state
         // and re-inject any already-bound data source (so a reload keeps the binding).
@@ -1425,6 +1440,15 @@ extension DesignerWindowController: WKScriptMessageHandler {
 
         case "setColumnConfig":
             AppSettings.shared.applyColumnConfigPayload(body["payload"])
+
+        case "setFilterSortPresets":
+            // Filter/sort presets are shared with the Print window via the same
+            // AppSettings store, so a preset saved here shows up there and back.
+            if let arr = body["payload"] as? [Any],
+               let data = try? JSONSerialization.data(withJSONObject: arr),
+               let json = String(data: data, encoding: .utf8) {
+                AppSettings.shared.filterSortPresetsJSON = json
+            }
 
         case "setDesignerPrefs":
             if let p = body["payload"] as? [String: Any] {

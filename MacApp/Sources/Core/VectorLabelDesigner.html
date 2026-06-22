@@ -3838,9 +3838,130 @@ function filterSummaryOf(f){
 }
 function filterSummary(){ return filterActive()?filterSummaryOf(S.dbFilter):""; }
 
+// ── Filter/sort presets (shared with the Print window via Swift/AppSettings) ─────
+// Swift injects the saved presets through applyFilterSortPresets() on load and
+// whenever they change; savePresets() posts them back, so both windows stay in sync.
+function applyFilterSortPresets(arr){ window._presets = Array.isArray(arr)?arr:[]; if(typeof R==='function')R(); }
+function presetGenId(){ return 'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function savePresets(){
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"setFilterSortPresets",payload:window._presets||[]});
+}
+function presetSummary(p){
+  const f=filterSummaryOf(p.filter), s=sortSummaryOf(p.sort);
+  const out=[]; if(f)out.push("Filter: "+f); if(s)out.push("Sort: "+s);
+  return out.length?out.join("\n"):"(no filter or sort)";
+}
+// Canonical JSON (recursively sorted keys) so preset comparison is key-order independent.
+function _canon(x){
+  if(x===null||x===undefined) return null;
+  if(Array.isArray(x)) return x.map(_canon);
+  if(typeof x==='object'){ const o={}; Object.keys(x).sort().forEach(k=>{ const v=_canon(x[k]); if(v!==undefined)o[k]=v; }); return o; }
+  return x;
+}
+function presetMatchesActive(p){
+  return JSON.stringify(_canon(p.filter||null))===JSON.stringify(_canon(S.dbFilter||null))
+      && JSON.stringify(_canon(p.sort||null))===JSON.stringify(_canon(S.dbSort||null));
+}
+function applyPreset(id){
+  const p=(window._presets||[]).find(x=>x.id===id); if(!p)return;
+  S.dbFilter=p.filter?JSON.parse(JSON.stringify(p.filter)):null;
+  S.dbSort=p.sort?JSON.parse(JSON.stringify(p.sort)):null;
+  _dbKeepActiveVisible(); R();
+}
+function deletePreset(id){ window._presets=(window._presets||[]).filter(x=>x.id!==id); savePresets(); R(); }
+function renamePreset(id){
+  const p=(window._presets||[]).find(x=>x.id===id); if(!p)return;
+  vlPrompt("Rename preset",p.name,n=>{ if(n){ p.name=n; savePresets(); R(); } });
+}
+function editPreset(id){ openFilterModal(id); }
+function closePresetMenu(){ const m=document.getElementById('vl-preset-menu'); if(m)m.remove(); }
+function presetMenu(e,id){
+  e.preventDefault(); e.stopPropagation(); closePresetMenu();
+  const menu=document.createElement('div'); menu.id='vl-preset-menu';
+  menu.style.cssText='position:fixed;z-index:2600;background:var(--surface);border:1px solid var(--bd4);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.5);padding:4px;min-width:160px;left:'+e.clientX+'px;top:'+e.clientY+'px';
+  function item(label,fn,danger){
+    const d=document.createElement('div'); d.textContent=label;
+    d.style.cssText='padding:6px 10px;border-radius:4px;cursor:pointer;font-size:12px;color:'+(danger?'var(--red)':'var(--text)');
+    d.onmouseenter=()=>d.style.background='var(--bd2)'; d.onmouseleave=()=>d.style.background='';
+    d.onmousedown=ev=>ev.stopPropagation(); d.onclick=()=>{ closePresetMenu(); fn(); };
+    menu.appendChild(d);
+  }
+  item("Apply (activate)",()=>applyPreset(id));
+  item("Edit…",()=>editPreset(id));
+  item("Rename…",()=>renamePreset(id));
+  item("Update preset with current",()=>updatePresetWithCurrent(id));
+  item("Delete",()=>deletePreset(id),true);
+  document.body.appendChild(menu);
+  setTimeout(()=>document.addEventListener('mousedown',closePresetMenu,{once:true}),0);
+}
+function saveCurrentAsPreset(){
+  const f=draftToFilter(), s=draftToSort();
+  if(!f&&!s){ showToast("Add a filter or sort first"); return; }
+  vlPrompt("Name this preset","",(name,exit)=>{
+    if(!name)return;
+    window._presets=window._presets||[];
+    window._presets.push({id:presetGenId(),name:name,filter:f,sort:s});
+    savePresets();
+    showToast("Preset saved: "+name);
+    if(exit){ closeFilterModal(); R(); }   // Save & exit → back to the designer
+    else { renderFilterModal(); }
+  }, "Save & exit");
+}
+function savePresetEdits(){
+  const p=(window._presets||[]).find(x=>x.id===S._editingPresetId); if(!p)return;
+  p.filter=draftToFilter(); p.sort=draftToSort();
+  savePresets(); closeFilterModal(); R();
+}
+function savePresetEditsAndApply(){
+  const p=(window._presets||[]).find(x=>x.id===S._editingPresetId); if(!p)return;
+  p.filter=draftToFilter(); p.sort=draftToSort();
+  savePresets();
+  S.dbFilter=p.filter?JSON.parse(JSON.stringify(p.filter)):null;
+  S.dbSort=p.sort?JSON.parse(JSON.stringify(p.sort)):null;
+  closeFilterModal(); _dbKeepActiveVisible(); R();
+}
+function updatePresetWithCurrent(id){
+  const p=(window._presets||[]).find(x=>x.id===id); if(!p)return;
+  p.filter=S.dbFilter?JSON.parse(JSON.stringify(S.dbFilter)):null;
+  p.sort=S.dbSort?JSON.parse(JSON.stringify(S.dbSort)):null;
+  savePresets(); R();
+  showToast("Preset updated: "+p.name);
+}
+// Text-input overlay (WKWebView blocks window.prompt without a delegate).
+// cb(value, viaExtra) — viaExtra true when the optional extra button was used.
+function vlPrompt(title,def,cb,extraLabel){
+  const o=document.createElement('div'); o.className='modal-overlay'; o.style.zIndex='2700';
+  o.onclick=e=>{ if(e.target===o){ o.remove(); cb(null,false); } };
+  o.innerHTML=`<div class="modal" style="min-width:360px">
+    <div class="modal-title">${esc(title)}</div>
+    <input id="vlpi" class="inp" value="${(def||'').replace(/"/g,'&quot;')}">
+    <div id="vlperr" style="display:none;color:var(--red);font-size:11px;margin-top:6px">You must enter a name.</div>
+    <div class="modal-footer"><button class="btn" id="vlpc">Cancel</button>
+      <button class="btn" id="vlpo" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Save</button>
+      ${extraLabel?`<button class="btn" id="vlpx" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">${esc(extraLabel)}</button>`:''}
+    </div>
+  </div>`;
+  document.body.appendChild(o);
+  const inp=o.querySelector('#vlpi'), err=o.querySelector('#vlperr');
+  inp.focus(); inp.select();
+  function attempt(extra){
+    const v=inp.value.trim();
+    if(!v){ err.style.display='block'; inp.focus(); return; }   // require a name; stay open
+    o.remove(); cb(v,!!extra);
+  }
+  inp.oninput=()=>{ if(inp.value.trim())err.style.display='none'; };
+  o.querySelector('#vlpo').onclick=()=>attempt(false);
+  o.querySelector('#vlpc').onclick=()=>{ o.remove(); cb(null,false); };
+  const xb=o.querySelector('#vlpx'); if(xb)xb.onclick=()=>attempt(true);
+  inp.onkeydown=e=>{ if(e.key==='Enter')attempt(false); if(e.key==='Escape'){ o.remove(); cb(null,false); } };
+}
+
 // ── Filter & sort modal ─────────────────────────────────────────────────────────
-function openFilterModal(){
+function openFilterModal(presetId){
+  S._editingPresetId = presetId || null;
   let baseFilter=S.dbFilter, baseSort=S.dbSort;
+  if(presetId){ const p=(window._presets||[]).find(x=>x.id===presetId); baseFilter=p?p.filter:null; baseSort=p?p.sort:null; }
   if(baseFilter){
     const d=JSON.parse(JSON.stringify(baseFilter));
     if(!Array.isArray(d.groups)) d.groups=[{rules:d.rules||[newFilterRule()],connectors:d.connectors||[]}];
@@ -3854,7 +3975,7 @@ function openFilterModal(){
   if(!S._sortDraft.pairMode)S._sortDraft.pairMode="break";
   renderFilterModal();
 }
-function closeFilterModal(){ S._filterDraft=null; S._sortDraft=null; const m=document.getElementById('vl-filter-modal'); if(m)m.remove(); }
+function closeFilterModal(){ S._filterDraft=null; S._sortDraft=null; S._editingPresetId=null; const m=document.getElementById('vl-filter-modal'); if(m)m.remove(); }
 function draftToFilter(){ const d=S._filterDraft; return (d.groups||[]).some(groupReady)?{groups:d.groups,groupConnectors:d.groupConnectors,showBothSides:!!d.showBothSides}:null; }
 function draftToSort(){ const s=S._sortDraft; return (s.rules||[]).some(r=>r.field)?{rules:s.rules.filter(r=>r.field),pairMode:s.pairMode||"break",inheritRack:!!s.inheritRack}:null; }
 // After a filter/sort change, keep the on-canvas record (S.recIdx) within the visible set.
@@ -3924,6 +4045,8 @@ function renderFilterModal(){
     return between+renderFilterGroup(g,gi,multi);
   }).join('');
   const sd=S._sortDraft, cols=recordColumns(currentRecords());
+  const editing=!!S._editingPresetId;
+  const editName=editing?(((window._presets||[]).find(x=>x.id===S._editingPresetId)||{}).name||""):"";
   const pairModes=[
     ['break','Sort sources & destinations (breaks pairs)'],
     ['source','Sort by source — destinations stay with sources'],
@@ -3952,7 +4075,7 @@ function renderFilterModal(){
   let m=document.getElementById('vl-filter-modal');
   if(!m){ m=document.createElement('div'); m.id='vl-filter-modal'; m.className='modal-overlay'; m.onclick=e=>{if(e.target===m)closeFilterModal();}; document.body.appendChild(m); }
   m.innerHTML=`<div class="modal" style="min-width:600px;max-width:720px">
-    <div class="modal-title">Filter &amp; sort</div>
+    <div class="modal-title">${editing?("Edit preset — "+esc(editName)):"Filter &amp; sort"}</div>
     <div style="max-height:calc(100vh - 180px);overflow-y:auto;padding-right:2px">
       <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Filter</div>
       <div style="display:flex;flex-direction:column;gap:2px">${groupsHtml}</div>
@@ -3970,14 +4093,18 @@ function renderFilterModal(){
     </div>
     <div class="modal-footer" style="justify-content:space-between">
       <div style="display:flex;gap:8px">
-        ${(S.dbFilter||S.dbSort)?`
+        ${editing?'':`<button class="btn" onclick="saveCurrentAsPreset()" title="Save this filter + sort as a reusable preset">Save as preset…</button>`}
+        ${(!editing&&(S.dbFilter||S.dbSort))?`
           <button class="btn" ${S.dbFilter?'':'disabled'} onclick="clearFilter()" style="color:var(--warn);border-color:rgba(245,201,108,0.4)${S.dbFilter?'':';opacity:0.4;cursor:default'}">Clear filter</button>
           <button class="btn" ${S.dbSort?'':'disabled'} onclick="clearSort()" style="color:var(--warn);border-color:rgba(245,201,108,0.4)${S.dbSort?'':';opacity:0.4;cursor:default'}">Clear sort</button>
         `:''}
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn" onclick="closeFilterModal()">Cancel</button>
-        <button class="btn" onclick="applyFilterDraft()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Apply</button>
+        ${editing
+          ? `<button class="btn" onclick="savePresetEdits()">Save preset</button>
+             <button class="btn" onclick="savePresetEditsAndApply()" title="Save these changes and apply them as the active filter/sort" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Save &amp; apply</button>`
+          : `<button class="btn" onclick="applyFilterDraft()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Apply</button>`}
       </div>
     </div>
   </div>`;
@@ -4138,6 +4265,7 @@ function buildDatabasePanel(){
       ${bound&&filterActive()?`<span title="${escAttr(filterSummary())}" style="display:flex;align-items:center;gap:4px;min-width:0;max-width:200px;overflow:hidden"><span style="color:var(--accent);font-weight:600;font-size:10px;flex-shrink:0">Filter:</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--text2)">${esc(filterSummary())}</span></span>`:""}
       ${bound&&sortActive()?`<span title="${escAttr(sortSummary())}" style="display:flex;align-items:center;gap:4px;min-width:0;max-width:180px;overflow:hidden"><span style="color:var(--accent);font-weight:600;font-size:10px;flex-shrink:0">Sort:</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--text2)">${esc(sortSummary())}</span></span>`:""}
       <div style="flex:1"></div>
+      ${bound&&window._presets&&window._presets.length?`<div style="display:flex;gap:5px;align-items:center;max-width:300px;overflow-x:auto">${window._presets.map(p=>`<button class="btn${presetMatchesActive(p)?' on':''}" onclick="event.stopPropagation();applyPreset('${p.id}')" oncontextmenu="presetMenu(event,'${p.id}')" title="${escAttr(presetSummary(p))}&#10;(right-click to edit / rename / delete)" style="padding:2px 8px;font-size:11px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0">${esc(p.name)}</button>`).join('')}</div><div style="width:1px;height:20px;background:var(--bd3);flex-shrink:0"></div>`:''}
       ${bound?`<input id="db-rec-search" type="text" value="${esc(S.dbSearch||'')}" oninput="onRecSearchInput(this.value)" placeholder="Search all fields…" title="Search across every field — space-separated terms must all match" style="width:170px;padding:3px 8px;font-size:11px;background:var(--surface);border:1px solid var(--bd3);border-radius:5px;color:var(--text)">`:""}
       ${bound?`<button class="btn${(filterActive()||sortActive())?' on':''}" onclick="event.stopPropagation();openFilterModal()" style="padding:3px 10px;font-size:11px" title="Filter & sort which records show and print">⧩ Filter &amp; sort</button>`:""}
       ${headerToggle}
