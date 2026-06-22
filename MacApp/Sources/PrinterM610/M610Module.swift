@@ -163,6 +163,13 @@ public final class M610Module: PrinterModule {
                 usleep(200_000)
             }
         }
+        // On cancel the settle loop above is skipped, so report the count the HARDWARE
+        // actually printed (the SmartCell counter) — otherwise the recent shows the last
+        // loop value, missing the label that printed as the user cancelled.
+        if job.isCancelled(), initialRem >= 0 {
+            let rem = labelsRemaining(on: conn)
+            if rem >= 0 { job.progress(.counter(done: min(count, max(0, printedSoFar(rem))), of: count)) }
+        }
         job.progress(.done)
     }
 }

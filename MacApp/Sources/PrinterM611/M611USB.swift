@@ -40,7 +40,7 @@ enum M611USB {
     /// One libusb context for the M611 USB transport (separate from the M610's).
     static let ctx: OpaquePointer? = { var c: OpaquePointer?; return libusb_init(&c) == 0 ? c : nil }()
 
-    enum USBError: Error { case noContext, notFound, openFailed, claimFailed, transferFailed(Int32) }
+    enum USBError: Error { case noContext, notFound, openFailed, claimFailed, transferFailed(Int32), stalledWrite }
 
     /// Connected M611 composite devices, as `PrinterDevice`s (id "usb:<serial>").
     static func enumerate() -> [PrinterDevice] {
@@ -107,8 +107,9 @@ enum M611USB {
             guard rc == 0 else { throw USBError.transferFailed(rc) }
             // Advance by bytes ACTUALLY transferred — libusb may report a short transfer on
             // success; skipping the unsent tail would punch a hole in the segment stream.
-            // Treat zero progress as a stall so we don't spin forever.
-            guard transferred > 0 else { throw USBError.transferFailed(rc) }
+            // Treat zero progress as a stall so we don't spin forever (rc is 0/"success"
+            // here, so throw a distinct error rather than the misleading transferFailed(0)).
+            guard transferred > 0 else { throw USBError.stalledWrite }
             off += Int(transferred)
         }
     }

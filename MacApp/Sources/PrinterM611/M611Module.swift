@@ -210,17 +210,32 @@ public final class M611Module: PrinterModule {
         var nextToSend = 0, completed = 0
         var lastDoneMs = 0                       // when `completed` last advanced (job start = 0)
         var labelMs = max(perLabelMs, 2500)      // running real per-label print time (calibrated from pushes)
+        var telemetryStalled = false             // set by the watchdog if completion pushes dry up
         // Drain the (large) initial snapshot once so the merged view is seeded before our jobs appear.
         if haveSub, let m = M611PICL.parse(readPush(2500)) { for (k, v) in m { merged[k] = v } }
 
         while true {
+            // Watchdog: if completion telemetry stops crediting our labels while labels are
+            // still in flight (firmware names slots differently than our FIFO assumption,
+            // ExternalId mismatch, slots aged out as .pending, …), `completed` never advances
+            // and the inFlight gate below would stall after ~2 labels — silently DROPPING
+            // labels 3..N. Detect that and fall back to time-paced SENDING so every label is
+            // sent; telemetry then only REFINES progress, it never gates sending. The happy
+            // path (completions arriving on time) never trips this, so it's unchanged.
+            if haveSub && !telemetryStalled && nextToSend > completed && nextToSend > 0
+               && elapsedMs() - lastDoneMs > max(labelMs * 3, 6000) {
+                telemetryStalled = true
+                NSLog("[M611] completion telemetry stalled (sent \(nextToSend), completed \(completed)) — switching to time-paced sending so no labels are dropped")
+            }
+            let useSub = haveSub && !telemetryStalled
+
             // SEND the next label when nothing is in flight (start / avoid idle), or once one is
             // printing, when it's ~HALFWAY done — so the next is queued before the current finishes
             // (printer never idles) but at most ~2 labels are in flight, so Cancel stops within a
             // label or two. "Halfway" is measured against the REAL per-label time (calibrated from
-            // the status pushes); without a subscription, fall back to a time pace ~2 ahead.
+            // the status pushes); without a working subscription, fall back to a time pace ~2 ahead.
             let canSend: Bool
-            if haveSub {
+            if useSub {
                 let inFlight = nextToSend - completed
                 canSend = inFlight <= 0 || (inFlight == 1 && elapsedMs() >= lastDoneMs + labelMs / 2)
             } else {
@@ -237,7 +252,7 @@ public final class M611Module: PrinterModule {
                 nextToSend += 1
             }
             // Read a pushed status frame (small), merge it, recount; calibrate labelMs on advance.
-            if haveSub {
+            if useSub {
                 if let m = M611PICL.parse(readPush(300)) {
                     for (k, v) in m { merged[k] = v }
                     let nc = max(completed, M611PICL.completedCount(in: merged, ids: ids,
@@ -252,15 +267,16 @@ public final class M611Module: PrinterModule {
             } else {
                 usleep(120_000)
             }
-            let shown = haveSub ? completed : min(nextToSend, printedEst())
+            let shown = useSub ? completed : min(nextToSend, printedEst())
             job.progress(.counter(done: min(count, max(0, shown)), of: count))
             let committed = nextToSend
             if (job.isCancelled() || nextToSend >= count)
-                && (haveSub ? (completed >= committed) : (printedEst() >= committed)) { break }
+                && (useSub ? (completed >= committed) : (printedEst() >= committed)) { break }
             if elapsedMs() >= capMs { break }
         }
+        let finalUseSub = haveSub && !telemetryStalled
         if job.isCancelled() {
-            let shown = haveSub ? completed : min(nextToSend, printedEst())
+            let shown = finalUseSub ? completed : min(nextToSend, printedEst())
             job.progress(.counter(done: min(count, max(0, shown)), of: count))
         } else { job.progress(.done) }
     }

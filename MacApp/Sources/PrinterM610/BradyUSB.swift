@@ -29,7 +29,8 @@ public enum BradyUSB {
     static let vendorID: UInt16 = 0x0E2E
     static let knownModels: [(pid: UInt16, model: String)] = [
         (0x010B, "M610"),
-        (0x010C, "M611"),   // UNVERIFIED PID — see header TODO
+        (0x0013, "M611"),   // hardware-confirmed M611 composite PID (matches M611USB.productID)
+        (0x010C, "M611"),   // legacy/unverified guess — kept as a fallback so neither id is missed
     ]
 
     /// Map a Brady-VID product id to a model name. Known PIDs map exactly; any

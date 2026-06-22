@@ -130,6 +130,9 @@ public enum NetworkDiscovery {
         if errno != EINPROGRESS { return false }
         var pfd = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
         guard poll(&pfd, 1, Int32(timeoutMs)) > 0 else { return false }
+        // A refused/errored connect also wakes poll (POLLERR/POLLHUP), so require the
+        // socket to be writable AND have a clear SO_ERROR before calling it reachable.
+        guard (pfd.revents & Int16(POLLOUT)) != 0 else { return false }
         var soErr: Int32 = 0
         var len = socklen_t(MemoryLayout<Int32>.size)
         getsockopt(fd, SOL_SOCKET, SO_ERROR, &soErr, &len)
