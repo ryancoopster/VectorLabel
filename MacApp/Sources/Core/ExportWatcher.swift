@@ -105,58 +105,6 @@ public final class ExportWatcher {
         }
     }
 
-    /// Scan the Exports/ tree on launch for files created AFTER the last launch.
-    /// Uses the datecode embedded in the filename (not filesystem mtime) for comparison.
-    /// Files that already existed when the app was last running are ignored.
-    private func scanExistingFiles() {
-        // Record this launch time so next launch knows what's new
-        let lastLaunchKey = "lastLaunchDatecode"
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd_HHmmss"
-        let nowDatecode = formatter.string(from: Date())
-        let lastDatecode = UserDefaults.standard.string(forKey: lastLaunchKey) ?? ""
-        UserDefaults.standard.set(nowDatecode, forKey: lastLaunchKey)
-
-        // If there's no previous launch recorded, this is a fresh install —
-        // don't auto-open anything on first launch.
-        guard !lastDatecode.isEmpty else { return }
-
-        guard let enumerator = FileManager.default.enumerator(
-            at: exportsRootURL,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        ) else { return }
-
-        var csvURLs: [URL] = []
-        for case let fileURL as URL in enumerator {
-            guard fileURL.pathExtension.lowercased() == "csv" else { continue }
-            guard ExportFilenameParser.isVectorLabelExport(fileURL.lastPathComponent) else { continue }
-            let parent = fileURL.deletingLastPathComponent()
-            guard parent.path != exportsRootURL.path else { continue }
-            // Only pick up files newer than the last launch
-            if let dc = ExportFilenameParser.datecode(from: fileURL.lastPathComponent), dc > lastDatecode {
-                csvURLs.append(fileURL)
-            }
-        }
-
-        guard !csvURLs.isEmpty else { return }
-
-        // Sort oldest → newest, fire the most recent per project
-        let sorted = csvURLs.sorted {
-            let a = ExportFilenameParser.datecode(from: $0.lastPathComponent) ?? ""
-            let b = ExportFilenameParser.datecode(from: $1.lastPathComponent) ?? ""
-            return a < b
-        }
-        var seenProjects = Set<String>()
-        for fileURL in sorted.reversed() {
-            let projectName = fileURL.deletingLastPathComponent().lastPathComponent
-            guard !seenProjects.contains(projectName) else { continue }
-            seenProjects.insert(projectName)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                self?.processFile(at: fileURL)
-            }
-        }
-    }
 }
 
 // ── Export filename parser ────────────────────────────────────────────────────

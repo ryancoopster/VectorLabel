@@ -234,7 +234,9 @@ public final class DesignerWindowController: NSObject {
         // plus a message handler so the designer can save/list/browse templates
         // through Swift (WKWebView has no File System Access API).
         let config = WKWebViewConfiguration()
-        config.preferences.setValue(true, forKey: "developerExtrasEnabled")
+        // Web Inspector only in dev (VL_DEV_HTML set) — not in shipped builds.
+        config.preferences.setValue(ProcessInfo.processInfo.environment["VL_DEV_HTML"] != nil,
+                                    forKey: "developerExtrasEnabled")
         let contentController = WKUserContentController()
         contentController.add(self, name: "vectorlabel")
         // Set the theme before first paint (avoids a flash of the old theme when

@@ -173,6 +173,14 @@ public final class PrintWindowController: NSObject {
         window?.close()
         window = nil
         webView = nil
+        // Return focus to the app the user exported from (Vectorworks etc.) and clear the
+        // reference. AutoPrint is a headless accessory app, so without this a ✕ Cancel /
+        // window-close would dump the user to the Finder instead of back to their app.
+        // (The print-started path nils previousApp before calling close(), so it stays a
+        // single activate; cancel/close now get the same restore.)
+        let prior = previousApp
+        previousApp = nil
+        prior?.activate()
     }
 
     // MARK: – Window setup
@@ -201,7 +209,9 @@ public final class PrintWindowController: NSObject {
             source: "window.__VL_BUILD__='\(BuildInfo.build)'; window.__VL_CATALOG__=\(SupplyCatalogStore.webCatalogJSON(forModel: ""));",
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController = contentController
-        config.preferences.setValue(true, forKey: "developerExtrasEnabled")
+        // Web Inspector only in dev (VL_DEV_HTML set) — not in shipped builds.
+        config.preferences.setValue(ProcessInfo.processInfo.environment["VL_DEV_HTML"] != nil,
+                                    forKey: "developerExtrasEnabled")
 
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.navigationDelegate = self
@@ -461,7 +471,13 @@ public final class PrintWindowController: NSObject {
                 return
             }
             let csv = WireExportParser.csvText(records: snapshot, headers: headers)
-            try? csv.write(to: url, atomically: true, encoding: .utf8)
+            do {
+                try csv.write(to: url, atomically: true, encoding: .utf8)
+            } catch {
+                // Surface the failure: the in-memory records (and the printed labels) now
+                // differ from the on-disk CSV, so a later reprint would print stale values.
+                NSLog("[writeRecordsBackToCSV] could not write inline edits back to \(url.lastPathComponent): \(error) — on-disk CSV now differs from what printed")
+            }
         }
     }
 
@@ -732,7 +748,19 @@ extension PrintWindowController: WKScriptMessageHandler {
             let estLabelMs = RenderedLabel.estimatedPrintMs(maxDimensionPx: labelPx)
 
             Task { @MainActor in
-                guard !renderedLabels.isEmpty else { return }   // nothing printable — keep window open
+                guard !renderedLabels.isEmpty else {
+                    // Nothing rendered (e.g. every selected record failed to render). Dismiss
+                    // the "Printing…" modal so the window isn't stuck on a dead spinner, and
+                    // tell the user, instead of returning silently.
+                    self.evalJS("if(typeof cancelPrint==='function')cancelPrint()")
+                    let alert = NSAlert()
+                    alert.alertStyle = .warning
+                    alert.messageText = "Nothing to print"
+                    alert.informativeText = "None of the selected records produced a printable label. Check the template and the selected rows, then try again."
+                    alert.addButton(withTitle: "OK")
+                    if let w = self.window { alert.beginSheetModal(for: w) } else { alert.runModal() }
+                    return
+                }
                 // Hand the rendered batch to the print backend as a PrintJobFile. The
                 // front-end is printer-agnostic — it submits rasters; the Engine encodes.
                 let job = PrintJobFile(
@@ -756,6 +784,7 @@ extension PrintWindowController: WKScriptMessageHandler {
                     // queued, so do NOT close the window or signal "print started".
                     // Tell the user and keep the window open to retry. (F26)
                     NSLog("[PrintWindowController] submit failed: \(error)")
+                    self.evalJS("if(typeof cancelPrint==='function')cancelPrint()")   // dismiss the stuck Printing… modal
                     let alert = NSAlert()
                     alert.alertStyle = .warning
                     alert.messageText = "Couldn’t start the print"
