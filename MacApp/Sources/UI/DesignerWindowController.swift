@@ -869,8 +869,8 @@ public final class DesignerWindowController: NSObject {
         } else if let lenN = payload["labelLengthInches"] as? NSNumber, lenN.doubleValue > 0 {
             tplDict["labelLengthInches"] = lenN.doubleValue
         }
-        // Continuous orientation (continuous only): canvasRot 90 = portrait override;
-        // absent/0 = the renderer's default landscape. #14.
+        // Orientation: canvasRot 90 = portrait override (continuous) or a 90° design
+        // rotation (die-cut); absent/0 = the renderer's default. #14.
         if let rot = payload["canvasRot"] as? Int { tplDict["canvasRot"] = rot }
         else if let rotN = payload["canvasRot"] as? NSNumber { tplDict["canvasRot"] = rotN.intValue }
         // Supply identity + geometry snapshot, so a Reprint reopens the exact design
@@ -1048,8 +1048,8 @@ public final class DesignerWindowController: NSObject {
         } else if let lenN = payload["labelLengthInches"] as? NSNumber, lenN.doubleValue > 0 {
             tplDict["labelLengthInches"] = lenN.doubleValue
         }
-        // Continuous orientation (continuous only): canvasRot 90 = portrait override;
-        // absent/0 = the renderer's default landscape. #14.
+        // Orientation: canvasRot 90 = portrait override (continuous) or a 90° design
+        // rotation (die-cut); absent/0 = the renderer's default. #14.
         if let rot = payload["canvasRot"] as? Int { tplDict["canvasRot"] = rot }
         else if let rotN = payload["canvasRot"] as? NSNumber { tplDict["canvasRot"] = rotN.intValue }
         // Supply identity + geometry snapshot (keep the canvas size if the supply is

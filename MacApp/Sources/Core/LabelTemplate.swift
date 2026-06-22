@@ -93,9 +93,17 @@ public enum LabelRenderer {
             let phInches = template.effectivePrintableHeightInches ?? size.printableHeightInches
             ph = vlInchesToPixels(phInches, dpi: dpi)
             remapCenterPx = 0
-            // Continuous stock renders LANDSCAPE by default (design width runs along the
-            // tape); canvasRot == 90 is the portrait opt-out. Die-cut never rotates. #14.
-            landscape = size.isContinuous && (template.canvasRot ?? 0) != 90
+            // Orientation rotation (#14):
+            //  • Continuous stock renders LANDSCAPE by default (design width runs along
+            //    the tape); canvasRot == 90 is the portrait opt-out.
+            //  • Die-cut renders unrotated by default; canvasRot == 90 rotates the design
+            //    onto the physical label (the user designed on a portrait canvas).
+            // Either way `landscape` runs the design's width along the bitmap's height via
+            // the rotation below, mapping the editor's (swapped) canvas onto the physical
+            // pw×ph bitmap.
+            landscape = size.isContinuous
+                ? (template.canvasRot ?? 0) != 90
+                : (template.canvasRot ?? 0) == 90
         }
 
         // Each axis is clamped, but their PRODUCT isn't: a large continuous length × a
