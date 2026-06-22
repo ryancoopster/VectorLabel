@@ -146,20 +146,25 @@ public struct PrintQueue {
         return (job, dest)
     }
 
+    /// Atomically move `src` onto `dst` in a single step via `rename(2)`, which
+    /// overwrites the destination — eliminating the remove-then-move window where `dst`
+    /// briefly doesn't exist (a crash there could strand the job, and on a collision the
+    /// pre-remove destroys an existing target). Same-volume only, always true here (both
+    /// live under the IPC root). Returns true on success.
+    @discardableResult
+    private func atomicMove(_ src: URL, onto dst: URL) -> Bool {
+        rename(src.path, dst.path) == 0
+    }
+
     /// Move a claimed (processing) job to done/ or failed/.
     public func complete(_ processingURL: URL, success: Bool) {
         let target = (success ? doneDir : failedDir).appendingPathComponent(processingURL.lastPathComponent)
-        try? FileManager.default.removeItem(at: target)
-        do {
-            try FileManager.default.moveItem(at: processingURL, to: target)
-        } catch {
-            // The move failed (transient FS error, or a collision the remove didn't
-            // clear). Don't leave a finalized job sitting in processing/ — the next
-            // launch's recoverProcessingJobs() would re-drain and REPRINT it. Log and
-            // remove so the job reaches a terminal state.
-            NSLog("[PrintQueue] complete(): could not move \(processingURL.lastPathComponent) to \(success ? "done/" : "failed/"): \(error). Removing to avoid a duplicate reprint.")
-            try? FileManager.default.removeItem(at: processingURL)
-        }
+        if atomicMove(processingURL, onto: target) { return }
+        // Atomic replace failed (rare transient FS error). Don't leave a finalized job
+        // sitting in processing/ — the next launch's recoverProcessingJobs() would
+        // re-drain and REPRINT it. Log + remove so it reaches a terminal state.
+        NSLog("[PrintQueue] complete(): atomic move of \(processingURL.lastPathComponent) → \(success ? "done/" : "failed/") failed (errno \(errno)). Removing to avoid a duplicate reprint.")
+        try? FileManager.default.removeItem(at: processingURL)
     }
 
     /// Un-claim a processing job by moving it back to queue/, so it will be
@@ -169,13 +174,22 @@ public struct PrintQueue {
     @discardableResult
     public func requeue(_ processingURL: URL) -> URL? {
         let dest = queueDir.appendingPathComponent(processingURL.lastPathComponent)
-        try? FileManager.default.removeItem(at: dest)
-        do {
-            try FileManager.default.moveItem(at: processingURL, to: dest)
-            return dest
-        } catch {
-            return nil
-        }
+        return atomicMove(processingURL, onto: dest) ? dest : nil
+    }
+
+    /// Cancel a still-QUEUED (unclaimed) job by IPC id: atomically move `queue/<id>.json`
+    /// out to done/ so the watcher/drain can never claim + print it, and return the job
+    /// (so the caller can record the cancellation). Returns nil if there's no such
+    /// queued file — i.e. it was already claimed (handle the in-flight path instead) or
+    /// the id is unknown/unsafe. The atomic move is the race gate: if the watcher claims
+    /// it first, the move fails and we report "not queued".
+    @discardableResult
+    public func cancelQueuedJob(id: String) -> PrintJobFile? {
+        guard PrintJobFile.isSafeID(id) else { return nil }
+        let src = queueDir.appendingPathComponent("\(id).json")
+        let dest = doneDir.appendingPathComponent("\(id).json")
+        guard atomicMove(src, onto: dest) else { return nil }
+        return decodeJSON(dest)
     }
 
     /// Sweep processing/ on startup: any leftover `<id>.json` is the residue of a
@@ -187,8 +201,7 @@ public struct PrintQueue {
             at: processingDir, includingPropertiesForKeys: nil)) ?? []
         for url in items where url.pathExtension == "json" {
             let dest = queueDir.appendingPathComponent(url.lastPathComponent)
-            try? FileManager.default.removeItem(at: dest)
-            try? FileManager.default.moveItem(at: url, to: dest)
+            _ = atomicMove(url, onto: dest)
             // A job interrupted AFTER some labels physically printed is re-drained in
             // full (no per-label progress is persisted), so recovery can reprint
             // already-printed labels. Logged so the duplicate isn't silent; resuming

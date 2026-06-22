@@ -445,7 +445,7 @@ function colDataCell(c,r,i){
   }
   const v=r[c]; const has=v!==undefined&&v!=='';
   const val=has?String(v):'—';
-  const editBtn=(i!=null)?`<button class="cell-edit" tabindex="-1" title="Edit cell" onclick="event.stopPropagation();startCellEdit(${i},'${c}')">✎</button>`:'';
+  const editBtn=(i!=null)?`<button class="cell-edit" tabindex="-1" title="Edit cell" onclick="event.stopPropagation();startCellEdit(${i},'${jsAttr(c)}')">✎</button>`:'';
   if(c==='_Side'){const side=v==='Source'?'src':'dst';return`<div class="rec-cell" style="white-space:normal;display:flex;align-items:center;position:relative"><span class="tag ${side}">${esc(val)}</span>${editBtn}</div>`;}
   return`<div class="rec-cell" style="white-space:normal;overflow-wrap:anywhere;word-break:break-word;position:relative;color:${has?'var(--text)':'var(--text3)'};${(c==='Number'&&has)?'font-weight:600;':''}">${esc(val)}${editBtn}</div>`;
 }
@@ -1321,15 +1321,15 @@ function buildPreviewPanel(){
       <div id="preview-label-inner" style="transform-origin:top center">${renderLabel(t,rec,1)}</div>
     </div>
     <div style="text-align:center">
-      <div style="color:var(--text);font-size:12px;font-weight:600">${rec.Number||"—"} ${rec.Cable||""}</div>
-      <div style="color:var(--text2);font-size:11px;margin-top:2px">${rec._Side} label</div>
+      <div style="color:var(--text);font-size:12px;font-weight:600">${esc(rec.Number||"—")} ${esc(rec.Cable||"")}</div>
+      <div style="color:var(--text2);font-size:11px;margin-top:2px">${esc(rec._Side)} label</div>
     </div>
     <div class="print-info" style="width:100%;max-width:260px">
       <label class="lbl">Required supply</label>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
         <div style="color:var(--text);font-size:12px;font-weight:600;font-family:monospace">${requiredSupplyDisplay(t.specN)}</div>
         ${cassetteMatched()?`<span title="Loaded cassette matches the required supply" style="color:var(--green);font-size:22px;line-height:1;font-weight:800">✓</span>`
-          :cassetteMismatch()?`<span title="Loaded ${loadedCassette().partNumber} doesn't match — the label may print misaligned or cropped" style="color:var(--red);font-size:13px;line-height:1;white-space:nowrap">⚠ mismatch</span>`:""}
+          :cassetteMismatch()?`<span title="Loaded ${escAttr(loadedCassette().partNumber)} doesn't match — the label may print misaligned or cropped" style="color:var(--red);font-size:13px;line-height:1;white-space:nowrap">⚠ mismatch</span>`:""}
       </div>
       <div style="display:flex;justify-content:space-between;gap:8px;margin-top:7px;font-size:11px">
         <span style="color:var(--text2)">Label size</span>
@@ -1678,10 +1678,10 @@ function buildPrintBar(){
             <span style="color:${P.printRange===v?"var(--text)":"var(--text2)"};font-size:11px">${v==="selected"?"Selected ("+nSel+")":v==="all"?"All ("+total+")":"Range"}</span>
           </label>`).join("")}
         ${P.printRange==="range"?`
-          <input type="number" class="inp" min="1" max="${total}" value="${P.rangeFrom}" style="width:54px;padding:3px 6px;font-size:11px" onchange="P.rangeFrom=Math.max(1,Math.min(parseInt(this.value)||1,${total}));R()">
+          <input type="number" class="inp" min="1" max="${total}" value="${Math.min(P.rangeFrom,total)}" style="width:54px;padding:3px 6px;font-size:11px" onchange="P.rangeFrom=Math.max(1,Math.min(parseInt(this.value)||1,Math.min(P.rangeTo,${total})));R()">
           <span style="color:var(--text3)">–</span>
-          <input type="number" class="inp" min="1" max="${total}" value="${P.rangeTo}" style="width:54px;padding:3px 6px;font-size:11px" onchange="P.rangeTo=Math.max(1,Math.min(parseInt(this.value)||${total},${total}));R()">
-          <span style="color:var(--text3);font-size:11px">(${Math.max(0,P.rangeTo-P.rangeFrom+1)})</span>`:""}
+          <input type="number" class="inp" min="1" max="${total}" value="${Math.min(P.rangeTo,total)}" style="width:54px;padding:3px 6px;font-size:11px" onchange="P.rangeTo=Math.max(P.rangeFrom,Math.min(parseInt(this.value)||${total},${total}));R()">
+          <span style="color:var(--text3);font-size:11px">(${Math.max(0,Math.min(P.rangeTo,total)-P.rangeFrom+1)})</span>`:""}
       </div>
     </div>
 
@@ -1728,7 +1728,7 @@ function buildPrintBar(){
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end">
         ${(()=>{const c=loadedCassette();
           if(!c||!c.partNumber)return `<button class="btn" onclick="detectCassette()" style="padding:3px 8px;font-size:10px">Detect supply</button>`;
-          return `<div onclick="detectCassette()" title="${c.partNumber} — click to re-detect" style="cursor:pointer;font-size:11px;color:var(--text2);white-space:nowrap">${c.partNumber}</div>`;
+          return `<div onclick="detectCassette()" title="${escAttr(c.partNumber)} — click to re-detect" style="cursor:pointer;font-size:11px;color:var(--text2);white-space:nowrap">${esc(c.partNumber)}</div>`;
         })()}
         ${telemetryHTML()}
         ${preflightHTML()}
@@ -2533,12 +2533,17 @@ function initPrintWindow(opts){
   // print window was already open from a prior export.
   if(opts.reprint){
     const rp=opts.reprint;
+    // The restored indices/range are absolute positions from the PRIOR job; the CSV may
+    // have been re-exported since. Clamp/drop anything out of range so we never select
+    // phantom rows (row identity can't be recovered if rows were reordered).
+    const nRec=(P.records||[]).length;
     if(rp.printRange) P.printRange=rp.printRange;
-    if(rp.rangeFrom)  P.rangeFrom=rp.rangeFrom;
-    if(rp.rangeTo)    P.rangeTo=rp.rangeTo;
+    if(rp.rangeFrom)  P.rangeFrom=Math.max(1,Math.min(rp.rangeFrom,Math.max(1,nRec)));
+    if(rp.rangeTo)    P.rangeTo=Math.max(P.rangeFrom,Math.min(rp.rangeTo,Math.max(1,nRec)));
     if(rp.selectedIndices&&rp.selectedIndices.length>0){
-      P.selected=new Set(rp.selectedIndices);
-      if(P.printRange==="all") P.printRange="selected";
+      const sel=rp.selectedIndices.filter(i=>Number.isInteger(i)&&i>=0&&i<nRec);
+      P.selected=new Set(sel);
+      if(P.printRange==="all"&&sel.length>0) P.printRange="selected";
     }
     // Try to match template by name
     if(rp.templateName){

@@ -875,7 +875,7 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
       const scaleX=(o.stretch||100)/100;
       const txtColor=e?"var(--red)":"#000";
       const textAlign=o.al||"left";
-      const dispVal=e?`⚠ ${e.substring(0,40)}`:v.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+      const dispVal=e?`⚠ ${esc(e.substring(0,40))}`:esc(v);
       const rb=single&&!readOnly?resizeHandles(o.id):"";
       const dropAttr=readOnly?"":`ondragenter="onColTextEnter(event,this)" ondragover="event.preventDefault();if(event.dataTransfer)event.dataTransfer.dropEffect='copy'" ondragleave="onColTextLeave(this)" ondrop="onColTextLeave(this);onColDropToText(event,'${o.id}')"`;
       const isStatic=txMode(o)==="static";
@@ -1138,7 +1138,7 @@ function buildProps(){
       `<button class="fmt-btn${tmode===m?" on":""}" style="flex:1" onclick="setTextMode('${o.id}','${m}')">${lbl}</button>`).join("");
     const srcEditor =
       tmode==="static"
-        ? `<textarea class="inp" rows="2" style="resize:vertical;font-family:inherit" placeholder="Type label text…" oninput="setStaticText('${o.id}',this.value)" onblur="R()">${(o.text||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</textarea>
+        ? `<textarea class="inp" rows="2" style="resize:vertical;font-family:inherit" placeholder="Type label text…" onfocus="snapshot()" oninput="setStaticText('${o.id}',this.value)" onblur="R()">${esc(o.text||"")}</textarea>
            <div style="color:var(--text3);font-size:10px;margin-top:5px;line-height:1.4">…or double-click the text box on the canvas to type directly.</div>`
       : tmode==="field"
         ? `<select class="inp" onchange="uobj('${o.id}',{field:this.value});R()">
@@ -1146,7 +1146,7 @@ function buildProps(){
              ${fieldDefs().map(f=>`<option value="${escAttr(f.c)}"${o.field===f.c?" selected":""}>${esc(f.f)}</option>`).join("")}
            </select>
            <div style="color:var(--text3);font-size:10px;margin-top:5px;line-height:1.4">…or drag a column header from the ${isCustomMode()?'Database pane':'Records panel'} onto the text box, or onto an empty spot to create a new field.</div>`
-      : `<input id="fxbar" class="inp" value="${(o.f||"").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}" style="font-family:monospace;font-size:12px" oninput="S._ef=this.value" onblur="commitF()" onkeydown="if(event.key==='Enter')commitF()" placeholder='=IF(Number&lt;&gt;&quot;&quot;,Number,&quot;&quot;)'>
+      : `<input id="fxbar" class="inp" value="${escAttr(o.f||"")}" style="font-family:monospace;font-size:12px" oninput="S._ef=this.value" onblur="commitF()" onkeydown="if(event.key==='Enter')commitF()" placeholder='=IF(Number&lt;&gt;&quot;&quot;,Number,&quot;&quot;)'>
          <div style="display:flex;gap:5px;margin-top:5px">
            <button class="btn${S.showFields?" on":""}" onclick="S.showFields=!S.showFields;R()" style="font-size:11px">Fields ▾</button>
            <button class="btn" onclick="openFormulaEditor('${o.id}')" style="font-size:11px" title="Open the formula editor with a live preview">Editor ⤢</button>
@@ -1400,7 +1400,7 @@ function R(){
       <button onclick="S.zoom=1;R()" class="btn" style="padding:4px 7px;font-size:10px">Reset</button>
       <button onclick="centerCanvas()" class="btn" title="Center the label in the view" style="padding:4px 7px;font-size:10px">⌖ Center</button>
       <div style="display:flex;align-items:center;gap:6px;margin-left:4px">
-        <span style="color:var(--text2);font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${S.tplName}">${S.tplName}</span>
+        <span style="color:var(--text2);font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escAttr(S.tplName)}">${esc(S.tplName)}</span>
       </div>
       <div style="width:1px;height:20px;background:var(--bd2)"></div>
       ${isCustomMode()?"":`<button class="btn" onclick="loadDesignerCSV()" style="padding:4px 9px;font-size:11px" title="${S._csvName||'No CSV loaded'}">
@@ -1901,6 +1901,7 @@ function onCanvasDragLeave(e){
 function setStaticText(id,val){
   const o=gobj(id); if(!o)return;
   o.text=val;
+  markDirty();   // so the close prompt fires + the edit isn't silently lost (undo point set on focus)
   const t=document.querySelector('[data-txt="'+id+'"]');
   if(t && t!==document.activeElement) t.textContent=val;
 }
@@ -2837,9 +2838,9 @@ function buildPrintRangeControl(){
         <span style="color:${S.printRange===v?"var(--text)":"var(--text2)"};font-size:11px">${v==="selected"?"Selected ("+nSel+")":v==="all"?"All ("+total+")":"Range"}</span>
       </label>`).join("")}
     ${S.printRange==="range"?`
-      <input type="number" class="inp" min="1" max="${total}" value="${S.rangeFrom}" style="width:54px;padding:3px 6px;font-size:11px" onchange="S.rangeFrom=Math.max(1,Math.min(parseInt(this.value)||1,${total}));R()">
+      <input type="number" class="inp" min="1" max="${total}" value="${S.rangeFrom}" style="width:54px;padding:3px 6px;font-size:11px" onchange="S.rangeFrom=Math.max(1,Math.min(parseInt(this.value)||1,Math.min(S.rangeTo,${total})));R()">
       <span style="color:var(--text3)">–</span>
-      <input type="number" class="inp" min="1" max="${total}" value="${S.rangeTo}" style="width:54px;padding:3px 6px;font-size:11px" onchange="S.rangeTo=Math.max(1,Math.min(parseInt(this.value)||${total},${total}));R()">
+      <input type="number" class="inp" min="1" max="${total}" value="${S.rangeTo}" style="width:54px;padding:3px 6px;font-size:11px" onchange="S.rangeTo=Math.max(S.rangeFrom,Math.min(parseInt(this.value)||${total},${total}));R()">
       <span style="color:var(--text3);font-size:11px">(${Math.max(0,S.rangeTo-S.rangeFrom+1)})</span>`:""}
   </div>`;
 }
@@ -3087,12 +3088,22 @@ if(typeof window!=='undefined'&&!window._vlErrHook){
 // break out of an attribute/onclick), whitelist the font, allow only an embedded
 // data:image src (no javascript:/remote), and only a known symbol key.
 function sanitizeObjs(objs){
+  const ALIGN=['left','center','right','justify'], VALIGN=['top','middle','bottom'];
   return (objs||[]).map(function(o){
     const c=Object.assign({},o);
     c.id=mid();
     if(typeof c.font==='string' && FONTS.indexOf(c.font)<0) c.font='Helvetica Neue';
     if(c.src!=null && !/^data:image\//i.test(String(c.src))) c.src='';
     if(c.sym!=null && !(String(c.sym) in SYMBOLS)) c.sym='';
+    // Whitelist the style enums that flow into inline style / handlers (attribute
+    // breakout guard), and coerce every numeric field so a string can't carry a quote
+    // into a style attribute. Id regeneration alone doesn't cover these vectors.
+    if(c.al!=null && ALIGN.indexOf(c.al)<0) c.al='left';
+    if(c.valign!=null && VALIGN.indexOf(c.valign)<0) c.valign='middle';
+    if(c.anchor!=null && !/^[A-Za-z-]+$/.test(String(c.anchor))) delete c.anchor;
+    ['x','y','w','h','fs','lw','rot','tracking','stretch','lh'].forEach(function(k){
+      if(c[k]!=null){ const n=Number(c[k]); if(isFinite(n)) c[k]=n; else delete c[k]; }
+    });
     return c;
   });
 }
@@ -3347,7 +3358,7 @@ function loadSelectedTemplate(){
   S.tplName=t.name||defaultDocName();
   S._loadedId=t.id||null;   // preserve id so a later Save overwrites in place
   applyLoadedSpec(t.specN,t.labelLengthInches,t.canvasRot,t.supplyID,t.supplyGeometry);
-  S.objs=JSON.parse(JSON.stringify(t.objs));
+  S.objs=sanitizeObjs(t.objs);   // untrusted (Finder-browsed) — sanitize like every other load path
   S.selId=null;S._ef=undefined;
   S.modal=null;
   R();

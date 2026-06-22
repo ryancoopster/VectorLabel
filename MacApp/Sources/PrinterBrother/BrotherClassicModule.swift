@@ -184,6 +184,20 @@ public class BrotherClassicModule: PrinterModule {
             if !job.isCancelled() { job.progress(.done) }
             return
         }
+        // A batch stream stamps EVERY page with one tape width; mixing widths would
+        // mis-position/clip later pages. If the job's labels don't all snap to the same
+        // width, fall back to one standalone full-cut job per label at its OWN width.
+        if Set(rasters.map { $0.tapeMm }).count > 1 {
+            for (i, tr) in rasters.enumerated() {
+                if job.isCancelled() { break }
+                try send(BrotherPT.buildPrintJob(rasterData: tr.raster, tapeMm: tr.tapeMm,
+                                                 autocut: true, halfCut: false, isLastPage: true), on: conn)
+                job.progress(.counter(done: i + 1, of: count))
+            }
+            drain(conn, count: count, perLabelMs: perLabelMs)
+            if !job.isCancelled() { job.progress(.done) }
+            return
+        }
         // Cut SUPPRESSION on the classic dialect (the nocut bit, for `.never`) is
         // hardware-unverified — the 0x1A terminator may still feed+cut. Verify on a unit.
         let stream = BrotherPT.buildBatchStream(labelRasters: rasters.map { $0.raster }, tapeMm: tapeMm,

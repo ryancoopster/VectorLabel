@@ -1,10 +1,16 @@
 import Foundation
 import CoreServices
 
-/// A recursive FSEvents folder watcher. Fires `onFile` (on the main queue) for
-/// each created / modified / renamed file under `root` whose path ends with
+/// A recursive FSEvents folder watcher. Fires `onFile` (on a private background queue)
+/// for each created / modified / renamed file under `root` whose path ends with
 /// `suffix`. Generalized from ExportWatcher so the export watcher and the
 /// Engine's print-queue watcher share one implementation.
+///
+/// Callbacks run OFF the main thread (so claim + decode of a big job file doesn't
+/// block the UI) — consumers that touch UI/@MainActor state must hop themselves. The
+/// stream sets `IgnoreSelf`, so a watcher's OWNING process doesn't get re-notified of
+/// its own writes (this is what keeps the Engine's requeue from hot-looping the queue
+/// watcher); cross-process writes (a front-end submitting a job) still fire normally.
 public final class FolderWatcher {
 
     public let root: URL
@@ -12,6 +18,7 @@ public final class FolderWatcher {
     private let latency: TimeInterval
     private let onFile: (URL) -> Void
     private var stream: FSEventStreamRef?
+    private let deliveryQueue = DispatchQueue(label: "com.sai.vectorlabel.folderwatcher", qos: .utility)
 
     public init(root: URL, suffix: String, latency: TimeInterval = 0.2,
                 onFile: @escaping (URL) -> Void) {
@@ -31,11 +38,14 @@ public final class FolderWatcher {
             info: Unmanaged.passUnretained(self).toOpaque(),
             retain: nil, release: nil, copyDescription: nil
         )
-        // FileEvents: per-file changes · UseCFTypes: CFString paths · NoDefer: prompt delivery.
+        // FileEvents: per-file changes · UseCFTypes: CFString paths · NoDefer: prompt
+        // delivery · IgnoreSelf: don't re-notify us of our OWN writes (stops the Engine's
+        // requeue move from re-firing the queue watcher → claim → requeue hot-loop).
         let flags = UInt32(
             kFSEventStreamCreateFlagFileEvents |
             kFSEventStreamCreateFlagUseCFTypes |
-            kFSEventStreamCreateFlagNoDefer
+            kFSEventStreamCreateFlagNoDefer |
+            kFSEventStreamCreateFlagIgnoreSelf
         )
         let s = FSEventStreamCreate(
             kCFAllocatorDefault,
@@ -62,7 +72,7 @@ public final class FolderWatcher {
             flags
         )
         guard let s = s else { return }
-        FSEventStreamSetDispatchQueue(s, DispatchQueue.main)
+        FSEventStreamSetDispatchQueue(s, deliveryQueue)   // off-main: claim+decode mustn't block the UI
         FSEventStreamStart(s)
         stream = s
     }

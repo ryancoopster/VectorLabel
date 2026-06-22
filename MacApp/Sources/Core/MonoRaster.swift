@@ -22,9 +22,13 @@ public enum MonoRaster {
     /// ratios the app actually uses (900→300 = ÷3, 900→180 = ÷5) and remains
     /// correct for any fractional ratio (e.g. a 1200-DPI master → 180).
     ///
-    /// `inkThreshold` (0…1) is the ink fraction that turns an output pixel on.
-    /// Lower keeps thin strokes/small text visible after a large reduction;
-    /// the default is tuned so a single 900-DPI hairline survives a ÷5 reduction.
+    /// `inkThreshold` (0…1) is the ink fraction that turns an output pixel on. Lower
+    /// keeps thin strokes/small text visible after a large reduction. At the default
+    /// 0.18 a FULL-LENGTH 1px master hairline survives (÷3 ≈ 0.33, ÷5 = 0.20 coverage),
+    /// but an ISOLATED 1px dot (÷3 ≈ 0.11, ÷5 = 0.04) — or a 1px hairline that straddles
+    /// two output cells — can drop entirely. Lowering toward ~0.10 preserves those at
+    /// the cost of slightly bolder output; re-tune against a real hardware print before
+    /// changing it (the Brady M610/M611 path is hardware-verified at 0.18).
     public static func downscale(pixels: [UInt8], width: Int, height: Int,
                                  fromDPI: Int, toDPI: Int,
                                  inkThreshold: Double = 0.18)

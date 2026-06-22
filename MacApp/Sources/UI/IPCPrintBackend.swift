@@ -63,6 +63,10 @@ public final class IPCPrintBackend: PrintBackend {
     public func submit(_ job: PrintJobFile) throws {
         try queue.write(job)
         lastSubmittedJobID = job.id
+        // Guarantee a consumer. If the Engine crashed / was force-quit, the job would
+        // otherwise sit in queue/ forever with no error surfaced (silent print loss);
+        // relaunching it drains the backlog on startup. No-op if it's already running.
+        DesignerAppLauncher.ensureRunning(.engine)
     }
 
     /// Request the Engine cancel an in-flight job (by its PrintJobFile id) via the
@@ -70,7 +74,8 @@ public final class IPCPrintBackend: PrintBackend {
     /// reads the control file. Defaults to the last submitted job's id.
     public func cancel(jobId: String? = nil) {
         guard let id = jobId ?? lastSubmittedJobID, !id.isEmpty else { return }
-        try? queue.writeControl(ControlRequest(action: .cancel, jobId: id))
+        do { try queue.writeControl(ControlRequest(action: .cancel, jobId: id)) }
+        catch { NSLog("[IPCPrintBackend] cancel: couldn't write control request: \(error)") }
     }
 
     public func requestCassetteRefresh(printerID: String?) {
@@ -79,6 +84,7 @@ public final class IPCPrintBackend: PrintBackend {
         // FolderWatcher picks up — refreshing status and clearing any stale pre-flight
         // error so the print button can re-enable without a physical reconnect.
         guard let id = printerID, !id.isEmpty else { return }
-        try? queue.writeControl(ControlRequest(action: .detectCassette, printerID: id))
+        do { try queue.writeControl(ControlRequest(action: .detectCassette, printerID: id)) }
+        catch { NSLog("[IPCPrintBackend] requestCassetteRefresh: couldn't write control request: \(error)") }
     }
 }

@@ -65,11 +65,14 @@ public struct RenderedLabel: Codable, Equatable {
         let height = try c.decode(Int.self, forKey: .height)
         let partNumber = (try? c.decode(String.self, forKey: .partNumber)) ?? ""
         let dpi = (try? c.decode(Int.self, forKey: .dpi)) ?? 300
-        guard width > 0, height > 0,
+        // dpi drives every driver's downscale (fromDPI: label.dpi); a 0/negative value
+        // makes `fromDPI > toDPI` false → the 900-DPI master raster is sent UNSCALED to
+        // the printer (giant/garbled). Validate it like the dimensions (absent → 300).
+        guard width > 0, height > 0, dpi > 0, dpi <= 4800,
               width <= Self.maxDimension, height <= Self.maxDimension else {
             throw DecodingError.dataCorruptedError(
                 forKey: .width, in: c,
-                debugDescription: "RenderedLabel dimensions out of range: \(width)x\(height)")
+                debugDescription: "RenderedLabel out of range: \(width)x\(height) @ \(dpi)dpi")
         }
         let (count, overflow) = width.multipliedReportingOverflow(by: height)
         guard !overflow else {

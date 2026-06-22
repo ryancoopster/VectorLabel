@@ -98,6 +98,13 @@ public enum LabelRenderer {
             landscape = size.isContinuous && (template.canvasRot ?? 0) != 90
         }
 
+        // Each axis is clamped, but their PRODUCT isn't: a large continuous length × a
+        // wide tape (or a corrupt dimension) could request hundreds of MB to GB, rendered
+        // synchronously per record across a batch. Cap the total at ~100M px (~100 MB
+        // mono) — well above any legitimate label — and fail rather than allocate it.
+        let (totalPx, pxOverflow) = pw.multipliedReportingOverflow(by: ph)
+        guard pw > 0, ph > 0, !pxOverflow, totalPx <= 100_000_000 else { return nil }
+
         let colorSpace = CGColorSpaceCreateDeviceGray()
         guard let ctx = CGContext(
             data: nil, width: pw, height: ph,
@@ -133,11 +140,19 @@ public enum LabelRenderer {
         // landscape rotation below.
         let feedRotation = (size.isContinuous || dieCutToContinuous) ? 0
             : BradyCatalog.effectiveFeedRotationDeg(selected: size.partNumber, loaded: loadedPartNumber)
+        // The 90° rotation about center only stays in bounds on a SQUARE printable area
+        // (pw == ph). On a non-square one it would push content off the bitmap, so skip
+        // it (leave the label un-rotated rather than clipped) — the feed-rotated die-cut
+        // supplies this targets are square in practice.
         if abs(feedRotation) > 0.0001 {
-            let cx = CGFloat(pw) / 2, cy = CGFloat(ph) / 2
-            ctx.translateBy(x: cx, y: cy)
-            ctx.rotate(by: CGFloat(feedRotation) * .pi / 180)   // clockwise in this y-down space
-            ctx.translateBy(x: -cx, y: -cy)
+            if pw == ph {
+                let cx = CGFloat(pw) / 2, cy = CGFloat(ph) / 2
+                ctx.translateBy(x: cx, y: cy)
+                ctx.rotate(by: CGFloat(feedRotation) * .pi / 180)   // clockwise in this y-down space
+                ctx.translateBy(x: -cx, y: -cy)
+            } else {
+                NSLog("[LabelTemplate] feed rotation \(feedRotation)° skipped: non-square printable area \(pw)×\(ph) (would clip)")
+            }
         }
 
         // Landscape rotation: continuous stock (the natural label orientation, the engine

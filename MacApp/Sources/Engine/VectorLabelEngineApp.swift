@@ -49,6 +49,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     // subscriptions (progress + completion), retained until the job finishes.
     private var inFlight: [UUID: InFlightEntry] = [:]
 
+    /// IPC job ids whose cancel arrived during the brief claim→consume window (before an
+    /// inFlight entry existed). consumeResolved cancels them the moment they go in-flight.
+    private var pendingCancels: Set<String> = []
+
     private struct InFlightEntry {
         let processingURL: URL
         let ipcJobID: String
@@ -494,6 +498,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             recentID: recent.id,
             subs: subs
         )
+        // Honor a cancel that arrived while this job was mid-claim (before it was
+        // in-flight): now that it's tracked, cancel it immediately.
+        if pendingCancels.remove(job.id) != nil { PrinterManager.shared.cancel(printJob) }
     }
 
     private func finishInFlight(_ job: PrintJob) {
@@ -538,12 +545,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
         switch req.action {
         case .cancel:
-            // Find the matching in-flight PrintJob by its IPC id and cancel it.
-            // PrinterManager.cancel marks it cancelled; the existing $isComplete
-            // observer then runs finishInFlight (completing the queue file).
+            // 1) In-flight: cancel the live PrintJob (the $isComplete observer then runs
+            //    finishInFlight, completing the queue file).
             if let pair = inFlight.first(where: { $0.value.ipcJobID == req.jobId }),
                let printJob = PrinterManager.shared.activeJobs.first(where: { $0.id == pair.key }) {
                 PrinterManager.shared.cancel(printJob)
+            // 2) Still QUEUED (not yet claimed — common when the USB scan is slow and the
+            //    job was requeued): pull it out of the queue so it never prints, and
+            //    record it as cancelled-before-printing.
+            } else if let job = queue.cancelQueuedJob(id: req.jobId) {
+                recents.add(RecentPrint(date: Date(), title: job.title, sourceFileName: "",
+                                        templateName: job.templateName, printerName: "",
+                                        labelCount: 0, printRange: .all, selectedIndices: [],
+                                        status: .cancelledBeforePrinting,
+                                        jobId: job.id, sourceApp: job.sourceApp))
+            // 3) Neither yet — it may be in the brief claim→consume window. Remember the
+            //    cancel so consumeResolved honors it the instant the job goes in-flight.
+            } else {
+                pendingCancels.insert(req.jobId)
             }
         case .detectCassette:
             // Force an on-demand cassette re-read; the republished status clears any

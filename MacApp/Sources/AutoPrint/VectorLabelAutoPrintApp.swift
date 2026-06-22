@@ -49,6 +49,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // Background app: no Dock icon. The print window appears on demand.
         NSApp.setActivationPolicy(.accessory)
 
+        // The Engine owns printing + the IPC queue; bring it up if it isn't running so a
+        // print submitted from this front-end is never left queued with no consumer.
+        DesignerAppLauncher.ensureRunning(.engine)
+
         TemplateStore.shared.reload()
 
         // Print window submits through the IPC queue; the Engine prints. start()

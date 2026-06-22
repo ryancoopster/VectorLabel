@@ -139,6 +139,19 @@ public final class PTE560BTModule: PrinterModule {
             if !job.isCancelled() { job.progress(.done) }
             return
         }
+        // Mixed tape widths can't share one D460BT stream (every page carries one width,
+        // and a width mismatch is exactly what can wedge this dialect). Fall back to one
+        // standalone full-cut job per label at its OWN width.
+        if Set(rasters.map { $0.tapeMm }).count > 1 {
+            for (i, tr) in rasters.enumerated() {
+                if job.isCancelled() { break }
+                try send(BrotherPT.buildPrintJobD460BT(rasterData: tr.raster, tapeMm: tr.tapeMm), on: conn)
+                job.progress(.counter(done: i + 1, of: count))
+            }
+            drain(conn, count: count, perLabelMs: perLabelMs)
+            if !job.isCancelled() { job.progress(.done) }
+            return
+        }
         let lr = rasters.map { $0.raster }
         let stream: [UInt8]
         if lr.count == 1 {
