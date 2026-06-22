@@ -427,11 +427,28 @@ function colResizeStart(e,c){
 function hideColumn(c){ window._hiddenColumns=Array.from(new Set([...(window._hiddenColumns||[]),c])); postColumnConfig(); R(); }
 function showColumn(c){ window._hiddenColumns=(window._hiddenColumns||[]).filter(x=>x!==c); postColumnConfig(); R(); }
 function toggleColumn(c){ (window._hiddenColumns||[]).includes(c)?showColumn(c):hideColumn(c); }
-function colHeaderContextMenu(e,c){ e.preventDefault(); hideColumn(c); }
+function closeColMenu(){ const m=document.getElementById('vl-col-menu'); if(m)m.remove(); }
+// Right-click a column header → a small menu (hide this column / show all hidden).
+function colHeaderContextMenu(e,c){
+  e.preventDefault(); e.stopPropagation(); closeColMenu();
+  const menu=document.createElement('div'); menu.id='vl-col-menu';
+  menu.style.cssText='position:fixed;z-index:2500;background:var(--surface);border:1px solid var(--bd4);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.5);padding:4px;min-width:170px;left:'+e.clientX+'px;top:'+e.clientY+'px';
+  function item(label,fn,danger){
+    const d=document.createElement('div'); d.textContent=label;
+    d.style.cssText='padding:6px 10px;border-radius:4px;cursor:pointer;font-size:12px;white-space:nowrap;color:'+(danger?'var(--red)':'var(--text)');
+    d.onmouseenter=()=>d.style.background='var(--bd2)'; d.onmouseleave=()=>d.style.background='';
+    d.onmousedown=ev=>ev.stopPropagation(); d.onclick=()=>{ closeColMenu(); fn(); };
+    menu.appendChild(d);
+  }
+  item('Hide “'+colLabel(c)+'” column',()=>hideColumn(c));
+  if((window._hiddenColumns||[]).length) item('Show all hidden columns',()=>{ window._hiddenColumns=[]; postColumnConfig(); R(); });
+  document.body.appendChild(menu);
+  setTimeout(()=>document.addEventListener('mousedown',closeColMenu,{once:true}),0);
+}
 
 function colHeaderCell(c){
   const j=jsAttr(c);
-  return `<div data-colhdr draggable="true" ondragstart="colDragStart(event,'${j}')" ondragover="colDragOver(event,this)" ondragend="colDragEnd(event)" ondrop="colDrop(event,'${j}')" oncontextmenu="colHeaderContextMenu(event,'${j}')" title="Drag to reorder · right-click to hide" style="position:relative;padding:5px 8px;font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;cursor:grab;box-sizing:border-box">${esc(colLabel(c))}<div onmousedown="colResizeStart(event,'${j}')" style="position:absolute;top:0;right:0;width:6px;height:100%;cursor:col-resize"></div></div>`;
+  return `<div data-colhdr draggable="true" ondragstart="colDragStart(event,'${j}')" ondragover="colDragOver(event,this)" ondragend="colDragEnd(event)" ondrop="colDrop(event,'${j}')" oncontextmenu="colHeaderContextMenu(event,'${j}')" title="Drag to reorder · right-click for column options" style="position:relative;padding:5px 8px;font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;cursor:grab;box-sizing:border-box">${esc(colLabel(c))}<div onmousedown="colResizeStart(event,'${j}')" style="position:absolute;top:0;right:0;width:6px;height:100%;cursor:col-resize"></div></div>`;
 }
 function colDataCell(c,r,i){
   // Inline editor for this cell.
