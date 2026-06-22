@@ -4269,8 +4269,10 @@ function buildDatabasePanel(){
       ${bound?`<input id="db-rec-search" type="text" value="${esc(S.dbSearch||'')}" oninput="onRecSearchInput(this.value)" placeholder="Search all fields…" title="Search across every field — space-separated terms must all match" style="width:170px;padding:3px 8px;font-size:11px;background:var(--surface);border:1px solid var(--bd3);border-radius:5px;color:var(--text)">`:""}
       ${bound?`<button class="btn${(filterActive()||sortActive())?' on':''}" onclick="event.stopPropagation();openFilterModal()" style="padding:3px 10px;font-size:11px" title="Filter & sort which records show and print">⧩ Filter &amp; sort</button>`:""}
       ${headerToggle}
-      ${bound?`<button class="btn${window._colMenuOpen?' on':''}" onclick="event.stopPropagation();toggleColumnsMenu()" style="padding:3px 10px;font-size:11px" title="Show / hide and reorder columns">Columns ▾</button>`:""}
-      ${bound?buildColumnsMenu():""}
+      ${bound?`<div style="position:relative;flex-shrink:0">
+        <button class="btn${window._colMenuOpen?' on':''}" onclick="event.stopPropagation();toggleColumnsMenu()" style="padding:3px 10px;font-size:11px" title="Show / hide and reorder columns">Columns ▾</button>
+        ${buildColumnsMenu()}
+      </div>`:""}
       <button class="btn" onclick="chooseDataSource()" style="padding:3px 10px;font-size:11px">Choose data file…</button>
       <button class="btn" onclick="clearDataSourceCustom()" style="padding:3px 10px;font-size:11px"${bound?"":" disabled"} title="Unbind the data source — back to a single label">Clear data</button>
       <button class="btn" onclick="refreshDataSource()" style="padding:3px 10px;font-size:11px"${bound?"":" disabled"} title="Re-read the bound file from disk">↻ Refresh from source</button>
