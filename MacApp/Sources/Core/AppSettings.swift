@@ -82,8 +82,13 @@ public final class AppSettings: ObservableObject {
     /// Per-column widths in px (CSV key → width). Shared + persisted.
     @Published public var recordColumnWidths: [String: Double] {
         didSet {
-            UserDefaults.standard.set(try? JSONEncoder().encode(recordColumnWidths),
-                                      forKey: "recordColumnWidths")
+            // Drop any non-finite width (NaN/Inf from a stray drag callback): JSONEncoder
+            // throws on it, and the old `set(try? …)` then wrote nil, REMOVING the key
+            // and wiping ALL widths. Sanitize + only write on a successful encode.
+            let clean = recordColumnWidths.filter { $0.value.isFinite }
+            if let data = try? JSONEncoder().encode(clean) {
+                UserDefaults.standard.set(data, forKey: "recordColumnWidths")
+            }
         }
     }
 
@@ -133,8 +138,13 @@ public final class AppSettings: ObservableObject {
     /// Keyed by serial (not the full USB id) so it follows the physical printer.
     @Published public var printerCalibration: [String: [Double]] {
         didSet {
-            UserDefaults.standard.set(try? JSONEncoder().encode(printerCalibration),
-                                      forKey: "printerCalibration")
+            // Drop any entry with a non-finite component (a single NaN/Inf would make the
+            // encode throw → the old `set(try? …)` wrote nil and wiped ALL calibrations).
+            // Sanitize + only write on a successful encode.
+            let clean = printerCalibration.filter { $0.value.allSatisfy { $0.isFinite } }
+            if let data = try? JSONEncoder().encode(clean) {
+                UserDefaults.standard.set(data, forKey: "printerCalibration")
+            }
         }
     }
 
@@ -306,6 +316,7 @@ public final class AppSettings: ObservableObject {
         recordColumnOrder    = []
         recordHiddenColumns  = []
         recordColumnWidths   = [:]
+        printerCalibration   = [:]   // a factory reset clears per-printer alignment offsets too
         designerSnapGrid     = true
         designerSnapObjects  = true
         designerGridSize     = 0.05

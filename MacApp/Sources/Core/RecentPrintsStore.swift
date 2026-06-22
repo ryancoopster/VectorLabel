@@ -189,10 +189,14 @@ public final class RecentPrintsStore: ObservableObject {
     // MARK: – Persistence
 
     private func load() {
-        guard let data = try? Data(contentsOf: fileURL),
-              let decoded = try? JSONDecoder().decode([RecentPrint].self, from: data)
-        else { return }
-        prints = decoded
+        guard let data = try? Data(contentsOf: fileURL) else { return }   // no file yet — expected
+        do {
+            prints = try JSONDecoder().decode([RecentPrint].self, from: data)
+        } catch {
+            // Present but undecodable — surface it rather than silently starting empty
+            // (and then overwriting the file on the next save, losing the history).
+            NSLog("[RecentPrintsStore] recent_prints.json is present but undecodable: \(error)")
+        }
     }
 
     private func save() {
