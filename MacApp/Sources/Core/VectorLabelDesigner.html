@@ -278,6 +278,9 @@ let S={
   // Mirrors the Print window's record browser over window._boundData rows.
   // printRange: "all" | "selected" | "range" (which bound rows print).
   printRange:"all", rangeFrom:1, rangeTo:1,
+  // Filter / sort / search over the bound rows (mirrors the Print window).
+  // dbFilter/dbSort are null when inactive; dbSearch is the quick-search text.
+  dbFilter:null, dbSort:null, dbSearch:"",
   // _dbSel: a Set of per-row print-enable indices (the "selected" subset).
   _dbSel:new Set(),
   // _dbLastClick: anchor row for shift-click range selection.
@@ -2845,7 +2848,7 @@ function buildJobStatusControl(){
 // window's print bar. Returns "" with no data bound (single-label print).
 function buildPrintRangeControl(){
   if(!hasBoundData()||!labelUsesData())return "";   // single label → no range control
-  const total=dBoundRowCount();
+  const total=dbVisibleIndices().length;   // "All" / Range operate over the visible (filtered) rows
   const nSel=dbSelCount();
   return`<div style="display:flex;align-items:center;gap:6px">
     <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Print</span>
@@ -3558,25 +3561,25 @@ function labelUsesData(){
 // when a data source is bound, else just `copies`.
 function dBoundRowCount(){ return hasBoundData()?window._boundData.records.length:0; }
 
-// The bound-row indices that will print, honoring the print-range control (#6):
-//   all      → every bound row
-//   selected → exactly the checked rows (S._dbSel)
-//   range    → the 1-based from..to window over the bound rows
+// The bound-row indices that will print, honoring the filter/sort + the print-range
+// control (#6). Indices are ABSOLUTE RX indices returned in VISIBLE (filtered+sorted)
+// order, so the printed sequence matches what the user sees:
+//   all      → every visible row (in display order)
+//   selected → the checked rows that are visible (in display order)
+//   range    → the 1-based from..to window over the visible rows
 // Returns [] with no data bound (the no-data print path is a single label and
-// ignores this). Indices are clamped to the row count.
+// ignores this).
 function dbPrintIndices(){
-  const n=dBoundRowCount();
-  if(n<=0)return [];
+  const vis=dbVisibleIndices();
+  if(!vis.length)return [];
   const sel=S._dbSel||new Set();
-  if(S.printRange==="selected"){
-    const out=[]; for(let i=0;i<n;i++)if(sel.has(i))out.push(i); return out;
-  }
+  if(S.printRange==="selected"){ return vis.filter(gi=>sel.has(gi)); }
   if(S.printRange==="range"){
-    const from=Math.max(1,Math.min(S.rangeFrom||1,n));
-    const to=Math.max(from,Math.min(S.rangeTo||n,n));
-    const out=[]; for(let i=from-1;i<to;i++)out.push(i); return out;
+    const from=Math.max(1,Math.min(S.rangeFrom||1,vis.length));
+    const to=Math.max(from,Math.min(S.rangeTo||vis.length,vis.length));
+    return vis.slice(from-1,to);
   }
-  const out=[]; for(let i=0;i<n;i++)out.push(i); return out;   // "all"
+  return vis.slice();   // "all" → all visible, in display order
 }
 function dJobLabelCount(){
   const copies=Math.max(1,S.copies||1);
@@ -3659,6 +3662,327 @@ function toggleHeaderRow(){
   chooseDataSource();
 }
 
+// ── Filter / sort / search engine (custom-mode database pane) ───────────────────
+// Ported from the Print window so the Custom Designer offers the same record
+// filtering, multi-level sorting (with Source/Destination pair modes), full-text
+// search, and the Filter & sort modal. Operates over RX (the bound rows) using
+// ABSOLUTE record indices, so the selection (S._dbSel) and the print set stay
+// correct regardless of the visible filter/sort order.
+
+// Source/Destination pairing — null when the data isn't paired, so pair features no-op.
+function pairIdx(i){
+  const r=RX[i];
+  if(!r)return null;
+  if(r._Side==="Source"      && i+1<RX.length && RX[i+1]._Side==="Destination") return i+1;
+  if(r._Side==="Destination" && i>0 && RX[i-1]._Side==="Source") return i-1;
+  return null;
+}
+
+const FILTER_OPS=[
+  {op:"contains",label:"Contains"},
+  {op:"not_contains",label:"Does not contain"},
+  {op:"is",label:"Is exactly"},
+  {op:"is_not",label:"Is not"},
+  {op:"eq",label:"="},
+  {op:"ne",label:"≠"},
+  {op:"gt",label:">"},
+  {op:"gte",label:"≥"},
+  {op:"lt",label:"<"},
+  {op:"lte",label:"≤"},
+  {op:"empty",label:"Is empty"},
+  {op:"not_empty",label:"Is not empty"},
+];
+function opNeedsValue(op){ return op!=="empty"&&op!=="not_empty"; }
+function ruleMatches(rec,rule){
+  if(!rule||!rule.field)return true;
+  const a=(rec[rule.field]==null?"":String(rec[rule.field]));
+  const b=opNeedsValue(rule.op)
+    ? (rule.valueType==="field" ? (rec[rule.value]==null?"":String(rec[rule.value])) : String(rule.value==null?"":rule.value))
+    : "";
+  const al=a.toLowerCase(), bl=b.toLowerCase();
+  const an=parseFloat(a), bn=parseFloat(b), nums=isFinite(an)&&isFinite(bn);
+  switch(rule.op){
+    case "contains":     return al.includes(bl);
+    case "not_contains": return !al.includes(bl);
+    case "is":           return al===bl;
+    case "is_not":       return al!==bl;
+    case "eq":           return nums?an===bn:a===b;
+    case "ne":           return nums?an!==bn:a!==b;
+    case "gt":           return nums?an>bn:a>b;
+    case "gte":          return nums?an>=bn:a>=b;
+    case "lt":           return nums?an<bn:a<b;
+    case "lte":          return nums?an<=bn:a<=b;
+    case "empty":        return a==="";
+    case "not_empty":    return a!=="";
+  }
+  return true;
+}
+function newFilterRule(){ const cols=recordColumns(currentRecords()); return {field:cols[0]||"",op:"contains",valueType:"text",value:""}; }
+function newFilterGroup(){ return {rules:[newFilterRule()],connectors:[]}; }
+function ruleReady(r){ if(!r||!r.field||!r.op)return false; if(!opNeedsValue(r.op))return true; return r.value!==undefined&&r.value!==""; }
+function groupReady(g){ return !!(g&&(g.rules||[]).some(ruleReady)); }
+function groupMatches(rec,g){
+  const rules=(g.rules||[]).filter(ruleReady);
+  if(!rules.length)return true;
+  let res=ruleMatches(rec,rules[0]);
+  for(let k=1;k<rules.length;k++){ const c=(g.connectors&&g.connectors[k-1])||"and"; res = c==="or" ? (res||ruleMatches(rec,rules[k])) : (res&&ruleMatches(rec,rules[k])); }
+  return res;
+}
+function filterGroups(f){ if(!f)return []; if(Array.isArray(f.groups))return f.groups; if(Array.isArray(f.rules))return [{rules:f.rules,connectors:f.connectors||[]}]; return []; }
+function recordMatchesFilter(rec,f){
+  const groups=filterGroups(f).filter(groupReady);
+  if(!groups.length)return true;
+  let res=groupMatches(rec,groups[0]);
+  for(let k=1;k<groups.length;k++){ const c=(f.groupConnectors&&f.groupConnectors[k-1])||"or"; res = c==="and" ? (res&&groupMatches(rec,groups[k])) : (res||groupMatches(rec,groups[k])); }
+  return res;
+}
+function filterActive(){ return filterGroups(S.dbFilter).some(groupReady); }
+function passesFilter(i){
+  if(!filterActive())return true;
+  if(recordMatchesFilter(RX[i],S.dbFilter))return true;
+  if(S.dbFilter.showBothSides){ const j=pairIdx(i); if(j!=null&&recordMatchesFilter(RX[j],S.dbFilter))return true; }
+  return false;
+}
+
+// Sorting
+function sortActive(){ return !!(S.dbSort && (S.dbSort.rules||[]).some(r=>r.field)); }
+let _effRack=null;
+function buildEffRack(){
+  _effRack=new Map();
+  if(!(S.dbSort && S.dbSort.inheritRack))return;
+  for(let i=0;i<RX.length;i++){
+    const r=RX[i]; let v=(r&&r.Rack!=null)?r.Rack:"";
+    if(v===""){ const j=pairIdx(i); if(j!=null){ const p=RX[j]; if(p&&p.Rack)v=p.Rack; } }
+    _effRack.set(r,v);
+  }
+}
+function sortVal(rec,field){ if(field==="Rack" && S.dbSort && S.dbSort.inheritRack && _effRack && _effRack.has(rec)) return _effRack.get(rec); return rec?rec[field]:""; }
+function cmpRecs(ra,rb){
+  for(const r of (S.dbSort.rules||[])){
+    if(!r.field)continue;
+    const a=sortVal(ra,r.field), b=sortVal(rb,r.field);
+    let c=String(a==null?"":a).localeCompare(String(b==null?"":b),undefined,{numeric:true,sensitivity:"base"});
+    if(r.dir==="desc")c=-c;
+    if(c)return c;
+  }
+  return 0;
+}
+function applySort(idx){
+  buildEffRack();
+  const mode=(S.dbSort.pairMode)||"break";
+  if(mode==="break") return idx.slice().sort((i,j)=>cmpRecs(RX[i],RX[j])||(i-j));
+  const vis=new Set(idx), consumed=new Set(), units=[];
+  for(const i of idx){
+    if(consumed.has(i))continue;
+    const r=RX[i];
+    if(r._Side==="Source"){ const j=pairIdx(i); if(j!=null&&vis.has(j)){ units.push([i,j]); consumed.add(i);consumed.add(j); continue; } }
+    units.push([i]); consumed.add(i);
+  }
+  function keyRow(u){ const want=mode==="source"?"Source":"Destination"; for(const k of u){ if(RX[k]._Side===want)return RX[k]; } return RX[u[0]]; }
+  units.sort((ua,ub)=>cmpRecs(keyRow(ua),keyRow(ub))||(ua[0]-ub[0]));
+  const out=[]; for(const u of units) for(const k of u) out.push(k);
+  return out;
+}
+
+// Quick search (all fields)
+function searchActive(){ return !!(S.dbSearch||"").trim(); }
+function passesSearch(rec){
+  const q=(S.dbSearch||"").trim().toLowerCase();
+  if(!q)return true;
+  const hay=Object.keys(rec).map(k=>String(rec[k]==null?"":rec[k])).join(" ").toLowerCase();
+  return q.split(/\s+/).every(t=>hay.indexOf(t)>=0);
+}
+function onRecSearchInput(v){
+  const old=document.getElementById("db-rec-search");
+  const pos=old?old.selectionStart:(v||"").length;
+  S.dbSearch=v; R();
+  const el=document.getElementById("db-rec-search");
+  if(el){ el.focus(); try{ el.setSelectionRange(pos,pos); }catch(_){} }
+}
+function clearRecSearch(){ S.dbSearch=""; R(); const el=document.getElementById("db-rec-search"); if(el)el.focus(); }
+
+// Absolute RX indices currently shown, in display order (filter + search + sort).
+function dbVisibleIndices(){
+  const all=RX.map((_,i)=>i);
+  let idx=filterActive()?all.filter(passesFilter):all;
+  if(searchActive()) idx=idx.filter(i=>passesSearch(RX[i]));
+  if(sortActive()) idx=applySort(idx);
+  return idx;
+}
+
+// Human-readable summaries for the header chips + tooltips.
+function sortSummaryOf(s){
+  if(!s||!(s.rules||[]).some(r=>r.field))return "";
+  const parts=s.rules.filter(r=>r.field).map(r=>colLabel(r.field)+(r.dir==="desc"?" ↓":" ↑"));
+  const modeTxt=s.pairMode==="source"?" · pairs follow source":s.pairMode==="dest"?" · pairs follow destination":"";
+  return parts.join(", ")+modeTxt;
+}
+function sortSummary(){ return sortSummaryOf(S.dbSort); }
+function ruleSummary(r){
+  const opl=(FILTER_OPS.find(o=>o.op===r.op)||{}).label||r.op;
+  const val=opNeedsValue(r.op)?(r.valueType==="field"?("["+colLabel(r.value)+"]"):('"'+r.value+'"')):"";
+  return colLabel(r.field)+" "+opl+(val?" "+val:"");
+}
+function filterSummaryOf(f){
+  const groups=filterGroups(f).filter(groupReady);
+  if(!groups.length)return "";
+  const groupStrs=groups.map(g=>{
+    const rules=g.rules.filter(ruleReady);
+    const parts=rules.map((r,k)=>(k>0?((g.connectors[k-1]||"and").toUpperCase()+" "):"")+ruleSummary(r));
+    const inner=parts.join(" ");
+    return groups.length>1?("("+inner+")"):inner;
+  });
+  let out=groupStrs[0]||"";
+  for(let k=1;k<groupStrs.length;k++){ out+=" "+((f.groupConnectors&&f.groupConnectors[k-1])||"or").toUpperCase()+" "+groupStrs[k]; }
+  return out + (f.showBothSides?" · incl. pairs":"");
+}
+function filterSummary(){ return filterActive()?filterSummaryOf(S.dbFilter):""; }
+
+// ── Filter & sort modal ─────────────────────────────────────────────────────────
+function openFilterModal(){
+  let baseFilter=S.dbFilter, baseSort=S.dbSort;
+  if(baseFilter){
+    const d=JSON.parse(JSON.stringify(baseFilter));
+    if(!Array.isArray(d.groups)) d.groups=[{rules:d.rules||[newFilterRule()],connectors:d.connectors||[]}];
+    if(!Array.isArray(d.groupConnectors)) d.groupConnectors=[];
+    delete d.rules; delete d.connectors;
+    S._filterDraft=d;
+  }else{ S._filterDraft={groups:[newFilterGroup()],groupConnectors:[],showBothSides:false}; }
+  S._filterDraft.groups.forEach(g=>{ if(!g.rules||!g.rules.length)g.rules=[newFilterRule()]; if(!Array.isArray(g.connectors))g.connectors=[]; });
+  S._sortDraft = baseSort ? JSON.parse(JSON.stringify(baseSort)) : {rules:[{field:"",dir:"asc"}], pairMode:"break"};
+  if(!S._sortDraft.rules.length)S._sortDraft.rules.push({field:"",dir:"asc"});
+  if(!S._sortDraft.pairMode)S._sortDraft.pairMode="break";
+  renderFilterModal();
+}
+function closeFilterModal(){ S._filterDraft=null; S._sortDraft=null; const m=document.getElementById('vl-filter-modal'); if(m)m.remove(); }
+function draftToFilter(){ const d=S._filterDraft; return (d.groups||[]).some(groupReady)?{groups:d.groups,groupConnectors:d.groupConnectors,showBothSides:!!d.showBothSides}:null; }
+function draftToSort(){ const s=S._sortDraft; return (s.rules||[]).some(r=>r.field)?{rules:s.rules.filter(r=>r.field),pairMode:s.pairMode||"break",inheritRack:!!s.inheritRack}:null; }
+// After a filter/sort change, keep the on-canvas record (S.recIdx) within the visible set.
+function _dbKeepActiveVisible(){ const vis=dbVisibleIndices(); if(vis.length&&!vis.includes(S.recIdx))S.recIdx=vis[0]; }
+function sdAddRule(){ S._sortDraft.rules.push({field:"",dir:"asc"}); renderFilterModal(); }
+function sdRemoveRule(i){ S._sortDraft.rules.splice(i,1); if(!S._sortDraft.rules.length)S._sortDraft.rules.push({field:"",dir:"asc"}); renderFilterModal(); }
+function sdSet(i,prop,val){ S._sortDraft.rules[i][prop]=val; renderFilterModal(); }
+function sdSetPairMode(m){ S._sortDraft.pairMode=m; renderFilterModal(); }
+function sdSetInheritRack(v){ S._sortDraft.inheritRack=v; renderFilterModal(); }
+function fdAddRule(gi){ const g=S._filterDraft.groups[gi]; g.rules.push(newFilterRule()); if(g.rules.length>1)g.connectors.push('and'); renderFilterModal(); }
+function fdRemoveRule(gi,ri){ const g=S._filterDraft.groups[gi]; g.rules.splice(ri,1); g.connectors.splice(Math.max(0,ri-1),1); if(!g.rules.length)g.rules.push(newFilterRule()); renderFilterModal(); }
+function fdAddGroup(){ S._filterDraft.groups.push(newFilterGroup()); if(S._filterDraft.groups.length>1)S._filterDraft.groupConnectors.push('or'); renderFilterModal(); }
+function fdRemoveGroup(gi){ S._filterDraft.groups.splice(gi,1); S._filterDraft.groupConnectors.splice(Math.max(0,gi-1),1); if(!S._filterDraft.groups.length)S._filterDraft.groups.push(newFilterGroup()); renderFilterModal(); }
+function fdSet(gi,ri,prop,val){ const r=S._filterDraft.groups[gi].rules[ri]; r[prop]=val; if(prop==='valueType') r.value = val==='field' ? (recordColumns(currentRecords())[0]||'') : ''; if(prop==='op'||prop==='valueType') renderFilterModal(); }
+function fdSetText(gi,ri,val){ S._filterDraft.groups[gi].rules[ri].value=val; }   // no re-render → keeps focus
+function fdSetConn(gi,ci,val){ S._filterDraft.groups[gi].connectors[ci]=val; renderFilterModal(); }
+function fdSetGroupConn(gci,val){ S._filterDraft.groupConnectors[gci]=val; renderFilterModal(); }
+function fdSetBoth(v){ S._filterDraft.showBothSides=v; }
+function applyFilterDraft(){ S.dbFilter=draftToFilter(); S.dbSort=draftToSort(); closeFilterModal(); _dbKeepActiveVisible(); R(); }
+function clearFilter(){ S.dbFilter=null; closeFilterModal(); _dbKeepActiveVisible(); R(); }
+function clearSort(){ S.dbSort=null; closeFilterModal(); _dbKeepActiveVisible(); R(); }
+function connToggle(curr,onclickPrefix){ return `<div style="display:flex;gap:4px">${['and','or'].map(c=>`<button onclick="${onclickPrefix}'${c}')" class="btn${(curr||'and')===c?' on':''}" style="padding:1px 14px;font-size:11px;text-transform:uppercase">${c}</button>`).join('')}</div>`; }
+function renderFilterGroup(g,gi,multi){
+  const cols=recordColumns(currentRecords());
+  const fieldOpts=sel=>cols.map(c=>`<option value="${escAttr(c)}" ${c===sel?'selected':''}>${esc(colLabel(c))}</option>`).join('');
+  const opOpts=sel=>FILTER_OPS.map(o=>`<option value="${o.op}" ${o.op===sel?'selected':''}>${o.label}</option>`).join('');
+  const rowsHtml=g.rules.map((r,ri)=>{
+    const conn = ri>0 ? `<div style="margin:6px 0">${connToggle(g.connectors[ri-1],`fdSetConn(${gi},${ri-1},`)}</div>` : '';
+    const valTypeToggle = !opNeedsValue(r.op) ? '' :
+      `<select class="inp" style="width:auto;flex-shrink:0" onchange="fdSet(${gi},${ri},'valueType',this.value)" title="Compare against typed text or another column's value">
+         <option value="text" ${r.valueType==='text'?'selected':''}>Text</option>
+         <option value="field" ${r.valueType==='field'?'selected':''}>Field</option>
+       </select>`;
+    const valCell = !opNeedsValue(r.op) ? '<div style="flex:1"></div>' :
+      r.valueType==='field'
+        ? `<select class="inp" style="flex:1;min-width:0" onchange="fdSet(${gi},${ri},'value',this.value)">${cols.map(c=>`<option value="${escAttr(c)}" ${c===r.value?'selected':''}>${esc(colLabel(c))}</option>`).join('')}</select>`
+        : `<input class="inp" style="flex:1;min-width:0" value="${esc(r.value||'')}" oninput="fdSetText(${gi},${ri},this.value)" placeholder="match value">`;
+    return `<div style="margin-bottom:4px">
+      ${conn}
+      <div style="display:flex;gap:6px;align-items:center">
+        <select class="inp" style="width:140px;flex-shrink:0" onchange="fdSet(${gi},${ri},'field',this.value)">${fieldOpts(r.field)}</select>
+        <select class="inp" style="width:120px;flex-shrink:0" onchange="fdSet(${gi},${ri},'op',this.value)">${opOpts(r.op)}</select>
+        ${valTypeToggle}
+        ${valCell}
+        <button onclick="fdRemoveRule(${gi},${ri})" title="Remove this condition" ${g.rules.length<=1?'disabled':''} style="flex-shrink:0;background:rgba(245,108,108,0.12);border:1px solid rgba(245,108,108,0.3);color:var(--red);border-radius:5px;padding:3px 9px;cursor:pointer;font-size:13px">×</button>
+      </div>
+    </div>`;
+  }).join('');
+  return `<div style="border:1px solid rgba(108,142,245,0.25);border-radius:7px;padding:10px 12px;background:rgba(108,142,245,0.04)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <span style="color:var(--accent);font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Group ${gi+1}</span>
+      ${multi?`<button onclick="fdRemoveGroup(${gi})" title="Remove this group" style="background:rgba(245,108,108,0.12);border:1px solid rgba(245,108,108,0.3);color:var(--red);border-radius:5px;padding:2px 8px;cursor:pointer;font-size:11px">Remove group</button>`:''}
+    </div>
+    ${rowsHtml}
+    <button class="btn" onclick="fdAddRule(${gi})" title="Add a condition to this group" style="margin-top:4px;font-size:11px">+ Add condition</button>
+  </div>`;
+}
+function renderFilterModal(){
+  const d=S._filterDraft; if(!d)return;
+  const multi=d.groups.length>1;
+  const groupsHtml=d.groups.map((g,gi)=>{
+    const between = gi>0 ? `<div style="display:flex;align-items:center;gap:8px;margin:8px 0">
+        <div style="flex:1;height:1px;background:var(--bd2)"></div>
+        ${connToggle(d.groupConnectors[gi-1]||'or',`fdSetGroupConn(${gi-1},`)}
+        <div style="flex:1;height:1px;background:var(--bd2)"></div>
+      </div>` : '';
+    return between+renderFilterGroup(g,gi,multi);
+  }).join('');
+  const sd=S._sortDraft, cols=recordColumns(currentRecords());
+  const pairModes=[
+    ['break','Sort sources & destinations (breaks pairs)'],
+    ['source','Sort by source — destinations stay with sources'],
+    ['dest','Sort by destination — sources stay with destinations']
+  ];
+  const pairHtml=`<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px">
+    ${pairModes.map(([mm,lbl])=>`<button class="btn${sd.pairMode===mm?' on':''}" onclick="sdSetPairMode('${mm}')" style="text-align:left;font-size:11px;padding:5px 10px">${lbl}</button>`).join('')}
+  </div>`;
+  const sortRows=sd.rules.map((r,i)=>`<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
+      <span style="color:var(--text2);font-size:11px;width:42px;flex-shrink:0">${i===0?'Sort by':'then by'}</span>
+      <select class="inp" style="flex:1;min-width:0" onchange="sdSet(${i},'field',this.value)">
+        <option value="">— none —</option>
+        ${cols.map(c=>`<option value="${escAttr(c)}" ${r.field===c?'selected':''}>${esc(colLabel(c))}</option>`).join('')}
+      </select>
+      <select class="inp" style="width:auto;flex-shrink:0" onchange="sdSet(${i},'dir',this.value)">
+        <option value="asc" ${r.dir!=='desc'?'selected':''}>A→Z</option>
+        <option value="desc" ${r.dir==='desc'?'selected':''}>Z→A</option>
+      </select>
+      <button onclick="sdRemoveRule(${i})" title="Remove" ${sd.rules.length<=1?'disabled':''} style="flex-shrink:0;background:rgba(245,108,108,0.12);border:1px solid rgba(245,108,108,0.3);color:var(--red);border-radius:5px;padding:3px 9px;cursor:pointer;font-size:13px">×</button>
+    </div>`).join('');
+  const hasRackSort=sd.rules.some(r=>r.field==='Rack');
+  const inheritRackHtml=hasRackSort?`<label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer;color:var(--text-soft);font-size:12px">
+    <input type="checkbox" ${sd.inheritRack?'checked':''} onchange="sdSetInheritRack(this.checked)">
+    Inherit rack name from other end label when not present
+  </label>`:'';
+  let m=document.getElementById('vl-filter-modal');
+  if(!m){ m=document.createElement('div'); m.id='vl-filter-modal'; m.className='modal-overlay'; m.onclick=e=>{if(e.target===m)closeFilterModal();}; document.body.appendChild(m); }
+  m.innerHTML=`<div class="modal" style="min-width:600px;max-width:720px">
+    <div class="modal-title">Filter &amp; sort</div>
+    <div style="max-height:calc(100vh - 180px);overflow-y:auto;padding-right:2px">
+      <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Filter</div>
+      <div style="display:flex;flex-direction:column;gap:2px">${groupsHtml}</div>
+      <button class="btn" onclick="fdAddGroup()" title="Add another group of conditions" style="margin-top:8px;font-size:12px">+ Add group</button>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:14px;cursor:pointer;color:var(--text-soft);font-size:12px">
+        <input type="checkbox" ${d.showBothSides?'checked':''} onchange="fdSetBoth(this.checked)">
+        Show Source and Destination when only Source or Destination matches
+      </label>
+      <hr style="border:none;border-top:1px solid var(--bd2);margin:16px 0 12px">
+      <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Sort</div>
+      ${pairHtml}
+      ${sortRows}
+      ${inheritRackHtml}
+      <button class="btn" onclick="sdAddRule()" title="Add another sort level" style="margin-top:8px;font-size:12px">+ Add sort</button>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between">
+      <div style="display:flex;gap:8px">
+        ${(S.dbFilter||S.dbSort)?`
+          <button class="btn" ${S.dbFilter?'':'disabled'} onclick="clearFilter()" style="color:var(--warn);border-color:rgba(245,201,108,0.4)${S.dbFilter?'':';opacity:0.4;cursor:default'}">Clear filter</button>
+          <button class="btn" ${S.dbSort?'':'disabled'} onclick="clearSort()" style="color:var(--warn);border-color:rgba(245,201,108,0.4)${S.dbSort?'':';opacity:0.4;cursor:default'}">Clear sort</button>
+        `:''}
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn" onclick="closeFilterModal()">Cancel</button>
+        <button class="btn" onclick="applyFilterDraft()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Apply</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 // ── Database-pane record browser (custom mode only) ─────────────────────────────
 // Mirrors the Print window's record list over window._boundData rows: per-row
 // print-enable checkboxes with shift-click range selection (#7), and inline cell
@@ -3668,30 +3992,36 @@ function toggleHeaderRow(){
 function dbRows(){ return RX||[]; }
 function dbCols(){ const bd=window._boundData; return (bd&&bd.columns)?bd.columns:[]; }
 // How many rows are currently print-enabled (checked).
-function dbSelCount(){ const s=S._dbSel||(S._dbSel=new Set()); return s.size; }
+// Count of checked rows that are currently VISIBLE (the set that actually prints
+// under "Selected") — so the radio label matches dbPrintIndices.
+function dbSelCount(){ const s=S._dbSel||(S._dbSel=new Set()); return dbVisibleIndices().filter(gi=>s.has(gi)).length; }
 
-// Per-row checkbox click. Shift+click extends from the last-clicked row across
-// every row in between, applying the anchor row's resulting on/off state — the
-// same semantics as the Print window's rowCheckClick (rows here are a flat list,
-// so "visible position" == record index).
-function dbRowCheckClick(i,e){
+// Per-row checkbox click. `gi` is the ABSOLUTE RX index. Shift+click extends from
+// the last-clicked row across every row in between IN THE VISIBLE (filtered+sorted)
+// ORDER, applying the anchor row's resulting on/off state — same semantics as the
+// Print window's rowCheckClick.
+function dbRowCheckClick(gi,e){
   const sel=S._dbSel||(S._dbSel=new Set());
-  if(e.shiftKey && S._dbLastClick!=null && S._dbLastClick!==i){
-    const target=sel.has(S._dbLastClick);   // match the anchor's state
-    const lo=Math.min(S._dbLastClick,i), hi=Math.max(S._dbLastClick,i);
-    for(let p=lo;p<=hi;p++){ if(target)sel.add(p); else sel.delete(p); }
-    S.printRange="selected"; S._dbLastClick=i; R(); return;
+  if(e.shiftKey && S._dbLastClick!=null && S._dbLastClick!==gi){
+    const vis=dbVisibleIndices();
+    const aPos=vis.indexOf(S._dbLastClick), bPos=vis.indexOf(gi);
+    if(aPos>=0&&bPos>=0){
+      const target=sel.has(S._dbLastClick);   // match the anchor's state
+      const lo=Math.min(aPos,bPos), hi=Math.max(aPos,bPos);
+      for(let p=lo;p<=hi;p++){ const g=vis[p]; if(target)sel.add(g); else sel.delete(g); }
+      S.printRange="selected"; S._dbLastClick=gi; R(); return;
+    }
   }
-  if(sel.has(i))sel.delete(i); else sel.add(i);
-  S.printRange="selected"; S._dbLastClick=i; R();
+  if(sel.has(gi))sel.delete(gi); else sel.add(gi);
+  S.printRange="selected"; S._dbLastClick=gi; R();
 }
-// Header checkbox: select-all / clear-all across the bound rows.
+// Header checkbox: select-all / clear-all across the VISIBLE (filtered) rows.
 function dbToggleAll(){
   const sel=S._dbSel||(S._dbSel=new Set());
-  const rows=dbRows();
-  const allSel=rows.length>0&&rows.every((_,i)=>sel.has(i));
-  if(allSel){ rows.forEach((_,i)=>sel.delete(i)); }
-  else { rows.forEach((_,i)=>sel.add(i)); S.printRange="all"; }
+  const vis=dbVisibleIndices();
+  const allSel=vis.length>0&&vis.every(gi=>sel.has(gi));
+  if(allSel){ vis.forEach(gi=>sel.delete(gi)); }
+  else { vis.forEach(gi=>sel.add(gi)); S.printRange="all"; }
   R();
 }
 
@@ -3739,13 +4069,17 @@ function dbCell(c,r,i){
 }
 
 // The scrollable record table with the print-enable checkbox column + # + data.
+// Rows are iterated in VISIBLE (filter+sort) order; each carries its ABSOLUTE RX
+// index (gi) for selection / preview / inline edit, while the # column shows the
+// 1-based display position.
 function dbRecordTable(){
-  const rows=dbRows(), cols=dbCols().filter(c=>!(window._hiddenColumns||[]).includes(c));
+  const cols=dbCols().filter(c=>!(window._hiddenColumns||[]).includes(c));
   if(!cols.length)return`<div style="padding:12px;color:var(--text3);font-size:11px">All columns hidden — use the Columns menu to show some.</div>`;
+  const vis=dbVisibleIndices();
   const gt="34px 36px "+colGridTemplate(cols);
   const sel=S._dbSel||(S._dbSel=new Set());
-  const allSel=rows.length>0&&rows.every((_,i)=>sel.has(i));
-  const someSel=rows.some((_,i)=>sel.has(i));
+  const allSel=vis.length>0&&vis.every(gi=>sel.has(gi));
+  const someSel=vis.some(gi=>sel.has(gi));
   const hdr=`<div class="rec-row" style="display:grid;grid-template-columns:${gt};width:max-content;min-width:100%;position:sticky;top:0;z-index:3;background:var(--surface);border-bottom:1px solid var(--bd3)">
     <div class="rec-cell" style="display:flex;align-items:center;justify-content:center">
       <div class="cb ${allSel?"chk":someSel?"partial":""}" onclick="dbToggleAll()"><span class="check-tick">${allSel?"✓":someSel?"−":""}</span></div>
@@ -3753,15 +4087,19 @@ function dbRecordTable(){
     <div style="padding:5px 8px;font-size:10px;color:var(--text3);font-weight:600;display:flex;align-items:center">#</div>
     ${cols.map(colHeaderCell).join('')}
   </div>`;
-  const body=rows.map((r,i)=>{
-    const isSel=sel.has(i);
-    const isActive=S.recIdx===i;
-    return`<div class="rec-row" data-i="${i}" style="display:grid;grid-template-columns:${gt};width:max-content;min-width:100%;border-bottom:1px solid var(--bd1);cursor:pointer;align-items:stretch;content-visibility:auto;contain-intrinsic-size:0 28px;${isActive?'background:rgba(108,142,245,0.18)':''}" onclick="S.recIdx=${i};S._dbLastClick=null;R()">
-      <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();dbRowCheckClick(${i},event)" title="Print this label — Shift+click to range select">
+  if(!vis.length){
+    return`<div style="overflow:auto">${hdr}<div style="padding:14px;color:var(--text3);font-size:11px">No rows match the current filter / search.</div></div>`;
+  }
+  const body=vis.map((gi,vp)=>{
+    const r=RX[gi];
+    const isSel=sel.has(gi);
+    const isActive=S.recIdx===gi;
+    return`<div class="rec-row" data-i="${gi}" style="display:grid;grid-template-columns:${gt};width:max-content;min-width:100%;border-bottom:1px solid var(--bd1);cursor:pointer;align-items:stretch;content-visibility:auto;contain-intrinsic-size:0 28px;${isActive?'background:rgba(108,142,245,0.18)':''}" onclick="S.recIdx=${gi};S._dbLastClick=null;R()">
+      <div class="rec-cell" style="display:flex;align-items:center;justify-content:center" onclick="event.stopPropagation();dbRowCheckClick(${gi},event)" title="Print this label — Shift+click to range select">
         <div class="cb ${isSel?"chk":""}"><span class="check-tick">${isSel?"✓":""}</span></div>
       </div>
-      <div class="rec-cell" style="display:flex;align-items:center;color:var(--text3);font-size:10px;padding:5px 8px">${i+1}</div>
-      ${cols.map(c=>dbCell(c,r,i)).join('')}
+      <div class="rec-cell" style="display:flex;align-items:center;color:var(--text3);font-size:10px;padding:5px 8px">${vp+1}</div>
+      ${cols.map(c=>dbCell(c,r,gi)).join('')}
     </div>`;
   }).join('');
   return`<div style="overflow:auto">${hdr}${body}</div>`;
@@ -3796,8 +4134,12 @@ function buildDatabasePanel(){
     <div style="display:flex;align-items:center;gap:10px;padding:5px 14px;border-bottom:1px solid var(--bd1);flex-shrink:0;position:relative">
       <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Database</span>
       ${fileLbl}
-      ${bound?`<span style="color:var(--text3);font-size:10px">·</span><span style="color:var(--text2);font-size:11px">${recs.length} row${recs.length===1?'':'s'} · ${cols.length} column${cols.length===1?'':'s'}</span>${selInfo}`:""}
+      ${bound?`<span style="color:var(--text3);font-size:10px">·</span><span style="color:var(--text2);font-size:11px">${(filterActive()||searchActive())?`${dbVisibleIndices().length} of ${recs.length} shown`:`${recs.length} row${recs.length===1?'':'s'}`} · ${cols.length} column${cols.length===1?'':'s'}</span>${selInfo}`:""}
+      ${bound&&filterActive()?`<span title="${escAttr(filterSummary())}" style="display:flex;align-items:center;gap:4px;min-width:0;max-width:200px;overflow:hidden"><span style="color:var(--accent);font-weight:600;font-size:10px;flex-shrink:0">Filter:</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--text2)">${esc(filterSummary())}</span></span>`:""}
+      ${bound&&sortActive()?`<span title="${escAttr(sortSummary())}" style="display:flex;align-items:center;gap:4px;min-width:0;max-width:180px;overflow:hidden"><span style="color:var(--accent);font-weight:600;font-size:10px;flex-shrink:0">Sort:</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--text2)">${esc(sortSummary())}</span></span>`:""}
       <div style="flex:1"></div>
+      ${bound?`<input id="db-rec-search" type="text" value="${esc(S.dbSearch||'')}" oninput="onRecSearchInput(this.value)" placeholder="Search all fields…" title="Search across every field — space-separated terms must all match" style="width:170px;padding:3px 8px;font-size:11px;background:var(--surface);border:1px solid var(--bd3);border-radius:5px;color:var(--text)">`:""}
+      ${bound?`<button class="btn${(filterActive()||sortActive())?' on':''}" onclick="event.stopPropagation();openFilterModal()" style="padding:3px 10px;font-size:11px" title="Filter & sort which records show and print">⧩ Filter &amp; sort</button>`:""}
       ${headerToggle}
       ${bound?`<button class="btn${window._colMenuOpen?' on':''}" onclick="event.stopPropagation();toggleColumnsMenu()" style="padding:3px 10px;font-size:11px" title="Show / hide and reorder columns">Columns ▾</button>`:""}
       ${bound?buildColumnsMenu():""}
