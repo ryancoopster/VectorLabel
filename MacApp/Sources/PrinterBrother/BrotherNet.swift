@@ -26,39 +26,48 @@ enum BrotherNet {
 
     enum NetError: Error { case connectFailed, writeFailed }
 
-    /// Connect to `host:port` with a bounded wait. Sets `SO_NOSIGPIPE` so a write to a
-    /// peer-closed socket throws instead of killing the process.
+    /// Connect to `host:port` with a bounded wait. Resolves `host` via `getaddrinfo`, so
+    /// an IPv4 literal, an IPv6 literal, OR a hostname all work (the old inet_pton path
+    /// accepted numeric IPv4 only and silently failed otherwise). Sets `SO_NOSIGPIPE` so
+    /// a write to a peer-closed socket throws instead of killing the process.
     static func connect(host: String, port: UInt16 = printPort, timeoutMs: Int = 4000) throws -> Int32 {
-        let fd = socket(AF_INET, SOCK_STREAM, 0)
-        guard fd >= 0 else { throw NetError.connectFailed }
-        var on: Int32 = 1
-        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
-        var addr = sockaddr_in()
-        addr.sin_family = sa_family_t(AF_INET)
-        addr.sin_port = port.bigEndian
-        guard inet_pton(AF_INET, host, &addr.sin_addr) == 1 else {
-            Darwin.close(fd); throw NetError.connectFailed
+        var hints = addrinfo()
+        hints.ai_family = AF_UNSPEC          // IPv4 or IPv6
+        hints.ai_socktype = SOCK_STREAM
+        var res: UnsafeMutablePointer<addrinfo>?
+        guard getaddrinfo(host, String(port), &hints, &res) == 0, res != nil else {
+            throw NetError.connectFailed
         }
-        let flags = fcntl(fd, F_GETFL, 0)
-        _ = fcntl(fd, F_SETFL, flags | O_NONBLOCK)
-        let rc = withUnsafePointer(to: &addr) { p in
-            p.withMemoryRebound(to: sockaddr.self, capacity: 1) { sp in
-                Darwin.connect(fd, sp, socklen_t(MemoryLayout<sockaddr_in>.size))
+        defer { freeaddrinfo(res) }
+        // Try each resolved address until one connects.
+        var ai = res
+        while let a = ai {
+            defer { ai = a.pointee.ai_next }
+            guard let sa = a.pointee.ai_addr else { continue }
+            let fd = socket(a.pointee.ai_family, a.pointee.ai_socktype, a.pointee.ai_protocol)
+            if fd < 0 { continue }
+            var on: Int32 = 1
+            setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
+            let flags = fcntl(fd, F_GETFL, 0)
+            _ = fcntl(fd, F_SETFL, flags | O_NONBLOCK)
+            let rc = Darwin.connect(fd, sa, a.pointee.ai_addrlen)
+            var ok = (rc == 0)
+            if rc != 0 && errno == EINPROGRESS {
+                var pfd = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+                if poll(&pfd, 1, Int32(timeoutMs)) > 0, (pfd.revents & Int16(POLLOUT)) != 0 {
+                    var soErr: Int32 = 0
+                    var len = socklen_t(MemoryLayout<Int32>.size)
+                    getsockopt(fd, SOL_SOCKET, SO_ERROR, &soErr, &len)
+                    ok = (soErr == 0)
+                }
             }
-        }
-        if rc != 0 {
-            guard errno == EINPROGRESS else { Darwin.close(fd); throw NetError.connectFailed }
-            var pfd = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
-            guard poll(&pfd, 1, Int32(timeoutMs)) > 0, (pfd.revents & Int16(POLLOUT)) != 0 else {
-                Darwin.close(fd); throw NetError.connectFailed
+            if ok {
+                _ = fcntl(fd, F_SETFL, flags)   // restore blocking mode for writeAll
+                return fd
             }
-            var soErr: Int32 = 0
-            var len = socklen_t(MemoryLayout<Int32>.size)
-            getsockopt(fd, SOL_SOCKET, SO_ERROR, &soErr, &len)
-            guard soErr == 0 else { Darwin.close(fd); throw NetError.connectFailed }
+            Darwin.close(fd)
         }
-        _ = fcntl(fd, F_SETFL, flags)   // restore blocking mode for writeAll
-        return fd
+        throw NetError.connectFailed
     }
 
     /// Write all bytes to the socket (chunking handled by the kernel). 64-byte framing

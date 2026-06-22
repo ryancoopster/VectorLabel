@@ -117,8 +117,8 @@ enum BrotherUSB {
     /// the printer never answers.
     static func readStatus(on conn: BrotherConnection, attempts: Int = 5) -> [UInt8]? {
         var buf = [UInt8](repeating: 0, count: 32)
-        for _ in 0 ..< attempts {
-            usleep(300_000)
+        for i in 0 ..< attempts {
+            if i > 0 { usleep(300_000) }   // retry backoff only — the blocking read already waits for data, so don't tax the (usually-ready) first read
             var got: Int32 = 0
             let rc = buf.withUnsafeMutableBufferPointer {
                 libusb_bulk_transfer(conn.handle, conn.epIn, $0.baseAddress, Int32($0.count), &got, statusTimeoutMs)

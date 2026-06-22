@@ -256,10 +256,13 @@ public enum BrotherPT {
     /// Parse a 32-byte status block (offsets per the handoff): byte10 = tape width
     /// mm, byte11 = media type, byte18 = status type (0x02 = error). nil if too short.
     public static func parseStatus(_ data: [UInt8]) -> Status? {
-        guard data.count >= 12 else { return nil }
+        // Require enough bytes to read EVERY field we report (media at 10/11, error
+        // flags at 8/9, status type at 18). A 12–18 byte partial read would otherwise
+        // report media as valid while silently skipping the error flags it can't reach.
+        guard data.count >= 19 else { return nil }
         var errors: [String] = []
         var coverOpen = false, noMedia = false, incompatible = false
-        let isError = data.count > 18 && data[18] == 0x02
+        let isError = data[18] == 0x02
         if isError {
             if data[8] & 0x01 != 0 { errors.append("No media"); noMedia = true }
             if data[8] & 0x04 != 0 { errors.append("Cutter jam") }
@@ -435,6 +438,12 @@ public enum BrotherPT {
         guard let pw = printWidth(tapeMm: tapeMm) else { return nil }
         let alongLen = max(along, minLabelDots)
         let offset = (pw - across) / 2          // center across the head (crop if wider than the head)
+        // The label is wider across the tape than the head can print: content at both
+        // edges is dropped by the pin-bounds guard below. Surface it rather than silently
+        // cropping (the design is too wide for the snapped tape — pick a wider tape).
+        if across > pw {
+            NSLog("[BrotherPT] label across-tape (\(across)px) exceeds the \(tapeMm)mm tape's \(pw)px printable width — edges will be cropped")
+        }
         var bro = [UInt8](repeating: 0, count: alongLen * pw)
         for a in 0 ..< across {
             let aSrc = mirrorAcross ? (across - 1 - a) : a
