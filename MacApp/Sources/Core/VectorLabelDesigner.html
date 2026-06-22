@@ -624,12 +624,29 @@ function colResizeStart(e,c){
 function hideColumn(c){ window._hiddenColumns=Array.from(new Set([...(window._hiddenColumns||[]),c])); postColumnConfig(); R(); }
 function showColumn(c){ window._hiddenColumns=(window._hiddenColumns||[]).filter(x=>x!==c); postColumnConfig(); R(); }
 function toggleColumn(c){ (window._hiddenColumns||[]).includes(c)?showColumn(c):hideColumn(c); }
-function colHeaderContextMenu(e,c){ e.preventDefault(); hideColumn(c); }
+function closeColMenu(){ const m=document.getElementById('vl-col-menu'); if(m)m.remove(); }
+// Right-click a column header → a small menu (hide this column / show all hidden).
+function colHeaderContextMenu(e,c){
+  e.preventDefault(); e.stopPropagation(); closeColMenu();
+  const menu=document.createElement('div'); menu.id='vl-col-menu';
+  menu.style.cssText='position:fixed;z-index:2500;background:var(--surface);border:1px solid var(--bd4);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.5);padding:4px;min-width:170px;left:'+e.clientX+'px;top:'+e.clientY+'px';
+  function item(label,fn,danger){
+    const d=document.createElement('div'); d.textContent=label;
+    d.style.cssText='padding:6px 10px;border-radius:4px;cursor:pointer;font-size:12px;white-space:nowrap;color:'+(danger?'var(--red)':'var(--text)');
+    d.onmouseenter=()=>d.style.background='var(--bd2)'; d.onmouseleave=()=>d.style.background='';
+    d.onmousedown=ev=>ev.stopPropagation(); d.onclick=()=>{ closeColMenu(); fn(); };
+    menu.appendChild(d);
+  }
+  item('Hide “'+colLabel(c)+'” column',()=>hideColumn(c));
+  if((window._hiddenColumns||[]).length) item('Show all hidden columns',()=>{ window._hiddenColumns=[]; postColumnConfig(); R(); });
+  document.body.appendChild(menu);
+  setTimeout(()=>document.addEventListener('mousedown',closeColMenu,{once:true}),0);
+}
 
 // One header cell: drag to reorder, right-edge to resize, right-click to hide.
 function colHeaderCell(c){
   const j=jsAttr(c);
-  return `<div data-colhdr draggable="true" ondragstart="colDragStart(event,'${j}')" ondragover="colDragOver(event,this)" ondragend="colDragEnd(event)" ondrop="colDrop(event,'${j}')" oncontextmenu="colHeaderContextMenu(event,'${j}')" title="Drag to reorder · right-click to hide" style="position:relative;padding:5px 8px;font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;cursor:grab;box-sizing:border-box">${esc(colLabel(c))}<div onmousedown="colResizeStart(event,'${j}')" style="position:absolute;top:0;right:0;width:6px;height:100%;cursor:col-resize"></div></div>`;
+  return `<div data-colhdr draggable="true" ondragstart="colDragStart(event,'${j}')" ondragover="colDragOver(event,this)" ondragend="colDragEnd(event)" ondrop="colDrop(event,'${j}')" oncontextmenu="colHeaderContextMenu(event,'${j}')" title="Drag to reorder · right-click for column options" style="position:relative;padding:5px 8px;font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;cursor:grab;box-sizing:border-box">${esc(colLabel(c))}<div onmousedown="colResizeStart(event,'${j}')" style="position:absolute;top:0;right:0;width:6px;height:100%;cursor:col-resize"></div></div>`;
 }
 
 // Columns dropdown: checkboxes to show/hide + grab handle to reorder.
@@ -638,7 +655,7 @@ function buildColumnsMenu(){
   if(!window._colMenuOpen)return '';
   const cols=recordColumns(currentRecords());
   const hidden=new Set(window._hiddenColumns||[]);
-  return `<div onclick="event.stopPropagation()" style="position:absolute;right:8px;top:26px;z-index:30;background:var(--surface);border:1px solid var(--bd4);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.5);padding:5px;max-height:280px;overflow-y:auto;min-width:190px">
+  return `<div id="vl-cols-menu-scroll" onclick="event.stopPropagation()" style="position:absolute;right:8px;top:26px;z-index:30;background:var(--surface);border:1px solid var(--bd4);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.5);padding:5px;max-height:280px;overflow-y:auto;min-width:190px">
     <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;padding:3px 6px 5px">Columns</div>
     ${cols.map(c=>`<div draggable="true" ondragstart="colDragStart(event,'${jsAttr(c)}')" ondragover="colDragOver(event,this)" ondragend="colDragEnd(event)" ondrop="colDrop(event,'${jsAttr(c)}')" style="display:flex;align-items:center;gap:7px;padding:3px 6px;border-radius:4px">
       <span title="Drag to reorder" style="cursor:grab;color:var(--text2);font-size:12px;user-select:none">⋮⋮</span>
@@ -1352,7 +1369,7 @@ function centerCanvasWhenReady(tries){
 // every click jumps the canvas and resets the properties panel to the top. Callers
 // that WANT to recenter the canvas instead (e.g. choosing a new supply) set
 // _centerCanvasNext, which overrides the canvas restore with centerCanvas().
-const _SCROLLERS=['canvas-scroll','props-pane','rec-panel','db-panel'];
+const _SCROLLERS=['canvas-scroll','props-pane','rec-panel','db-panel','vl-cols-menu-scroll'];
 let _centerCanvasNext=false;
 function _captureScroll(){
   const m={};
@@ -3776,12 +3793,14 @@ function buildDatabasePanel(){
 
   return `<div id="db-panel" style="background:var(--surface);border-top:1px solid var(--bd2);flex-shrink:0;display:flex;flex-direction:column;height:${Math.max(110,S.dbH||240)}px;max-height:75vh">
     <div id="db-resizer" title="Drag to resize the database pane" onmousedown="startDbResize(event)" onmouseenter="this.style.background='rgba(108,142,245,0.25)'" onmouseleave="this.style.background='rgba(108,142,245,0)'" style="height:6px;cursor:row-resize;flex-shrink:0;background:rgba(108,142,245,0);transition:background .12s"></div>
-    <div style="display:flex;align-items:center;gap:10px;padding:5px 14px;border-bottom:1px solid var(--bd1);flex-shrink:0">
+    <div style="display:flex;align-items:center;gap:10px;padding:5px 14px;border-bottom:1px solid var(--bd1);flex-shrink:0;position:relative">
       <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Database</span>
       ${fileLbl}
       ${bound?`<span style="color:var(--text3);font-size:10px">·</span><span style="color:var(--text2);font-size:11px">${recs.length} row${recs.length===1?'':'s'} · ${cols.length} column${cols.length===1?'':'s'}</span>${selInfo}`:""}
       <div style="flex:1"></div>
       ${headerToggle}
+      ${bound?`<button class="btn${window._colMenuOpen?' on':''}" onclick="event.stopPropagation();toggleColumnsMenu()" style="padding:3px 10px;font-size:11px" title="Show / hide and reorder columns">Columns ▾</button>`:""}
+      ${bound?buildColumnsMenu():""}
       <button class="btn" onclick="chooseDataSource()" style="padding:3px 10px;font-size:11px">Choose data file…</button>
       <button class="btn" onclick="clearDataSourceCustom()" style="padding:3px 10px;font-size:11px"${bound?"":" disabled"} title="Unbind the data source — back to a single label">Clear data</button>
       <button class="btn" onclick="refreshDataSource()" style="padding:3px 10px;font-size:11px"${bound?"":" disabled"} title="Re-read the bound file from disk">↻ Refresh from source</button>
