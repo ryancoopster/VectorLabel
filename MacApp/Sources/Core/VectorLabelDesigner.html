@@ -98,10 +98,15 @@ const BARCODE_TYPES=[
 function bcDef(id){ return BARCODE_TYPES.find(t=>t.id===id)||BARCODE_TYPES[0]; }
 function bcIs2D(id){ return bcDef(id).d2; }
 function bcECC(id){ return bcDef(id).ecc; }
+// Matrix codes that MUST keep a square aspect to scan (uniform scaling). Everything else
+// — linear (1-D) codes AND the stacked PDF417 — may stretch freely in either axis.
+function bcSquare(id){ return id==="qrcode"||id==="datamatrix"||id==="azteccode"||id==="microqrcode"; }
 function barcodeEngineReady(){ return !(typeof bwipjs==="undefined"||!bwipjs); }
 // Render a barcode to an SVG string via bwip-js; null if it can't encode (or no engine).
 // A quiet zone (paddingwidth/height in MODULES) matches the print path so the preview is
-// WYSIWYG: 2-D gets 2 modules all round, 1-D gets 10 modules left/right.
+// WYSIWYG: 2-D gets 2 modules all round, 1-D gets 10 modules left/right. Non-square codes
+// get preserveAspectRatio="none" so object-fit:fill actually stretches them (the SVG's
+// default "meet" otherwise keeps the bars proportional → looks like overall-only scaling).
 function renderBarcodeSVG(bcid,text,eclevel){
   if(!barcodeEngineReady()||!bcid||text==null||text==="") return null;
   try{
@@ -110,7 +115,9 @@ function renderBarcodeSVG(bcid,text,eclevel){
                 paddingwidth:is2D?2:10, paddingheight:is2D?2:0};
     const ecc=bcECC(bcid);
     if(ecc.length&&eclevel)opts.eclevel=String(eclevel);
-    return bwipjs.toSVG(opts);
+    let svg=bwipjs.toSVG(opts);
+    if(svg && !bcSquare(bcid) && !/preserveAspectRatio/.test(svg)) svg=svg.replace('<svg ','<svg preserveAspectRatio="none" ');
+    return svg;
   }catch(e){ return null; }
 }
 // True when this barcode object encodes the given record's data (else flag the row).
@@ -1039,7 +1046,7 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
       const svg=(!r.e&&r.v!==""&&r.v!=null)?renderBarcodeSVG(o.bcType,r.v,o.eclevel):null;
       let inner;
       if(svg){
-        inner=`<img src="data:image/svg+xml,${encodeURIComponent(svg)}" style="width:100%;height:100%;object-fit:${bcIs2D(o.bcType)?'contain':'fill'};pointer-events:none;display:block">`;
+        inner=`<img src="data:image/svg+xml,${encodeURIComponent(svg)}" style="width:100%;height:100%;object-fit:${bcSquare(o.bcType)?'contain':'fill'};pointer-events:none;display:block">`;
       }else{
         const msg=!barcodeEngineReady()?'⚠ barcode engine unavailable':r.e?('⚠ '+r.e.substring(0,28)):((r.v===""||r.v==null)?'⚠ no data':'⚠ can’t encode');
         inner=`<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;border:1px dashed var(--red);color:var(--red);font-size:10px;text-align:center;box-sizing:border-box;padding:2px;pointer-events:none">${esc(msg)}</div>`;

@@ -102,35 +102,39 @@ public final class BarcodeRenderer {
     /// Returns false if nothing was drawn (invalid/empty input, or a box so small that no
     /// whole module fits) so the caller can leave the label blank.
     ///
-    /// CRITICAL: the module size is snapped to a multiple of the 900→native downscale
+    /// SQUARE matrix codes (QR/DataMatrix/Aztec/MicroQR) keep their aspect and are drawn
+    /// with an integer module size snapped to a multiple of the 900→native downscale
     /// factor (lcm of Brady ÷3 and Brother ÷5 = 15, then ÷3, then best-effort) so the
-    /// driver's box-filter downscale is an EXACT integer reduction. Without this, module
-    /// boundaries land mid-output-pixel and the ink-biased (0.18) threshold can merge
-    /// adjacent 2-D modules into solid black — unscannable. Aligned modules make every
-    /// native pixel fully inside one module, so the threshold can't smear them.
+    /// driver's box-filter downscale is an EXACT integer reduction — otherwise module
+    /// boundaries land mid-output-pixel and the ink-biased (0.18) threshold merges
+    /// adjacent modules into solid black (unscannable).
+    ///
+    /// NON-SQUARE codes (1-D linear + stacked PDF417) instead STRETCH to fill the box on
+    /// both axes (matching the designer, where the user sizes width/height freely); 1-D /
+    /// PDF417 tolerate the resulting fractional modules.
     @discardableResult
     public func draw(bcid: String, text: String, eclevel: String?,
                      in rect: CGRect, ctx cg: CGContext, quietModules: Int = -1) -> Bool {
         guard rect.width > 0, rect.height > 0,
               let sym = symbol(bcid: bcid, text: text, eclevel: eclevel) else { return false }
         let is2D = sym.h > 1
+        let square = ["qrcode", "datamatrix", "azteccode", "microqrcode"].contains(bcid)
         let quiet = quietModules >= 0 ? quietModules : (is2D ? 2 : 10)
         let gridW = sym.w + quiet * 2
         let gridH = is2D ? (sym.h + quiet * 2) : sym.h   // 1-D: bars fill the box height
-
-        // Integer module size that fits, snapped to the downscale factor (see note above).
-        func snap(_ v: Int) -> Int { v >= 15 ? v - v % 15 : (v >= 3 ? v - v % 3 : v) }
-        let fit = is2D ? Int(floor(min(rect.width / CGFloat(gridW), rect.height / CGFloat(gridH))))
-                       : Int(floor(rect.width / CGFloat(gridW)))
-        guard fit >= 1 else { return false }   // box too small for one whole module → blank
-        let m = CGFloat(max(1, snap(fit)))
 
         cg.saveGState()
         cg.clip(to: rect)                       // never bleed past the box
         cg.setShouldAntialias(false)
         cg.setFillColor(gray: 0, alpha: 1)
+        defer { cg.restoreGState() }
 
-        if is2D {
+        if square {
+            // Aligned integer module, centered, square (scannability-critical: no merge).
+            func snap(_ v: Int) -> Int { v >= 15 ? v - v % 15 : (v >= 3 ? v - v % 3 : v) }
+            let fit = Int(floor(min(rect.width / CGFloat(gridW), rect.height / CGFloat(gridH))))
+            guard fit >= 1 else { return false }   // box too small for one whole module → blank
+            let m = CGFloat(max(1, snap(fit)))
             let drawW = m * CGFloat(gridW), drawH = m * CGFloat(gridH)
             let ox = rect.minX + (rect.width - drawW) / 2 + m * CGFloat(quiet)
             let oy = rect.minY + (rect.height - drawH) / 2 + m * CGFloat(quiet)
@@ -148,21 +152,37 @@ public final class BarcodeRenderer {
                 }
             }
         } else {
-            // 1-D: integer-width bars (aligned), full box height, centered horizontally.
-            let drawW = m * CGFloat(gridW)
-            let ox = rect.minX + (rect.width - drawW) / 2 + m * CGFloat(quiet)
-            var col = 0
-            while col < sym.w {
-                if sym.bits[col] {
-                    var run = 1
-                    while col + run < sym.w, sym.bits[col + run] { run += 1 }
-                    cg.fill(CGRect(x: ox + CGFloat(col) * m, y: rect.minY,
-                                   width: m * CGFloat(run), height: rect.height))
-                    col += run
-                } else { col += 1 }
+            // Stretch to fill the box. Fractional module sizes; bars/rows fill both axes.
+            let mX = rect.width / CGFloat(gridW)
+            let ox = rect.minX + mX * CGFloat(quiet)
+            if is2D {
+                let mY = rect.height / CGFloat(gridH)
+                let oy = rect.minY + mY * CGFloat(quiet)
+                for row in 0..<sym.h {
+                    let y = oy + CGFloat(sym.h - 1 - row) * mY
+                    var col = 0
+                    while col < sym.w {
+                        if sym.bits[row * sym.w + col] {
+                            var run = 1
+                            while col + run < sym.w, sym.bits[row * sym.w + col + run] { run += 1 }
+                            cg.fill(CGRect(x: ox + CGFloat(col) * mX, y: y, width: mX * CGFloat(run), height: mY))
+                            col += run
+                        } else { col += 1 }
+                    }
+                }
+            } else {
+                var col = 0
+                while col < sym.w {
+                    if sym.bits[col] {
+                        var run = 1
+                        while col + run < sym.w, sym.bits[col + run] { run += 1 }
+                        cg.fill(CGRect(x: ox + CGFloat(col) * mX, y: rect.minY,
+                                       width: mX * CGFloat(run), height: rect.height))
+                        col += run
+                    } else { col += 1 }
+                }
             }
         }
-        cg.restoreGState()
         return true
     }
 }

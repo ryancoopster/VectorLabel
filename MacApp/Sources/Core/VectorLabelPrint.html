@@ -121,6 +121,9 @@ const BARCODE_TYPES=[
 function bcDef(id){ return BARCODE_TYPES.find(t=>t.id===id)||BARCODE_TYPES[0]; }
 function bcIs2D(id){ return bcDef(id).d2; }
 function bcECC(id){ return bcDef(id).ecc; }
+// Matrix codes that MUST keep a square aspect (QR/DataMatrix/Aztec/MicroQR); everything
+// else (linear + PDF417) may stretch freely.
+function bcSquare(id){ return id==="qrcode"||id==="datamatrix"||id==="azteccode"||id==="microqrcode"; }
 function barcodeEngineReady(){ return !(typeof bwipjs==="undefined"||!bwipjs); }
 function renderBarcodeSVG(bcid,text,eclevel){
   if(!barcodeEngineReady()||!bcid||text==null||text==="") return null;
@@ -130,7 +133,9 @@ function renderBarcodeSVG(bcid,text,eclevel){
                 paddingwidth:is2D?2:10, paddingheight:is2D?2:0};
     const ecc=bcECC(bcid);
     if(ecc.length&&eclevel)opts.eclevel=String(eclevel);
-    return bwipjs.toSVG(opts);
+    let svg=bwipjs.toSVG(opts);
+    if(svg && !bcSquare(bcid) && !/preserveAspectRatio/.test(svg)) svg=svg.replace('<svg ','<svg preserveAspectRatio="none" ');
+    return svg;
   }catch(e){ return null; }
 }
 // True when this barcode object encodes the given record's data (else flag the row).
@@ -306,7 +311,7 @@ function renderLabel(tpl,rec,scale=1){
     if(o.t==="bc"){
       const {v,e}=textValue(o,rec);
       const svg=(!e&&v!==""&&v!=null)?renderBarcodeSVG(o.bcType,v,o.eclevel):null;
-      if(svg)return`<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;${rc}"><img src="data:image/svg+xml,${encodeURIComponent(svg)}" style="width:100%;height:100%;object-fit:${bcIs2D(o.bcType)?'contain':'fill'};display:block"></div>`;
+      if(svg)return`<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;${rc}"><img src="data:image/svg+xml,${encodeURIComponent(svg)}" style="width:100%;height:100%;object-fit:${bcSquare(o.bcType)?'contain':'fill'};display:block"></div>`;
       const bmsg=!barcodeEngineReady()?'Barcode engine unavailable':('This record can’t be encoded as '+bcDef(o.bcType).label);
       return`<div title="${esc(bmsg)}" style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;${rc};display:flex;align-items:center;justify-content:center;border:1px dashed var(--red);color:var(--red);font-size:9px;box-sizing:border-box;text-align:center">⚠</div>`;
     }
