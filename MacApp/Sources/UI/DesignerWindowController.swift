@@ -541,17 +541,19 @@ public final class DesignerWindowController: NSObject {
     /// then inject the chosen template into the designer.
     private func browseForTemplate() {
         let panel = NSOpenPanel()
-        // Accept the new ".vltmp" type, the legacy ".json"/".vlt.json" forms, and a Brady
-        // Workstation template (".BWT") — the latter is auto-converted on selection.
+        // Accept the new ".vltmp" type, the legacy ".json"/".vlt.json" forms, a Brady
+        // Workstation template (".BWT") and a Brother P-touch template (".lbx") — the last
+        // two are auto-converted on selection.
         var types: [UTType] = [.json]
         if let vltmp = UTType(filenameExtension: TemplateStore.templateExtension) { types.append(vltmp) }
         if let bwt = UTType(filenameExtension: "bwt") { types.append(bwt) }
+        if let lbx = UTType(filenameExtension: "lbx") { types.append(lbx) }
         panel.allowedContentTypes = types
-        panel.allowsOtherFileTypes = true   // ".BWT" may have no registered UTI
+        panel.allowsOtherFileTypes = true   // ".BWT"/".lbx" may have no registered UTI
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.directoryURL = AppSettings.shared.templatesFolderURL
-        panel.message = "Choose a VectorLabel template (.vltmp) or Brady template (.BWT) to open"
+        panel.message = "Open a VectorLabel template (.vltmp), Brady (.BWT) or Brother P-touch (.lbx)"
         panel.level = .modalPanel  // above the floating designer window
         // The designer window is a .nonactivatingPanel, so the app may not be active —
         // activate it first or the modeless open panel can't become key (unclickable).
@@ -559,51 +561,61 @@ public final class DesignerWindowController: NSObject {
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             MainActor.assumeIsolated {
-                // Route by file type: a Brady ".BWT" is converted; anything else opens as
+                // Route by file type: ".BWT"/".lbx" are converted; anything else opens as
                 // a VectorLabel template.
-                if url.pathExtension.lowercased() == "bwt" { self?.performBradyImport(from: url) }
+                let ext = url.pathExtension.lowercased()
+                if ext == "bwt" || ext == "lbx" { self?.performImport(from: url) }
                 else { self?.injectBrowsedTemplate(from: url) }
             }
         }
     }
 
-    /// Custom Designer "Open…": pick a VectorLabel label (".vlcus") OR a Brady template
-    /// (".BWT"), routing by file type — a Brady template is auto-converted, a ".vlcus"
-    /// opens normally.
+    /// Custom Designer "Open…": pick a VectorLabel label (".vlcus") OR a third-party
+    /// template (Brady ".BWT" / Brother P-touch ".lbx"), routing by file type — the
+    /// templates are auto-converted, a ".vlcus" opens normally.
     private func browseForCustomOpen() {
         let panel = NSOpenPanel()
         var types: [UTType] = []
         if let vlcus = UTType(filenameExtension: CustomLabelStore.fileExtension) { types.append(vlcus) }
         if let bwt = UTType(filenameExtension: "bwt") { types.append(bwt) }
+        if let lbx = UTType(filenameExtension: "lbx") { types.append(lbx) }
         if !types.isEmpty { panel.allowedContentTypes = types }
-        panel.allowsOtherFileTypes = true     // ".BWT" may have no registered UTI
+        panel.allowsOtherFileTypes = true     // ".BWT"/".lbx" may have no registered UTI
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.directoryURL = CustomLabelStore.defaultFolderURL
-        panel.message = "Open a VectorLabel label (.vlcus) or Brady template (.BWT)"
+        panel.message = "Open a VectorLabel label (.vlcus), Brady (.BWT) or Brother P-touch (.lbx)"
         panel.level = .modalPanel
         NSApp.activate(ignoringOtherApps: true)
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             MainActor.assumeIsolated {
-                if url.pathExtension.lowercased() == "bwt" {
-                    self?.performBradyImport(from: url)
+                let ext = url.pathExtension.lowercased()
+                if ext == "bwt" || ext == "lbx" {
+                    self?.performImport(from: url)
                 } else if let doc = CustomLabelStore.load(from: url) {
                     self?.openCustomDocument(doc)
                 } else {
-                    self?.presentBradyImportError(url, reason: "This file couldn't be opened. Choose a .vlcus or .BWT file.")
+                    self?.presentImportError(url, reason: "This file couldn't be opened. Choose a .vlcus, .BWT or .lbx file.")
                 }
             }
         }
     }
 
-    private func performBradyImport(from url: URL) {
+    /// Import a third-party template — Brady ".BWT" or Brother P-touch ".lbx" — dispatching
+    /// by file type, and load it as a new unsaved document.
+    private func performImport(from url: URL) {
         guard let data = try? Data(contentsOf: url) else {
-            presentBradyImportError(url, reason: "The file couldn't be read.")
+            presentImportError(url, reason: "The file couldn't be read.")
             return
         }
-        guard let imp = BradyBWTImporter.parse(data) else {
-            presentBradyImportError(url, reason: "This doesn't look like a supported Brady text template — no readable label fields were found. Barcodes-only or image-only templates aren't supported yet.")
+        let ext = url.pathExtension.lowercased()
+        let design: ImportedDesign? = (ext == "lbx") ? BrotherLBXImporter.parse(data)
+                                                      : BradyBWTImporter.parse(data)
+        guard let imp = design else {
+            presentImportError(url, reason: ext == "lbx"
+                ? "This Brother P-touch label couldn't be read — no supported text, barcode, or line objects were found."
+                : "This doesn't look like a supported Brady text template — no readable label fields were found. Barcode-only or image-only templates aren't supported yet.")
             return
         }
         // Importing replaces the canvas — don't silently clobber unsaved work.
@@ -620,7 +632,7 @@ public final class DesignerWindowController: NSObject {
     }
 
     /// Build the JS doc the page's `initImportedDocument` expects and inject it.
-    private func injectImported(_ imp: BradyBWTImporter.Imported, sourceName: String) {
+    private func injectImported(_ imp: ImportedDesign, sourceName: String) {
         guard let wv = webView else { return }
         guard let objData = try? JSONSerialization.data(withJSONObject: imp.objects),
               let objJSON = String(data: objData, encoding: .utf8) else { return }
@@ -647,7 +659,7 @@ public final class DesignerWindowController: NSObject {
         wv.evaluateJavaScript(js, completionHandler: nil)
     }
 
-    private func presentBradyImportError(_ url: URL, reason: String) {
+    private func presentImportError(_ url: URL, reason: String) {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = "Couldn't import “\(url.lastPathComponent)”"

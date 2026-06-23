@@ -21,20 +21,8 @@ import Foundation
 
 public enum BradyBWTImporter {
 
-    /// The result of importing a ".BWT": the recovered design, ready to inject into the
-    /// designer as a new, unsaved document.
-    public struct Imported {
-        public var name: String                 // display name (file stem, falls back to part #)
-        public var partNumber: String           // Brady part number (e.g. "M6-173-593")
-        public var widthInches: Double           // supply width  (die-cut: part width; continuous: tape width)
-        public var heightInches: Double          // supply height (die-cut: part height; continuous: label length)
-        public var canvasRotation: Int           // 0 or 90 — stock-aware (see parse())
-        public var labelLengthInches: Double     // continuous only: the design's along-feed length (0 ⇒ n/a)
-        public var isContinuous: Bool
-        public var objects: [[String: Any]]      // designer "tx" objects (x/y/w/h in the design frame, inches)
-        public var fieldNames: [String]          // prompt names, in object order
-        public var warnings: [String]            // anything skipped / not yet supported
-    }
+    /// The recovered design (shared shape across importers — see `ImportedDesign`).
+    public typealias Imported = ImportedDesign
 
     /// Parse ".BWT" bytes. Returns nil only when the file isn't a recognizable BWT
     /// (no usable PartInfo geometry, or no decodable text objects).
