@@ -541,40 +541,59 @@ public final class DesignerWindowController: NSObject {
     /// then inject the chosen template into the designer.
     private func browseForTemplate() {
         let panel = NSOpenPanel()
-        // Accept the new ".vltmp" type and the legacy ".json"/".vlt.json" forms.
+        // Accept the new ".vltmp" type, the legacy ".json"/".vlt.json" forms, and a Brady
+        // Workstation template (".BWT") — the latter is auto-converted on selection.
         var types: [UTType] = [.json]
         if let vltmp = UTType(filenameExtension: TemplateStore.templateExtension) { types.append(vltmp) }
+        if let bwt = UTType(filenameExtension: "bwt") { types.append(bwt) }
         panel.allowedContentTypes = types
+        panel.allowsOtherFileTypes = true   // ".BWT" may have no registered UTI
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.directoryURL = AppSettings.shared.templatesFolderURL
-        panel.message = "Choose a VectorLabel template (.vltmp) to open"
+        panel.message = "Choose a VectorLabel template (.vltmp) or Brady template (.BWT) to open"
         panel.level = .modalPanel  // above the floating designer window
         // The designer window is a .nonactivatingPanel, so the app may not be active —
         // activate it first or the modeless open panel can't become key (unclickable).
         NSApp.activate(ignoringOtherApps: true)
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
-            MainActor.assumeIsolated { self?.injectBrowsedTemplate(from: url) }
+            MainActor.assumeIsolated {
+                // Route by file type: a Brady ".BWT" is converted; anything else opens as
+                // a VectorLabel template.
+                if url.pathExtension.lowercased() == "bwt" { self?.performBradyImport(from: url) }
+                else { self?.injectBrowsedTemplate(from: url) }
+            }
         }
     }
 
-    /// Finder panel to pick a Brady Workstation template (".BWT"), then import it into
-    /// the current designer (Template or Custom) as a new, unsaved document.
-    private func importBradyTemplate() {
+    /// Custom Designer "Open…": pick a VectorLabel label (".vlcus") OR a Brady template
+    /// (".BWT"), routing by file type — a Brady template is auto-converted, a ".vlcus"
+    /// opens normally.
+    private func browseForCustomOpen() {
         let panel = NSOpenPanel()
         var types: [UTType] = []
+        if let vlcus = UTType(filenameExtension: CustomLabelStore.fileExtension) { types.append(vlcus) }
         if let bwt = UTType(filenameExtension: "bwt") { types.append(bwt) }
         if !types.isEmpty { panel.allowedContentTypes = types }
         panel.allowsOtherFileTypes = true     // ".BWT" may have no registered UTI
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        panel.message = "Choose a Brady Workstation template (.BWT) to import"
+        panel.directoryURL = CustomLabelStore.defaultFolderURL
+        panel.message = "Open a VectorLabel label (.vlcus) or Brady template (.BWT)"
         panel.level = .modalPanel
         NSApp.activate(ignoringOtherApps: true)
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
-            MainActor.assumeIsolated { self?.performBradyImport(from: url) }
+            MainActor.assumeIsolated {
+                if url.pathExtension.lowercased() == "bwt" {
+                    self?.performBradyImport(from: url)
+                } else if let doc = CustomLabelStore.load(from: url) {
+                    self?.openCustomDocument(doc)
+                } else {
+                    self?.presentBradyImportError(url, reason: "This file couldn't be opened. Choose a .vlcus or .BWT file.")
+                }
+            }
         }
     }
 
@@ -587,6 +606,16 @@ public final class DesignerWindowController: NSObject {
             presentBradyImportError(url, reason: "This doesn't look like a supported Brady text template — no readable label fields were found. Barcodes-only or image-only templates aren't supported yet.")
             return
         }
+        // Importing replaces the canvas — don't silently clobber unsaved work.
+        if isDirty {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Replace the current label?"
+            alert.informativeText = "Importing “\(url.lastPathComponent)” replaces what’s on the canvas. Your unsaved changes will be lost."
+            alert.addButton(withTitle: "Replace")
+            alert.addButton(withTitle: "Cancel")
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+        }
         injectImported(imp, sourceName: url.deletingPathExtension().lastPathComponent)
     }
 
@@ -595,9 +624,10 @@ public final class DesignerWindowController: NSObject {
         guard let wv = webView else { return }
         guard let objData = try? JSONSerialization.data(withJSONObject: imp.objects),
               let objJSON = String(data: objData, encoding: .utf8) else { return }
-        // PHYSICAL (portrait) supply geometry — the design frame's rotation is carried
-        // by canvasRot, so the supply resolves to the real catalog part and the renderer
-        // rotates the design onto it.
+        // Supply geometry. Die-cut: the physical (portrait) part — its landscape design
+        // is carried by canvasRot, so the supply resolves to the real catalog part and the
+        // renderer rotates the design onto it. Continuous: the tape width + label length,
+        // with canvasRot expressing portrait/landscape against the renderer's default.
         let geom: [String: Any] = [
             "widthInches": imp.widthInches, "heightInches": imp.heightInches,
             "printableWidthInches": imp.widthInches, "printableHeightInches": imp.heightInches,
@@ -611,7 +641,8 @@ public final class DesignerWindowController: NSObject {
         let js = """
         if(typeof initImportedDocument==='function')initImportedDocument({\
         name:\(name.jsonQuoted),specN:\(imp.partNumber.jsonQuoted),objs:\(objJSON),\
-        supplyGeometry:\(geomJSON),canvasRot:\(imp.canvasRotation),warnings:\(warnJSON)});
+        supplyGeometry:\(geomJSON),canvasRot:\(imp.canvasRotation),\
+        labelLengthInches:\(imp.labelLengthInches),warnings:\(warnJSON)});
         """
         wv.evaluateJavaScript(js, completionHandler: nil)
     }
@@ -1419,8 +1450,8 @@ extension DesignerWindowController: WKScriptMessageHandler {
         case "browseTemplate":
             browseForTemplate()
 
-        case "importBradyTemplate":
-            importBradyTemplate()
+        case "browseCustomOpen":
+            browseForCustomOpen()
 
         case "browseDataSource":
             // Custom mode sends the current "first row is headers" toggle so the

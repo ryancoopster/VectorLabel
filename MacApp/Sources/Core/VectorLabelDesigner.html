@@ -1414,7 +1414,6 @@ function R(){
         <span style="color:var(--text3);font-size:11px">${isCustomMode()?'Custom Designer':'Template Designer'}</span>
         <span style="color:var(--text3);font-size:9px;opacity:.55;letter-spacing:.2px" title="VectorLabel build ${(window.__VL_BUILD__||"?")}">build ${(window.__VL_BUILD__||"?")}</span>
       </div>
-      <button class="btn" onclick="importBradyTemplate()" title="Import a Brady Workstation template (.BWT) — recreates its fields, sizes, and layout as a new label" style="padding:4px 10px;font-size:11px">⤓ Import Brady…</button>
       <div style="flex:1"></div>
       <button class="btn" onclick="openSupplyPicker()" title="Choose a label supply" style="display:flex;align-items:center;gap:10px;padding:4px 10px">
         <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Supply</span>
@@ -1590,6 +1589,7 @@ function R(){
       // Custom Designer: save the canvas + embedded data as a ".vlcus" document.
       tb.innerHTML=`
         <button class="btn" onclick="showModal('new')" style="padding:4px 10px">New</button>
+        <button class="btn" onclick="openCustomFile()" title="Open a VectorLabel label (.vlcus) or a Brady template (.BWT, auto-converted)" style="padding:4px 10px">Open…</button>
         <button class="btn" onclick="saveCustomDocument()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600;padding:5px 14px">Save Label…</button>
       `;
     }else{
@@ -1774,7 +1774,7 @@ function renderModal(){
     overlay.innerHTML=`
       <div class="modal" style="width:420px">
         <div class="modal-title" style="display:flex;align-items:center;gap:8px"><span style="color:var(--warn)">⚠</span> ${esc(S._infoTitle||"Notice")}</div>
-        <div style="color:var(--text2);font-size:13px;line-height:1.6;margin:6px 0 18px">${esc(S._infoMsg||"")}</div>
+        <div style="color:var(--text2);font-size:13px;line-height:1.6;margin:6px 0 18px;white-space:pre-wrap">${esc(S._infoMsg||"")}</div>
         <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px">
           <button class="btn" onclick="closeModal()">OK</button>
         </div>
@@ -3664,10 +3664,12 @@ function initImportedDocument(doc){
   showToast("Imported "+(doc.objs||[]).length+" field"+((doc.objs||[]).length===1?"":"s")+": "+S.tplName);
   if(warns.length){ S._infoTitle="Import note"; S._infoMsg="Imported “"+S.tplName+"” with "+warns.length+" item(s) that need attention:\n\n• "+warns.join("\n• "); S.modal="info"; renderModal(); }
 }
-// Ask Swift to show an open panel for a Brady ".BWT" template, then import it.
-function importBradyTemplate(){
+// Custom Designer "Open…" → Swift shows an open panel for a VectorLabel label
+// (".vlcus") OR a Brady template (".BWT"); Swift routes by file type, auto-converting
+// a Brady template into a new imported document.
+function openCustomFile(){
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
-    window.webkit.messageHandlers.vectorlabel.postMessage({action:"importBradyTemplate"});
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"browseCustomOpen"});
 }
 
 // "Choose data file…" → Swift opens an NSOpenPanel (csv,xlsx), sending the current

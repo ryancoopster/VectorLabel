@@ -26,9 +26,10 @@ public enum BradyBWTImporter {
     public struct Imported {
         public var name: String                 // display name (file stem, falls back to part #)
         public var partNumber: String           // Brady part number (e.g. "M6-173-593")
-        public var widthInches: Double           // PHYSICAL part width (the supply's native size)
-        public var heightInches: Double          // PHYSICAL part height
-        public var canvasRotation: Int           // 0, or 90 when the design is laid out landscape
+        public var widthInches: Double           // supply width  (die-cut: part width; continuous: tape width)
+        public var heightInches: Double          // supply height (die-cut: part height; continuous: label length)
+        public var canvasRotation: Int           // 0 or 90 — stock-aware (see parse())
+        public var labelLengthInches: Double     // continuous only: the design's along-feed length (0 ⇒ n/a)
         public var isContinuous: Bool
         public var objects: [[String: Any]]      // designer "tx" objects (x/y/w/h in the design frame, inches)
         public var fieldNames: [String]          // prompt names, in object order
@@ -41,14 +42,22 @@ public enum BradyBWTImporter {
         let b = [UInt8](data)
         guard let part = parsePartInfo(b) else { return nil }
 
-        // Brady stores part dimensions in 1/10000 inch. The supply keeps its PHYSICAL
-        // (portrait) size; a Landscape template designs the label rotated 90°, which we
-        // represent with canvasRot=90 over the physical supply (the designer + renderer
-        // then show / print the rotated 2×1 design on the physical 1×2 label). The text
-        // rects below are already in that rotated design frame, so they need no transform.
+        // Brady stores part dimensions in 1/10000 inch. The text rects below are already
+        // in the laid-out design frame, so they need no transform — only the supply +
+        // orientation differ by stock type:
+        //  • Die-cut: supply keeps its PHYSICAL (portrait) size; a Landscape template is
+        //    represented with canvasRot=90 (renderer rotates the design onto the label).
+        //  • Continuous: the tape width is fixed and the length is the along-feed extent;
+        //    the renderer's DEFAULT is landscape, so a landscape design is canvasRot=0 and
+        //    a portrait design is the 90° override (opposite of die-cut).
         let pwIn = Double(part.w) / 10_000.0
         let phIn = Double(part.h) / 10_000.0
-        let canvasRotation = part.landscape ? 90 : 0
+        // Reject obviously-corrupt geometry (real Brady supplies are well under ~60").
+        guard pwIn > 0, phIn > 0, pwIn <= 60, phIn <= 60 else { return nil }
+        let canvasRotation = part.continuous ? (part.landscape ? 0 : 90)
+                                             : (part.landscape ? 90 : 0)
+        // Continuous: tape width = the part's width, label length = the part's height.
+        let labelLength = part.continuous ? phIn : 0
 
         var objects: [[String: Any]] = []
         var fields: [String] = []
@@ -67,8 +76,11 @@ public enum BradyBWTImporter {
                 warnings.append("Skipped \(prompt): out-of-range geometry"); continue
             }
             let fs = readFontSize(b, from: t.start, to: t.end) ?? 12
+            // Import as STATIC text whose content is the Brady prompt/field name (so the
+            // imported label reads like the original layout; the user edits the text or
+            // re-binds to data afterward).
             objects.append([
-                "t": "tx", "mode": "field", "field": prompt,
+                "t": "tx", "mode": "static", "text": prompt,
                 "x": round4(x), "y": round4(y), "w": round4(wd), "h": round4(h),
                 "fs": Int(fs.rounded()), "al": "left", "valign": "middle",
                 "font": "Helvetica Neue",
@@ -91,6 +103,7 @@ public enum BradyBWTImporter {
                         partNumber: part.name,
                         widthInches: pwIn, heightInches: phIn,
                         canvasRotation: canvasRotation,
+                        labelLengthInches: labelLength,
                         isContinuous: part.continuous,
                         objects: objects, fieldNames: fields, warnings: warnings)
     }
@@ -113,9 +126,12 @@ public enum BradyBWTImporter {
         guard w > 0, h > 0 else { return nil }
         let orient = (tag("OutputOrientation") ?? "Portrait").lowercased()
         let cont = (tag("IsContinuous") ?? "False").lowercased() == "true"
-        // "<Name>M6-173-593 | M6-173-593</Name>" → first part number.
+        // The Name carries the part number plus a duplicate or a serial, separated by
+        // "|" or " : " — e.g. "M6-173-593 | M6-173-593" or "BM-32-427 : Y5074516". Take
+        // the leading part number so it resolves against the supply catalog.
         let nameRaw = tag("Name") ?? ""
-        let part = nameRaw.components(separatedBy: "|").first?.trimmingCharacters(in: .whitespaces) ?? nameRaw
+        let part = nameRaw.components(separatedBy: CharacterSet(charactersIn: "|:"))
+            .first?.trimmingCharacters(in: .whitespaces) ?? nameRaw
         return PartInfo(name: part, w: w, h: h, landscape: orient == "landscape", continuous: cont)
     }
 
@@ -131,8 +147,14 @@ public enum BradyBWTImporter {
             if Array(b[i..<i + prefix.count]) == prefix, isDigit(b[i + prefix.count]) {
                 var j = i + prefix.count
                 while j < b.count, isDigit(b[j]) { j += 1 }
-                let name = String(decoding: b[i..<j], as: UTF8.self)
-                out.append(TextMarker(name: name, start: i, nameLen: name.count, end: b.count))
+                let nameLen = j - i
+                // .NET BinaryFormatter strings are length-prefixed, so the byte BEFORE the
+                // "TEXT n" layer name equals its length. Requiring that match rejects a
+                // literal "TEXT 5" appearing inside object data / a GUID / the preview PNG.
+                if i > 0, Int(b[i - 1]) == nameLen {
+                    let name = String(decoding: b[i..<j], as: UTF8.self)
+                    out.append(TextMarker(name: name, start: i, nameLen: nameLen, end: b.count))
+                }
                 i = j
             } else {
                 i += 1
@@ -162,9 +184,9 @@ public enum BradyBWTImporter {
                 let o = i + needle.count
                 if o < to {
                     let ln = Int(b[o])
-                    if ln >= 2, ln <= 40, o + 1 + ln <= to {
-                        let s = String(decoding: b[(o + 1)..<(o + 1 + ln)], as: UTF8.self)
-                        if isPlausibleFieldName(s) { return s }
+                    if ln >= 2, ln <= 60, o + 1 + ln <= to {
+                        let raw = String(decoding: b[(o + 1)..<(o + 1 + ln)], as: UTF8.self)
+                        if let name = sanitizeFieldName(raw) { return name }
                     }
                 }
                 i = o
@@ -173,6 +195,23 @@ public enum BradyBWTImporter {
             }
         }
         return nil
+    }
+
+    // Clean a decoded prompt into a usable name: take the first line (Brady appends a
+    // "\r\n<ordinal>" to some names), drop control chars, trim. Returns nil only when
+    // nothing real remains — so a name with newlines, foot/inch marks (225'), or other
+    // punctuation is KEPT (the object is no longer discarded over stray characters).
+    private static func sanitizeFieldName(_ s: String) -> String? {
+        // Work on SCALARS (a CR/LF is a single grapheme cluster in Swift, so a Character
+        // split would miss it). Take everything up to the first control character.
+        var out = String.UnicodeScalarView()
+        for sc in s.unicodeScalars {
+            if sc.value < 0x20 || sc.value == 0x7f { break }
+            out.append(sc)
+        }
+        let cleaned = String(out).trimmingCharacters(in: .whitespaces)
+        guard cleaned.unicodeScalars.contains(where: { CharacterSet.alphanumerics.contains($0) }) else { return nil }
+        return cleaned
     }
 
     // Font size: the first plausible double in the bytes after "AutosizeFontKey".
@@ -211,11 +250,4 @@ public enum BradyBWTImporter {
     private static func contains(_ b: [UInt8], _ s: String) -> Bool { indexOf(b, s) != nil }
     private static func isDigit(_ c: UInt8) -> Bool { c >= 0x30 && c <= 0x39 }
     private static func round4(_ v: Double) -> Double { (v * 10_000).rounded() / 10_000 }
-
-    private static func isPlausibleFieldName(_ s: String) -> Bool {
-        guard !s.isEmpty else { return false }
-        return s.unicodeScalars.allSatisfy { sc in
-            sc.isASCII && (CharacterSet.alphanumerics.contains(sc) || " -_/.:#()".unicodeScalars.contains(sc))
-        }
-    }
 }
