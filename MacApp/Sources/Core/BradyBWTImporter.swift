@@ -1,0 +1,221 @@
+import Foundation
+
+// MARK: – Brady Workstation template import (".BWT")
+//
+// Brady Workstation saves label templates as ".BWT" — a .NET-serialized object graph
+// (BinaryFormatter) with an embedded PartInfo XML block (stored single-byte/ASCII
+// despite its `encoding="utf-16"` declaration). This reader recovers the parts that
+// map cleanly onto VectorLabel's designer model:
+//
+//   • Label geometry — the part's physical size + output orientation → a design frame
+//     in inches (Landscape swaps the part's width/height, as Brady lays the design out
+//     rotated to landscape).
+//   • Text / prompt objects — each carries a bounding rect (4 little-endian doubles in
+//     inches: Height, Width, X, Y at a fixed offset after its "TEXT n" layer name), a
+//     prompt name (the variable-data field), and a font size. Each becomes a data-bound
+//     text field so binding a data file whose columns match the prompt names fills them.
+//
+// Reverse-engineered from sample templates and validated against known files. Object
+// types we don't decode yet (barcodes, images, shapes) are reported in `warnings` so a
+// partial import is never silently mistaken for a complete one.
+
+public enum BradyBWTImporter {
+
+    /// The result of importing a ".BWT": the recovered design, ready to inject into the
+    /// designer as a new, unsaved document.
+    public struct Imported {
+        public var name: String                 // display name (file stem, falls back to part #)
+        public var partNumber: String           // Brady part number (e.g. "M6-173-593")
+        public var widthInches: Double           // PHYSICAL part width (the supply's native size)
+        public var heightInches: Double          // PHYSICAL part height
+        public var canvasRotation: Int           // 0, or 90 when the design is laid out landscape
+        public var isContinuous: Bool
+        public var objects: [[String: Any]]      // designer "tx" objects (x/y/w/h in the design frame, inches)
+        public var fieldNames: [String]          // prompt names, in object order
+        public var warnings: [String]            // anything skipped / not yet supported
+    }
+
+    /// Parse ".BWT" bytes. Returns nil only when the file isn't a recognizable BWT
+    /// (no usable PartInfo geometry, or no decodable text objects).
+    public static func parse(_ data: Data) -> Imported? {
+        let b = [UInt8](data)
+        guard let part = parsePartInfo(b) else { return nil }
+
+        // Brady stores part dimensions in 1/10000 inch. The supply keeps its PHYSICAL
+        // (portrait) size; a Landscape template designs the label rotated 90°, which we
+        // represent with canvasRot=90 over the physical supply (the designer + renderer
+        // then show / print the rotated 2×1 design on the physical 1×2 label). The text
+        // rects below are already in that rotated design frame, so they need no transform.
+        let pwIn = Double(part.w) / 10_000.0
+        let phIn = Double(part.h) / 10_000.0
+        let canvasRotation = part.landscape ? 90 : 0
+
+        var objects: [[String: Any]] = []
+        var fields: [String] = []
+        var warnings: [String] = []
+
+        for t in findTextMarkers(b) {
+            guard let rect = readRect(b, markerStart: t.start, nameLen: t.nameLen) else {
+                warnings.append("Skipped \(t.name): position couldn't be read"); continue
+            }
+            guard let prompt = readPrompt(b, from: t.start, to: t.end) else {
+                warnings.append("Skipped \(t.name): no field name"); continue
+            }
+            let (h, wd, x, y) = rect   // stored order: Height, Width, X, Y
+            guard x.isFinite, y.isFinite, wd.isFinite, h.isFinite,
+                  x > -1, y > -1, wd > 0, h > 0, wd < 100, h < 100 else {
+                warnings.append("Skipped \(prompt): out-of-range geometry"); continue
+            }
+            let fs = readFontSize(b, from: t.start, to: t.end) ?? 12
+            objects.append([
+                "t": "tx", "mode": "field", "field": prompt,
+                "x": round4(x), "y": round4(y), "w": round4(wd), "h": round4(h),
+                "fs": Int(fs.rounded()), "al": "left", "valign": "middle",
+                "font": "Helvetica Neue",
+                "bold": false, "italic": false, "underline": false,
+                "wrapText": false, "tracking": 0, "stretch": 100,
+            ])
+            fields.append(prompt)
+        }
+
+        // Flag element types we don't decode so a partial import is obvious.
+        if contains(b, "Barcode") || contains(b, "BARCODE") || contains(b, "DataMatrix") {
+            warnings.append("A barcode/2-D code wasn't imported — add it manually.")
+        }
+        if contains(b, "ImageObject") || contains(b, "GraphicObject") {
+            warnings.append("An image/graphic wasn't imported — add it manually.")
+        }
+
+        guard !objects.isEmpty else { return nil }
+        return Imported(name: part.name.isEmpty ? "Imported Label" : part.name,
+                        partNumber: part.name,
+                        widthInches: pwIn, heightInches: phIn,
+                        canvasRotation: canvasRotation,
+                        isContinuous: part.continuous,
+                        objects: objects, fieldNames: fields, warnings: warnings)
+    }
+
+    // MARK: – PartInfo XML (ASCII, despite the utf-16 declaration)
+
+    private struct PartInfo { var name: String; var w: Int; var h: Int; var landscape: Bool; var continuous: Bool }
+
+    private static func parsePartInfo(_ b: [UInt8]) -> PartInfo? {
+        guard let lo = indexOf(b, "<?xml"),
+              let hi = indexOf(b, "</PartsDatabase>", from: lo) else { return nil }
+        let xml = String(decoding: b[lo..<hi], as: UTF8.self)
+        func tag(_ t: String) -> String? {
+            guard let r = xml.range(of: "<\(t)>"),
+                  let r2 = xml.range(of: "</\(t)>", range: r.upperBound..<xml.endIndex) else { return nil }
+            return String(xml[r.upperBound..<r2.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let w = Int(tag("Width") ?? "") ?? 0
+        let h = Int(tag("Height") ?? "") ?? 0
+        guard w > 0, h > 0 else { return nil }
+        let orient = (tag("OutputOrientation") ?? "Portrait").lowercased()
+        let cont = (tag("IsContinuous") ?? "False").lowercased() == "true"
+        // "<Name>M6-173-593 | M6-173-593</Name>" → first part number.
+        let nameRaw = tag("Name") ?? ""
+        let part = nameRaw.components(separatedBy: "|").first?.trimmingCharacters(in: .whitespaces) ?? nameRaw
+        return PartInfo(name: part, w: w, h: h, landscape: orient == "landscape", continuous: cont)
+    }
+
+    // MARK: – Text-object markers ("TEXT n" layer names)
+
+    private struct TextMarker { var name: String; var start: Int; var nameLen: Int; var end: Int }
+
+    private static func findTextMarkers(_ b: [UInt8]) -> [TextMarker] {
+        let prefix = Array("TEXT ".utf8)
+        var out: [TextMarker] = []
+        var i = 0
+        while i + prefix.count < b.count {
+            if Array(b[i..<i + prefix.count]) == prefix, isDigit(b[i + prefix.count]) {
+                var j = i + prefix.count
+                while j < b.count, isDigit(b[j]) { j += 1 }
+                let name = String(decoding: b[i..<j], as: UTF8.self)
+                out.append(TextMarker(name: name, start: i, nameLen: name.count, end: b.count))
+                i = j
+            } else {
+                i += 1
+            }
+        }
+        for k in out.indices { out[k].end = (k + 1 < out.count) ? out[k + 1].start : b.count }
+        return out
+    }
+
+    // The bounding rect is 4 little-endian doubles (Height, Width, X, Y) at a fixed
+    // offset after the "TEXT n" layer name. The base offset grows by one per extra name
+    // character (longer names → the rect starts one byte later).
+    private static func readRect(_ b: [UInt8], markerStart: Int, nameLen: Int) -> (Double, Double, Double, Double)? {
+        let base = markerStart + 35 + (nameLen - 6)
+        guard base >= 0, base + 32 <= b.count else { return nil }
+        return (leDouble(b, base), leDouble(b, base + 8), leDouble(b, base + 16), leDouble(b, base + 24))
+    }
+
+    // The prompt (field) name: "TEMPLATE_PROMPT" + a 1-byte length + UTF-8 text. The
+    // "TEMPLATE_PROMPT_ORDER" key is naturally excluded because its following byte ('_')
+    // is outside the valid 2…40 length range.
+    private static func readPrompt(_ b: [UInt8], from: Int, to: Int) -> String? {
+        let needle = Array("TEMPLATE_PROMPT".utf8)
+        var i = from
+        while i + needle.count < to {
+            if Array(b[i..<i + needle.count]) == needle {
+                let o = i + needle.count
+                if o < to {
+                    let ln = Int(b[o])
+                    if ln >= 2, ln <= 40, o + 1 + ln <= to {
+                        let s = String(decoding: b[(o + 1)..<(o + 1 + ln)], as: UTF8.self)
+                        if isPlausibleFieldName(s) { return s }
+                    }
+                }
+                i = o
+            } else {
+                i += 1
+            }
+        }
+        return nil
+    }
+
+    // Font size: the first plausible double in the bytes after "AutosizeFontKey".
+    private static func readFontSize(_ b: [UInt8], from: Int, to: Int) -> Double? {
+        guard let k = indexOf(b, "AutosizeFontKey", from: from), k < to else { return nil }
+        let s = k + Array("AutosizeFontKey".utf8).count
+        var c = s
+        while c + 8 <= b.count, c < s + 10 {
+            let v = leDouble(b, c)
+            if v > 1, v < 300 { return v }
+            c += 1
+        }
+        return nil
+    }
+
+    // MARK: – Byte helpers
+
+    private static func leDouble(_ b: [UInt8], _ off: Int) -> Double {
+        var bits: UInt64 = 0
+        for k in 0..<8 { bits |= UInt64(b[off + k]) << (8 * k) }
+        return Double(bitPattern: bits)
+    }
+
+    private static func indexOf(_ b: [UInt8], _ s: String, from: Int = 0) -> Int? {
+        let needle = Array(s.utf8)
+        guard !needle.isEmpty, b.count >= needle.count else { return nil }
+        var i = max(0, from)
+        let last = b.count - needle.count
+        while i <= last {
+            if b[i] == needle[0], Array(b[i..<i + needle.count]) == needle { return i }
+            i += 1
+        }
+        return nil
+    }
+
+    private static func contains(_ b: [UInt8], _ s: String) -> Bool { indexOf(b, s) != nil }
+    private static func isDigit(_ c: UInt8) -> Bool { c >= 0x30 && c <= 0x39 }
+    private static func round4(_ v: Double) -> Double { (v * 10_000).rounded() / 10_000 }
+
+    private static func isPlausibleFieldName(_ s: String) -> Bool {
+        guard !s.isEmpty else { return false }
+        return s.unicodeScalars.allSatisfy { sc in
+            sc.isASCII && (CharacterSet.alphanumerics.contains(sc) || " -_/.:#()".unicodeScalars.contains(sc))
+        }
+    }
+}

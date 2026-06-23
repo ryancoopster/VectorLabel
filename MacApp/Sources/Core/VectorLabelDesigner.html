@@ -1414,6 +1414,7 @@ function R(){
         <span style="color:var(--text3);font-size:11px">${isCustomMode()?'Custom Designer':'Template Designer'}</span>
         <span style="color:var(--text3);font-size:9px;opacity:.55;letter-spacing:.2px" title="VectorLabel build ${(window.__VL_BUILD__||"?")}">build ${(window.__VL_BUILD__||"?")}</span>
       </div>
+      <button class="btn" onclick="importBradyTemplate()" title="Import a Brady Workstation template (.BWT) — recreates its fields, sizes, and layout as a new label" style="padding:4px 10px;font-size:11px">⤓ Import Brady…</button>
       <div style="flex:1"></div>
       <button class="btn" onclick="openSupplyPicker()" title="Choose a label supply" style="display:flex;align-items:center;gap:10px;padding:4px 10px">
         <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Supply</span>
@@ -3635,6 +3636,38 @@ function initCustomDocument(doc){
   _centerCanvasNext=true;   // center the opened design in the view
   R();
   markClean();showToast("Opened: "+S.tplName);
+}
+
+// Load a freshly-imported design (e.g. a Brady ".BWT") as a NEW, UNSAVED document in
+// either designer mode. Sets the supply from the imported frame geometry, drops in the
+// recovered objects, and leaves the doc dirty so the user is prompted to save. Custom
+// mode clears any bound data (the import defines fields; the user binds data after).
+//   doc = {name, specN, objs, supplyGeometry, canvasRot, warnings:[String]}
+function initImportedDocument(doc){
+  if(!doc)return;
+  window._printEdit=false;
+  S.modal=null;
+  S.tplName=doc.name||"Imported Label";
+  S._loadedId=null;
+  applyLoadedSpec(doc.specN||"", doc.labelLengthInches||0, doc.canvasRot||0, doc.supplyID||"", doc.supplyGeometry||null);
+  S.objs=sanitizeObjs(doc.objs||[]);
+  S.selId=null;S._ef=undefined;
+  if(isCustomMode()){
+    window._boundData=null; window._editorRecords=null; RX=[]; S.recIdx=0; S._csvName="";
+    S._dbSel=new Set(); S._dbLastClick=null; S._dbEditCell=null; S._dbEditVal=undefined;
+    S.printRange="all"; S.rangeFrom=1; S.rangeTo=1;
+  }
+  _centerCanvasNext=true;
+  markDirty();           // imported, not yet saved
+  R();
+  const warns=(doc.warnings||[]);
+  showToast("Imported "+(doc.objs||[]).length+" field"+((doc.objs||[]).length===1?"":"s")+": "+S.tplName);
+  if(warns.length){ S._infoTitle="Import note"; S._infoMsg="Imported “"+S.tplName+"” with "+warns.length+" item(s) that need attention:\n\n• "+warns.join("\n• "); S.modal="info"; renderModal(); }
+}
+// Ask Swift to show an open panel for a Brady ".BWT" template, then import it.
+function importBradyTemplate(){
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"importBradyTemplate"});
 }
 
 // "Choose data file…" → Swift opens an NSOpenPanel (csv,xlsx), sending the current

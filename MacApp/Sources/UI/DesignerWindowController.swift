@@ -559,6 +559,73 @@ public final class DesignerWindowController: NSObject {
         }
     }
 
+    /// Finder panel to pick a Brady Workstation template (".BWT"), then import it into
+    /// the current designer (Template or Custom) as a new, unsaved document.
+    private func importBradyTemplate() {
+        let panel = NSOpenPanel()
+        var types: [UTType] = []
+        if let bwt = UTType(filenameExtension: "bwt") { types.append(bwt) }
+        if !types.isEmpty { panel.allowedContentTypes = types }
+        panel.allowsOtherFileTypes = true     // ".BWT" may have no registered UTI
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = "Choose a Brady Workstation template (.BWT) to import"
+        panel.level = .modalPanel
+        NSApp.activate(ignoringOtherApps: true)
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            MainActor.assumeIsolated { self?.performBradyImport(from: url) }
+        }
+    }
+
+    private func performBradyImport(from url: URL) {
+        guard let data = try? Data(contentsOf: url) else {
+            presentBradyImportError(url, reason: "The file couldn't be read.")
+            return
+        }
+        guard let imp = BradyBWTImporter.parse(data) else {
+            presentBradyImportError(url, reason: "This doesn't look like a supported Brady text template — no readable label fields were found. Barcodes-only or image-only templates aren't supported yet.")
+            return
+        }
+        injectImported(imp, sourceName: url.deletingPathExtension().lastPathComponent)
+    }
+
+    /// Build the JS doc the page's `initImportedDocument` expects and inject it.
+    private func injectImported(_ imp: BradyBWTImporter.Imported, sourceName: String) {
+        guard let wv = webView else { return }
+        guard let objData = try? JSONSerialization.data(withJSONObject: imp.objects),
+              let objJSON = String(data: objData, encoding: .utf8) else { return }
+        // PHYSICAL (portrait) supply geometry — the design frame's rotation is carried
+        // by canvasRot, so the supply resolves to the real catalog part and the renderer
+        // rotates the design onto it.
+        let geom: [String: Any] = [
+            "widthInches": imp.widthInches, "heightInches": imp.heightInches,
+            "printableWidthInches": imp.widthInches, "printableHeightInches": imp.heightInches,
+            "isContinuous": imp.isContinuous,
+        ]
+        let geomJSON = (try? JSONSerialization.data(withJSONObject: geom))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "null"
+        let warnJSON = (try? JSONSerialization.data(withJSONObject: imp.warnings))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+        let name = sourceName.isEmpty ? imp.name : sourceName
+        let js = """
+        if(typeof initImportedDocument==='function')initImportedDocument({\
+        name:\(name.jsonQuoted),specN:\(imp.partNumber.jsonQuoted),objs:\(objJSON),\
+        supplyGeometry:\(geomJSON),canvasRot:\(imp.canvasRotation),warnings:\(warnJSON)});
+        """
+        wv.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    private func presentBradyImportError(_ url: URL, reason: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Couldn't import “\(url.lastPathComponent)”"
+        alert.informativeText = reason
+        alert.addButton(withTitle: "OK")
+        if let win = window { alert.beginSheetModal(for: win, completionHandler: nil) }
+        else { alert.runModal() }
+    }
+
     /// Finder panel (at the Exports folder) to pick a CSV/XLSX data source.
     ///
     /// Template mode keeps the original lightweight behavior: pick a CSV export and
@@ -1351,6 +1418,9 @@ extension DesignerWindowController: WKScriptMessageHandler {
 
         case "browseTemplate":
             browseForTemplate()
+
+        case "importBradyTemplate":
+            importBradyTemplate()
 
         case "browseDataSource":
             // Custom mode sends the current "first row is headers" toggle so the
