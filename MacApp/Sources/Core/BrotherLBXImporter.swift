@@ -60,10 +60,13 @@ public enum BrotherLBXImporter {
             }
         }
         guard !objects.isEmpty else { return nil }
+        // style:paper autoLength="true" ⇒ the label auto-sizes its length to content.
+        let autoLength = (firstDescendant(root, "paper")?.attribute(named: "autoLength") ?? "false") == "true"
         return ImportedDesign(name: "Imported Label", partNumber: "",
                               widthInches: tapeWidthIn, heightInches: lengthIn,
                               canvasRotation: 0, labelLengthInches: lengthIn, isContinuous: true,
-                              objects: objects, fieldNames: fields, warnings: warnings)
+                              objects: objects, fieldNames: fields, warnings: warnings,
+                              supplyGroupHint: "ptouch", autoLength: autoLength)
     }
 
     // MARK: – Object parsers

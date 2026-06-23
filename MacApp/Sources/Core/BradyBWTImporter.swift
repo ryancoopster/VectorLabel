@@ -93,7 +93,8 @@ public enum BradyBWTImporter {
                         canvasRotation: canvasRotation,
                         labelLengthInches: labelLength,
                         isContinuous: part.continuous,
-                        objects: objects, fieldNames: fields, warnings: warnings)
+                        objects: objects, fieldNames: fields, warnings: warnings,
+                        autoLength: boolField(b, "IsAutoSizeLabel"))
     }
 
     // MARK: – PartInfo XML (ASCII, despite the utf-16 declaration)
@@ -236,6 +237,17 @@ public enum BradyBWTImporter {
     }
 
     private static func contains(_ b: [UInt8], _ s: String) -> Bool { indexOf(b, s) != nil }
+
+    /// A ".BWT" boolean property is the key followed by a length-prefixed "True"/"False"
+    /// string (e.g. IsAutoSizeLabel\x05False). Returns true only for an explicit "true".
+    private static func boolField(_ b: [UInt8], _ key: String) -> Bool {
+        guard let i = indexOf(b, key) else { return false }
+        let o = i + key.utf8.count
+        guard o < b.count else { return false }
+        let ln = Int(b[o])
+        guard ln >= 4, ln <= 5, o + 1 + ln <= b.count else { return false }
+        return String(decoding: b[(o + 1)..<(o + 1 + ln)], as: UTF8.self).lowercased() == "true"
+    }
     private static func isDigit(_ c: UInt8) -> Bool { c >= 0x30 && c <= 0x39 }
     private static func round4(_ v: Double) -> Double { (v * 10_000).rounded() / 10_000 }
 }

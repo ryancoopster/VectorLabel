@@ -14,14 +14,23 @@ public struct ImportedDesign {
     public var objects: [[String: Any]]      // designer objects (x/y/w/h in inches, in the design frame)
     public var fieldNames: [String]          // bound/source field names, in object order
     public var warnings: [String]            // anything skipped / not yet supported
+    /// Hint for picking the real catalog supply when the source has no resolvable part
+    /// number — e.g. "ptouch" → match the Brother P-touch tape group by tape width. "" ⇒
+    /// resolve by partNumber (or fall back to the imported geometry).
+    public var supplyGroupHint: String
+    /// The source had auto-length / auto-size enabled (continuous): the length should
+    /// auto-fit the content on import rather than use a fixed value.
+    public var autoLength: Bool
 
     public init(name: String, partNumber: String, widthInches: Double, heightInches: Double,
                 canvasRotation: Int, labelLengthInches: Double, isContinuous: Bool,
-                objects: [[String: Any]], fieldNames: [String], warnings: [String]) {
+                objects: [[String: Any]], fieldNames: [String], warnings: [String],
+                supplyGroupHint: String = "", autoLength: Bool = false) {
         self.name = name; self.partNumber = partNumber
         self.widthInches = widthInches; self.heightInches = heightInches
         self.canvasRotation = canvasRotation; self.labelLengthInches = labelLengthInches
         self.isContinuous = isContinuous
         self.objects = objects; self.fieldNames = fieldNames; self.warnings = warnings
+        self.supplyGroupHint = supplyGroupHint; self.autoLength = autoLength
     }
 }

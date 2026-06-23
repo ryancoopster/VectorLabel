@@ -636,13 +636,20 @@ public final class DesignerWindowController: NSObject {
         guard let wv = webView else { return }
         guard let objData = try? JSONSerialization.data(withJSONObject: imp.objects),
               let objJSON = String(data: objData, encoding: .utf8) else { return }
-        // Supply geometry. Die-cut: the physical (portrait) part — its landscape design
-        // is carried by canvasRot, so the supply resolves to the real catalog part and the
-        // renderer rotates the design onto it. Continuous: the tape width + label length,
-        // with canvasRot expressing portrait/landscape against the renderer's default.
+        // Resolve the catalog supply. Brady die-cut imports carry a real part number that
+        // resolves directly. Brother imports have none — match the P-touch tape group by
+        // tape width so the correct tape is auto-selected (and switch the picker to it).
+        var specN = imp.partNumber, supplyID = "", supplyGroup = ""
+        var w = imp.widthInches, h = imp.heightInches
+        if imp.supplyGroupHint == "ptouch", let m = matchPTouchSupply(tapeWidthInches: imp.widthInches) {
+            supplyGroup = m.group
+            supplyID = m.supply.id.uuidString
+            specN = m.supply.primaryPartNumber
+            w = m.supply.printableWidthInches; h = m.supply.printableHeightInches
+        }
         let geom: [String: Any] = [
-            "widthInches": imp.widthInches, "heightInches": imp.heightInches,
-            "printableWidthInches": imp.widthInches, "printableHeightInches": imp.heightInches,
+            "widthInches": w, "heightInches": h,
+            "printableWidthInches": w, "printableHeightInches": h,
             "isContinuous": imp.isContinuous,
         ]
         let geomJSON = (try? JSONSerialization.data(withJSONObject: geom))
@@ -652,11 +659,27 @@ public final class DesignerWindowController: NSObject {
         let name = sourceName.isEmpty ? imp.name : sourceName
         let js = """
         if(typeof initImportedDocument==='function')initImportedDocument({\
-        name:\(name.jsonQuoted),specN:\(imp.partNumber.jsonQuoted),objs:\(objJSON),\
+        name:\(name.jsonQuoted),specN:\(specN.jsonQuoted),supplyID:\(supplyID.jsonQuoted),\
+        supplyGroup:\(supplyGroup.jsonQuoted),objs:\(objJSON),\
         supplyGeometry:\(geomJSON),canvasRot:\(imp.canvasRotation),\
-        labelLengthInches:\(imp.labelLengthInches),warnings:\(warnJSON)});
+        labelLengthInches:\(imp.labelLengthInches),autoLength:\(imp.autoLength),warnings:\(warnJSON)});
         """
         wv.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    /// Find the Brother P-touch tape whose printable width best matches an imported label,
+    /// so a Brother ".lbx" auto-selects the right tape size. Returns the group name + supply.
+    private func matchPTouchSupply(tapeWidthInches: Double) -> (group: String, supply: Supply)? {
+        let cat = SupplyCatalogStore.snapshot
+        guard let group = cat.groups.first(where: { g in
+            g.name.lowercased().contains("p-touch")
+                || g.printerModels.contains(where: { $0.uppercased().hasPrefix("PT-") })
+        }) else { return nil }
+        let supplies = group.categories.flatMap { $0.supplies }.filter { $0.kind == .continuous }
+        guard let best = supplies.min(by: {
+            abs($0.printableWidthInches - tapeWidthInches) < abs($1.printableWidthInches - tapeWidthInches)
+        }) else { return nil }
+        return (group.name, best)
     }
 
     private func presentImportError(_ url: URL, reason: String) {

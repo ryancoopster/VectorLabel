@@ -521,6 +521,23 @@ function setLabelLen(v){
   markDirty();
   R();
 }
+// Farthest edge of any object along the continuous LENGTH axis (the definable axis):
+// landscape (canvasRot 0) → right edge (x+w); portrait (90) → bottom edge (y+h).
+function contentLengthExtent(){
+  let m=0; const portrait=(S.canvasRot===90);
+  for(const o of (S.objs||[])){ const e=portrait?((o.y||0)+(o.h||0)):((o.x||0)+(o.w||0)); if(e>m)m=e; }
+  return m;
+}
+// Continuous only: fit the label length to the content (farthest object edge + a small
+// trailing margin).
+function autoFitLabelLength(){
+  if(!dContinuous())return;
+  const ext=contentLengthExtent();
+  if(ext<=0){ showToast("No objects to fit"); return; }
+  S.labelLen=Math.min(LEN_MAX,Math.max(LEN_MIN, ext+0.04));
+  markDirty(); R();
+  showToast("Length fit to content");
+}
 // "Use currently installed" (supply picker): select the defined supply whose part
 // numbers include the loaded cassette's part number (exact, or by bulk-box/cartridge
 // core). No match → a pop-up telling the user to add one in settings.
@@ -1561,6 +1578,7 @@ function R(){
         <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Length</span>
         <input type="number" class="inp" min="${LEN_MIN}" max="${LEN_MAX}" step="0.05" value="${(dEffLen()||dDefaultLen(S.spec.n))}" style="width:64px;padding:4px 6px;font-size:12px" onchange="setLabelLen(this.value)" onblur="setLabelLen(this.value)" onkeydown="if(event.key==='Enter')this.blur()">
         <span style="color:var(--text3);font-size:11px">in</span>
+        <button class="btn" onclick="autoFitLabelLength()" title="Fit the label length to the content — the farthest right edge of the furthest object" style="padding:3px 8px;font-size:11px">⤢ Fit</button>
       </div>`:""}
       <button class="btn${S.canvasRot===90?" on":""}" onclick="rotateCanvas()" title="Rotate the label canvas 90° — design the label in the other orientation (the rendered output is rotated to match the physical label)" style="padding:4px 9px;font-size:11px">⟳ 90°</button>
       <button class="btn${S.wrap?" on":""}" onclick="S.wrap=!S.wrap;R()">${S.wrap?"Hide wrap":"Show wrap"}</button>
@@ -3842,6 +3860,9 @@ function initImportedDocument(doc){
   S.modal=null;
   S.tplName=doc.name||"Imported Label";
   S._loadedId=null;
+  // Switch the supply picker to the import's group (e.g. Brother P-touch) so the matched
+  // tape resolves + shows as the active group.
+  if(doc.supplyGroup && typeof switchSupplyGroup==="function") switchSupplyGroup(doc.supplyGroup);
   applyLoadedSpec(doc.specN||"", doc.labelLengthInches||0, doc.canvasRot||0, doc.supplyID||"", doc.supplyGeometry||null);
   S.objs=sanitizeObjs(doc.objs||[]);
   S.selId=null;S._ef=undefined;
@@ -3849,6 +3870,11 @@ function initImportedDocument(doc){
     window._boundData=null; window._editorRecords=null; RX=[]; S.recIdx=0; S._csvName="";
     S._dbSel=new Set(); S._dbLastClick=null; S._dbEditCell=null; S._dbEditVal=undefined;
     S.printRange="all"; S.rangeFrom=1; S.rangeTo=1;
+  }
+  // The source used auto-length (continuous) → fit the label length to the content.
+  if(doc.autoLength && dContinuous()){
+    const ext=contentLengthExtent();
+    if(ext>0) S.labelLen=Math.min(LEN_MAX,Math.max(LEN_MIN, ext+0.04));
   }
   _centerCanvasNext=true;
   markDirty();           // imported, not yet saved
