@@ -46,6 +46,11 @@ public struct TemplateObject: Codable, Identifiable, Hashable {
     var sym: String?
     var lockAspect: Bool?   // image: keep width/height ratio when resizing
 
+    // Barcode (t == "bc"). The encoded data uses the SAME mode/text/field/f as a text
+    // object (static literal, bound field, or formula), so binding + drag-drop are shared.
+    var bcType: String?     // bwip-js symbology id, e.g. "qrcode" | "datamatrix" | "code128"
+    var eclevel: String?    // error-correction level (QR: L/M/Q/H; PDF417/Aztec: numeric)
+
     // Rotation in degrees, clockwise, about the object's center. nil/0 = none.
     var rot: Double?
 

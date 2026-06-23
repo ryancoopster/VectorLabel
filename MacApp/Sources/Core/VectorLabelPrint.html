@@ -95,7 +95,47 @@ label.lbl{font-size:10px;color:var(--text2);display:block;margin-bottom:3px}
 </head>
 <body>
 <div id="app" style="display:flex;flex-direction:column;height:100vh"></div>
+<!-- Barcode engine (bwip-js, MIT). CommonJS module → shimmed to a window global. -->
+<script>var module={exports:{}};</script>
+<script src="bwip-js.js"></script>
+<script>try{window.bwipjs=module.exports;}catch(e){window.bwipjs=null;}</script>
 <script>
+// ── Barcode symbologies (shared with VectorLabelDesigner.html; rendered by bwip-js) ─
+const BARCODE_TYPES=[
+  {id:"qrcode",label:"QR Code",d2:true,ecc:["L","M","Q","H"]},
+  {id:"datamatrix",label:"Data Matrix",d2:true,ecc:[]},
+  {id:"azteccode",label:"Aztec Code",d2:true,ecc:[]},
+  {id:"pdf417",label:"PDF417",d2:true,ecc:["0","1","2","3","4","5","6","7","8"]},
+  {id:"microqrcode",label:"Micro QR",d2:true,ecc:["L","M","Q"]},
+  {id:"code128",label:"Code 128",d2:false,ecc:[]},
+  {id:"gs1-128",label:"GS1-128",d2:false,ecc:[]},
+  {id:"code39",label:"Code 39",d2:false,ecc:[]},
+  {id:"code93",label:"Code 93",d2:false,ecc:[]},
+  {id:"ean13",label:"EAN-13",d2:false,ecc:[]},
+  {id:"ean8",label:"EAN-8",d2:false,ecc:[]},
+  {id:"upca",label:"UPC-A",d2:false,ecc:[]},
+  {id:"upce",label:"UPC-E",d2:false,ecc:[]},
+  {id:"interleaved2of5",label:"Interleaved 2 of 5",d2:false,ecc:[]},
+  {id:"codabar",label:"Codabar",d2:false,ecc:[]},
+];
+function bcDef(id){ return BARCODE_TYPES.find(t=>t.id===id)||BARCODE_TYPES[0]; }
+function bcIs2D(id){ return bcDef(id).d2; }
+function bcECC(id){ return bcDef(id).ecc; }
+function renderBarcodeSVG(bcid,text,eclevel){
+  if(typeof bwipjs==="undefined"||!bwipjs||!bcid||text==null||text==="") return null;
+  try{
+    const opts={bcid:String(bcid),text:String(text),scale:3,includetext:false};
+    const ecc=bcECC(bcid);
+    if(ecc.length&&eclevel)opts.eclevel=String(eclevel);
+    return bwipjs.toSVG(opts);
+  }catch(e){ return null; }
+}
+// True when this barcode object encodes the given record's data (else flag the row).
+function barcodeEncodes(o,rec){
+  const r=textValue(o,rec);
+  if(r.e||r.v===""||r.v==null) return false;
+  return renderBarcodeSVG(o.bcType,r.v,o.eclevel)!=null;
+}
 // ── Field definitions ─────────────────────────────────────────────────────────
 // MUST stay identical to VectorLabelDesigner.html FD and FormulaEngine.fieldMap
 // (Swift) so a formula resolves the same in the designer, the print preview, and
@@ -253,6 +293,12 @@ function renderLabel(tpl,rec,scale=1){
     if(o.t==="rc")return`<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border:${o.lw||1}px solid #000;background:transparent;${rc}"></div>`;
     if(o.t==="ci"||o.t==="ov")return`<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border:${o.lw||1}px solid #000;background:transparent;border-radius:50%;${rc}"></div>`;
     if(o.t==="im"||o.t==="sy")return`<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;${rc}"><img src="${o.src||''}" style="width:100%;height:100%;object-fit:${o.t==='sy'?'contain':'fill'};display:block"></div>`;
+    if(o.t==="bc"){
+      const {v,e}=textValue(o,rec);
+      const svg=(!e&&v!==""&&v!=null)?renderBarcodeSVG(o.bcType,v,o.eclevel):null;
+      if(svg)return`<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;${rc}"><img src="data:image/svg+xml,${encodeURIComponent(svg)}" style="width:100%;height:100%;object-fit:${bcIs2D(o.bcType)?'contain':'fill'};display:block"></div>`;
+      return`<div title="This record can’t be encoded as ${esc(bcDef(o.bcType).label)}" style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;${rc};display:flex;align-items:center;justify-content:center;border:1px dashed var(--red);color:var(--red);font-size:9px;box-sizing:border-box;text-align:center">⚠</div>`;
+    }
     if(o.t==="ar"){
       const aw=(o.w||1)*sc, th=Math.max(1,o.lw||2), as=Math.max(4,o.arrowSize||12), hw=as*0.6, vh=Math.max(th/2,hw)+2;
       const x1=o.arrowStart?as:0, x2=aw-(o.arrowEnd?as:0);
@@ -2198,6 +2244,13 @@ function windowRange(vis,scrollTop,clientH){
   const pv=vis.indexOf(P.previewIdx); if(pv>=0){ if(pv<lo)lo=pv; if(pv>hi)hi=pv; }
   return {lo,hi,offs:m.offs,total:m.total};
 }
+// True if the active template has a barcode that can't encode this record's value
+// (it would print blank) — flagged in the record list. Fast no-op without barcodes.
+function recBarcodeBad(rec){
+  const t=tpl(); if(!t||!t.objs)return false;
+  for(const o of t.objs){ if(o.t==="bc" && !barcodeEncodes(o,rec)) return true; }
+  return false;
+}
 function buildRow(i,vpos,cols,gridT){
   const r=P.records[i];
   const isSel=P.selected.has(i);
@@ -2212,7 +2265,7 @@ function buildRow(i,vpos,cols,gridT){
         <span style="color:${ps2?'var(--accent)':'var(--bd4)'};font-size:8px;line-height:1">⇅</span>
       </div>
     </div>
-    <div class="rec-cell" style="display:flex;align-items:center;color:var(--text3);font-size:10px">${vpos+1}</div>
+    <div class="rec-cell" style="display:flex;align-items:center;gap:3px;color:var(--text3);font-size:10px">${vpos+1}${recBarcodeBad(r)?'<span title="A barcode on this label can’t encode this record — it will print blank" style="color:var(--red)">⚠</span>':''}</div>
     ${cols.map(c=>colDataCell(c,r,i)).join('')}
   </div>`;
 }

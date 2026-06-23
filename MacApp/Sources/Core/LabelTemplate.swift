@@ -196,6 +196,7 @@ public enum LabelRenderer {
             case "ci", "ov": drawEllipse(obj, in: ctx, dpi: dpi)
             case "ar": drawArrow(obj, in: ctx, dpi: dpi)
             case "im", "sy": drawImage(obj, in: ctx, dpi: dpi)
+            case "bc": drawBarcode(obj, record: record, in: ctx, dpi: dpi)
             default: break
             }
             if rotated { ctx.restoreGState() }
@@ -413,6 +414,32 @@ public enum LabelRenderer {
         ctx.translateBy(x: r.minX, y: r.minY + r.height)
         ctx.scaleBy(x: 1, y: -1)
         ctx.draw(cg, in: CGRect(x: 0, y: 0, width: r.width, height: r.height))
+        ctx.restoreGState()
+    }
+
+    /// Barcode ("bc") — encode the object's data (resolved the same way as text: static
+    /// literal, bound field, or formula) with its symbology + ECC level via the bwip-js
+    /// engine, rasterized crisply to fill the box. Empty data or input the symbology can't
+    /// encode draws nothing (the label prints blank — the chosen empty/invalid policy).
+    private static func drawBarcode(_ obj: TemplateObject, record: WireRecord, in ctx: CGContext, dpi: Int) {
+        guard let bcid = obj.bcType, !bcid.isEmpty else { return }
+        let mode = obj.mode ?? (obj.field != nil ? "field"
+                                : (obj.text != nil && (obj.f?.isEmpty ?? true) ? "static" : "formula"))
+        let text: String
+        switch mode {
+        case "static": text = obj.text ?? ""
+        case "field":  text = obj.field.flatMap { record.fields[$0] } ?? ""
+        default:       text = FormulaEngine.evaluate(obj.f ?? "", fields: record.fields)
+        }
+        guard !text.isEmpty else { return }
+        let r = rect(for: obj, dpi: dpi)
+        ctx.saveGState()
+        // Match drawImage's local flip so the symbol lands upright (correct orientation
+        // matters — a mirrored 2-D code won't scan).
+        ctx.translateBy(x: r.minX, y: r.minY + r.height)
+        ctx.scaleBy(x: 1, y: -1)
+        BarcodeRenderer.shared.draw(bcid: bcid, text: text, eclevel: obj.eclevel,
+                                    in: CGRect(x: 0, y: 0, width: r.width, height: r.height), ctx: ctx)
         ctx.restoreGState()
     }
 

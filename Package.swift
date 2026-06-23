@@ -41,6 +41,7 @@ let package = Package(
                 .copy("BradyCatalog.json"),
                 .copy("VectorLabelPrint.html"),
                 .copy("VectorLabelDesigner.html"),
+                .copy("bwip-js.js"),
                 .copy("MenuBarIcon.png"),
                 .copy("AppIcon.icns"),
             ],
