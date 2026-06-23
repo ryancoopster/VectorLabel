@@ -121,20 +121,30 @@ const BARCODE_TYPES=[
 function bcDef(id){ return BARCODE_TYPES.find(t=>t.id===id)||BARCODE_TYPES[0]; }
 function bcIs2D(id){ return bcDef(id).d2; }
 function bcECC(id){ return bcDef(id).ecc; }
+function barcodeEngineReady(){ return !(typeof bwipjs==="undefined"||!bwipjs); }
 function renderBarcodeSVG(bcid,text,eclevel){
-  if(typeof bwipjs==="undefined"||!bwipjs||!bcid||text==null||text==="") return null;
+  if(!barcodeEngineReady()||!bcid||text==null||text==="") return null;
   try{
-    const opts={bcid:String(bcid),text:String(text),scale:3,includetext:false};
+    const is2D=bcIs2D(bcid);
+    const opts={bcid:String(bcid),text:String(text),scale:3,includetext:false,
+                paddingwidth:is2D?2:10, paddingheight:is2D?2:0};
     const ecc=bcECC(bcid);
     if(ecc.length&&eclevel)opts.eclevel=String(eclevel);
     return bwipjs.toSVG(opts);
   }catch(e){ return null; }
 }
 // True when this barcode object encodes the given record's data (else flag the row).
+// Cached per (type|ecc|value) so the per-row check doesn't re-encode every render.
+const _bcEncCache=new Map();
 function barcodeEncodes(o,rec){
   const r=textValue(o,rec);
   if(r.e||r.v===""||r.v==null) return false;
-  return renderBarcodeSVG(o.bcType,r.v,o.eclevel)!=null;
+  const key=o.bcType+'|'+(o.eclevel||'')+'|'+r.v;
+  if(_bcEncCache.has(key)) return _bcEncCache.get(key);
+  const ok=renderBarcodeSVG(o.bcType,r.v,o.eclevel)!=null;
+  if(_bcEncCache.size>5000)_bcEncCache.clear();
+  _bcEncCache.set(key,ok);
+  return ok;
 }
 // ── Field definitions ─────────────────────────────────────────────────────────
 // MUST stay identical to VectorLabelDesigner.html FD and FormulaEngine.fieldMap
@@ -297,7 +307,8 @@ function renderLabel(tpl,rec,scale=1){
       const {v,e}=textValue(o,rec);
       const svg=(!e&&v!==""&&v!=null)?renderBarcodeSVG(o.bcType,v,o.eclevel):null;
       if(svg)return`<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;${rc}"><img src="data:image/svg+xml,${encodeURIComponent(svg)}" style="width:100%;height:100%;object-fit:${bcIs2D(o.bcType)?'contain':'fill'};display:block"></div>`;
-      return`<div title="This record can’t be encoded as ${esc(bcDef(o.bcType).label)}" style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;${rc};display:flex;align-items:center;justify-content:center;border:1px dashed var(--red);color:var(--red);font-size:9px;box-sizing:border-box;text-align:center">⚠</div>`;
+      const bmsg=!barcodeEngineReady()?'Barcode engine unavailable':('This record can’t be encoded as '+bcDef(o.bcType).label);
+      return`<div title="${esc(bmsg)}" style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;${rc};display:flex;align-items:center;justify-content:center;border:1px dashed var(--red);color:var(--red);font-size:9px;box-sizing:border-box;text-align:center">⚠</div>`;
     }
     if(o.t==="ar"){
       const aw=(o.w||1)*sc, th=Math.max(1,o.lw||2), as=Math.max(4,o.arrowSize||12), hw=as*0.6, vh=Math.max(th/2,hw)+2;

@@ -98,21 +98,33 @@ const BARCODE_TYPES=[
 function bcDef(id){ return BARCODE_TYPES.find(t=>t.id===id)||BARCODE_TYPES[0]; }
 function bcIs2D(id){ return bcDef(id).d2; }
 function bcECC(id){ return bcDef(id).ecc; }
+function barcodeEngineReady(){ return !(typeof bwipjs==="undefined"||!bwipjs); }
 // Render a barcode to an SVG string via bwip-js; null if it can't encode (or no engine).
+// A quiet zone (paddingwidth/height in MODULES) matches the print path so the preview is
+// WYSIWYG: 2-D gets 2 modules all round, 1-D gets 10 modules left/right.
 function renderBarcodeSVG(bcid,text,eclevel){
-  if(typeof bwipjs==="undefined"||!bwipjs||!bcid||text==null||text==="") return null;
+  if(!barcodeEngineReady()||!bcid||text==null||text==="") return null;
   try{
-    const opts={bcid:String(bcid),text:String(text),scale:3,includetext:false};
+    const is2D=bcIs2D(bcid);
+    const opts={bcid:String(bcid),text:String(text),scale:3,includetext:false,
+                paddingwidth:is2D?2:10, paddingheight:is2D?2:0};
     const ecc=bcECC(bcid);
     if(ecc.length&&eclevel)opts.eclevel=String(eclevel);
     return bwipjs.toSVG(opts);
   }catch(e){ return null; }
 }
 // True when this barcode object encodes the given record's data (else flag the row).
+// Cached per (type|ecc|value) so the per-row check doesn't re-encode every render.
+const _bcEncCache=new Map();
 function barcodeEncodes(o,rec){
   const r=textValue(o,rec);
   if(r.e||r.v===""||r.v==null) return false;
-  return renderBarcodeSVG(o.bcType,r.v,o.eclevel)!=null;
+  const key=o.bcType+'|'+(o.eclevel||'')+'|'+r.v;
+  if(_bcEncCache.has(key)) return _bcEncCache.get(key);
+  const ok=renderBarcodeSVG(o.bcType,r.v,o.eclevel)!=null;
+  if(_bcEncCache.size>5000)_bcEncCache.clear();
+  _bcEncCache.set(key,ok);
+  return ok;
 }
 // True if any barcode on the canvas can't encode this record (it would print blank) —
 // flagged in the database pane. Fast no-op when the design has no barcodes.
@@ -1029,7 +1041,7 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
       if(svg){
         inner=`<img src="data:image/svg+xml,${encodeURIComponent(svg)}" style="width:100%;height:100%;object-fit:${bcIs2D(o.bcType)?'contain':'fill'};pointer-events:none;display:block">`;
       }else{
-        const msg=r.e?('⚠ '+r.e.substring(0,28)):((r.v===""||r.v==null)?'⚠ no data':'⚠ can’t encode');
+        const msg=!barcodeEngineReady()?'⚠ barcode engine unavailable':r.e?('⚠ '+r.e.substring(0,28)):((r.v===""||r.v==null)?'⚠ no data':'⚠ can’t encode');
         inner=`<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;border:1px dashed var(--red);color:var(--red);font-size:10px;text-align:center;box-sizing:border-box;padding:2px;pointer-events:none">${esc(msg)}</div>`;
       }
       return `<div data-obj="${o.id}" ${drag} ${dropAttr} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;cursor:${readOnly?"default":"move"};${rotCss}${ss}">${inner}${rotH}${rb}</div>`;
