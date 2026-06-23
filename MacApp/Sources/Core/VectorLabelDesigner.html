@@ -1645,7 +1645,7 @@ function R(){
               const icon=o.t==='tx'?'T':o.t==='ln'?'╌':o.t==='ar'?'→':o.t==='ci'?'◯':o.t==='ov'?'⬭':o.t==='im'?'▦':o.t==='sy'?'△':o.t==='bc'?'▣':'▭';
               const lbl=objListLabel(o);
               return`<div onclick="selectObj('${o.id}',event)" title="${lbl.replace(/"/g,'&quot;')}"
-                style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;cursor:pointer;font-size:11px;white-space:nowrap;overflow:hidden;
+                style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;cursor:pointer;font-size:11px;white-space:nowrap;overflow:hidden;flex-shrink:0;
                        background:${sel?'rgba(108,142,245,0.18)':'transparent'};border:1px solid ${sel?'rgba(108,142,245,0.4)':'transparent'};color:${sel?'var(--text)':'var(--text2)'}">
                 <span style="width:13px;text-align:center;color:var(--accent);flex-shrink:0">${icon}</span>
                 <span style="overflow:hidden;text-overflow:ellipsis">${lbl}</span>
