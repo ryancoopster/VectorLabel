@@ -1065,7 +1065,7 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
   // the printable area prints. The margin is not visually called out.
   const canvasDrop=readOnly?"":`ondragover="onCanvasDragOver(event)" ondragleave="onCanvasDragLeave(event)" ondrop="onColDropToCanvas(event)"`;
   return `<div style="display:flex;flex-direction:column;align-items:flex-start;flex-shrink:0">
-    <div onmousedown="${readOnly?'':`if(event.target===this){if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();deselect()}`}" ${canvasDrop} style="width:${bw}px;height:${bh}px;background:transparent;position:relative;overflow:hidden;flex-shrink:0">
+    <div onmousedown="${readOnly?'':`if(event.target===this)startMarquee(event)`}" ${canvasDrop} style="width:${bw}px;height:${bh}px;background:transparent;position:relative;overflow:hidden;flex-shrink:0">
       <!-- Printable area (only this prints) -->
       <div id="printable-area" style="position:absolute;left:${B}px;top:${B}px;width:${pw}px;height:${ph}px;background:#fff;box-shadow:0 0 0 1.5px var(--accent);pointer-events:none"></div>
       ${wrapZone}
@@ -1962,7 +1962,45 @@ function renderModal(){
 }
 
 // ── Actions ───────────────────────────────────────────────────────────────────
-function deselect(){S.selId=null;S.showFields=false;S._ef=undefined;S.editingId=null;R();}
+function deselect(){S.selId=null;S.selIds=[];S.showFields=false;S._ef=undefined;S.editingId=null;S._selAnchor=null;R();}
+
+// Marquee (rubber-band) selection: mousedown on empty canvas, drag a box, and every
+// object whose bounding box the box touches is selected. A plain click (no drag) just
+// deselects. Holding ⇧/⌘ while marquee-ing ADDS to the current selection.
+function startMarquee(e){
+  if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
+  const canvas=e.currentTarget;
+  const rect=canvas.getBoundingClientRect();
+  const B=BLEED_IN*SC, z=S.zoom||1;
+  const additive=e.shiftKey||e.metaKey||e.ctrlKey;
+  const toInch=(cx,cy)=>({x:(((cx-rect.left)/z)-B)/SC, y:(((cy-rect.top)/z)-B)/SC});
+  const start=toInch(e.clientX,e.clientY); let cur=start, moved=false;
+  const box=document.createElement('div');
+  box.style.cssText='position:absolute;border:1px solid var(--accent);background:rgba(108,142,245,0.14);z-index:8;pointer-events:none';
+  canvas.appendChild(box);
+  const draw=()=>{
+    const x0=Math.min(start.x,cur.x),y0=Math.min(start.y,cur.y),x1=Math.max(start.x,cur.x),y1=Math.max(start.y,cur.y);
+    box.style.left=(x0*SC+B)+'px'; box.style.top=(y0*SC+B)+'px';
+    box.style.width=Math.max(0,(x1-x0)*SC)+'px'; box.style.height=Math.max(0,(y1-y0)*SC)+'px';
+  };
+  const mv=ev=>{ cur=toInch(ev.clientX,ev.clientY); if(!moved&&(Math.abs(ev.clientX-e.clientX)>3||Math.abs(ev.clientY-e.clientY)>3))moved=true; if(moved)draw(); };
+  const up=()=>{
+    window.removeEventListener('mousemove',mv); window.removeEventListener('mouseup',up);
+    if(box.parentNode)box.parentNode.removeChild(box);
+    if(!moved){ deselect(); return; }   // plain click on empty canvas → deselect
+    const x0=Math.min(start.x,cur.x),y0=Math.min(start.y,cur.y),x1=Math.max(start.x,cur.x),y1=Math.max(start.y,cur.y);
+    const hit=(S.objs||[]).filter(o=>{
+      const ow=(o.w||0.04), oh=((o.h!=null?o.h:0)||0.04);
+      return o.x<x1 && o.x+ow>x0 && o.y<y1 && o.y+oh>y0;   // bbox intersects the marquee
+    }).map(o=>o.id);
+    if(additive){ const set=new Set(S.selIds||[]); hit.forEach(id=>set.add(id)); S.selIds=[...set]; }
+    else { S.selIds=hit.slice(); }
+    S.selId=S.selIds[S.selIds.length-1]||null; S._selAnchor=S.selId;
+    S.editingId=null; S._ef=undefined; R();
+  };
+  window.addEventListener('mousemove',mv); window.addEventListener('mouseup',up);
+  e.preventDefault();
+}
 
 function commitF(){if(S.selId&&S._ef!==undefined){uobj(S.selId,{f:S._ef});S._ef=undefined;R();}}
 
@@ -2228,8 +2266,8 @@ function startDrag(e,id){
   e.stopPropagation();
   const o=gobj(id);if(!o)return;
   if(S.editingId&&S.editingId!==id)S.editingId=null;
-  // Shift-click toggles this object in/out of the multi-selection (no drag).
-  if(e.shiftKey){ toggleSel(id); R(); return; }
+  // Shift / ⌘-click toggles this object in/out of the multi-selection (no drag).
+  if(e.shiftKey||e.metaKey||e.ctrlKey){ toggleSel(id); S._selAnchor=id; R(); return; }
   // Double-click a lone static text box → edit inline. A single click only selects
   // and arms a move, so static text stays draggable (previously a single click
   // entered edit mode, after which the box could no longer be moved).
@@ -2243,7 +2281,7 @@ function startDrag(e,id){
   // Grabbing an object already part of a multi-selection drags the whole group;
   // grabbing anything else selects just it first.
   const inMulti=(S.selIds||[]).length>1 && S.selIds.includes(id);
-  if(!inMulti && (S.selId!==id||(S.selIds||[]).length>1)){ setSel(id); S._ef=o.f; R(); }
+  if(!inMulti && (S.selId!==id||(S.selIds||[]).length>1)){ setSel(id); S._selAnchor=id; S._ef=o.f; R(); }
   snapshot();
   S._rulerObj=id;   // highlight this object's extent on the rulers while dragging
   const ids=((S.selIds||[]).length?S.selIds:[id]).slice();
@@ -2404,11 +2442,24 @@ function objListLabel(o){
   return o.t==='ln'?'Line':o.t==='ar'?'Arrow':o.t==='ci'?'Circle':o.t==='ov'?'Oval':o.t==='im'?'Image':o.t==='sy'?((SYMBOLS[o.sym]||{}).label||'Symbol'):'Rectangle';
 }
 
-// Select an object from the object list (mirrors clicking it on the canvas).
+// Select an object from the object list. Modifiers (macOS list convention):
+//   ⇧ Shift  → RANGE: select every object between the anchor and this one (in list order).
+//   ⌘/Ctrl   → FREE: toggle just this object in/out of the selection; it becomes the anchor.
+//   (plain)  → select only this object; it becomes the anchor.
 function selectObj(id,e){
   const o=gobj(id); if(!o)return;
-  if(e&&e.shiftKey){ toggleSel(id); R(); return; }
-  setSel(id);
+  const ids=S.objs.map(x=>x.id), idx=ids.indexOf(id);
+  if(e&&e.shiftKey){
+    const aIdx=(S._selAnchor!=null && ids.indexOf(S._selAnchor)>=0) ? ids.indexOf(S._selAnchor) : idx;
+    const lo=Math.min(aIdx,idx), hi=Math.max(aIdx,idx);
+    S.selIds=ids.slice(lo,hi+1); S.selId=id;   // anchor stays put for further range extends
+    S.editingId=null; S._ef=o.t==='tx'?o.f:undefined; R(); return;
+  }
+  if(e&&(e.metaKey||e.ctrlKey)){
+    toggleSel(id); S._selAnchor=id;
+    const p=S.selId&&gobj(S.selId); S.editingId=null; S._ef=(p&&p.t==='tx')?p.f:undefined; R(); return;
+  }
+  setSel(id); S._selAnchor=id;
   S.editingId=null;
   S._ef=o.t==='tx'?o.f:undefined;
   R();
