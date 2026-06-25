@@ -151,11 +151,28 @@ public enum BradyCatalog {
     public static func printableWidthInches(forPartNumber pn: String)  -> Double? { find(pn)?.supply.printableWidthInches }
     public static func printableHeightInches(forPartNumber pn: String) -> Double? { find(pn)?.supply.printableHeightInches }
 
+    /// Degrees the label feeds rotated relative to the designer layout (the
+    /// renderer rotates to match). Per part number now (the editable `rotate90`),
+    /// resolved exact-first then by core so a bulk box rotates like its cartridge.
+    public static func feedRotationDeg(forPartNumber pn: String) -> Double {
+        (find(pn)?.part.rotate90 ?? false) ? 90 : 0
+    }
+
     /// The supply identity (UUID string) a part number belongs to, "" if unknown.
     public static func supplyID(forPartNumber pn: String) -> String { find(pn)?.supply.id.uuidString ?? "" }
 
-    // (feedRotationDeg / effectiveFeedRotationDeg were removed with the per-supply
-    // "Rotate 90°" override — orientation is now automatic in the renderer + encoders.)
+    /// Feed rotation to use when a specific cassette is loaded. Two die-cut part
+    /// numbers under ONE supply may feed at different rotations on the roll; if the
+    /// `loaded` cassette belongs to the same supply as the `selected` part, print
+    /// with the loaded part's rotation so it comes out correct for whichever roll is
+    /// in the machine. Otherwise use the selected part's rotation.
+    public static func effectiveFeedRotationDeg(selected: String, loaded: String?) -> Double {
+        if let l = loaded, !l.isEmpty {
+            let sid = supplyID(forPartNumber: selected)
+            if !sid.isEmpty, supplyID(forPartNumber: l) == sid { return feedRotationDeg(forPartNumber: l) }
+        }
+        return feedRotationDeg(forPartNumber: selected)
+    }
 
     /// Supply type for a part number (die-cut vs continuous). Unknown parts default
     /// to die-cut, preserving the fixed-height behavior of older supplies.

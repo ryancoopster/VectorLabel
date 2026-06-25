@@ -143,7 +143,7 @@ public final class SupplyCatalogStore: ObservableObject {
                 categories.append(category.name)
                 for s in category.supplies {
                     let parts: [[String: Any]] = s.parts.map { p in
-                        var d: [String: Any] = ["pn": p.partNumber,
+                        var d: [String: Any] = ["pn": p.partNumber, "rot": p.rotate90,
                                                 "mat": p.materialLabel, "url": p.overrideURL]
                         if let q = p.quantityPerRoll { d["qty"] = q }
                         if let l = p.rollLengthFeet { d["lenFt"] = fin(l) }
