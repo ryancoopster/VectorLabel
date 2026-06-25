@@ -97,61 +97,66 @@ public enum BradyVGL {
         return []
     }
 
-    /// Build a complete VGL job for one label image.
+    /// Build a complete VGL job for one label image. The raster is row-major, top-left
+    /// origin, `width` × `height` pixels.
     ///
-    /// The raster is row-major, top-left origin, `width` = pixels ACROSS the print head
-    /// and `height` = lines along the FEED — the same convention the renderer produces and
-    /// the (hardware-validated) M611 encoder uses. Each row becomes one raster line across
-    /// the head; rows advance along the feed. (Previously this iterated COLUMNS, which
-    /// transposed the image — sending the feed dimension across the head, clipping a long
-    /// continuous label to the head width and rotating it 90°.)
-    public static func buildPrintJob(pixels: [UInt8], width: Int, height: Int, cutMode: CutMode = .afterJob) -> [UInt8] {
-        // Defensive bound: the per-row loop indexes pixels[row*width+col], so a raster
-        // smaller than width*height (or with absurd/overflowing dimensions) would read out
-        // of bounds and trap. IPC input is validated at the RenderedLabel decode boundary;
-        // this also guards in-process callers.
+    /// `columnMajor` picks how the raster maps to the head — and the M610 needs DIFFERENT
+    /// mappings for its two stock types, because the renderer rotates CONTINUOUS 90°
+    /// (landscape) but leaves DIE-CUT upright, so the two arrive 90° apart:
+    ///   • false (row-major): each ROW is one raster line ACROSS the head, rows advance
+    ///     along the FEED — `width` = across, `height` = feed. Correct for CONTINUOUS (a
+    ///     long label's length is the feed; row-major was the build-339 fix).
+    ///   • true (column-major): each COLUMN is one line, columns advance along the feed —
+    ///     `height` = across, `width` = feed. Correct for DIE-CUT (the orientation that
+    ///     printed correctly before build 339).
+    public static func buildPrintJob(pixels: [UInt8], width: Int, height: Int,
+                                     cutMode: CutMode = .afterJob, columnMajor: Bool = false) -> [UInt8] {
+        // Defensive bound: the loop indexes pixels[row*width+col], so a raster smaller than
+        // width*height (or with absurd/overflowing dimensions) would read out of bounds and
+        // trap. IPC input is validated at the RenderedLabel decode boundary; this also
+        // guards in-process callers.
         let (need, overflow) = width.multipliedReportingOverflow(by: height)
         guard width > 0, height > 0, !overflow, pixels.count >= need else { return [] }
         var job: [UInt8] = []
 
         // Job Start
         job += [0x1B, 0x58, 0x00]
-        // Continuous feed-length command would go here (no-op until verified).
-        // `height` is the raster height in printer pixels = the printed label
-        // length along the feed for continuous stock.
-        job += feedLengthCommand(lengthPixels: height)
+        // Feed length = number of raster lines (across-head pixels per line is the other
+        // axis). No-op until verified, but kept correct per orientation.
+        let lineCount = columnMajor ? width : height          // lines along the feed
+        let acrossLen = columnMajor ? height : width          // pixels across the head per line
+        job += feedLengthCommand(lengthPixels: lineCount)
         // Set Cut Mode (UNVERIFIED bytes — see cutCommand).
         job += cutCommand(for: cutMode)
 
-        let bytesPerLine = (width + 7) / 8
-
+        let bytesPerLine = (acrossLen + 7) / 8
         var pendingSkips = 0
 
-        // Iterate rows top→bottom; each row becomes one raster line across the head.
-        for row in 0..<height {
+        // Emit one raster line per feed position. Row-major: line = a row (col 0…width-1
+        // across, MSB = leftmost). Column-major: line = a column (right→left feed order,
+        // row 0…height-1 across, MSB = top).
+        for k in 0..<lineCount {
             var lineBytes = [UInt8](repeating: 0, count: bytesPerLine)
-
-            for col in 0..<width {
-                if pixels[row * width + col] != 0 {
-                    let byteIndex = col / 8
-                    let bitIndex = 7 - (col % 8) // MSB = leftmost column
-                    lineBytes[byteIndex] |= (1 << bitIndex)
+            if columnMajor {
+                let col = width - 1 - k
+                for row in 0..<height where pixels[row * width + col] != 0 {
+                    lineBytes[row / 8] |= (1 << (7 - (row % 8)))   // MSB = top row
+                }
+            } else {
+                let row = k
+                for col in 0..<width where pixels[row * width + col] != 0 {
+                    lineBytes[col / 8] |= (1 << (7 - (col % 8)))   // MSB = leftmost column
                 }
             }
 
             // Trim trailing zero bytes
             var trimmedLen = lineBytes.count
-            while trimmedLen > 0 && lineBytes[trimmedLen - 1] == 0 {
-                trimmedLen -= 1
-            }
+            while trimmedLen > 0 && lineBytes[trimmedLen - 1] == 0 { trimmedLen -= 1 }
 
             if trimmedLen == 0 {
-                // Entirely blank line - accumulate as a skip
-                pendingSkips += 1
+                pendingSkips += 1                              // entirely blank line → skip
                 continue
             }
-
-            // Flush any pending skip lines first
             if pendingSkips > 0 {
                 job += skipLinesCommand(count: pendingSkips)
                 pendingSkips = 0
@@ -160,7 +165,7 @@ public enum BradyVGL {
             let line = Array(lineBytes[0..<trimmedLen])
             let rle = compressRLELine(line)
             if rle.count < line.count {
-                job += rasterCommand(opcode: 0x68, data: rle) // RLE Raster
+                job += rasterCommand(opcode: 0x68, data: rle)  // RLE Raster
             } else {
                 job += rasterCommand(opcode: 0x67, data: line) // Raw Raster
             }

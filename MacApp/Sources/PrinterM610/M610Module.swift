@@ -74,8 +74,17 @@ public final class M610Module: PrinterModule {
         // packs it (one wire pixel = one print-head dot); VGL itself is DPI-agnostic.
         let d = MonoRaster.downscale(pixels: label.bytes, width: label.width,
                                      height: label.height, fromDPI: label.dpi, toDPI: Self.nativeDPI)
+        // Encoder base orientation is per-stock, because the renderer rotates CONTINUOUS
+        // 90° (landscape) but leaves DIE-CUT upright, so they arrive 90° apart:
+        //   continuous → row-major  (the long label's length runs along the feed)
+        //   die-cut    → column-major (the orientation that printed correctly before the
+        //                row-major change; the per-supply "flip 90" catalog setting tunes
+        //                individual die-cut supplies on top of this base).
+        // Keyed on the printed part (deterministic); unknown ⇒ die-cut (the safe default).
+        // M610-only — the M611 (M611Bitmap) and Brother (BrotherPT) drivers are untouched.
+        let continuous = BradyCatalog.isContinuous(forPartNumber: label.partNumber)
         return BradyVGL.buildPrintJob(pixels: d.pixels, width: d.width,
-                                      height: d.height, cutMode: vglCut)
+                                      height: d.height, cutMode: vglCut, columnMajor: !continuous)
     }
 
     public func open(_ device: PrinterDevice) throws -> PrinterConnection {

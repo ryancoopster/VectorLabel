@@ -1,11 +1,12 @@
 import XCTest
 @testable import VectorLabelCore
 
-/// Guards the BradyVGL (M610) raster orientation: the encoder must be ROW-major —
-/// each raster line is a row of `width` pixels ACROSS the head, with `height` lines
-/// along the FEED — matching the renderer + the validated M611 encoder. A column-major
-/// regression would transpose the image (the 2"x4"-continuous-prints-rotated-and-clipped
-/// bug).
+/// Guards the BradyVGL (M610) raster orientation, which is PER-STOCK because the renderer
+/// rotates continuous 90° but not die-cut:
+///   • row-major (continuous): width = across head, height = feed (the 2"x4"-continuous
+///     fix — a long label's length runs along the feed, not clipped across the head).
+///   • column-major (die-cut): height = across head, width = feed (the orientation that
+///     printed correctly before the row-major change).
 final class BradyVGLOrientationTests: XCTestCase {
 
     /// Count emitted raster-line commands (0x67 raw / 0x68 RLE) by walking the VGL stream.
@@ -26,22 +27,42 @@ final class BradyVGLOrientationTests: XCTestCase {
         return n
     }
 
-    /// Ink only in the TOP ROW (full width): row-major emits exactly ONE raster line
-    /// (that row) + a skip for the rest. Column-major would emit one line per column.
-    func testTopRowInkIsOneRasterLine() {
+    // ── Row-major (CONTINUOUS): width = across head, height = feed ──────────────────
+
+    /// Ink only in the TOP ROW (full width): row-major emits exactly ONE raster line.
+    func testRowMajorTopRowIsOneLine() {
         let w = 16, h = 5
         var px = [UInt8](repeating: 0, count: w * h)
         for c in 0..<w { px[c] = 0xFF }   // row 0 only
-        let job = BradyVGL.buildPrintJob(pixels: px, width: w, height: h)
-        XCTAssertEqual(rasterLineCount(job), 1, "top-row ink must be a single across-head line (row-major)")
+        let job = BradyVGL.buildPrintJob(pixels: px, width: w, height: h, columnMajor: false)
+        XCTAssertEqual(rasterLineCount(job), 1, "top-row ink → one across-head line (row-major)")
     }
 
-    /// A fully-inked raster emits one raster line PER ROW (= height), confirming the line
-    /// count tracks the feed dimension, not the width.
-    func testFullRasterEmitsHeightLines() {
+    /// A fully-inked raster emits one raster line PER ROW (= height) in row-major.
+    func testRowMajorFullRasterEmitsHeightLines() {
         let w = 3, h = 7
         let px = [UInt8](repeating: 0xFF, count: w * h)
-        let job = BradyVGL.buildPrintJob(pixels: px, width: w, height: h)
-        XCTAssertEqual(rasterLineCount(job), h, "one across-head line per feed row")
+        let job = BradyVGL.buildPrintJob(pixels: px, width: w, height: h, columnMajor: false)
+        XCTAssertEqual(rasterLineCount(job), h, "one across-head line per feed row (row-major)")
+    }
+
+    // ── Column-major (DIE-CUT): height = across head, width = feed ───────────────────
+
+    /// Ink only in the LEFT COLUMN: column-major emits exactly ONE raster line. Guards the
+    /// build-339 regression that flipped die-cut.
+    func testColumnMajorLeftColumnIsOneLine() {
+        let w = 16, h = 5
+        var px = [UInt8](repeating: 0, count: w * h)
+        for r in 0..<h { px[r * w] = 0xFF }   // column 0 only
+        let job = BradyVGL.buildPrintJob(pixels: px, width: w, height: h, columnMajor: true)
+        XCTAssertEqual(rasterLineCount(job), 1, "left-column ink → one across-head line (column-major)")
+    }
+
+    /// A fully-inked raster emits one raster line PER COLUMN (= width) in column-major.
+    func testColumnMajorFullRasterEmitsWidthLines() {
+        let w = 7, h = 3
+        let px = [UInt8](repeating: 0xFF, count: w * h)
+        let job = BradyVGL.buildPrintJob(pixels: px, width: w, height: h, columnMajor: true)
+        XCTAssertEqual(rasterLineCount(job), w, "one across-head line per feed column (column-major)")
     }
 }

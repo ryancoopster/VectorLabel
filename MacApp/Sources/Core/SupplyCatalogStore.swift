@@ -104,7 +104,10 @@ public final class SupplyCatalogStore: ObservableObject {
     private static let snapLock = NSLock()
     private static var _snapshot: SupplyCatalog?
 
-    private static func setSnapshot(_ c: SupplyCatalog) {
+    /// Replace the in-memory snapshot WITHOUT touching disk. Internal so tests can pin a
+    /// deterministic catalog (`SupplyCatalog.makeDefault()`) without mutating the user's
+    /// persisted file. Production code goes through `replace`/`reloadSnapshotFromDisk`.
+    static func setSnapshot(_ c: SupplyCatalog) {
         snapLock.lock(); _snapshot = c; snapLock.unlock()
     }
 

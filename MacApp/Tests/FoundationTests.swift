@@ -43,6 +43,10 @@ final class FoundationTests: XCTestCase {
     /// label rendering; any change here changes what prints. BM-33-427 is the
     /// tricky one: physical 1.5×4.0, printable 1.5×1.5, rotated 90°.
     func testBradyGeometryPinned() {
+        // Pin against the BUNDLED factory catalog, not the developer's persisted catalog —
+        // `feedRotationDeg`/`size` read SupplyCatalogStore.snapshot, which a user's "rotate
+        // 90" edit (e.g. BM-32-427) would otherwise leak into this test.
+        SupplyCatalogStore.setSnapshot(.makeDefault())
         let expected: [String: (w: Double, h: Double, pw: Double, ph: Double, rot: Double)] = [
             "BM-31-427": (1.0, 1.5, 1.0, 0.5, 0),
             "BM-32-427": (1.5, 1.5, 1.5, 0.5, 0),
