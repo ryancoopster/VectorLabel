@@ -126,7 +126,11 @@ public final class M610Module: PrinterModule {
         func bytes(_ p: DriverPage) -> [UInt8] {
             encode(label: p.label, status: job.status, cut: p.cut, isLastLabel: p.isLast)
         }
-        if job.singleLabel {
+        // No auto-cutter + "cut every label": pause for a MANUAL cut between labels.
+        // Force the one-at-a-time path (a batched send can't pause mid-stream).
+        let manualCutPause = !capabilities.hasAutoCutter && job.awaitCut != nil
+            && job.pages.contains { $0.cut == .eachLabel }
+        if job.singleLabel || manualCutPause {
             for (i, page) in job.pages.enumerated() {
                 if job.isCancelled() { break }
                 try send(bytes(page), on: conn)
@@ -140,6 +144,11 @@ public final class M610Module: PrinterModule {
                 }
                 if job.isCancelled() { break }
                 job.progress(.counter(done: i + 1, of: count))
+                // Pause so the user cuts this label before the next feeds (not after the
+                // last). awaitCut blocks until they continue; false ⇒ they stopped the job.
+                if manualCutPause, page.cut == .eachLabel, i < count - 1, !job.isCancelled() {
+                    if !(job.awaitCut?() ?? true) { break }
+                }
             }
         } else {
             var batch: [UInt8] = []

@@ -416,6 +416,27 @@ public final class PrinterManager: ObservableObject {
                             case .done:     if !job.isCancelled { job.completedLabels = pages.count }
                             }
                         }
+                    },
+                    // Manual-cut pause (printers with no auto-cutter, cut-every-label): the
+                    // driver calls this between labels; show a modal so the user cuts/tears
+                    // the printed label before the next one feeds. Blocks the print thread.
+                    awaitCut: {
+                        if job.isCancelled { return false }
+                        let sem = DispatchSemaphore(value: 0)
+                        var keepGoing = true
+                        DispatchQueue.main.async {
+                            let alert = NSAlert()
+                            alert.alertStyle = .informational
+                            alert.messageText = "Cut the label"
+                            alert.informativeText = "Cut or tear off the printed label, then continue printing the next one."
+                            alert.addButton(withTitle: "Continue")
+                            alert.addButton(withTitle: "Stop Printing")
+                            NSApp.activate(ignoringOtherApps: true)
+                            keepGoing = (alert.runModal() == .alertFirstButtonReturn)
+                            sem.signal()
+                        }
+                        sem.wait()
+                        return keepGoing && !job.isCancelled
                     }))
             } catch {
                 print("[PrinterManager] Print failed: \(error)")

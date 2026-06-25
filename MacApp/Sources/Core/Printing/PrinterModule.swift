@@ -122,12 +122,19 @@ public struct DriverJob {
     public let connection: PrinterConnection
     public let isCancelled: () -> Bool
     public let progress: (JobProgress) -> Void
+    /// Pause between labels on a printer WITHOUT an auto-cutter (cut-every-label): the
+    /// driver calls this after each label so the host can prompt the user to cut/tear it,
+    /// blocking until they continue. Returns true to keep printing, false to stop (the user
+    /// cancelled). nil ⇒ no pause (auto-cutter, or the host didn't supply one).
+    public let awaitCut: (() -> Bool)?
     public init(pages: [DriverPage], status: CassetteStatus?, singleLabel: Bool,
                 estLabelMs: Int, connection: PrinterConnection,
-                isCancelled: @escaping () -> Bool, progress: @escaping (JobProgress) -> Void) {
+                isCancelled: @escaping () -> Bool, progress: @escaping (JobProgress) -> Void,
+                awaitCut: (() -> Bool)? = nil) {
         self.pages = pages; self.status = status; self.singleLabel = singleLabel
         self.estLabelMs = estLabelMs
         self.connection = connection; self.isCancelled = isCancelled; self.progress = progress
+        self.awaitCut = awaitCut
     }
 }
 
