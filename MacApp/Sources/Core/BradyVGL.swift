@@ -97,11 +97,18 @@ public enum BradyVGL {
     }
 
     /// Build a complete VGL job for one label image.
+    ///
+    /// The raster is row-major, top-left origin, `width` = pixels ACROSS the print head
+    /// and `height` = lines along the FEED — the same convention the renderer produces and
+    /// the (hardware-validated) M611 encoder uses. Each row becomes one raster line across
+    /// the head; rows advance along the feed. (Previously this iterated COLUMNS, which
+    /// transposed the image — sending the feed dimension across the head, clipping a long
+    /// continuous label to the head width and rotating it 90°.)
     public static func buildPrintJob(pixels: [UInt8], width: Int, height: Int, cutMode: CutMode = .afterJob) -> [UInt8] {
-        // Defensive bound: the per-column loop indexes pixels[row*width+col], so a
-        // raster smaller than width*height (or with absurd/overflowing dimensions)
-        // would read out of bounds and trap. IPC input is validated at the
-        // RenderedLabel decode boundary; this also guards in-process callers.
+        // Defensive bound: the per-row loop indexes pixels[row*width+col], so a raster
+        // smaller than width*height (or with absurd/overflowing dimensions) would read out
+        // of bounds and trap. IPC input is validated at the RenderedLabel decode boundary;
+        // this also guards in-process callers.
         let (need, overflow) = width.multipliedReportingOverflow(by: height)
         guard width > 0, height > 0, !overflow, pixels.count >= need else { return [] }
         var job: [UInt8] = []
@@ -115,21 +122,18 @@ public enum BradyVGL {
         // Set Cut Mode (UNVERIFIED bytes — see cutCommand).
         job += cutCommand(for: cutMode)
 
-        let bytesPerLine = (height + 7) / 8
+        let bytesPerLine = (width + 7) / 8
 
         var pendingSkips = 0
 
-        // Iterate columns right-to-left; each column becomes one raster line.
-        for col in stride(from: width - 1, through: 0, by: -1) {
+        // Iterate rows top→bottom; each row becomes one raster line across the head.
+        for row in 0..<height {
             var lineBytes = [UInt8](repeating: 0, count: bytesPerLine)
-            var hasInk = false
 
-            for row in 0..<height {
-                let pixel = pixels[row * width + col]
-                if pixel != 0 {
-                    hasInk = true
-                    let byteIndex = row / 8
-                    let bitIndex = 7 - (row % 8) // MSB first
+            for col in 0..<width {
+                if pixels[row * width + col] != 0 {
+                    let byteIndex = col / 8
+                    let bitIndex = 7 - (col % 8) // MSB = leftmost column
                     lineBytes[byteIndex] |= (1 << bitIndex)
                 }
             }
@@ -159,8 +163,6 @@ public enum BradyVGL {
             } else {
                 job += rasterCommand(opcode: 0x67, data: line) // Raw Raster
             }
-
-            _ = hasInk
         }
 
         // End Page, End Job
