@@ -74,17 +74,53 @@ public final class M610Module: PrinterModule {
         // packs it (one wire pixel = one print-head dot); VGL itself is DPI-agnostic.
         let d = MonoRaster.downscale(pixels: label.bytes, width: label.width,
                                      height: label.height, fromDPI: label.dpi, toDPI: Self.nativeDPI)
-        // Encoder base orientation is per-stock, because the renderer rotates CONTINUOUS
-        // 90° (landscape) but leaves DIE-CUT upright, so they arrive 90° apart:
-        //   continuous → row-major  (the long label's length runs along the feed)
-        //   die-cut    → column-major (the orientation that printed correctly before the
-        //                row-major change; the per-supply "flip 90" catalog setting tunes
-        //                individual die-cut supplies on top of this base).
-        // Keyed on the printed part (deterministic); unknown ⇒ die-cut (the safe default).
-        // M610-only — the M611 (M611Bitmap) and Brother (BrotherPT) drivers are untouched.
-        let continuous = BradyCatalog.isContinuous(forPartNumber: label.partNumber)
+        // Orient the raster to the PRINTER-REPORTED printable area of the loaded supply,
+        // not a catalog part-number lookup. (Build 342 keyed on the part number; an unknown
+        // continuous part resolved to die-cut → column-major → the long label clipped.) The
+        // renderer keeps raster.width = printable WIDTH and raster.height = printable
+        // HEIGHT/length for BOTH stock types — its landscape rotation moves only the drawn
+        // content, not the bitmap — so whichever raster axis equals the SmartCell's
+        // across-head printable width IS the across-head axis.
+        // M610-only — the M611 (M611Bitmap/areaRotation) and Brother (BrotherPT) are untouched.
+        let columnMajor = Self.acrossHeadIsHeight(rasterWidth: d.width, rasterHeight: d.height,
+                                                  status: status)
         return BradyVGL.buildPrintJob(pixels: d.pixels, width: d.width,
-                                      height: d.height, cutMode: vglCut, columnMajor: !continuous)
+                                      height: d.height, cutMode: vglCut, columnMajor: columnMajor)
+    }
+
+    /// Decide BradyVGL orientation by MATCHING the rendered raster to the printer-reported
+    /// printable area. Returns `true` (column-major: height across the head, width along the
+    /// feed) when the raster's HEIGHT is the across-head axis; `false` (row-major: width
+    /// across, height along the feed) when its WIDTH is. `rasterWidth/Height` are at the
+    /// native 300 dpi the raster was downscaled to.
+    ///
+    /// Primary signal: the SmartCell `printableWidthMils` — the across-head printable width,
+    /// reported for BOTH die-cut and continuous. The raster axis matching it (within a
+    /// tolerance that absorbs mils + 900→300 box-filter rounding) is the across-head axis.
+    /// This auto-adapts per supply: a continuous tape's width matches across (→ row-major, not
+    /// clipped); a portrait die-cut's height matches across (→ column-major). When the match
+    /// is ambiguous (near-square, where either orientation fits dimensionally), no width is
+    /// reported, or there is no cassette status, fall back to the hardware die-cut bit —
+    /// die-cut → column-major, continuous → row-major; unknown ⇒ die-cut (pre-339-safe).
+    static func acrossHeadIsHeight(rasterWidth: Int, rasterHeight: Int, status: CassetteStatus?) -> Bool {
+        var decision = status?.isDieCut ?? true          // fallback: hardware stock-type bit
+        var via = "isDieCut"
+        if let st = status, st.printableWidthMils > 0 {
+            let targetAcross = Int((Double(st.printableWidthMils) / 1000.0 * Double(nativeDPI)).rounded())
+            let tol = max(6, targetAcross / 40)          // ~2.5% + a floor of 6 px
+            let widthIsAcross  = abs(rasterWidth  - targetAcross) <= tol
+            let heightIsAcross = abs(rasterHeight - targetAcross) <= tol
+            if widthIsAcross != heightIsAcross {         // exactly ONE axis matches → unambiguous
+                decision = heightIsAcross
+                via = "printableWidth(\(st.printableWidthMils)mils≈\(targetAcross)px)"
+            }
+        }
+        // Diagnostic for hardware verification (one line per encoded label).
+        let dieCutStr = status.map { String($0.isDieCut) } ?? "nil"
+        let pwStr = status.map { String($0.printableWidthMils) } ?? "nil"
+        NSLog("[M610] orient raster=%dx%d dieCut=%@ printableWidth=%@mils columnMajor=%@ via %@",
+              rasterWidth, rasterHeight, dieCutStr, pwStr, String(decision), via)
+        return decision
     }
 
     public func open(_ device: PrinterDevice) throws -> PrinterConnection {
