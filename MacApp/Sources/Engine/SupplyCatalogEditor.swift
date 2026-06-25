@@ -291,7 +291,7 @@ struct SupplyCatalogEditorView: View {
                            printableWidthInches: s.printableWidthInches, printableHeightInches: s.printableHeightInches,
                            parts: s.parts.map { p in
                                SupplyPartNumber(partNumber: p.partNumber, quantityPerRoll: p.quantityPerRoll,
-                                                rollLengthFeet: p.rollLengthFeet, rotate90: p.rotate90,
+                                                rollLengthFeet: p.rollLengthFeet,
                                                 materialLabel: p.materialLabel, overrideURL: p.overrideURL)
                            })
                 })
@@ -558,7 +558,6 @@ struct SupplyCatalogEditorView: View {
                     Text("len"); numFieldOptD(pB.rollLengthFeet, width: 50); Text("ft").foregroundStyle(.secondary)
                 } else {
                     Text("qty"); numFieldOptI(pB.quantityPerRoll, width: 56); Text("/roll").foregroundStyle(.secondary)
-                    Toggle("Rotate 90°", isOn: pB.rotate90).toggleStyle(.checkbox).font(.system(size: 11))
                 }
                 Spacer()
                 Button { pendingDelete = .part(sid, pid, pB.partNumber.wrappedValue.isEmpty ? "this part" : pB.partNumber.wrappedValue) } label: { Image(systemName: "minus.circle") }.buttonStyle(.borderless)

@@ -33,10 +33,6 @@ public struct SupplyPartNumber: Codable, Hashable, Identifiable {
     public var quantityPerRoll: Int?
     /// Continuous: roll length in feet (shown as "Vinyl PN/50'"). nil ⇒ unknown.
     public var rollLengthFeet: Double?
-    /// Die-cut: Brady feeds this label rotated 90° on the roll, so the printed
-    /// raster is rotated to match (drives BradyCatalog.feedRotationDeg → the
-    /// renderer's feedRotation). Ignored for continuous.
-    public var rotate90: Bool
     /// Material/finish label for display on continuous buy buttons, e.g. "Vinyl",
     /// "Polyester", "Clear polyester". "" ⇒ fall back to the supply's material.
     public var materialLabel: String
@@ -44,20 +40,20 @@ public struct SupplyPartNumber: Codable, Hashable, Identifiable {
     public var overrideURL: String
 
     public init(partNumber: String, quantityPerRoll: Int? = nil, rollLengthFeet: Double? = nil,
-                rotate90: Bool = false, materialLabel: String = "", overrideURL: String = "",
+                materialLabel: String = "", overrideURL: String = "",
                 id: UUID = UUID()) {
         self.id = id
         self.partNumber = partNumber
         self.quantityPerRoll = quantityPerRoll
         self.rollLengthFeet = rollLengthFeet
-        self.rotate90 = rotate90
         self.materialLabel = materialLabel
         self.overrideURL = overrideURL
     }
 
-    // Tolerate hand-edited / older JSON missing the id or optional fields.
+    // Tolerate hand-edited / older JSON missing the id or optional fields. A legacy
+    // "rotate90" key (the removed per-supply 90° feed rotation) is simply ignored.
     private enum CodingKeys: String, CodingKey {
-        case id, partNumber, quantityPerRoll, rollLengthFeet, rotate90, materialLabel, overrideURL
+        case id, partNumber, quantityPerRoll, rollLengthFeet, materialLabel, overrideURL
     }
     public init(from d: Decoder) throws {
         let c = try d.container(keyedBy: CodingKeys.self)
@@ -65,7 +61,6 @@ public struct SupplyPartNumber: Codable, Hashable, Identifiable {
         partNumber = try c.decode(String.self, forKey: .partNumber)
         quantityPerRoll = try? c.decodeIfPresent(Int.self, forKey: .quantityPerRoll)
         rollLengthFeet = try? c.decodeIfPresent(Double.self, forKey: .rollLengthFeet)
-        rotate90 = (try? c.decode(Bool.self, forKey: .rotate90)) ?? false
         materialLabel = (try? c.decode(String.self, forKey: .materialLabel)) ?? ""
         overrideURL = (try? c.decode(String.self, forKey: .overrideURL)) ?? ""
     }

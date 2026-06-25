@@ -44,16 +44,16 @@ final class FoundationTests: XCTestCase {
     /// tricky one: physical 1.5×4.0, printable 1.5×1.5, rotated 90°.
     func testBradyGeometryPinned() {
         // Pin against the BUNDLED factory catalog, not the developer's persisted catalog —
-        // `feedRotationDeg`/`size` read SupplyCatalogStore.snapshot, which a user's "rotate
-        // 90" edit (e.g. BM-32-427) would otherwise leak into this test.
+        // `size` reads SupplyCatalogStore.snapshot, which a user's edit would otherwise
+        // leak into this test. (The per-supply "Rotate 90°" feed rotation was removed.)
         SupplyCatalogStore.setSnapshot(.makeDefault())
-        let expected: [String: (w: Double, h: Double, pw: Double, ph: Double, rot: Double)] = [
-            "BM-31-427": (1.0, 1.5, 1.0, 0.5, 0),
-            "BM-32-427": (1.5, 1.5, 1.5, 0.5, 0),
-            "BM-33-427": (1.5, 4.0, 1.5, 1.5, 90),
+        let expected: [String: (w: Double, h: Double, pw: Double, ph: Double)] = [
+            "BM-31-427": (1.0, 1.5, 1.0, 0.5),
+            "BM-32-427": (1.5, 1.5, 1.5, 0.5),
+            "BM-33-427": (1.5, 4.0, 1.5, 1.5),
         ]
         // The original 3 die-cut supplies must still be present with byte-identical
-        // geometry/rotation (Phase 5 only ADDS supplies + metadata).
+        // geometry (Phase 5 only ADDS supplies + metadata).
         XCTAssertGreaterThanOrEqual(BradyCatalog.sizes.count, 3)
         for (pn, e) in expected {
             guard let s = BradyCatalog.size(forPartNumber: pn) else { return XCTFail("missing \(pn)") }
@@ -61,13 +61,7 @@ final class FoundationTests: XCTestCase {
             XCTAssertEqual(s.heightInches, e.h, "physical height \(pn)")
             XCTAssertEqual(s.printableWidthInches, e.pw, "printable width \(pn)")
             XCTAssertEqual(s.printableHeightInches, e.ph, "printable height \(pn)")
-            XCTAssertEqual(BradyCatalog.feedRotationDeg(forPartNumber: pn), e.rot, "feed rotation \(pn)")
         }
-        // Only the 33-427 family rotates, and it does so regardless of prefix
-        // (matches the old core-based renderer gate).
-        XCTAssertEqual(BradyCatalog.feedRotationDeg(forPartNumber: "BM-31-427"), 0)
-        XCTAssertEqual(BradyCatalog.feedRotationDeg(forPartNumber: "M6-33-427"), 90)
-        XCTAssertEqual(BradyCatalog.feedRotationDeg(forPartNumber: "BM-109-427"), 90)
     }
 
     /// Phase 5 additive metadata: supply type (die-cut vs continuous) and buy URLs.

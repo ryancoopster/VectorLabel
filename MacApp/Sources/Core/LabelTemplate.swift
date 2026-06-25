@@ -139,29 +139,10 @@ public enum LabelRenderer {
         let calScale = Double(dpi) / Double(RenderDPI.calibrationReference)
         ctx.translateBy(x: CGFloat(offset.dx * calScale), y: CGFloat(offset.dy * calScale))
 
-        // Some DIE-CUT supplies (e.g. the 33-427 / BM-109-427) feed rotated relative to
-        // the designer layout, so the whole label is rotated to match. The angle comes
-        // from the catalog (feedRotationDeg); its printable area is square, so a 90°
-        // rotation stays in bounds. GATED to die-cut on its own stock: a continuous
-        // raster (or a die-cut→continuous re-map) is non-square, so rotating it about its
-        // center would push content off the bitmap — continuous orientation is the
-        // landscape rotation below.
-        let feedRotation = (size.isContinuous || dieCutToContinuous) ? 0
-            : BradyCatalog.effectiveFeedRotationDeg(selected: size.partNumber, loaded: loadedPartNumber)
-        // The 90° rotation about center only stays in bounds on a SQUARE printable area
-        // (pw == ph). On a non-square one it would push content off the bitmap, so skip
-        // it (leave the label un-rotated rather than clipped) — the feed-rotated die-cut
-        // supplies this targets are square in practice.
-        if abs(feedRotation) > 0.0001 {
-            if pw == ph {
-                let cx = CGFloat(pw) / 2, cy = CGFloat(ph) / 2
-                ctx.translateBy(x: cx, y: cy)
-                ctx.rotate(by: CGFloat(feedRotation) * .pi / 180)   // clockwise in this y-down space
-                ctx.translateBy(x: -cx, y: -cy)
-            } else {
-                NSLog("[LabelTemplate] feed rotation \(feedRotation)° skipped: non-square printable area \(pw)×\(ph) (would clip)")
-            }
-        }
+        // (The per-supply "Rotate 90°" feed-rotation override was removed: orientation is
+        // now fully automatic — continuous renders landscape, die-cut upright, and the
+        // M610/M611 encoders map that to the head. To rotate a die-cut design, rotate the
+        // canvas in the designer instead.)
 
         // Landscape rotation: continuous stock (the natural label orientation, the engine
         // default for every printer) and the die-cut→continuous re-map both run the

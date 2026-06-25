@@ -29,14 +29,13 @@ extension SupplyCatalog {
         let pn: String
         let qty: Int?
         let lenFt: Double?
-        let rot: Bool
         let matLabel: String        // shown on continuous buy buttons
         init(_ cat: String, _ kind: SupplyKind, selfLam: Bool = false, material: String,
              _ w: Double, _ h: Double, _ pw: Double, _ ph: Double,
-             _ pn: String, qty: Int? = nil, lenFt: Double? = nil, rot: Bool = false, matLabel: String = "") {
+             _ pn: String, qty: Int? = nil, lenFt: Double? = nil, matLabel: String = "") {
             self.cat = cat; self.kind = kind; self.selfLam = selfLam; self.material = material
             self.w = w; self.h = h; self.pw = pw; self.ph = ph
-            self.pn = pn; self.qty = qty; self.lenFt = lenFt; self.rot = rot; self.matLabel = matLabel
+            self.pn = pn; self.qty = qty; self.lenFt = lenFt; self.matLabel = matLabel
         }
     }
 
@@ -58,10 +57,10 @@ extension SupplyCatalog {
             // 1.5"×1.5" wrap: M6 cartridge (250/roll) + BM bulk box (1000/box).
             Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.5, 1.5, 1.5, 0.5, "M6-32-427", qty: 250),
             Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.5, 1.5, 1.5, 0.5, "BM-32-427", qty: 1000),
-            // 1.5"×4" wrap (feeds rotated 90°): M6 cartridge (100/roll) + BM bulk box.
+            // 1.5"×4" wrap: M6 cartridge (100/roll) + BM bulk box.
             // (M6-109-427 dropped — it was derived from the M710-only M7-109-427.)
-            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.5, 4.0, 1.5, 1.5, "M6-33-427", qty: 100, rot: true),
-            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.5, 4.0, 1.5, 1.5, "BM-33-427", rot: true),
+            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.5, 4.0, 1.5, 1.5, "M6-33-427", qty: 100),
+            Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.5, 4.0, 1.5, 1.5, "BM-33-427"),
             Row(WRAP, .dieCut, selfLam: true, material: "B-427", 0.5, 1.0, 0.5, 0.25, "M6-11-427", qty: 250),
             Row(WRAP, .dieCut, selfLam: true, material: "B-427", 0.75, 1.0, 0.75, 0.25, "M6-17-427", qty: 250),
             Row(WRAP, .dieCut, selfLam: true, material: "B-427", 1.0, 1.0, 1.0, 0.375, "M6-19-427", qty: 250),
@@ -143,8 +142,7 @@ extension SupplyCatalog {
                 let r0 = group[0]
                 let parts = group.map {
                     SupplyPartNumber(partNumber: $0.pn, quantityPerRoll: $0.qty,
-                                     rollLengthFeet: $0.lenFt, rotate90: $0.rot,
-                                     materialLabel: $0.matLabel)
+                                     rollLengthFeet: $0.lenFt, materialLabel: $0.matLabel)
                 }
                 let name = r0.kind == .continuous
                     ? "\(fmtIn(r0.w)) continuous"
