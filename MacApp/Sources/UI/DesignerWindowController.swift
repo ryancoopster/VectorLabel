@@ -1076,7 +1076,7 @@ public final class DesignerWindowController: NSObject {
             // we then expand by `copies` and stamp the per-label cut command so the
             // chosen cut SETTING applies across the whole expanded label list (e.g.
             // afterJobLast cuts once after the very last copy of the last row).
-            var rasters: [(pixels: [UInt8], width: Int, height: Int)] = []
+            var rasters: [(pixels: [UInt8], width: Int, height: Int, landscape: Bool)] = []
             var maxLabelPx = 0
             for record in records {
                 guard let rendered = LabelRenderer.render(template: template, record: record, offset: offset, loadedPartNumber: loadedPN) else { continue }
@@ -1088,7 +1088,8 @@ public final class DesignerWindowController: NSObject {
             // the per-label cut from `cutMode` at print time.
             let part = loadedPN ?? template.labelSize?.partNumber ?? ""
             let renderedLabels = rasters.map {
-                RenderedLabel(pixels: $0.pixels, width: $0.width, height: $0.height, partNumber: part)
+                RenderedLabel(pixels: $0.pixels, width: $0.width, height: $0.height, partNumber: part,
+                              landscape: $0.landscape)
             }
             // Feed-to-clear: the Engine synthesizes + prepends the blank lead label at print
             // time (from live media + the real label geometry); we only flag the job here.

@@ -2,64 +2,50 @@ import XCTest
 @testable import VectorLabelCore
 @testable import PrinterM610
 
-/// Guards `M610Module.acrossHeadIsHeight` — the M610's raster orientation decision, which
-/// MATCHES the rendered raster to the printer-reported printable area (SmartCell
-/// `printableWidthMils`) instead of a catalog part-number lookup (the build-342 regression
-/// that clipped continuous). Returns true = column-major (height across head), false =
-/// row-major (width across head). All sizes are native 300-dpi pixels.
+/// Guards the M610 raster orientation: the encoder must derive row-major vs column-major
+/// from the renderer's `RenderedLabel.landscape` flag — NOT a catalog part-number lookup
+/// (the build-342 regression) and NOT the SmartCell printable area (build 343, where
+/// `printableWidthMils` is the label's own-frame width and `isDieCut` reads true even for
+/// continuous tape). `landscape == true` (continuous-style) ⇒ row-major; `false` (die-cut
+/// upright) ⇒ column-major.
 final class M610OrientTests: XCTestCase {
 
-    /// Build a CassetteStatus carrying only the fields the orientation decision reads.
-    private func status(printableWidthMils: Int, isDieCut: Bool) -> CassetteStatus {
-        CassetteStatus(partNumber: "TEST", labelWidthMils: 0, labelHeightMils: 0,
-                       printableWidthMils: printableWidthMils, printableHeightMils: 0,
-                       isDieCut: isDieCut, supplyRemainingPct: 100, labelsPerRoll: nil,
-                       pixelWidth: 0, pixelHeight: 0)
+    /// Count emitted raster-line commands (0x67 raw / 0x68 RLE) in a VGL stream.
+    private func rasterLineCount(_ job: [UInt8]) -> Int {
+        var i = 0, n = 0
+        while i + 1 < job.count {
+            guard job[i] == 0x1B else { i += 1; continue }
+            switch job[i + 1] {
+            case 0x58: i += 3
+            case 0x5A: i += 4
+            case 0x67, 0x68:
+                guard i + 3 < job.count else { return n }
+                let len = Int(job[i + 2]) | (Int(job[i + 3]) << 8)
+                n += 1; i += 4 + len
+            default: i += 2
+            }
+        }
+        return n
     }
 
-    /// CONTINUOUS tape: a 2"x4" raster (600x1200 px) on a 2" tape (printableWidth 2000 mils →
-    /// 600 px). Width matches across → row-major, so the 4" length runs along the feed
-    /// (NOT clipped to the head). This is the case build 342 regressed.
-    func testContinuousWidthMatchesAcross_rowMajor() {
-        let s = status(printableWidthMils: 2000, isDieCut: false)
-        XCTAssertFalse(M610Module.acrossHeadIsHeight(rasterWidth: 600, rasterHeight: 1200, status: s))
+    /// Encode a raster whose TOP ROW is fully inked, at native 300 dpi (downscale is the
+    /// identity), tagged with the given landscape flag, through the real M610 encoder.
+    private func encodeTopRow(landscape: Bool, w: Int, h: Int) -> [UInt8] {
+        var px = [UInt8](repeating: 0, count: w * h)
+        for c in 0..<w { px[c] = 0xFF }            // row 0 only
+        let label = RenderedLabel(pixels: px, width: w, height: h, dpi: 300, landscape: landscape)
+        return M610Module().encode(label: label, status: nil, cut: .never, isLastLabel: true)
     }
 
-    /// PORTRAIT die-cut (across = height): a 1.5"x0.5" printable (450x150 px) fed with the
-    /// 0.5" dimension across the head (printableWidth 500 mils → 150 px). Height matches
-    /// across → column-major.
-    func testDieCutHeightMatchesAcross_columnMajor() {
-        let s = status(printableWidthMils: 500, isDieCut: true)
-        XCTAssertTrue(M610Module.acrossHeadIsHeight(rasterWidth: 450, rasterHeight: 150, status: s))
+    /// CONTINUOUS-style (landscape): row-major — the full top row is ONE across-head line.
+    func testLandscapeIsRowMajor() {
+        XCTAssertEqual(rasterLineCount(encodeTopRow(landscape: true, w: 16, h: 5)), 1,
+                       "landscape ⇒ row-major: top row = one across-head line")
     }
 
-    /// LANDSCAPE die-cut (across = width): the printable WIDTH matches the reported across-
-    /// head width, so even a die-cut resolves to row-major. Proves the decision adapts
-    /// per-supply to the hardware rather than assuming die-cut ⇒ column-major.
-    func testDieCutWidthMatchesAcross_rowMajorOverridesDieCut() {
-        let s = status(printableWidthMils: 2000, isDieCut: true)   // 2" across → 600 px
-        XCTAssertFalse(M610Module.acrossHeadIsHeight(rasterWidth: 600, rasterHeight: 300, status: s))
-    }
-
-    /// SQUARE/ambiguous (both axes match the reported width): the dimension test can't
-    /// decide, so fall back to the hardware die-cut bit.
-    func testSquareAmbiguous_fallsBackToDieCutBit() {
-        let dieCut = status(printableWidthMils: 1500, isDieCut: true)    // 450 px, raster 450x450
-        XCTAssertTrue(M610Module.acrossHeadIsHeight(rasterWidth: 450, rasterHeight: 450, status: dieCut))
-        let cont = status(printableWidthMils: 1500, isDieCut: false)
-        XCTAssertFalse(M610Module.acrossHeadIsHeight(rasterWidth: 450, rasterHeight: 450, status: cont))
-    }
-
-    /// No reported width (0) → fall back to the die-cut bit, never compare against 0.
-    func testZeroPrintableWidth_fallsBackToDieCutBit() {
-        XCTAssertFalse(M610Module.acrossHeadIsHeight(rasterWidth: 600, rasterHeight: 1200,
-                                                     status: status(printableWidthMils: 0, isDieCut: false)))
-        XCTAssertTrue(M610Module.acrossHeadIsHeight(rasterWidth: 600, rasterHeight: 1200,
-                                                    status: status(printableWidthMils: 0, isDieCut: true)))
-    }
-
-    /// No cassette status at all → die-cut default (column-major), the pre-339-safe choice.
-    func testNilStatus_defaultsToColumnMajor() {
-        XCTAssertTrue(M610Module.acrossHeadIsHeight(rasterWidth: 600, rasterHeight: 1200, status: nil))
+    /// DIE-CUT (upright): column-major — the top row becomes one line PER column (= width).
+    func testUprightIsColumnMajor() {
+        XCTAssertEqual(rasterLineCount(encodeTopRow(landscape: false, w: 16, h: 5)), 16,
+                       "upright ⇒ column-major: top row spans one line per feed column")
     }
 }

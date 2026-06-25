@@ -25,24 +25,33 @@ public struct RenderedLabel: Codable, Equatable {
     /// driver downscales from this to its printer-native DPI before encoding.
     /// Legacy job files without it decode as 300 (the old fixed render DPI).
     public var dpi: Int
+    /// Whether the renderer rotated the design 90° (its `landscape` decision: continuous
+    /// stock by default, or a canvasRot-90 / die-cut→continuous remap). This is the
+    /// orientation signal the M610/VGL encoder needs — it maps directly to row-major
+    /// (landscape, feed along height) vs column-major (upright, feed along width). It is
+    /// carried from the renderer (which decided it) rather than re-derived from a fragile
+    /// part-number lookup. Other drivers (M611 `areaRotation`, Brother) ignore it. Legacy
+    /// job files without it decode as `false` (upright / die-cut — the pre-339-safe default).
+    public var landscape: Bool
 
     public init(pixels: Data, width: Int, height: Int, partNumber: String = "",
-                dpi: Int = RenderDPI.master) {
+                dpi: Int = RenderDPI.master, landscape: Bool = false) {
         self.pixels = pixels
         self.width = width
         self.height = height
         self.partNumber = partNumber
         self.dpi = dpi
+        self.landscape = landscape
     }
 
     /// Convenience initializer from a `[UInt8]` raster (the `LabelRenderer` output).
     public init(pixels: [UInt8], width: Int, height: Int, partNumber: String = "",
-                dpi: Int = RenderDPI.master) {
+                dpi: Int = RenderDPI.master, landscape: Bool = false) {
         self.init(pixels: Data(pixels), width: width, height: height,
-                  partNumber: partNumber, dpi: dpi)
+                  partNumber: partNumber, dpi: dpi, landscape: landscape)
     }
 
-    enum CodingKeys: String, CodingKey { case pixels, pixelsZ, width, height, partNumber, dpi }
+    enum CodingKeys: String, CodingKey { case pixels, pixelsZ, width, height, partNumber, dpi, landscape }
 
     /// Upper sanity bound on either decoded dimension. Generous on purpose: it must
     /// clear the longest real continuous-tape strip at the master render DPI, so it's
@@ -65,6 +74,7 @@ public struct RenderedLabel: Codable, Equatable {
         let height = try c.decode(Int.self, forKey: .height)
         let partNumber = (try? c.decode(String.self, forKey: .partNumber)) ?? ""
         let dpi = (try? c.decode(Int.self, forKey: .dpi)) ?? 300
+        let landscape = (try? c.decode(Bool.self, forKey: .landscape)) ?? false
         // dpi drives every driver's downscale (fromDPI: label.dpi); a 0/negative value
         // makes `fromDPI > toDPI` false → the 900-DPI master raster is sent UNSCALED to
         // the printer (giant/garbled). Validate it like the dimensions (absent → 300).
@@ -102,6 +112,7 @@ public struct RenderedLabel: Codable, Equatable {
         self.height = height
         self.partNumber = partNumber
         self.dpi = dpi
+        self.landscape = landscape
     }
 
     /// Encode with the pixel buffer DEFLATE-compressed under `pixelsZ`. Falls back to
@@ -112,6 +123,7 @@ public struct RenderedLabel: Codable, Equatable {
         try c.encode(height, forKey: .height)
         try c.encode(partNumber, forKey: .partNumber)
         try c.encode(dpi, forKey: .dpi)
+        try c.encode(landscape, forKey: .landscape)
         if let z = Self.deflate(pixels) {
             try c.encode(z, forKey: .pixelsZ)
         } else {

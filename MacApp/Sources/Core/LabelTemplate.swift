@@ -59,7 +59,7 @@ public enum LabelRenderer {
     public static func render(template: VLTemplate, record: WireRecord,
                        offset: (dx: Double, dy: Double) = (0, 0),
                        loadedPartNumber: String? = nil,
-                       continuousTargetWidthInches: Double? = nil) -> (pixels: [UInt8], width: Int, height: Int)? {
+                       continuousTargetWidthInches: Double? = nil) -> (pixels: [UInt8], width: Int, height: Int, landscape: Bool)? {
         guard let size = template.labelSize else { return nil }
         let dpi = size.dpi
 
@@ -208,7 +208,7 @@ public enum LabelRenderer {
         for i in 0 ..< (pw * ph) {
             pixels[i] = raw[i] < 0x80 ? 0xFF : 0x00
         }
-        return (pixels, pw, ph)
+        return (pixels, pw, ph, landscape)
     }
 
     // MARK: – Drawing helpers

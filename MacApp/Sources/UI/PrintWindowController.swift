@@ -722,7 +722,7 @@ extension PrintWindowController: WKScriptMessageHandler {
             // afterJobLast end-of-job cut would land on a label that never goes out
             // and be lost. (DesignerWindowController computes its cut over `rasters`
             // for the same reason.)
-            var rasters: [(pixels: [UInt8], width: Int, height: Int)] = []
+            var rasters: [(pixels: [UInt8], width: Int, height: Int, landscape: Bool)] = []
             var labelPx = 0   // longest rendered dimension (px) → print-length estimate
             for record in selectedRecords {
                 guard let rendered = LabelRenderer.render(template: template, record: record, offset: offset,
@@ -739,7 +739,8 @@ extension PrintWindowController: WKScriptMessageHandler {
             renderedLabels.reserveCapacity(rasters.count)
             for rendered in rasters {
                 renderedLabels.append(RenderedLabel(pixels: rendered.pixels, width: rendered.width,
-                                                    height: rendered.height, partNumber: part))
+                                                    height: rendered.height, partNumber: part,
+                                                    landscape: rendered.landscape))
             }
             // Feed-to-clear: the Engine synthesizes + prepends the blank lead label at print
             // time (from live media + the real label geometry), so we only flag the job here.
