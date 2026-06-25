@@ -44,23 +44,24 @@ public enum BradyVGL {
     //   .eachLabel (1) → cut after every label (needed for continuous tape)
     //   .never (2)     → never actuate the cutter (die-cut stock is pre-cut)
 
-    /// Master switch for emitting the cut command. Default `false`: the cut command
-    /// is a logged no-op (plumbing stays intact, NO bytes reach the cutter) because
-    /// the `ESC M <mode> 00` sequence is UNVERIFIED on real M611 hardware. Flip to
-    /// `true` only after the byte sequence is confirmed (see the note above).
-    public static var cutCommandEnabled = false
+    /// Master switch for emitting the cut command. ENABLED 2026-06-25 for M610 hardware
+    /// verification: without it, "cut every label" did nothing (the printer just ran all
+    /// labels with no cut/pause). BradyVGL is the M610-only encoder — the M611 uses its
+    /// own (validated) `M611Bitmap` path, so this does NOT touch the M611. On the M610
+    /// (no auto-cutter) a per-label cut mode makes the printer pause + prompt to cut.
+    /// If the `ESC M <mode> 00` bytes turn out wrong on hardware, correct `cutCommand`
+    /// (one place) — the printer will simply ignore an unrecognized ESC sequence.
+    public static var cutCommandEnabled = true
 
     /// The single source of truth for the cut-mode byte sequence.
-    /// ⚠️ UNVERIFIED — confirm on M611 hardware before relying on this. ⚠️
+    /// `ESC M <mode> 00` "Set Cut Mode" — pending M610 hardware confirmation.
     /// Returns an empty array (a safe no-op) when disabled.
     public static func cutCommand(for mode: CutMode) -> [UInt8] {
         guard cutCommandEnabled else {
-            // No-op stub: do not touch the cutter. Logged so a hardware test can
-            // see the plumbing fired without risking a jam.
-            print("[BradyVGL] cutCommand(\(mode)) suppressed — cutCommandEnabled == false (UNVERIFIED bytes)")
+            print("[BradyVGL] cutCommand(\(mode)) suppressed — cutCommandEnabled == false")
             return []
         }
-        // ESC M <mode> 00  — historical "Set Cut Mode" (UNVERIFIED, see above).
+        // ESC M <mode> 00  — "Set Cut Mode" (afterJob=0, eachLabel=1, never=2).
         return [0x1B, 0x4D, mode.rawValue, 0x00]
     }
 
