@@ -104,10 +104,12 @@ extension SupplyCatalog {
             Row(CLEAR, .dieCut, material: "B-430", 1.25, 2.75, 1.25, 2.75, "M6-198-430"),
             Row(CLEAR, .dieCut, material: "B-430", 3.0, 1.9, 3.0, 1.9, "M6-37-430"),
 
-            // ── Raised panel die-cut labels (B-593; flat, printable = full). The two
-            //    M610/M611-compatible sizes (the M7-…-593 variants are M710-only).
-            //    Box of 100. ──
+            // ── Raised panel die-cut labels (B-593; flat, printable = full). The four
+            //    M610/M611-compatible sizes; the M7-…-593 variants (172 = 1.77×0.59,
+            //    192 = 6×1.9) are M710/BMP71-only cartridges and are intentionally omitted. ──
+            Row(PANEL, .dieCut, material: "B-593", 1.06, 0.5, 1.06, 0.5, "M6-171-593", qty: 200),
             Row(PANEL, .dieCut, material: "B-593", 1.0, 2.0, 1.0, 2.0, "M6-173-593", qty: 100),
+            Row(PANEL, .dieCut, material: "B-593", 1.0, 3.0, 1.0, 3.0, "M6-176-593", qty: 100),
             Row(PANEL, .dieCut, material: "B-593", 1.0, 4.0, 1.0, 4.0, "M6-174-593", qty: 100),
 
             // ── Continuous tapes — grouped by WIDTH; each material is a buy option.
@@ -159,7 +161,7 @@ extension SupplyCatalog {
 
         let group = SupplyGroup(name: "Brady M6", printerModels: ["M610", "M611"],
                                 categories: categories)
-        return SupplyCatalog(version: 3, groups: [group, brotherPTouchGroup()],
+        return SupplyCatalog(version: 4, groups: [group, brotherPTouchGroup()],
                              coreEquivalences: ["109-427": "33-427"])
     }
 

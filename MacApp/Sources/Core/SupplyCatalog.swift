@@ -218,9 +218,11 @@ public struct SupplyCatalog: Codable, Hashable {
     /// (corrected sizes + self-laminating type) so an existing install picks up the fix
     /// without a manual "Restore defaults" — a user-authored OR renamed Brother group
     /// survives untouched (the earlier code removed every group serving a Brother model,
-    /// destroying user edits). No-op for v3+.
+    /// destroying user edits). v3→v4 ADDS the full raised-panel size set to the M610/M611
+    /// group (a prior build dropped 2 of the 4) — additive + idempotent, by part number,
+    /// so user edits/customizations survive. No-op for v4+.
     public func migrated() -> SupplyCatalog {
-        guard version < 3 else { return self }
+        guard version < 4 else { return self }
         var c = self
         let brotherModels: Set<String> = ["pt-e550w", "pt-p750w", "pt-e560bt"]
         func servesBrother(_ g: SupplyGroup) -> Bool {
@@ -239,7 +241,32 @@ public struct SupplyCatalog: Codable, Hashable {
             c.groups.removeAll(where: isFactoryGroup)
             c.groups.append(SupplyCatalog.brotherPTouchGroup())
         }
-        c.version = 3
+        if c.version < 4 {
+            // ADD any raised-panel sizes the M610/M611 group is missing (a prior build
+            // shipped only 2 of the 4). ADDITIVE + idempotent — matched by part number,
+            // so it never removes or overwrites a user's own supplies/edits.
+            let panelCat = "Raised Panel Labels"
+            let panelDefaults = SupplyCatalog.makeDefault().groups
+                .flatMap { $0.categories }
+                .first { $0.name.caseInsensitiveCompare(panelCat) == .orderedSame }?
+                .supplies ?? []
+            let m6Models: Set<String> = ["m610", "m611"]
+            for gi in c.groups.indices where c.groups[gi].printerModels.contains(where: {
+                m6Models.contains($0.trimmingCharacters(in: .whitespaces).lowercased()) }) {
+                let existing = Set(c.groups[gi].categories
+                    .flatMap { $0.supplies.flatMap { $0.parts.map { $0.partNumber.uppercased() } } })
+                let missing = panelDefaults.filter { s in
+                    !s.parts.contains { existing.contains($0.partNumber.uppercased()) } }
+                guard !missing.isEmpty else { continue }
+                if let ci = c.groups[gi].categories.firstIndex(where: {
+                    $0.name.caseInsensitiveCompare(panelCat) == .orderedSame }) {
+                    c.groups[gi].categories[ci].supplies.append(contentsOf: missing)
+                } else {
+                    c.groups[gi].categories.append(SupplyCategory(name: panelCat, supplies: missing))
+                }
+            }
+        }
+        c.version = 4
         return c
     }
 }
