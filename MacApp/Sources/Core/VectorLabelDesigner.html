@@ -848,7 +848,51 @@ function colHeaderContextMenu(e,c){
 // One header cell: drag to reorder, right-edge to resize, right-click to hide.
 function colHeaderCell(c){
   const j=jsAttr(c);
-  return `<div data-colhdr draggable="true" ondragstart="colDragStart(event,'${j}')" ondragover="colDragOver(event,this)" ondragend="colDragEnd(event)" ondrop="colDrop(event,'${j}')" oncontextmenu="colHeaderContextMenu(event,'${j}')" title="Drag to reorder · right-click for column options" style="position:relative;padding:5px 8px;font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;cursor:grab;box-sizing:border-box">${esc(colLabel(c))}<div onmousedown="colResizeStart(event,'${j}')" style="position:absolute;top:0;right:0;width:6px;height:100%;cursor:col-resize"></div></div>`;
+  // Editable column headers — Custom Designer only (not Print / Template).
+  if(isCustomMode()&&feOn()){
+    return '<div style="position:relative;padding:0;box-sizing:border-box">'
+      +'<input value="'+escAttr(c)+'" spellcheck="false" title="Edit column name" onmousedown="event.stopPropagation()"'
+      +' onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();}else if(event.key===\'Escape\'){this.value=\''+j+'\';this.blur();}"'
+      +' onblur="dbRenameColumn(\''+j+'\',this.value)"'
+      +' style="width:100%;box-sizing:border-box;border:none;outline:none;background:var(--surface);color:var(--text);font-size:10px;font-weight:600;padding:5px 8px;text-transform:none">'
+      +'<div onmousedown="colResizeStart(event,\''+j+'\')" style="position:absolute;top:0;right:0;width:6px;height:100%;cursor:col-resize"></div></div>';
+  }
+  if(isCustomMode()&&S._dbHdrEdit===c){
+    return '<div style="position:relative;padding:3px 4px;display:flex;align-items:center;gap:3px;box-sizing:border-box;background:var(--surface);box-shadow:inset 0 0 0 2px var(--accent)">'
+      +'<input id="db-hdr-edit-input" value="'+escAttr(S._dbHdrVal!=null?S._dbHdrVal:c)+'" spellcheck="false" oninput="S._dbHdrVal=this.value"'
+      +' onkeydown="if(event.key===\'Enter\'){event.preventDefault();dbSaveHdrEdit();}else if(event.key===\'Escape\'){event.preventDefault();dbCancelHdrEdit();}" style="flex:1;min-width:60px;width:90px;padding:2px 5px;font-size:11px;text-transform:none;border:1px solid var(--bd3);border-radius:3px;background:var(--bg);color:var(--text)">'
+      +'<button class="btn" onclick="event.stopPropagation();dbSaveHdrEdit()" title="Save (Enter)" style="padding:1px 6px;font-size:12px;color:var(--green)">✓</button>'
+      +'<button class="btn" onclick="event.stopPropagation();dbCancelHdrEdit()" title="Cancel (Esc)" style="padding:1px 6px;font-size:12px;color:var(--red)">✕</button></div>';
+  }
+  const editBtn=isCustomMode()?'<button class="cell-edit" tabindex="-1" title="Rename column" onclick="event.stopPropagation();dbStartHdrEdit(\''+j+'\')" style="text-transform:none">✎</button>':'';
+  return `<div data-colhdr draggable="true" ondragstart="colDragStart(event,'${j}')" ondragover="colDragOver(event,this)" ondragend="colDragEnd(event)" ondrop="colDrop(event,'${j}')" oncontextmenu="colHeaderContextMenu(event,'${j}')" title="Drag to reorder · right-click for column options" style="position:relative;padding:5px 8px;font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;overflow:hidden;cursor:grab;box-sizing:border-box">${esc(colLabel(c))}${editBtn}<div onmousedown="colResizeStart(event,'${j}')" style="position:absolute;top:0;right:0;width:6px;height:100%;cursor:col-resize"></div></div>`;
+}
+// ── Editable headers + rename propagation (Custom Designer) ───────────────────────
+function dbStartHdrEdit(c){ S._dbHdrEdit=c; S._dbHdrVal=c; R(); setTimeout(function(){const el=document.getElementById('db-hdr-edit-input'); if(el){el.focus();el.select();}},0); }
+function dbCancelHdrEdit(){ S._dbHdrEdit=null; S._dbHdrVal=undefined; R(); }
+function dbSaveHdrEdit(){ const old=S._dbHdrEdit, nv=(S._dbHdrVal!=null?S._dbHdrVal:''); S._dbHdrEdit=null; S._dbHdrVal=undefined; if(old!=null)dbRenameColumn(old,nv); else R(); }
+function _renameInFilter(f,oldN,newN){ if(!f||!Array.isArray(f.groups))return; f.groups.forEach(function(g){ (g.rules||[]).forEach(function(r){ if(r.field===oldN)r.field=newN; if(r.valueType==='field'&&r.value===oldN)r.value=newN; }); }); }
+function _renameInSort(s,oldN,newN){ if(!s||!Array.isArray(s.rules))return; s.rules.forEach(function(r){ if(r.field===oldN)r.field=newN; }); }
+function _renameInFormula(txt,oldN,newN){ if(!txt||!/^[A-Za-z_][A-Za-z0-9_]*$/.test(oldN)||!/^[A-Za-z_][A-Za-z0-9_]*$/.test(newN))return txt;
+  return txt.replace(new RegExp('\\b'+oldN.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','g'),newN); }
+function dbRenameColumn(oldName,newName){
+  newName=String(newName==null?'':newName).trim();
+  const bd=window._boundData; if(!bd||!bd.columns)return false;
+  if(!newName||newName===oldName){ R(); return false; }
+  if(bd.columns.indexOf(newName)>=0){ alert('A column named “'+newName+'” already exists.'); R(); return false; }
+  const ci=bd.columns.indexOf(oldName); if(ci<0){ R(); return false; }
+  bd.columns[ci]=newName;
+  bd.records.forEach(function(r){ if(Object.prototype.hasOwnProperty.call(r,oldName)){ r[newName]=r[oldName]; delete r[oldName]; } });
+  RX=bd.records;
+  if(Array.isArray(window._columnOrder)) window._columnOrder=window._columnOrder.map(function(c){return c===oldName?newName:c;});
+  if(Array.isArray(window._hiddenColumns)) window._hiddenColumns=window._hiddenColumns.map(function(c){return c===oldName?newName:c;});
+  if(window._colWidths&&window._colWidths[oldName]!=null){ window._colWidths[newName]=window._colWidths[oldName]; delete window._colWidths[oldName]; }
+  if(typeof postColumnConfig==='function')postColumnConfig();
+  (S.objs||[]).forEach(function(o){ if(o.field===oldName)o.field=newName; if(typeof o.f==='string')o.f=_renameInFormula(o.f,oldName,newName); });
+  _renameInFilter(S.dbFilter,oldName,newName); _renameInSort(S.dbSort,oldName,newName);
+  if(Array.isArray(window._presets)){ window._presets.forEach(function(p){ _renameInFilter(p.filter,oldName,newName); _renameInSort(p.sort,oldName,newName); }); if(typeof savePresets==='function')savePresets(); }
+  dbSyncBoundData(); markDirty(); R();
+  return true;
 }
 
 // Columns dropdown: checkboxes to show/hide + grab handle to reorder.
@@ -1810,6 +1854,10 @@ function R(){
   if(isCustomMode()&&S._dbEditCell){
     const ce=document.getElementById('db-cell-edit-input');
     if(ce){ ce.focus(); const n=ce.value.length; try{ce.setSelectionRange(n,n);}catch(_){} }
+  }
+  if(isCustomMode()&&S._dbHdrEdit){
+    const he=document.getElementById('db-hdr-edit-input');
+    if(he&&document.activeElement!==he){ he.focus(); const n=he.value.length; try{he.setSelectionRange(n,n);}catch(_){} }
   }
   // Free-edit mode: re-focus the floating cell editor across re-renders.
   if(window._fe&&window._fe.on&&window._fe.active){
@@ -4520,6 +4568,23 @@ function dbAddColumn(){
   dbSyncBoundData(); markDirty(); R();
 }
 
+// ── Export dataset (custom mode) → CSV or Excel via a Swift save panel ───────────
+function dbExportDialog(){
+  if(!hasBoundData())return;
+  const wrap=document.createElement('div'); wrap.id='export-overlay';
+  wrap.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:99999;display:flex;align-items:center;justify-content:center';
+  wrap.onmousedown=function(e){ if(e.target===wrap)wrap.remove(); };
+  wrap.innerHTML='<div onmousedown="event.stopPropagation()" style="background:var(--surface);border:1px solid var(--bd3);border-radius:10px;padding:18px 20px;width:300px;box-shadow:0 12px 44px rgba(0,0,0,0.5);color:var(--text)">'
+    +'<div style="font-weight:600;font-size:14px;margin-bottom:3px">Export data</div>'
+    +'<div style="color:var(--text3);font-size:11px;margin-bottom:14px">Write the current dataset to a file. You can overwrite your original import if you choose.</div>'
+    +'<div style="display:flex;flex-direction:column;gap:8px">'
+    +'<button class="btn" onclick="dbDoExport(\'csv\')" style="padding:9px 12px;text-align:left">CSV (.csv)</button>'
+    +'<button class="btn" onclick="dbDoExport(\'xlsx\')" style="padding:9px 12px;text-align:left">Excel (.xlsx)</button></div>'
+    +'<div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn" onclick="var e=document.getElementById(\'export-overlay\');if(e)e.remove()" style="padding:5px 12px">Cancel</button></div></div>';
+  document.body.appendChild(wrap);
+}
+function dbDoExport(fmt){ const el=document.getElementById('export-overlay'); if(el)el.remove(); _vlPost('exportDataset',{format:fmt}); }
+
 // ── Free-edit mode + Ripple (Excel-like grid editing) ────────────────────────────
 // State in window._fe; grid coords are (visRow, colIdx) over feVisRows()×feGridCols(),
 // mapped to absolute RX rows. The ADAPTER hooks below differ per front-end; the SHARED
@@ -4807,6 +4872,7 @@ function buildDatabasePanel(){
       <button class="btn" onclick="dbAddRow()" style="padding:3px 10px;font-size:11px" title="Add a new blank row">+ Row</button>
       <button class="btn" onclick="dbAddColumn()" style="padding:3px 10px;font-size:11px"${bound?"":" disabled"} title="Add a new column">+ Column</button>
       <button class="btn${feOn()?' fe-on':''}" onclick="feToggle()" style="padding:3px 10px;font-size:11px"${bound?"":" disabled"} title="Free edit: click any cell to edit directly · multi-select · copy/paste · drag a corner to fill (Option = no auto-increment) · right-click to Ripple">${feOn()?'● Free edit ON':'Free edit'}</button>
+      <button class="btn" onclick="dbExportDialog()" style="padding:3px 10px;font-size:11px"${bound?"":" disabled"} title="Export this dataset to CSV or Excel (.xlsx)">Export…</button>
       <button class="btn" onclick="chooseDataSource()" style="padding:3px 10px;font-size:11px">Choose data file…</button>
       <button class="btn" onclick="clearDataSourceCustom()" style="padding:3px 10px;font-size:11px"${bound?"":" disabled"} title="Unbind the data source — back to a single label">Clear data</button>
       <button class="btn" onclick="refreshDataSource()" style="padding:3px 10px;font-size:11px"${(bound&&(window._boundData.filename||'')!=='Custom data')?"":" disabled"} title="Re-read the bound file from disk">↻ Refresh from source</button>

@@ -1162,6 +1162,39 @@ public final class DesignerWindowController: NSObject {
     /// in-memory bound data snapshot (headers / rows / source path). Shared by Save
     /// (writes it to a file) and the Reprint capture (serialized into the job's
     /// `reprint.customDocJSON`) so a reprint reopens the exact printed design.
+    /// Export the bound dataset to CSV or .xlsx via an NSSavePanel.
+    private func handleExportDataset(_ payloadAny: Any?) {
+        guard let ds = dataSource, !ds.records.isEmpty else {
+            let a = NSAlert(); a.messageText = "Nothing to export"
+            a.informativeText = "Add some rows or bind a data file first."; a.runModal(); return
+        }
+        let isXLSX = ((payloadAny as? [String: Any])?["format"] as? String) == "xlsx"
+        let base = ds.path?.deletingPathExtension().lastPathComponent ?? "VectorLabel Data"
+        let panel = NSSavePanel()
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = base + (isXLSX ? ".xlsx" : ".csv")
+        if isXLSX, let t = UTType(filenameExtension: "xlsx") { panel.allowedContentTypes = [t] }
+        else { panel.allowedContentTypes = [.commaSeparatedText] }
+        panel.level = .modalPanel
+        NSApp.activate(ignoringOtherApps: true)
+        panel.begin { [weak self] resp in
+            guard resp == .OK, let url = panel.url else { return }
+            MainActor.assumeIsolated {
+                guard let ds = self?.dataSource else { return }
+                let data: Data? = isXLSX
+                    ? XLSXWriter.data(headers: ds.columns, rows: ds.records.map { $0.fields })
+                    : WireExportParser.csvText(records: ds.records, headers: ds.columns).data(using: .utf8)
+                if let data = data {
+                    do { try data.write(to: url, options: .atomic) }
+                    catch {
+                        let a = NSAlert(); a.messageText = "Export failed"
+                        a.informativeText = error.localizedDescription; a.runModal()
+                    }
+                }
+            }
+        }
+    }
+
     private func customLabelDocument(from template: VLTemplate, copies: Int, cutMode: CutMode) -> CustomLabelDocument {
         var rows: [[String: String]] = []
         var headers: [String] = []
@@ -1587,6 +1620,11 @@ extension DesignerWindowController: WKScriptMessageHandler {
             if let d = try? JSONEncoder().encode(t), let s = String(data: d, encoding: .utf8) {
                 webView?.evaluateJavaScript("if(typeof feApplyPaste==='function')feApplyPaste(\(s));", completionHandler: nil)
             }
+
+        case "exportDataset":
+            // Custom Designer only — write the current dataset out as CSV or .xlsx via a
+            // save panel (the user may overwrite their original import if they choose).
+            if mode == .custom { handleExportDataset(body["payload"]) }
 
         case "printCustom":
             // Custom Designer only — render the current canvas as a single label
