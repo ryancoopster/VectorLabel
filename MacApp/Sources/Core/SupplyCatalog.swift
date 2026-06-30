@@ -177,6 +177,52 @@ public struct SupplyGroup: Codable, Hashable, Identifiable {
     }
 }
 
+// MARK: – Deep copy with fresh ids (import / duplicate)
+//
+// Reconstructing through the initializers (which default `id: UUID()`) yields a copy
+// whose ids can't collide with an existing group/category/supply/part — required when
+// importing a file or duplicating, since UUIDs are SwiftUI identity + match keys.
+
+public extension SupplyPartNumber {
+    func withFreshID() -> SupplyPartNumber {
+        SupplyPartNumber(partNumber: partNumber, quantityPerRoll: quantityPerRoll,
+                         rollLengthFeet: rollLengthFeet, rotate90: rotate90,
+                         materialLabel: materialLabel, overrideURL: overrideURL)
+    }
+}
+public extension Supply {
+    func withFreshIDs() -> Supply {
+        Supply(name: name, kind: kind, selfLaminating: selfLaminating, materialFamily: materialFamily,
+               widthInches: widthInches, heightInches: heightInches,
+               printableWidthInches: printableWidthInches, printableHeightInches: printableHeightInches,
+               parts: parts.map { $0.withFreshID() })
+    }
+}
+public extension SupplyCategory {
+    func withFreshIDs() -> SupplyCategory {
+        SupplyCategory(name: name, supplies: supplies.map { $0.withFreshIDs() })
+    }
+}
+public extension SupplyGroup {
+    func withFreshIDs() -> SupplyGroup {
+        SupplyGroup(name: name, printerModels: printerModels, categories: categories.map { $0.withFreshIDs() })
+    }
+}
+
+/// A portable supply export — exactly one of `group` / `category` is set. A versioned
+/// envelope so import can validate the file is ours and the format can evolve.
+public struct SupplyExport: Codable {
+    public static let formatTag = "vectorlabel-supply"
+    public var format: String
+    public var version: Int
+    public var group: SupplyGroup?
+    public var category: SupplyCategory?
+    public init(group: SupplyGroup? = nil, category: SupplyCategory? = nil) {
+        self.format = SupplyExport.formatTag; self.version = 1
+        self.group = group; self.category = category
+    }
+}
+
 /// The whole editable catalog: every group plus the bulk-box ↔ cartridge core
 /// equivalence map used by part-number matching.
 public struct SupplyCatalog: Codable, Hashable {

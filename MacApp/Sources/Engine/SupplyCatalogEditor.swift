@@ -219,6 +219,10 @@ struct SupplyCatalogEditorView: View {
                 Button { pendingDelete = .group(group.id, group.name) } label: { Image(systemName: "trash") }
                     .help("Delete this supply group")
                     .disabled(draft.groups.count <= 1)
+                Button { exportGroup() } label: { Image(systemName: "square.and.arrow.up") }
+                    .help("Export this supply group to a file")
+                Button { importGroup() } label: { Image(systemName: "square.and.arrow.down") }
+                    .help("Import a supply group from a file")
                 Spacer()
                 Button("Restore defaults…") { confirmRestore = true }
             }
@@ -372,6 +376,8 @@ struct SupplyCatalogEditorView: View {
             HStack {
                 Button { addCategory() } label: { Label("Add category", systemImage: "plus") }
                     .buttonStyle(.borderless)
+                Button { importCategory() } label: { Label("Import category…", systemImage: "square.and.arrow.down") }
+                    .buttonStyle(.borderless).help("Import a category from a file into this group")
                 Spacer()
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
@@ -406,6 +412,9 @@ struct SupplyCatalogEditorView: View {
                 Spacer()
                 Button { pendingDelete = .category(cat.id, cat.name) } label: { Image(systemName: "trash") }
                     .buttonStyle(.borderless).help("Delete this category").disabled(group.categories.count <= 1)
+            }
+            .contextMenu {
+                Button { exportCategory(cat) } label: { Label("Export category…", systemImage: "square.and.arrow.up") }
             }
             ForEach(Array(cat.supplies.enumerated()), id: \.element.id) { si, s in
                 supplyRow(ci: ci, si: si, s: s)
@@ -615,6 +624,72 @@ struct SupplyCatalogEditorView: View {
     private func addCategory() {
         guard draft.groups.indices.contains(groupIndex) else { return }
         draft.groups[groupIndex].categories.append(SupplyCategory(name: "New category", supplies: []))
+    }
+
+    // MARK: Import / export (supply groups + categories)
+
+    private func exportGroup() {
+        guard draft.groups.indices.contains(groupIndex) else { return }
+        saveExport(SupplyExport(group: group), suggestedName: group.name)
+    }
+    private func exportCategory(_ cat: SupplyCategory) {
+        saveExport(SupplyExport(category: cat), suggestedName: cat.name)
+    }
+    private func importGroup() {
+        guard let exp = openExport() else { return }
+        guard let g = exp.group else {
+            showAlert("Import failed", "That file is a category, not a supply group. Use “Import category…” below the category list.")
+            return
+        }
+        draft.groups.append(g.withFreshIDs())          // fresh ids so it can't collide
+        groupIndex = draft.groups.count - 1
+        selectedSupply = nil
+    }
+    private func importCategory() {
+        guard draft.groups.indices.contains(groupIndex) else { return }
+        guard let exp = openExport() else { return }
+        guard let cat = exp.category else {
+            showAlert("Import failed", "That file is a supply group, not a category. Use the Import button next to the supply-group selector.")
+            return
+        }
+        draft.groups[groupIndex].categories.append(cat.withFreshIDs())
+    }
+
+    private static let supplyFileTypes: [UTType] = [UTType(filenameExtension: "vlsupply") ?? .json, .json]
+
+    private func saveExport(_ export: SupplyExport, suggestedName: String) {
+        let enc = JSONEncoder(); enc.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let data = try? enc.encode(export) else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = Self.supplyFileTypes
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "\(sanitizeFileName(suggestedName)).vlsupply"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do { try data.write(to: url) }
+        catch { showAlert("Export failed", "Couldn’t write the file: \(error.localizedDescription)") }
+    }
+    private func openExport() -> SupplyExport? {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = Self.supplyFileTypes
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        guard panel.runModal() == .OK, let url = panel.url else { return nil }
+        guard let data = try? Data(contentsOf: url),
+              let exp = try? JSONDecoder().decode(SupplyExport.self, from: data),
+              exp.format == SupplyExport.formatTag else {
+            showAlert("Import failed", "That file isn’t a VectorLabel supply export.")
+            return nil
+        }
+        return exp
+    }
+    private func sanitizeFileName(_ s: String) -> String {
+        let cleaned = s.components(separatedBy: CharacterSet(charactersIn: "/\\:?%*|\"<>"))
+            .joined(separator: "-").trimmingCharacters(in: .whitespaces)
+        return cleaned.isEmpty ? "Untitled" : cleaned
+    }
+    private func showAlert(_ title: String, _ message: String) {
+        let a = NSAlert(); a.messageText = title; a.informativeText = message
+        a.alertStyle = .warning; a.addButton(withTitle: "OK"); a.runModal()
     }
     private func deleteCategory(ci: Int) {
         guard draft.groups.indices.contains(groupIndex),
