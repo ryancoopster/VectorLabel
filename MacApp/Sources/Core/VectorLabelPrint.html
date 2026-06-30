@@ -268,7 +268,7 @@ const BLEED_IN=2;
 function autoFitPx(text,o,basePx,boxW,pad){
   if(!text) return basePx;
   const cx=autoFitPx._c||(autoFitPx._c=document.createElement('canvas').getContext('2d'));
-  cx.font=(o.italic?'italic ':'')+(o.bold?700:400)+' '+basePx+'px "'+(o.font||'Helvetica Neue')+'"';
+  cx.font=(o.italic?'italic ':'')+(o.bold?700:400)+' '+basePx+'px "'+(o.font||'Arial')+'"';
   let w=cx.measureText(text).width;
   if(o.tracking) w+=o.tracking*Math.max(0,String(text).length-1);
   w*=((o.stretch||100)/100);
@@ -301,7 +301,7 @@ function renderLabel(tpl,rec,scale=1){
       const col=e?"var(--red)":"#000";
       const txt=(e?`⚠`:v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
       return `<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${Math.max(h,8)}px;${rc}overflow:hidden;display:flex;align-items:${va};padding:0 1px;box-sizing:border-box">
-        <div style="width:100%;font-family:'${o.font||"Helvetica Neue"}',Arial,sans-serif;font-size:${fz}px;font-weight:${fw};font-style:${fs};text-decoration:${td};color:${col};white-space:${ws};overflow:hidden;text-overflow:ellipsis;line-height:1.15;text-align:${o.al||"left"};transform:scaleX(${sx});transform-origin:left center">${txt}</div>
+        <div style="width:100%;font-family:'${o.font||"Arial"}',Arial,sans-serif;font-size:${fz}px;font-weight:${fw};font-style:${fs};text-decoration:${td};color:${col};white-space:${ws};overflow:hidden;text-overflow:ellipsis;line-height:1.15;text-align:${o.al||"left"};transform:scaleX(${sx});transform-origin:left center">${txt}</div>
       </div>`;
     }
     if(o.t==="ln")return`<div style="position:absolute;left:${x}px;top:${y}px;width:${(o.w||1)*sc}px;height:${Math.max(1,o.lw||1)}px;background:#000;${rc}"></div>`;
@@ -346,11 +346,11 @@ const SAMPLE_TPL={
   name:"Standard Wire Label",
   specN:"BM-32-427",
   objs:[
-    {id:"st1",t:"tx",x:.02,y:.03,w:.44,h:.28,f:'=IF(Connector<>"",Connector,"")',al:"left",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100},
-    {id:"st2",t:"tx",x:.62,y:.03,w:.36,h:.28,f:'=IF(Rack<>"",Rack,"")',al:"right",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100},
-    {id:"st3",t:"tx",x:.02,y:.08,w:.96,h:.34,f:'=IF(Number<>"",Number&IF(Cable<>""," - "&Cable,""),IF(Cable<>"",Cable,""))',al:"center",valign:"middle",fs:19,bold:true,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100},
+    {id:"st1",t:"tx",x:.02,y:.03,w:.44,h:.28,f:'=IF(Connector<>"",Connector,"")',al:"left",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Arial",wrapText:false,tracking:0,stretch:100},
+    {id:"st2",t:"tx",x:.62,y:.03,w:.36,h:.28,f:'=IF(Rack<>"",Rack,"")',al:"right",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Arial",wrapText:false,tracking:0,stretch:100},
+    {id:"st3",t:"tx",x:.02,y:.08,w:.96,h:.34,f:'=IF(Number<>"",Number&IF(Cable<>""," - "&Cable,""),IF(Cable<>"",Cable,""))',al:"center",valign:"middle",fs:19,bold:true,italic:false,underline:false,font:"Arial",wrapText:false,tracking:0,stretch:100},
     {id:"st4",t:"ln",x:0,y:.44,w:1,h:0,lw:1},
-    {id:"st5",t:"tx",x:.02,y:.47,w:.96,h:.24,f:'=IF(Other_Device<>"","@ "&Other_Device&IF(Other_Socket<>""," : "&Other_Socket,""),"")',al:"center",valign:"middle",fs:12,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100}
+    {id:"st5",t:"tx",x:.02,y:.47,w:.96,h:.24,f:'=IF(Other_Device<>"","@ "&Other_Device&IF(Other_Socket<>""," : "&Other_Socket,""),"")',al:"center",valign:"middle",fs:12,bold:false,italic:false,underline:false,font:"Arial",wrapText:false,tracking:0,stretch:100}
   ]
 };
 

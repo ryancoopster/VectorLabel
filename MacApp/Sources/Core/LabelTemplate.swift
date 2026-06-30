@@ -246,17 +246,9 @@ public enum LabelRenderer {
 
         let r = rect(for: obj, dpi: dpi)
 
-        // Font
-        let fontName: String
-        switch obj.font ?? "Helvetica Neue" {
-        case "Arial Narrow": fontName = "ArialNarrow"
-        case "Courier New":  fontName = "CourierNewPSMT"
-        case "Georgia":      fontName = "Georgia"
-        case "Impact":       fontName = "Impact"
-        case "Tahoma":       fontName = "Tahoma"
-        case "Verdana":      fontName = "Verdana"
-        default:             fontName = "HelveticaNeue"
-        }
+        // Font: the family DISPLAY name — the designer offers its curated list PLUS every
+        // installed system family — resolved to a concrete face in makeFont below.
+        let family = obj.font ?? "Arial"
 
         // The HTML designer renders text at:  fz = max(7, obj.fs * 185/100) px
         // (185 px per inch). Reproduce that exact physical size at print DPI by
@@ -270,10 +262,13 @@ public enum LabelRenderer {
 
         let fontManager = NSFontManager.shared
         func makeFont(_ size: Double) -> NSFont {
-            if let base = NSFont(name: fontName, size: CGFloat(size)) {
-                return traits.isEmpty ? base : fontManager.convert(base, toHaveTrait: traits)
-            }
-            return NSFont.systemFont(ofSize: CGFloat(size), weight: obj.bold == true ? .bold : .regular)
+            // `font(withFamily:)` resolves a family DISPLAY name that `NSFont(name:)` (which
+            // wants a PostScript name) would miss — e.g. "Helvetica Neue" vs "HelveticaNeue"
+            // — so any installed system font the designer offers renders correctly.
+            let base = fontManager.font(withFamily: family, traits: [], weight: 5, size: CGFloat(size))
+                    ?? NSFont(name: family, size: CGFloat(size))
+                    ?? NSFont.systemFont(ofSize: CGFloat(size), weight: obj.bold == true ? .bold : .regular)
+            return traits.isEmpty ? base : fontManager.convert(base, toHaveTrait: traits)
         }
 
         let stretchFactor = (obj.stretch ?? 100.0) / 100.0

@@ -252,7 +252,8 @@ public final class DesignerWindowController: NSObject {
         // so the designer builds its BL table from it before first render. "" ⇒ the
         // default group (one group today; keyed by printer model once more exist).
         contentController.addUserScript(WKUserScript(
-            source: "window.__VL_BUILD__='\(BuildInfo.build)'; window.__VL_CATALOG__=\(SupplyCatalogStore.webCatalogJSON(forModel: ""));",
+            source: "window.__VL_BUILD__='\(BuildInfo.build)'; window.__VL_CATALOG__=\(SupplyCatalogStore.webCatalogJSON(forModel: ""));"
+                  + " window.__VL_FONTS__=\(Self.systemFontFamiliesJSON());",
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController = contentController
         let wv = WKWebView(frame: .zero, configuration: config)
@@ -945,6 +946,16 @@ public final class DesignerWindowController: NSObject {
         webView?.evaluateJavaScript(
             "if(typeof updateDesignerCassettes==='function')updateDesignerCassettes(\(cassettesJSONString()));",
             completionHandler: nil)
+    }
+
+    /// Installed font FAMILIES (display names) as a JSON array, for the designer's font
+    /// dropdown. Hidden/system-internal families (names starting with ".") are dropped.
+    /// The designer merges these with its curated list; the renderer resolves any of them.
+    static func systemFontFamiliesJSON() -> String {
+        let families = NSFontManager.shared.availableFontFamilies
+            .filter { !$0.hasPrefix(".") }
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        return (try? String(data: JSONSerialization.data(withJSONObject: families), encoding: .utf8)) ?? "[]"
     }
 
     /// Push the latest supply catalog (the Engine's edits) into the designer.

@@ -76,7 +76,10 @@ label.lbl{font-size:10px;color:var(--text2);display:block;margin-bottom:3px}
 <script src="bwip-js.js"></script>
 <script>try{window.bwipjs=module.exports;}catch(e){window.bwipjs=null;}</script>
 <script>
-const FONTS=["Helvetica Neue","Arial","Arial Narrow","Verdana","Tahoma","Courier New","Georgia","Impact"];
+const FONTS=["Arial","Helvetica Neue","Arial Narrow","Verdana","Tahoma","Courier New","Georgia","Impact"];
+// Installed system font families, injected by Swift (window.__VL_FONTS__). Offered in the
+// font dropdown in addition to the curated FONTS above; the renderer resolves any of them.
+const SYS_FONTS=(typeof window!=='undefined'&&Array.isArray(window.__VL_FONTS__))?window.__VL_FONTS__:[];
 // ── Barcode symbologies (rendered by the vendored bwip-js engine) ───────────────
 const BARCODE_TYPES=[
   {id:"qrcode",label:"QR Code",d2:true,ecc:["L","M","Q","H"]},
@@ -317,7 +320,7 @@ function textValue(o,rec){
 function autoFitPx(text,o,basePx,boxW,pad){
   if(!text) return basePx;
   const cx=autoFitPx._c||(autoFitPx._c=document.createElement('canvas').getContext('2d'));
-  cx.font=(o.italic?'italic ':'')+(o.bold?700:400)+' '+basePx+'px "'+(o.font||'Helvetica Neue')+'"';
+  cx.font=(o.italic?'italic ':'')+(o.bold?700:400)+' '+basePx+'px "'+(o.font||'Arial')+'"';
   let w=cx.measureText(text).width;
   if(o.tracking) w+=o.tracking*Math.max(0,String(text).length-1);
   w*=((o.stretch||100)/100);
@@ -1017,7 +1020,7 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
       const pe=editing?"pointer-events:auto;outline:none;cursor:text;":"pointer-events:none;";
       const curs=readOnly?"default":(editing?"text":"move");   // caret while editing; otherwise grab-to-move
       return `<div data-obj="${o.id}" ${drag} ${dropAttr} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${Math.max(h,12)}px;${rotCss}${ss}border-radius:2px;cursor:${curs};display:flex;align-items:${va};padding:0 2px;box-sizing:border-box">
-        <div data-txt="${o.id}" ${editAttrs} style="width:100%;font-family:'${o.font||"Helvetica Neue"}',Arial,sans-serif;font-size:${fz}px;font-weight:${fontWeight};font-style:${fontStyle};text-decoration:${textDecoration};color:${txtColor};white-space:${whiteSpace};word-break:${wordBreak};overflow:hidden;text-overflow:${o.wrapText?"clip":"ellipsis"};line-height:1.15;letter-spacing:${letterSpacing};text-align:${textAlign};transform:scaleX(${scaleX});transform-origin:left center;${pe}">${dispVal}</div>
+        <div data-txt="${o.id}" ${editAttrs} style="width:100%;font-family:'${o.font||"Arial"}',Arial,sans-serif;font-size:${fz}px;font-weight:${fontWeight};font-style:${fontStyle};text-decoration:${textDecoration};color:${txtColor};white-space:${whiteSpace};word-break:${wordBreak};overflow:hidden;text-overflow:${o.wrapText?"clip":"ellipsis"};line-height:1.15;letter-spacing:${letterSpacing};text-align:${textAlign};transform:scaleX(${scaleX});transform-origin:left center;${pe}">${dispVal}</div>
         ${rotH}${rb}</div>`;
     }
     if(o.t==="ln"){
@@ -1233,7 +1236,18 @@ function buildMultiProps(sels){
   function tog(key,lbl,inner){ const s=sh(key,false); const on=!s.multi&&s.v===true; return `<button class="fmt-btn${on?' on':''}" title="${lbl}${s.multi?' (mixed)':''}"${s.multi?' style="opacity:.6"':''} onclick="uobjAll({${key}:${on?'false':'true'}})">${inner}</button>`; }
   function btnset(key,def,opts){ const s=sh(key,def); return opts.map(([v,l,ti])=>`<button class="fmt-btn${!s.multi&&s.v===v?' on':''}" title="${ti||l}" onclick="uobjAll({${key}:'${v}'})">${l}</button>`).join(''); }
   function check(key,lbl,def){ const s=sh(key,def); return `<div style="margin-bottom:8px"><label class="lbl" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" ${(!s.multi&&s.v===true)?'checked':''} onchange="uobjAll({${key}:this.checked})"> ${lbl}${s.multi?' <span style=\"color:var(--text3)\">(mixed)</span>':''}</label></div>`; }
-  function fontsel(){ const s=sh('font','Helvetica Neue'); const ho=s.multi?'<option value="__m__" selected>Multiple</option>':''; const body=FONTS.map(f=>`<option value="${f}"${!s.multi&&s.v===f?' selected':''}>${f}</option>`).join(''); return `<div style="margin-bottom:8px"><label class="lbl">Font</label><select class="inp" onchange="if(this.value!=='__m__')uobjAll({font:this.value})">${ho}${body}</select></div>`; }
+  function fontsel(){
+    const s=sh('font','Arial');
+    const ho=s.multi?'<option value="__m__" selected>Multiple</option>':'';
+    const opt=f=>`<option value="${escAttr(f)}"${!s.multi&&s.v===f?' selected':''}>${esc(f)}</option>`;
+    // If the current font isn't in either list (e.g. a font from another machine), show it
+    // anyway so the dropdown reflects the real value rather than silently snapping.
+    const known=FONTS.indexOf(s.v)>=0||SYS_FONTS.indexOf(s.v)>=0;
+    const cur=(!s.multi&&s.v&&!known)?`<option value="${escAttr(s.v)}" selected>${esc(s.v)} (not installed)</option>`:'';
+    const curated=`<optgroup label="Common">${FONTS.map(opt).join('')}</optgroup>`;
+    const sys=SYS_FONTS.length?`<optgroup label="System fonts">${SYS_FONTS.filter(f=>FONTS.indexOf(f)<0).map(opt).join('')}</optgroup>`:'';
+    return `<div style="margin-bottom:8px"><label class="lbl">Font</label><select class="inp" onchange="if(this.value!=='__m__')uobjAll({font:this.value})">${ho}${cur}${curated}${sys}</select></div>`;
+  }
 
   let body='';
   if(t==='tx'){
@@ -2108,7 +2122,7 @@ function onColDropToCanvas(e){
   }
   snapshot();
   const id=mid();
-  S.objs.push({id,x:x,y:y,t:"tx",w:.5,h:.2,mode:"field",field:key,al:"left",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100});
+  S.objs.push({id,x:x,y:y,t:"tx",w:.5,h:.2,mode:"field",field:key,al:"left",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Arial",wrapText:false,tracking:0,stretch:100});
   S.selId=id; S.selIds=[id]; S._ef=undefined; R();
 }
 
@@ -2506,7 +2520,7 @@ function addObj(type){
   snapshot();
   const id=mid();
   const base={id,x:.05,y:.05};
-  if(type==="tx")S.objs.push({...base,t:"tx",w:.5,h:.2,mode:"static",text:"Text",al:"left",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Helvetica Neue",wrapText:false,tracking:0,stretch:100});
+  if(type==="tx")S.objs.push({...base,t:"tx",w:.5,h:.2,mode:"static",text:"Text",al:"left",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Arial",wrapText:false,tracking:0,stretch:100});
   if(type==="ln")S.objs.push({...base,t:"ln",y:.25,w:1,h:0,lw:1});
   if(type==="rc")S.objs.push({...base,t:"rc",w:.4,h:.2,lw:1});
   if(type==="ar")S.objs.push({...base,t:"ar",y:.25,w:1,h:0,lw:2,arrowStart:false,arrowEnd:true,arrowSize:12});
@@ -3338,7 +3352,7 @@ function sanitizeObjs(objs){
   return (objs||[]).map(function(o){
     const c=Object.assign({},o);
     c.id=mid();
-    if(typeof c.font==='string' && FONTS.indexOf(c.font)<0) c.font='Helvetica Neue';
+    if(typeof c.font!=='string' || !c.font.trim()) c.font='Arial';
     if(c.src!=null && !/^data:image\//i.test(String(c.src))) c.src='';
     if(c.sym!=null && !(String(c.sym) in SYMBOLS)) c.sym='';
     // Whitelist the style enums that flow into inline style / handlers (attribute
