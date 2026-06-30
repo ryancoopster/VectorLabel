@@ -9,18 +9,23 @@ log() { /usr/bin/logger -t VectorLabel "templates postinstall: $*"; }
 
 USER_CONSOLE=$(stat -f %Su /dev/console 2>/dev/null)
 [ -n "$USER_CONSOLE" ] && [ "$USER_CONSOLE" != "root" ] || exit 0
-# Space-safe home resolution: `dscl … | awk '{print $2}'` silently truncated a home path
-# containing a space (relocated/network homes), pointing every mkdir/cp/chown at the wrong
-# location. Tilde expansion via getpwnam handles spaces.
-USER_HOME=$(eval echo "~$USER_CONSOLE")
+# Resolve the home dir with the username as a LITERAL dscl argument — never via `eval`
+# (this runs as ROOT, so eval on the Open Directory RecordName would execute shell
+# metacharacters). NFSHomeDirectory is single-valued, so its value follows the key on one
+# line; sed keeps spaces in the path intact (the old `awk '{print $2}'` truncated them).
+USER_HOME=$(/usr/bin/dscl . -read "/Users/$USER_CONSOLE" NFSHomeDirectory 2>/dev/null | /usr/bin/sed -n 's/^NFSHomeDirectory: //p')
 [ -n "$USER_HOME" ] && [ -d "$USER_HOME" ] || { log "could not resolve home for $USER_CONSOLE"; exit 0; }
 
-DEST="$USER_HOME/Documents/VectorLabel/Templates"
+DOCS="$USER_HOME/Documents"
+[ -d "$DOCS" ]; DOCS_EXISTED=$?     # 0 = already present, non-0 = mkdir below creates it
+DEST="$DOCS/VectorLabel/Templates"
 /bin/mkdir -p "$DEST" || log "mkdir $DEST failed"
 # Chown ONLY the directories we may have just created (non-recursive). The old recursive
 # chown of the whole ~/Documents/VectorLabel tree reassigned ownership of the user's own
-# templates and synced Exports content; this touches nothing pre-existing under it.
-/usr/sbin/chown "$USER_CONSOLE" "$USER_HOME/Documents/VectorLabel" "$DEST" 2>/dev/null
+# templates and synced Exports content; this touches nothing pre-existing under it. Include
+# ~/Documents itself only when WE created it (don't touch a pre-existing one).
+[ "$DOCS_EXISTED" -ne 0 ] && /usr/sbin/chown "$USER_CONSOLE" "$DOCS" 2>/dev/null
+/usr/sbin/chown "$USER_CONSOLE" "$DOCS/VectorLabel" "$DEST" 2>/dev/null
 for f in "$STAGE"/*.vltmp; do
   [ -e "$f" ] || continue
   base=$(basename "$f")

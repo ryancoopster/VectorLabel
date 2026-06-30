@@ -10,8 +10,9 @@ log() { /usr/bin/logger -t VectorLabel "vwplugins postinstall: $*"; }
 
 USER_CONSOLE=$(stat -f %Su /dev/console 2>/dev/null)
 [ -n "$USER_CONSOLE" ] && [ "$USER_CONSOLE" != "root" ] || exit 0
-# Space-safe home resolution (see templates postinstall — awk '{print $2}' truncated spaced homes).
-USER_HOME=$(eval echo "~$USER_CONSOLE")
+# Resolve home with the username as a LITERAL dscl argument (never `eval` — runs as ROOT).
+# See the templates postinstall for the full rationale; sed keeps spaces in the path intact.
+USER_HOME=$(/usr/bin/dscl . -read "/Users/$USER_CONSOLE" NFSHomeDirectory 2>/dev/null | /usr/bin/sed -n 's/^NFSHomeDirectory: //p')
 [ -n "$USER_HOME" ] && [ -d "$USER_HOME" ] || { log "could not resolve home for $USER_CONSOLE"; exit 0; }
 VW_BASE="$USER_HOME/Library/Application Support/Vectorworks"
 [ -d "$VW_BASE" ] || exit 0   # Vectorworks not installed → nothing to do
