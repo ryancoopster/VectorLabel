@@ -48,6 +48,8 @@ label.lbl{font-size:10px;color:var(--text2);display:block;margin-bottom:3px}
 .fe-handle{position:absolute;right:-3px;bottom:-3px;width:8px;height:8px;background:var(--accent);border:1px solid #fff;border-radius:1px;cursor:crosshair;z-index:8}
 .btn.fe-on{background:var(--warn,#f5c96c);border-color:var(--warn,#f5c96c);color:#1a1a1a;animation:feflash 0.9s ease-in-out infinite}
 @keyframes feflash{0%,100%{opacity:1}50%{opacity:0.45}}
+.fe-banner{animation:febanner 0.9s ease-in-out infinite}
+@keyframes febanner{0%,100%{background:rgba(245,201,108,0.06)}50%{background:rgba(245,201,108,0.20)}}
 .cell-edit{position:absolute;top:50%;right:3px;transform:translateY(-50%);opacity:0;border:1px solid var(--bd3);background:var(--surface);color:var(--text2);border-radius:3px;font-size:9px;line-height:1;padding:2px 4px;cursor:pointer;z-index:5}
 .rec-row:hover .cell-edit{opacity:.85}
 .cell-edit:hover{opacity:1;color:var(--accent);border-color:var(--accent)}
@@ -694,13 +696,13 @@ const RIPPLE_ICON='<svg width="14" height="14" viewBox="0 0 16 16" style="displa
 // --- Ripple dialog (self-contained overlay; shared with the Custom Designer) ---
 function rippleOpen(absRow,col,prefixOverride){
   const o=feRowObj(absRow)||{}; const cur=(prefixOverride!=null)?prefixOverride:String(o[col]!=null?o[col]:'');
-  const vis=feVisRows(); const pos=vis.indexOf(absRow); const remain=pos>=0?(vis.length-pos):1;
-  window._ripple={absRow:absRow,col:col,prefix:cur,start:'1',inc:1,postfix:'',count:remain};
+  window._ripple={absRow:absRow,col:col,prefix:cur,start:'1',inc:1,postfix:'',count:''};
   rippleRender();
 }
-function rippleField(label,key,type){ const rp=window._ripple; const v=escAttr(String(rp[key]));
+function rippleField(label,key,type,placeholder){ const rp=window._ripple; const v=escAttr(String(rp[key]));
   return '<label style="display:block;margin-bottom:9px"><span style="display:block;color:var(--text2);margin-bottom:3px;font-size:11px">'+esc(label)+'</span>'
-    +'<input type="'+type+'" value="'+v+'" oninput="window._ripple.'+key+'=this.value" onkeydown="if(event.key===\'Enter\'){event.preventDefault();rippleApply();}" style="width:100%;padding:6px 8px;font-size:12px;border:1px solid var(--bd3);border-radius:5px;background:var(--bg);color:var(--text);box-sizing:border-box"></label>'; }
+    +'<input type="'+type+'" value="'+v+'"'+(placeholder?' placeholder="'+escAttr(placeholder)+'"':'')+' oninput="window._ripple.'+key+'=this.value;rippleValidate()" onkeydown="if(event.key===\'Enter\'){event.preventDefault();rippleApply();}" style="width:100%;padding:6px 8px;font-size:12px;border:1px solid var(--bd3);border-radius:5px;background:var(--bg);color:var(--text);box-sizing:border-box"></label>'; }
+function rippleValidate(){ const b=document.getElementById('ripple-apply'); if(!b)return; const rp=window._ripple; const ok=!!rp&&/^\d+$/.test(String(rp.count).trim())&&parseInt(rp.count,10)>=1; b.disabled=!ok; b.style.opacity=ok?'1':'0.4'; b.style.cursor=ok?'pointer':'not-allowed'; b.style.pointerEvents=ok?'':'none'; }
 function rippleRender(){ rippleClose(true); const rp=window._ripple; if(!rp)return;
   const wrap=document.createElement('div'); wrap.id='ripple-overlay';
   wrap.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:99999;display:flex;align-items:center;justify-content:center';
@@ -710,11 +712,11 @@ function rippleRender(){ rippleClose(true); const rp=window._ripple; if(!rp)retu
     +'<div style="color:var(--text3);font-size:11px;margin-bottom:13px">Auto-enumerate down column “'+esc(colLabel(rp.col))+'”. Each value is <b>prefix + counter + postfix</b>.</div>'
     +rippleField('Prefix','prefix','text')+rippleField('Start (number or letter)','start','text')
     +rippleField('Increment (e.g. 1 → 1,2,3 · 2 → 1,3,5)','inc','number')+rippleField('Postfix','postfix','text')
-    +rippleField('Number of records','count','number')
+    +rippleField('Number of records','count','number','Enter a quantity')
     +'<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">'
     +'<button class="btn" onclick="rippleClose()" style="padding:5px 12px">Cancel</button>'
-    +'<button class="btn on" onclick="rippleApply()" style="padding:5px 16px">Apply</button></div></div>';
-  document.body.appendChild(wrap); const fi=wrap.querySelector('input'); if(fi){ fi.focus(); fi.select(); } }
+    +'<button id="ripple-apply" class="btn on" onclick="rippleApply()" style="padding:5px 16px">Apply</button></div></div>';
+  document.body.appendChild(wrap); const fi=wrap.querySelector('input'); if(fi){ fi.focus(); fi.select(); } rippleValidate(); }
 function rippleClose(silent){ const el=document.getElementById('ripple-overlay'); if(el)el.remove(); if(!silent)window._ripple=null; }
 function _lettersToNum(s){ let n=0; s=String(s).toUpperCase(); for(let i=0;i<s.length;i++){ const ch=s.charCodeAt(i); if(ch<65||ch>90)return 0; n=n*26+(ch-64); } return n; }
 function _numToLetters(n){ if(n<1)n=1; let s=''; while(n>0){ const m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=Math.floor((n-1)/26); } return s; }
@@ -723,6 +725,7 @@ function rippleValueAt(start,inc,step){ start=String(start);
   if(/^[A-Za-z]+$/.test(start)){ const lower=start===start.toLowerCase(); const base=_lettersToNum(start); if(base>0){ const out=_numToLetters(base+step*inc); return lower?out.toLowerCase():out; } }
   return start; }
 function rippleApply(){ const rp=window._ripple; if(!rp){ rippleClose(); return; }
+  if(!/^\d+$/.test(String(rp.count).trim())||parseInt(rp.count,10)<1) return;   // require a quantity
   const vis=feVisRows(); const startPos=vis.indexOf(rp.absRow); if(startPos<0){ rippleClose(); return; }
   const n=Math.max(1,parseInt(rp.count,10)||1); const inc=parseInt(rp.inc,10)||1;
   for(let k=0;k<n;k++){ const pos=startPos+k; if(pos>=vis.length)break; const val=rp.prefix+rippleValueAt(rp.start,inc,k)+rp.postfix; feWriteCellAbs(vis[pos],rp.col,val); }
@@ -2587,8 +2590,8 @@ function R(){
       <!-- Record table -->
       <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0">
         <!-- Table header info -->
-        <div style="position:relative;padding:7px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0;border-bottom:1px solid var(--bd1)">
-          <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Labels</span>
+        <div class="${feOn()?'fe-banner':''}" style="position:relative;padding:7px 16px;display:flex;align-items:center;gap:8px;flex-shrink:0;border-bottom:1px solid var(--bd1)">
+          <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Labels${feOn()?' · <span style="color:#b8860b;font-weight:700">FREE EDIT</span>':''}</span>
           ${(filterActive()||searchActive())
             ? `<span style="color:var(--text2);font-size:11px">${visibleIndices().length} of ${P.records.length} shown</span>`
             : `<span style="color:var(--text2);font-size:11px">${P.records.length} total · click row to preview · checkbox to select</span>`}
