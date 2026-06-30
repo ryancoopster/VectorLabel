@@ -601,6 +601,7 @@ function feStdActiveRow(){ return (P.previewIdx!=null)?P.previewIdx:-1; }
 function feSetStdActive(absRow){ P.previewIdx=absRow; }
 function feClearAt(absRow,colName){ feWriteCellAbs(absRow,colName,''); feBulkSyncNow(); R(); }
 function feInsertRow(atAbs){ const cols=recordColumns(P.records); if(!cols.length)return; const row={}; cols.forEach(function(c){row[c]='';}); const i=Math.max(0,Math.min(P.records.length,atAbs)); P.records.splice(i,0,row); P.previewIdx=i; P._visCache=null; pSyncRecords(); R(); }
+function feDuplicateRow(srcAbs,atAbs){ const src=P.records[srcAbs]; if(!src)return; const row=Object.assign({},src); const i=Math.max(0,Math.min(P.records.length,atAbs)); P.records.splice(i,0,row); P.previewIdx=i; P._visCache=null; pSyncRecords(); R(); }
 function feDeleteRows(absArr){ if(!absArr||!absArr.length)return; const set=new Set(absArr); P.records=P.records.filter(function(_,i){return !set.has(i);}); if(P._rowSel)P._rowSel.clear(); if(window._fe)window._fe.sel=null; if(P.previewIdx>=P.records.length)P.previewIdx=Math.max(0,P.records.length-1); P._visCache=null; pSyncRecords(); R(); }
 function feInsertColumn(atIdx){ /* Print can't add columns */ }
 function feDeleteColumn(colName){ /* Print can't remove columns */ }
@@ -713,6 +714,10 @@ function showCellMenu(x,y,absRow,colName){ feCloseMenu(); const cols=feGridCols(
   item('Insert row above',function(){ feInsertRow(absRow); });
   item('Insert row below',function(){ feInsertRow(absRow+1); });
   if(feColumnsEditable()){ item('Insert column before',function(){ feInsertColumn(colIdx); }); item('Insert column after',function(){ feInsertColumn(colIdx+1); }); }
+  sep();
+  item('Duplicate row above',function(){ feDuplicateRow(absRow,absRow); });
+  item('Duplicate row below',function(){ feDuplicateRow(absRow,absRow+1); });
+  item('Duplicate row at end of list',function(){ feDuplicateRow(absRow,1e9); });
   sep();
   item('Delete '+(nr>1?nr+' rows':'row'),function(){ const tgt=rows.length?rows:[absRow]; feConfirm('Delete '+(tgt.length>1?tgt.length+' selected rows':'this row')+'? This can’t be undone.','Delete',function(){ feDeleteRows(tgt); }); });
   if(feColumnsEditable()){ item('Delete column “'+esc(colLabel(colName))+'”',function(){ feConfirm('Delete the column “'+colLabel(colName)+'” and all its values? This can’t be undone.','Delete',function(){ feDeleteColumn(colName); }); }); }
