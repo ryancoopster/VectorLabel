@@ -73,6 +73,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     /// must not touch the (winner-owned) shared IPC root.
     private var didBecomeEngine = false
 
+    /// Cross-process nudge: a second Engine launch posts this (then exits) so the LIVE
+    /// Engine re-shows its menu-bar item — a reliable manual recovery if the icon vanished.
+    static let reassertNotification = Notification.Name("com.sai.vectorlabel.engine.reassert")
+
     /// Take an exclusive lock so only ONE Engine per IPC root owns the USB printer and
     /// the published status file. Two engines would contend the device, clobber each
     /// other's printers.json, and re-claim each other's in-flight processing jobs
@@ -101,7 +105,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // Refuse to start a second Engine on the same IPC root (resolved from the
         // bundle id above): it would double-own the USB device and race the status file.
         guard acquireSingleInstanceLock() else {
-            NSLog("[Engine] another VectorLabel Engine already owns \(AppEnvironment.ipcRoot.path) — exiting.")
+            // A live Engine already owns the IPC. Don't just vanish silently — that left
+            // the user unable to recover a dropped menu-bar icon (relaunching did nothing).
+            // Nudge the live Engine to re-show its icon + come forward, then exit.
+            NSLog("[Engine] another VectorLabel Engine already owns \(AppEnvironment.ipcRoot.path) — nudging it to re-show, then exiting.")
+            DistributedNotificationCenter.default().postNotificationName(
+                Self.reassertNotification, object: nil, userInfo: nil, deliverImmediately: true)
             NSApp.terminate(nil)
             return
         }
@@ -123,6 +132,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
 
         setupStatusItem()
+        installStatusItemResilience()
         NSApp.setActivationPolicy(AppSettings.shared.showInDock ? .regular : .accessory)
 
         TemplateStore.shared.reload()
@@ -157,6 +167,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 
     // MARK: – Status item / menu
+
+    /// macOS can drop a long-lived NSStatusItem (after sleep/wake or long uptime) while
+    /// the process keeps running, leaving no menu-bar icon. Re-create it on wake, and on a
+    /// nudge from a duplicate launch (the single-instance guard) so relaunching recovers it.
+    private func installStatusItemResilience() {
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.reassertStatusItem() } }
+        DistributedNotificationCenter.default().addObserver(
+            forName: Self.reassertNotification, object: nil, queue: .main
+        ) { [weak self] _ in MainActor.assumeIsolated {
+            self?.reassertStatusItem()
+            NSApp.activate(ignoringOtherApps: true)
+        } }
+    }
+
+    /// Tear down + re-create the menu-bar status item — recovery for an icon the system
+    /// dropped (the process keeps running, but the icon is gone). Cheap + idempotent.
+    private func reassertStatusItem() {
+        if let old = statusItem { NSStatusBar.system.removeStatusItem(old) }
+        statusItem = nil
+        setupStatusItem()
+    }
 
     private func setupStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
