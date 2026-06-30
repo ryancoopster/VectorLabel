@@ -1,0 +1,20 @@
+#!/bin/bash
+# Runs as root after the four apps are copied to /Applications/VectorLabel.
+# Registers the document types (.vltmp / .vlcus) and launches the always-on
+# Engine + Auto Print in the logged-in user's GUI session (best-effort).
+set +e
+APPS="/Applications/VectorLabel"
+
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+[ -x "$LSREGISTER" ] && "$LSREGISTER" -f "$APPS"/*.app
+
+# Don't leave the downloaded apps quarantined (defensive; notarized installs are clean).
+/usr/bin/xattr -dr com.apple.quarantine "$APPS" 2>/dev/null
+
+# Launch in the active user's session — postinstall runs as root, so use launchctl asuser.
+UID_CONSOLE=$(stat -f %u /dev/console 2>/dev/null)
+if [ -n "$UID_CONSOLE" ] && [ "$UID_CONSOLE" != "0" ]; then
+  /bin/launchctl asuser "$UID_CONSOLE" /usr/bin/open "$APPS/VectorLabelEngine.app"
+  /bin/launchctl asuser "$UID_CONSOLE" /usr/bin/open "$APPS/VectorLabelAutoPrint.app"
+fi
+exit 0

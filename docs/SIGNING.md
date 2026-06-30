@@ -3,7 +3,8 @@
 This project ships a **Developer ID**-signed, **notarized** macOS app (distributed
 outside the App Store). CI builds and tests every push; pushing a version tag
 (`vX.Y.Z`) runs `.github/workflows/release.yml`, which signs, notarizes, staples,
-and attaches a `.zip` + `.dmg` to a GitHub Release.
+and attaches a guided **`.pkg` installer** plus a `.zip` + `.dmg` to a GitHub
+Release.
 
 You only need to do the one-time setup below. **None of these secrets are ever
 shared with anyone — you add them directly in GitHub.**
@@ -16,22 +17,28 @@ shared with anyone — you add them directly in GitHub.**
 You need a paid **Apple Developer Program** membership ($99/yr). Your **Team ID** is
 in <https://developer.apple.com/account> → Membership.
 
-### 2. Create a "Developer ID Application" certificate
-This is the cert that signs apps for distribution outside the App Store.
+### 2. Create the signing certificates
+You need **two** Developer ID certs for distribution outside the App Store:
+- **Developer ID Application** — signs the four `.app` bundles.
+- **Developer ID Installer** — signs the `.pkg` installer.
 
 1. In **Xcode → Settings → Accounts**, add your Apple ID, select your team, click
-   **Manage Certificates → + → Developer ID Application**. (Or create it at
+   **Manage Certificates → +**, and create **both**: *Developer ID Application*
+   **and** *Developer ID Installer*. (Or create them at
    <https://developer.apple.com/account/resources/certificates>.)
-2. In **Keychain Access**, find *Developer ID Application: Your Name (TEAMID)*,
-   right-click → **Export…**, save as a `.p12`, set a password.
+2. In **Keychain Access** (login keychain → *My Certificates*), ⌘-click to select
+   **both** *Developer ID Application: …* and *Developer ID Installer: …*,
+   right-click → **Export 2 items…**, save as one `.p12`, set a password.
+   (Both certs in a single `.p12` means CI imports them in one step.)
 3. Base64-encode it for GitHub:
    ```sh
    base64 -i Certificates.p12 | pbcopy
    ```
-4. Note the exact identity string (used as `DEVELOPER_ID_IDENTITY`):
+4. Note the exact identity strings:
    ```sh
-   security find-identity -v -p codesigning
-   # → "Developer ID Application: Your Name (TEAMID)"
+   security find-identity -v
+   # → "Developer ID Application: Your Name (TEAMID)"   → DEVELOPER_ID_IDENTITY
+   # → "Developer ID Installer: Your Name (TEAMID)"     → DEVELOPER_ID_INSTALLER_IDENTITY
    ```
 
 ### 3. Create an App Store Connect API key (for notarization)
@@ -50,9 +57,10 @@ Repo → **Settings → Secrets and variables → Actions → New repository sec
 
 | Secret | Value |
 |---|---|
-| `DEVELOPER_ID_CERT_P12_BASE64` | base64 of the `.p12` (step 2.3) |
+| `DEVELOPER_ID_CERT_P12_BASE64` | base64 of the `.p12` holding both certs (step 2.3) |
 | `DEVELOPER_ID_CERT_PASSWORD` | the `.p12` export password (step 2.2) |
 | `DEVELOPER_ID_IDENTITY` | `Developer ID Application: Your Name (TEAMID)` (step 2.4) |
+| `DEVELOPER_ID_INSTALLER_IDENTITY` | `Developer ID Installer: Your Name (TEAMID)` (step 2.4) |
 | `KEYCHAIN_PASSWORD` | any random string (CI's temporary keychain password) |
 | `NOTARY_API_KEY_P8_BASE64` | base64 of the `.p8` key (step 3.3) |
 | `NOTARY_API_KEY_ID` | the Key ID (step 3.2) |
@@ -86,6 +94,22 @@ xcrun stapler staple dist/VectorLabel.app
 ```
 A plain `scripts/package-suite.sh` (no `SIGN_IDENTITY`) produces an **ad-hoc** signed
 bundle that runs on your machine but is **not distributable**.
+
+## Building the installer locally (optional)
+After packaging the suite, build the guided `.pkg` wizard:
+```sh
+scripts/package-suite.sh                       # → dist/VectorLabel/ (the 4 apps)
+scripts/build-installer.sh                     # → dist/VectorLabel-Installer-<ver>.pkg (unsigned)
+# signed installer (needs the Developer ID Installer cert in your keychain):
+DEVELOPER_ID_INSTALLER_IDENTITY="Developer ID Installer: Your Name (TEAMID)" \
+  scripts/build-installer.sh
+```
+The installer UI lives in `installer/` (`distribution.xml` + the `resources/*.html`
+panes). An **unsigned** `.pkg` installs fine after a right-click → **Open**; signed
++ notarized installers come from the release workflow. Verify a signed one with:
+```sh
+spctl --assess --type install -vv dist/VectorLabel-Installer-*.pkg   # → "accepted, source=Notarized Developer ID"
+```
 
 ## Notes
 - **libusb is bundled** inside the app (`Contents/Frameworks`) and signed with your

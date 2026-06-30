@@ -61,3 +61,19 @@ jobs:
           path: dist/${{ steps.meta.outputs.name }}.zip
           retention-days: 30
           if-no-files-found: error
+
+      # Also build the guided installer UNSIGNED so the wizard can be smoke-tested
+      # from a CI run (Gatekeeper needs right-click → Open on another Mac). Signed,
+      # notarized installers come from release.yml on a version tag.
+      - name: Build unsigned installer (.pkg)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: ./scripts/build-installer.sh   # no installer identity → unsigned .pkg
+
+      - name: Upload installer artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.name }}-installer
+          path: dist/VectorLabel-Installer-*.pkg
+          retention-days: 30
+          if-no-files-found: error

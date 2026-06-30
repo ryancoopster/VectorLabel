@@ -4,9 +4,11 @@ name: Release (signed & notarized)
 # zip + DMG to a GitHub Release. Triggered by pushing a version tag, e.g. `v1.1.0`.
 #
 # Requires repo Secrets (Settings → Secrets and variables → Actions). See docs/SIGNING.md:
-#   DEVELOPER_ID_CERT_P12_BASE64   base64 of your "Developer ID Application" .p12
+#   DEVELOPER_ID_CERT_P12_BASE64   base64 of a .p12 holding BOTH your "Developer ID
+#                                  Application" AND "Developer ID Installer" certs
 #   DEVELOPER_ID_CERT_PASSWORD     password used when exporting that .p12
 #   DEVELOPER_ID_IDENTITY          e.g. "Developer ID Application: Your Name (TEAMID)"
+#   DEVELOPER_ID_INSTALLER_IDENTITY e.g. "Developer ID Installer: Your Name (TEAMID)"
 #   KEYCHAIN_PASSWORD              any random string (for the ephemeral CI keychain)
 #   NOTARY_API_KEY_P8_BASE64       base64 of your App Store Connect API key (AuthKey_XXX.p8)
 #   NOTARY_API_KEY_ID              the key ID (e.g. ABC123DE45)
@@ -70,6 +72,29 @@ jobs:
           done
           rm -f $RUNNER_TEMP/AuthKey.p8
 
+      # Build the guided installer FROM the just-stapled apps, so each app inside
+      # the .pkg carries its own notarization ticket. Signed with the Developer ID
+      # Installer cert (distinct from the Application cert) imported above.
+      - name: Build guided installer (.pkg)
+        env:
+          DEVELOPER_ID_INSTALLER_IDENTITY: ${{ secrets.DEVELOPER_ID_INSTALLER_IDENTITY }}
+        run: ./scripts/build-installer.sh   # → dist/VectorLabel-Installer-<version>.pkg
+
+      - name: Notarize & staple installer
+        env:
+          KEY_B64: ${{ secrets.NOTARY_API_KEY_P8_BASE64 }}
+          KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          ISSUER: ${{ secrets.NOTARY_API_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          PKG=$(ls dist/VectorLabel-Installer-*.pkg | head -n1)
+          echo "$KEY_B64" | base64 --decode > $RUNNER_TEMP/AuthKey.p8
+          xcrun notarytool submit "$PKG" \
+            --key $RUNNER_TEMP/AuthKey.p8 --key-id "$KEY_ID" --issuer "$ISSUER" --wait
+          xcrun stapler staple "$PKG"
+          spctl --assess --type install --verbose=4 "$PKG"
+          rm -f $RUNNER_TEMP/AuthKey.p8
+
       - name: Package zip + DMG
         run: |
           set -euo pipefail
@@ -81,6 +106,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
+            dist/VectorLabel-Installer-*.pkg
             dist/VectorLabel-${{ github.ref_name }}.zip
             dist/VectorLabel-${{ github.ref_name }}.dmg
           generate_release_notes: true
