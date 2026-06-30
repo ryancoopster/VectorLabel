@@ -61,6 +61,8 @@ label.lbl{font-size:10px;color:var(--text2);display:block;margin-bottom:3px}
 .fe-cell.fe-sel{background:rgba(108,142,245,0.16)}
 .fe-cell.fe-fill{background:rgba(108,142,245,0.30);outline:1px dashed var(--accent);outline-offset:-2px}
 .fe-cell.fe-act{box-shadow:inset 0 0 0 2px var(--accent);z-index:6}
+.fe-cell.fe-hdr{cursor:default;background:var(--surface)}
+.fe-cell.fe-hdr:focus-within{box-shadow:inset 0 0 0 2px var(--accent);z-index:6}
 .fe-inp{flex:1;width:100%;min-width:0;border:none;outline:none;background:var(--bg);color:var(--text);font-size:11px;padding:5px 8px;box-sizing:border-box}
 .fe-handle{position:absolute;right:-3px;bottom:-3px;width:8px;height:8px;background:var(--accent);border:1px solid #fff;border-radius:1px;cursor:crosshair;z-index:8}
 .btn.fe-on{background:var(--warn,#f5c96c);border-color:var(--warn,#f5c96c);color:#1a1a1a}
@@ -841,6 +843,14 @@ function colHeaderContextMenu(e,c){
     d.onmousedown=ev=>ev.stopPropagation(); d.onclick=()=>{ closeColMenu(); fn(); };
     menu.appendChild(d);
   }
+  function sep(){ const s=document.createElement('div'); s.style.cssText='height:1px;background:var(--bd2);margin:4px 6px'; menu.appendChild(s); }
+  if(isCustomMode()){
+    item('Insert column before',()=>feInsertColumn(c,false));
+    item('Insert column after',()=>feInsertColumn(c,true));
+    if(!feOn()) item('Rename column…',()=>dbStartHdrEdit(c));
+    item('Delete column “'+colLabel(c)+'”',()=>feConfirm('Delete the column “'+colLabel(c)+'” and all its values? This can’t be undone.','Delete',()=>feDeleteColumn(c)),true);
+    sep();
+  }
   item('Hide “'+colLabel(c)+'” column',()=>hideColumn(c));
   if((window._hiddenColumns||[]).length) item('Show all hidden columns',()=>{ window._hiddenColumns=[]; postColumnConfig(); R(); });
   document.body.appendChild(menu);
@@ -852,11 +862,11 @@ function colHeaderCell(c){
   const j=jsAttr(c);
   // Editable column headers — Custom Designer only (not Print / Template).
   if(isCustomMode()&&feOn()){
-    return '<div style="position:relative;padding:0;box-sizing:border-box">'
-      +'<input value="'+escAttr(c)+'" spellcheck="false" title="Edit column name" onmousedown="event.stopPropagation()"'
+    return '<div class="fe-cell fe-hdr" oncontextmenu="colHeaderContextMenu(event,\''+j+'\')" style="padding:0;display:flex">'
+      +'<input value="'+escAttr(c)+'" spellcheck="false" title="Edit column name · right-click for column options" onmousedown="event.stopPropagation()"'
       +' onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur();}else if(event.key===\'Escape\'){this.value=\''+j+'\';this.blur();}"'
       +' onblur="dbRenameColumn(\''+j+'\',this.value)"'
-      +' style="width:100%;box-sizing:border-box;border:none;outline:none;background:var(--surface);color:var(--text);font-size:10px;font-weight:600;padding:5px 8px;text-transform:none">'
+      +' style="flex:1;width:100%;box-sizing:border-box;border:none;outline:none;background:transparent;color:var(--text);font-size:10px;font-weight:600;padding:5px 8px;text-transform:none">'
       +'<div onmousedown="colResizeStart(event,\''+j+'\')" style="position:absolute;top:0;right:0;width:6px;height:100%;cursor:col-resize"></div></div>';
   }
   if(isCustomMode()&&S._dbHdrEdit===c){
@@ -4616,7 +4626,7 @@ function feClearAt(absRow,colName){ feWriteCellAbs(absRow,colName,''); feBulkSyn
 function feInsertRow(atAbs){ const bd=window._boundData; if(!bd||!bd.columns||!bd.columns.length){ dbAddRow(); return; } const row={}; bd.columns.forEach(function(c){row[c]='';}); const i=Math.max(0,Math.min(bd.records.length,atAbs)); bd.records.splice(i,0,row); RX=bd.records; S.recIdx=i; dbSyncBoundData(); markDirty(); R(); }
 function feDuplicateRow(srcAbs,atAbs){ const bd=window._boundData; if(!bd)return; const src=bd.records[srcAbs]; if(!src)return; const row=Object.assign({},src); const i=Math.max(0,Math.min(bd.records.length,atAbs)); bd.records.splice(i,0,row); RX=bd.records; S.recIdx=i; dbSyncBoundData(); markDirty(); R(); }
 function feDeleteRows(absArr){ const bd=window._boundData; if(!bd||!absArr||!absArr.length)return; const set=new Set(absArr); bd.records=bd.records.filter(function(_,i){return !set.has(i);}); RX=bd.records; if(S._rowSel)S._rowSel.clear(); if(window._fe)window._fe.sel=null; if(S.recIdx>=bd.records.length)S.recIdx=Math.max(0,bd.records.length-1); dbSyncBoundData(); markDirty(); R(); }
-function feInsertColumn(atIdx){ const bd=window._boundData; if(!bd||!bd.columns)return; let n=bd.columns.length+1,name='Column '+n; while(bd.columns.indexOf(name)>=0){n++;name='Column '+n;} const i=Math.max(0,Math.min(bd.columns.length,atIdx)); bd.columns.splice(i,0,name); bd.records.forEach(function(r){ if(r[name]===undefined)r[name]=''; }); if(Array.isArray(window._hiddenColumns))window._hiddenColumns=window._hiddenColumns.filter(function(c){return c!==name;}); if(typeof postColumnConfig==='function')postColumnConfig(); dbSyncBoundData(); markDirty(); R(); }
+function feInsertColumn(refColName,after){ const bd=window._boundData; if(!bd||!bd.columns)return; let n=bd.columns.length+1,name='Column '+n; while(bd.columns.indexOf(name)>=0){n++;name='Column '+n;} const ref=bd.columns.indexOf(refColName); const i=(ref<0)?bd.columns.length:(after?ref+1:ref); bd.columns.splice(i,0,name); bd.records.forEach(function(r){ if(r[name]===undefined)r[name]=''; }); if(Array.isArray(window._hiddenColumns))window._hiddenColumns=window._hiddenColumns.filter(function(c){return c!==name;}); if(typeof postColumnConfig==='function')postColumnConfig(); dbSyncBoundData(); markDirty(); R(); }
 function _removeColFilter(f,col){ if(!f||!Array.isArray(f.groups))return; f.groups.forEach(function(g){ g.rules=(g.rules||[]).filter(function(r){return r.field!==col&&!(r.valueType==='field'&&r.value===col);}); }); }
 function _removeColSort(s,col){ if(!s||!Array.isArray(s.rules))return; s.rules=s.rules.filter(function(r){return r.field!==col;}); }
 function feDeleteColumn(colName){ const bd=window._boundData; if(!bd||!bd.columns)return; const ci=bd.columns.indexOf(colName); if(ci<0)return; if(bd.columns.length<=1){ alert('A data set must keep at least one column.'); return; } bd.columns.splice(ci,1); bd.records.forEach(function(r){ delete r[colName]; }); if(Array.isArray(window._columnOrder))window._columnOrder=window._columnOrder.filter(function(c){return c!==colName;}); if(Array.isArray(window._hiddenColumns))window._hiddenColumns=window._hiddenColumns.filter(function(c){return c!==colName;}); if(window._colWidths)delete window._colWidths[colName]; if(typeof postColumnConfig==='function')postColumnConfig(); (S.objs||[]).forEach(function(o){ if(o.field===colName)o.field=''; }); _removeColFilter(S.dbFilter,colName); _removeColSort(S.dbSort,colName); if(Array.isArray(window._presets)){ window._presets.forEach(function(p){ _removeColFilter(p.filter,colName); _removeColSort(p.sort,colName); }); if(typeof savePresets==='function')savePresets(); } dbSyncBoundData(); markDirty(); R(); }
@@ -4728,7 +4738,7 @@ function showCellMenu(x,y,absRow,colName){ feCloseMenu(); const cols=feGridCols(
   sep();
   item('Insert row above',function(){ feInsertRow(absRow); });
   item('Insert row below',function(){ feInsertRow(absRow+1); });
-  if(feColumnsEditable()){ item('Insert column before',function(){ feInsertColumn(colIdx); }); item('Insert column after',function(){ feInsertColumn(colIdx+1); }); }
+  if(feColumnsEditable()){ item('Insert column before',function(){ feInsertColumn(colName,false); }); item('Insert column after',function(){ feInsertColumn(colName,true); }); }
   sep();
   item('Duplicate row above',function(){ feDuplicateRow(absRow,absRow); });
   item('Duplicate row below',function(){ feDuplicateRow(absRow,absRow+1); });

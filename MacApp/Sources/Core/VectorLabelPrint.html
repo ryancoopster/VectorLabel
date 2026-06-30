@@ -713,7 +713,7 @@ function showCellMenu(x,y,absRow,colName){ feCloseMenu(); const cols=feGridCols(
   sep();
   item('Insert row above',function(){ feInsertRow(absRow); });
   item('Insert row below',function(){ feInsertRow(absRow+1); });
-  if(feColumnsEditable()){ item('Insert column before',function(){ feInsertColumn(colIdx); }); item('Insert column after',function(){ feInsertColumn(colIdx+1); }); }
+  if(feColumnsEditable()){ item('Insert column before',function(){ feInsertColumn(colName,false); }); item('Insert column after',function(){ feInsertColumn(colName,true); }); }
   sep();
   item('Duplicate row above',function(){ feDuplicateRow(absRow,absRow); });
   item('Duplicate row below',function(){ feDuplicateRow(absRow,absRow+1); });
