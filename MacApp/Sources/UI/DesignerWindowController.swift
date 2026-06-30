@@ -1575,6 +1575,19 @@ extension DesignerWindowController: WKScriptMessageHandler {
                 }
             }
 
+        case "clipboardWrite":
+            // Free-edit copy: write the selection (TSV) to the system pasteboard.
+            if let t = (body["payload"] as? [String: Any])?["text"] as? String {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(t, forType: .string)
+            }
+        case "clipboardRead":
+            // Free-edit paste: hand the page the pasteboard text (JSON-escaped).
+            let t = NSPasteboard.general.string(forType: .string) ?? ""
+            if let d = try? JSONEncoder().encode(t), let s = String(data: d, encoding: .utf8) {
+                webView?.evaluateJavaScript("if(typeof feApplyPaste==='function')feApplyPaste(\(s));", completionHandler: nil)
+            }
+
         case "printCustom":
             // Custom Designer only — render the current canvas as a single label
             // and submit it to the IPC print queue.

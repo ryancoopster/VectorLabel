@@ -556,6 +556,19 @@ extension PrintWindowController: WKScriptMessageHandler {
                 scheduleWriteback()
             }
 
+        case "clipboardWrite":
+            // Free-edit copy: write the selection (TSV) to the system pasteboard.
+            if let t = (body["payload"] as? [String: Any])?["text"] as? String {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(t, forType: .string)
+            }
+        case "clipboardRead":
+            // Free-edit paste: hand the page the pasteboard text (JSON-escaped).
+            let t = NSPasteboard.general.string(forType: .string) ?? ""
+            if let d = try? JSONEncoder().encode(t), let s = String(data: d, encoding: .utf8) {
+                webView?.evaluateJavaScript("if(typeof feApplyPaste==='function')feApplyPaste(\(s));", completionHandler: nil)
+            }
+
         case "openURL":
             // "Buy more" — open a bradyid.com supply URL in the system browser.
             // Only http(s) URLs are honored (never file:// or arbitrary schemes).
