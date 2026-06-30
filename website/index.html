@@ -2,8 +2,8 @@
 <!-- Embed in Squarespace via a Code Block, or host on GitHub Pages and iframe it. -->
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VectorLabel — Print wire & cable labels straight from Vectorworks</title>
-<meta name="description" content="VectorLabel designs and prints barcode-ready wire, cable and patch labels straight from Vectorworks ConnectCAD to Brady and Brother thermal printers.">
+<title>VectorLabel — Design and print any label, your way</title>
+<meta name="description" content="VectorLabel is a macOS label-design suite for thermal printers. Design any label by hand in the Custom Designer, or pull your data straight from Vectorworks ConnectCAD, then print to Brady and Brother printers.">
 
 <style>
 /* ---------- Theme ---------- */
@@ -35,6 +35,7 @@ body{
 }
 img,svg{display:block;max-width:100%}
 a{color:inherit;text-decoration:none}
+section[id],#top{scroll-margin-top:84px}
 
 /* ---------- Layout ---------- */
 .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
@@ -44,10 +45,10 @@ section{padding:96px 0}
   color:var(--accent);margin-bottom:16px;
 }
 h1,h2,h3{letter-spacing:-.02em;line-height:1.08;font-weight:700}
-h1{font-size:clamp(38px,6vw,64px)}
+h1{font-size:clamp(38px,6vw,62px)}
 h2{font-size:clamp(28px,3.6vw,42px)}
 h3{font-size:20px;letter-spacing:-.01em}
-.lead{font-size:clamp(17px,1.6vw,20px);color:var(--ink-soft);max-width:620px}
+.lead{font-size:clamp(17px,1.6vw,20px);color:var(--ink-soft);max-width:640px}
 .muted{color:var(--muted)}
 .center{text-align:center}
 .center .lead{margin-left:auto;margin-right:auto}
@@ -65,6 +66,14 @@ h3{font-size:20px;letter-spacing:-.01em}
 .btn-ghost{background:transparent;color:var(--ink);border-color:var(--line)}
 .btn-ghost:hover{border-color:var(--ink)}
 .btn svg{width:17px;height:17px}
+
+/* ---------- Alpha banner ---------- */
+.alphabar{background:var(--bg-ink);color:#e7ebf2;font-size:13.5px;text-align:center;padding:10px 18px;line-height:1.4}
+.alphabar b{color:#fff;font-weight:700}
+.alphabar .pill{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  background:rgba(142,160,255,.16);color:#aeb9ff;padding:2px 9px;border-radius:999px;margin-right:9px;vertical-align:1px}
+.alphabar a{color:#aeb9ff;font-weight:600;text-decoration:underline;text-underline-offset:2px}
+.alphabar a:hover{color:#fff}
 
 /* ---------- Nav ---------- */
 header.nav{
@@ -85,7 +94,7 @@ header.nav{
 .menu-btn{display:none;background:none;border:0;cursor:pointer}
 
 /* ---------- Hero ---------- */
-.hero{padding:84px 0 72px}
+.hero{padding:80px 0 72px}
 .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
 .hero h1{margin-bottom:22px}
 .hero .lead{margin-bottom:30px}
@@ -149,7 +158,7 @@ header.nav{
 .strip-inner .sep{width:5px;height:5px;border-radius:50%;background:var(--line)}
 
 /* ---------- Cards / grids ---------- */
-.section-head{max-width:680px;margin-bottom:54px}
+.section-head{max-width:700px;margin-bottom:54px}
 .section-head.center{margin-left:auto;margin-right:auto}
 
 .suite{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
@@ -168,31 +177,25 @@ header.nav{
 .feature h3{font-size:17px;margin-bottom:7px}
 .feature p{font-size:14px;color:var(--muted)}
 
-/* ---------- Workflow ---------- */
+/* ---------- Two ways (dark) ---------- */
 .flow{background:var(--bg-ink);color:#fff;border-radius:24px;padding:54px 40px}
 .flow .eyebrow{color:#8ea0ff}
 .flow h2{color:#fff}
 .flow .lead{color:#aab2c0}
-.flow-stages{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-top:46px;position:relative}
-.fstage{position:relative;padding:0 18px;text-align:center}
-.fstage .num{width:46px;height:46px;border-radius:50%;margin:0 auto 16px;display:grid;place-items:center;
-  background:#1a1f27;border:1px solid #2a313c;color:#fff;position:relative;z-index:2}
-.fstage .num svg{width:22px;height:22px}
-.fstage h3{font-size:16px;color:#fff;margin-bottom:6px}
-.fstage p{font-size:13.5px;color:#8b94a3}
-.fline{position:absolute;top:23px;left:0;right:0;height:2px;background:#252b34;z-index:1}
-.fpulse{position:absolute;top:19px;left:0;width:10px;height:10px;border-radius:50%;
-  background:#8ea0ff;box-shadow:0 0 16px 3px rgba(142,160,255,.7);z-index:3;
-  animation:pulse-move 5s linear infinite}
-@keyframes pulse-move{0%{left:8%;opacity:0}6%{opacity:1}94%{opacity:1}100%{left:92%;opacity:0}}
-.fstage .num.lit{animation:litglow 5s ease-in-out infinite}
-.fstage:nth-child(1) .num{animation-delay:0s}
-.fstage:nth-child(2) .num{animation-delay:1.1s}
-.fstage:nth-child(3) .num{animation-delay:2.2s}
-.fstage:nth-child(4) .num{animation-delay:3.3s}
-@keyframes litglow{0%,12%{background:#1a1f27;border-color:#2a313c;color:#fff}
-  18%,30%{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 0 22px -2px var(--accent)}
-  40%,100%{background:#1a1f27;border-color:#2a313c}}
+.ways{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:42px}
+.way{background:#15191f;border:1px solid #262d37;border-radius:18px;padding:28px}
+.way-head{display:flex;align-items:center;gap:12px;margin-bottom:13px;flex-wrap:wrap}
+.way-ico{width:42px;height:42px;border-radius:11px;background:#1d2430;color:#8ea0ff;display:grid;place-items:center}
+.way-ico svg{width:22px;height:22px}
+.way h3{color:#fff;font-size:19px}
+.way-tag{margin-left:auto;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:#aeb9ff;background:rgba(142,160,255,.12);padding:4px 10px;border-radius:999px}
+.way > p{color:#aab2c0;font-size:14.5px;margin-bottom:18px}
+.steps{list-style:none;counter-reset:s;display:flex;flex-direction:column;gap:13px}
+.steps li{counter-increment:s;display:flex;gap:13px;color:#cdd3dc;font-size:14.5px;align-items:flex-start}
+.steps li::before{content:counter(s);flex-shrink:0;width:25px;height:25px;border-radius:50%;background:#1d2430;
+  border:1px solid #2e3744;color:#8ea0ff;font-size:12.5px;font-weight:700;display:grid;place-items:center;margin-top:1px}
+.steps li b{color:#fff;font-weight:600}
 
 /* ---------- Data binding animation ---------- */
 .bind{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center}
@@ -260,8 +263,7 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
   .hero-grid{grid-template-columns:1fr;gap:40px}
   .suite{grid-template-columns:repeat(2,1fr)}
   .features{grid-template-columns:1fr 1fr}
-  .flow-stages{grid-template-columns:1fr 1fr;gap:36px 0}
-  .fline,.fpulse{display:none}
+  .ways{grid-template-columns:1fr}
   .bind{grid-template-columns:1fr}
   .printers{grid-template-columns:1fr}
   .specs{grid-template-columns:1fr 1fr;gap:32px}
@@ -279,6 +281,13 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
 }
 </style>
 
+<!-- ============================== ALPHA BANNER ============================== -->
+<div class="alphabar">
+  <span class="pill">Alpha</span>
+  <b>VectorLabel is in open alpha</b> — actively testing and looking for feedback.
+  <a href="https://github.com/ryancoopster/VectorLabel/issues">Report a bug or request a feature →</a>
+</div>
+
 <!-- ============================== NAV ============================== -->
 <header class="nav">
   <div class="wrap nav-inner">
@@ -292,10 +301,9 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
     </a>
     <nav class="nav-links">
       <a href="#suite">The suite</a>
-      <a href="#workflow">Workflow</a>
+      <a href="#how">How it works</a>
       <a href="#features">Features</a>
       <a href="#printers">Printers</a>
-      <a href="#integration">Vectorworks</a>
     </nav>
     <div class="nav-cta">
       <a href="#download" class="btn btn-primary">
@@ -315,17 +323,17 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
 <section class="hero">
   <div class="wrap hero-grid">
     <div>
-      <div class="eyebrow">macOS · Vectorworks ConnectCAD</div>
-      <h1>Wire labels,<br>printed straight from<br>your drawings.</h1>
-      <p class="lead">VectorLabel turns your Vectorworks ConnectCAD circuits into barcode-ready wire, cable and patch labels — designed once, bound to your data, and sent to Brady and Brother thermal printers in a couple of clicks.</p>
+      <div class="eyebrow">macOS label-design suite · Open alpha</div>
+      <h1>Design and print<br>any label —<br>your way.</h1>
+      <p class="lead">VectorLabel is a macOS label-design suite for thermal printers. Lay out wire, cable, asset, panel and patch labels by hand in the Custom Designer — or pull your data straight from Vectorworks ConnectCAD. Then print to Brady and Brother in a couple of clicks.</p>
       <div class="hero-actions">
         <a href="#download" class="btn btn-primary">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Download for macOS
         </a>
-        <a href="#workflow" class="btn btn-ghost">See it in action</a>
+        <a href="#how" class="btn btn-ghost">See how it works</a>
       </div>
-      <div class="hero-note"><span class="dot"></span> No re-typing. No spreadsheets. Select circuits in Vectorworks, print.</div>
+      <div class="hero-note"><span class="dot"></span> Design from scratch, or bring your data — barcodes, QR and 2-D codes built in.</div>
     </div>
 
     <!-- Animated printer + label -->
@@ -379,63 +387,69 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
   <div class="wrap">
     <div class="section-head reveal">
       <div class="eyebrow">One suite, four apps</div>
-      <h2>Everything from drawing to printed label.</h2>
-      <p class="lead muted">VectorLabel is a coordinated set of macOS apps. Design templates, watch for new exports, and drive your printers — each piece does one job well.</p>
+      <h2>Everything from blank canvas to printed label.</h2>
+      <p class="lead muted">VectorLabel is a coordinated set of macOS apps. Design labels with or without a template, watch for new data, and drive your printers — each piece does one job well.</p>
     </div>
     <div class="suite">
+      <div class="app reveal">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v16" stroke-linecap="round"/></svg></div>
+        <h3>Custom Designer</h3>
+        <p>Design any label on an open canvas — no template, no CAD required. Plus a database mode for browsing and editing records inline.</p>
+      </div>
+      <div class="app reveal">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 17l6-6 4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <h3>Template Designer</h3>
+        <p>Build reusable templates, bind fields to your data, and reuse them across every project and every batch of labels.</p>
+      </div>
+      <div class="app reveal">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 3v6m0 0l3-3m-3 3L9 6" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 13a8 8 0 0016 0" stroke-linecap="round"/></svg></div>
+        <h3>AutoPrint</h3>
+        <p>Watches your export folder. The moment new data lands from Vectorworks, the print window opens with your records loaded.</p>
+      </div>
       <div class="app reveal">
         <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M5 12h14M12 5v14" stroke-linecap="round"/><rect x="3" y="3" width="18" height="18" rx="3"/></svg></div>
         <h3>Engine</h3>
         <p>The print engine and menu-bar hub. Owns the printers, manages the queue, detects cassettes and publishes live status.</p>
       </div>
-      <div class="app reveal">
-        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 3v6m0 0l3-3m-3 3L9 6" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 13a8 8 0 0016 0" stroke-linecap="round"/></svg></div>
-        <h3>AutoPrint</h3>
-        <p>Watches your Vectorworks export folder. The moment a new export lands, the print window opens with your records loaded.</p>
-      </div>
-      <div class="app reveal">
-        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 17l6-6 4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="11" r="0"/></svg></div>
-        <h3>Template Designer</h3>
-        <p>Build reusable label templates, bind fields to your circuit data, and reuse them across every project.</p>
-      </div>
-      <div class="app reveal">
-        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v16" stroke-linecap="round"/></svg></div>
-        <h3>Custom Designer</h3>
-        <p>Design one-off labels with no template binding — full layout freedom, plus a database mode for browsing and editing records inline.</p>
-      </div>
     </div>
   </div>
 </section>
 
-<!-- ============================== WORKFLOW ============================== -->
-<section id="workflow">
+<!-- ============================== TWO WAYS (HOW IT WORKS) ============================== -->
+<section id="how">
   <div class="wrap">
     <div class="flow reveal">
-      <div class="eyebrow">The workflow</div>
-      <h2>From ConnectCAD circuit to printed label.</h2>
-      <p class="lead">Two Python commands live inside Vectorworks. Select your circuits, run the command, and VectorLabel takes it from there — automatically.</p>
-      <div class="flow-stages">
-        <div class="fline"></div>
-        <div class="fpulse"></div>
-        <div class="fstage">
-          <div class="num lit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6l8-3 8 3-8 3-8-3z"/><path d="M4 6v8l8 3 8-3V6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-          <h3>Select in Vectorworks</h3>
-          <p>Pick circuits in ConnectCAD, or export every circuit on the layer.</p>
+      <div class="eyebrow">How it works</div>
+      <h2>Two ways to make a label.</h2>
+      <p class="lead">Start from a blank canvas in the Custom Designer, or pull your data straight from Vectorworks. Same printers, same power — pick the workflow that fits the job.</p>
+      <div class="ways">
+        <!-- Way 1: Custom Designer -->
+        <div class="way">
+          <div class="way-head">
+            <div class="way-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20l4-1 9.5-9.5a2 2 0 000-3l-.5-.5a2 2 0 00-3 0L4.5 15.5 4 20z" stroke-linejoin="round"/><path d="M13 6l3 3" stroke-linecap="round"/></svg></div>
+            <h3>Custom Designer</h3>
+            <span class="way-tag">No CAD needed</span>
+          </div>
+          <p>Design any label by hand — wire wraps, asset tags, panel and equipment labels, anything your printer can make.</p>
+          <ol class="steps">
+            <li><span><b>Open a canvas</b> at your exact label or tape size.</span></li>
+            <li><span><b>Add text, barcodes, QR, images and shapes</b> — drag, rotate, auto-scale to fit.</span></li>
+            <li><span><b>Print</b> — or load a list in database mode and print a whole batch.</span></li>
+          </ol>
         </div>
-        <div class="fstage">
-          <div class="num lit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5" stroke-linecap="round"/></svg></div>
-          <h3>Export silently</h3>
-          <p>A clean CSV of names, sockets, cables and racks lands in your project folder.</p>
-        </div>
-        <div class="fstage">
-          <div class="num lit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 17l6-6 4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-          <h3>Auto-loaded</h3>
-          <p>AutoPrint spots the file and opens the print window — records ready, preview live.</p>
-        </div>
-        <div class="fstage">
-          <div class="num lit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="9" width="14" height="8" rx="1.5"/><path d="M7 9V4h10v5M7 17v3h10v-3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-          <h3>Print &amp; cut</h3>
-          <p>Choose a template and printer, hit print — with live per-label progress.</p>
+        <!-- Way 2: Vectorworks -->
+        <div class="way">
+          <div class="way-head">
+            <div class="way-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7l8-4 8 4-8 4-8-4z" stroke-linejoin="round"/><path d="M4 12l8 4 8-4M4 17l8 4 8-4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <h3>Vectorworks</h3>
+            <span class="way-tag">Data-driven</span>
+          </div>
+          <p>Turn ConnectCAD circuits into labels automatically — device names, sockets, connectors, cables and racks, no re-typing.</p>
+          <ol class="steps">
+            <li><span><b>Run the plug-in</b> in Vectorworks — selected circuits, or every circuit on the layer.</span></li>
+            <li><span><b>It exports silently</b> and AutoPrint opens the print window with your records ready.</span></li>
+            <li><span><b>Pick a template and print</b> — with live per-label progress.</span></li>
+          </ol>
         </div>
       </div>
     </div>
@@ -446,14 +460,14 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
 <section id="features">
   <div class="wrap">
     <div class="section-head reveal">
-      <div class="eyebrow">Built for the rack room</div>
-      <h2>Designed for accurate, barcode-ready labels.</h2>
-      <p class="lead muted">Every feature is aimed at one thing: getting the right text and codes onto the right label, fast, with no manual re-keying.</p>
+      <div class="eyebrow">What's inside</div>
+      <h2>Built for accurate, barcode-ready labels.</h2>
+      <p class="lead muted">Every feature is aimed at one thing: getting the right text and codes onto the right label, fast — whether you're designing one or printing hundreds.</p>
     </div>
     <div class="features">
       <div class="feature reveal">
         <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 13h6M7 16h10" stroke-linecap="round"/></svg></div>
-        <h3>Visual template designer</h3>
+        <h3>Visual designer</h3>
         <p>Drag text, barcodes, images, symbols, lines, rectangles and arrows onto a true-to-size canvas. Rotate anything; auto-scale text to fit.</p>
       </div>
       <div class="feature reveal">
@@ -474,7 +488,7 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
       <div class="feature reveal">
         <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v16" stroke-linecap="round"/><path d="M12 13l2 2 3-3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
         <h3>Inline record editing</h3>
-        <p>Spot a typo? Click a cell in the record browser, fix it, and the change syncs straight back to the export — no context switch.</p>
+        <p>Spot a typo? Click a cell in the record browser, fix it, and the change syncs straight back to the data — no context switch.</p>
       </div>
       <div class="feature reveal">
         <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15V6a2 2 0 00-2-2H5a2 2 0 00-2 2v9" stroke-linecap="round"/><path d="M3 15h18l-2 4H5l-2-4z" stroke-linejoin="round"/></svg></div>
@@ -506,7 +520,7 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
     <div class="reveal">
       <div class="eyebrow">Design once, print hundreds</div>
       <h2>Your data flows into the label automatically.</h2>
-      <p class="lead muted" style="margin-bottom:22px">Map each part of the label to a column from your export — or build it with a formula. Then every record prints with its own text and its own barcode, no manual edits.</p>
+      <p class="lead muted" style="margin-bottom:22px">Map each part of the label to a column from your data — whether it came from Vectorworks or your own spreadsheet — or build it with a formula. Then every record prints with its own text and its own barcode, no manual edits.</p>
       <p class="muted" style="font-size:14.5px"><code style="background:#fff;border:1px solid var(--line);padding:3px 8px;border-radius:6px;font-size:13px">=IF(Number&lt;&gt;"",Number&amp;" - "&amp;Cable,Cable)</code><br><span style="display:inline-block;margin-top:10px">A formula like this builds a clean label from whatever fields are present — VectorLabel evaluates it for every row.</span></p>
     </div>
     <div class="bind-visual reveal">
@@ -561,36 +575,7 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
       <div class="spec"><div class="n">900<span style="font-size:.5em;letter-spacing:0"> DPI</span></div><div class="l">Master render, downscaled per printer</div></div>
       <div class="spec"><div class="n">15</div><div class="l">Barcode &amp; 2-D symbologies</div></div>
       <div class="spec"><div class="n">1500+</div><div class="l">Records scroll smoothly per print</div></div>
-      <div class="spec"><div class="n">2</div><div class="l">Vectorworks export commands</div></div>
-    </div>
-  </div>
-</section>
-
-<!-- ============================== VECTORWORKS INTEGRATION ============================== -->
-<section id="integration" style="background:var(--bg-soft);border-top:1px solid var(--line)">
-  <div class="wrap bind">
-    <div class="bind-visual reveal" style="order:2">
-      <div style="font:600 12px var(--font);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:14px">Vectorworks · Plug-in Manager</div>
-      <div style="border:1px solid var(--line);border-radius:10px;overflow:hidden">
-        <div style="padding:13px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;background:#fff">
-          <div style="width:30px;height:30px;border-radius:8px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l8-3 8 3-8 3-8-3z"/></svg></div>
-          <div><div style="font-weight:600;font-size:14.5px">Export Selected Circuits</div><div style="font-size:12.5px;color:var(--muted)">Only the circuits you've selected</div></div>
-        </div>
-        <div style="padding:13px 16px;display:flex;align-items:center;gap:12px;background:#fff">
-          <div style="width:30px;height:30px;border-radius:8px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round"/></svg></div>
-          <div><div style="font-weight:600;font-size:14.5px">Export All Circuits</div><div style="font-size:12.5px;color:var(--muted)">Every circuit on the active layer</div></div>
-        </div>
-      </div>
-      <div style="margin-top:16px;font:12.5px/1.7 ui-monospace,Menlo,monospace;color:var(--ink-soft);background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px">
-        ~/Documents/VectorLabel/Exports/<br>&nbsp;&nbsp;<span style="color:var(--accent)">Theatre_Renovation/</span><br>&nbsp;&nbsp;&nbsp;&nbsp;Theatre_export_20260629.csv
-      </div>
-    </div>
-    <div class="reveal" style="order:1">
-      <div class="eyebrow">Native Vectorworks integration</div>
-      <h2>It lives inside Vectorworks.</h2>
-      <p class="lead muted" style="margin-bottom:20px">Install two Python commands through the Plug-in Manager and they appear right in your menus. They read ConnectCAD circuits directly — device names, sockets, connectors, cable numbers, racks and RackU — and write a clean CSV.</p>
-      <p class="muted" style="font-size:15px;margin-bottom:18px">No copy-paste, no exporting to Excel and reformatting. The data your drawing already holds becomes the data on your labels.</p>
-      <div class="hero-note"><span class="dot"></span> Export runs silently — VectorLabel detects the new file and opens automatically.</div>
+      <div class="spec"><div class="n">2</div><div class="l">Designers — with or without a template</div></div>
     </div>
   </div>
 </section>
@@ -599,20 +584,20 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
 <section id="download">
   <div class="wrap">
     <div class="cta reveal">
-      <div class="eyebrow" style="color:#8ea0ff">Get VectorLabel</div>
-      <h2>Ready to stop re-typing labels?</h2>
-      <p class="lead">Download the latest build, install the Vectorworks plug-ins, and print your first rack of labels in minutes.</p>
+      <div class="eyebrow" style="color:#8ea0ff">Get the alpha</div>
+      <h2>Try VectorLabel and tell us what you think.</h2>
+      <p class="lead">It's free and in active development. Download the latest build, print some labels, and send us the bugs and feature requests — your feedback shapes where it goes next.</p>
       <div class="cta-actions">
         <a href="https://github.com/ryancoopster/VectorLabel/releases" class="btn btn-primary">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Download from GitHub
         </a>
-        <a href="https://github.com/ryancoopster/VectorLabel" class="btn btn-ghost">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.5 2 2 6.6 2 12.2c0 4.5 2.9 8.3 6.8 9.6.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.2-3.4-1.2-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.7.3-1.1.6-1.4-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.7 1a9.4 9.4 0 015 0c1.9-1.3 2.7-1 2.7-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.3 4.7-4.6 5 .4.3.7.9.7 1.9v2.8c0 .3.2.6.7.5A10.2 10.2 0 0022 12.2C22 6.6 17.5 2 12 2z"/></svg>
-          View source &amp; docs
+        <a href="https://github.com/ryancoopster/VectorLabel/issues" class="btn btn-ghost">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H8l-4 4V5a2 2 0 012-2h13a2 2 0 012 2z" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Send feedback
         </a>
       </div>
-      <div class="cta-sub">macOS · Free &amp; open source · Brady and Brother thermal printers</div>
+      <div class="cta-sub">macOS · Free &amp; open source · Open alpha · Brady and Brother thermal printers</div>
     </div>
   </div>
 </section>
@@ -629,18 +614,28 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
       VectorLabel
     </a>
     <div class="foot-links">
+      <a href="#how">How it works</a>
       <a href="#features">Features</a>
       <a href="#printers">Printers</a>
-      <a href="#integration">Vectorworks</a>
       <a href="https://github.com/ryancoopster/VectorLabel">GitHub</a>
     </div>
-    <div class="copy">© <span id="yr"></span> VectorLabel · Built for Vectorworks ConnectCAD · Brady and Brother are trademarks of their respective owners.</div>
+    <div class="copy">© <span id="yr"></span> VectorLabel · Open alpha · Brady and Brother are trademarks of their respective owners.</div>
   </div>
 </footer>
 
 <script>
   // Year
   document.getElementById('yr').textContent = new Date().getFullYear();
+
+  // Smooth in-page scrolling that DOESN'T let Squarespace hijack "#" links into a blank page load.
+  document.querySelectorAll('a[href^="#"]').forEach(function(a){
+    a.addEventListener('click', function(e){
+      var id = a.getAttribute('href').slice(1);
+      var el = id ? document.getElementById(id) : null;
+      if(el){ e.preventDefault(); el.scrollIntoView({behavior:'smooth', block:'start'}); }
+    });
+  });
+
   // Scroll reveal
   var io = new IntersectionObserver(function(entries){
     entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} });

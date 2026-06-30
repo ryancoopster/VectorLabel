@@ -22,9 +22,10 @@ Two easy options:
 2. Open `index.html`, copy **everything**, and paste it into the Code block.
 3. Turn **off** "Display Source" so it renders instead of showing the code.
 
-> Squarespace Code blocks run in the page, so the sticky nav and in-page anchor
-> links (`#features`, `#printers`, …) all work. If the top nav overlaps Squarespace's
-> own header, either hide the site header on that page, or delete the `<header class="nav">`
+> The in-page nav links scroll via JavaScript (they never change the URL hash), so
+> Squarespace won't hijack a click into a blank page load — that's the fix for the
+> "nav buttons go to a blank page" problem. If the top nav overlaps Squarespace's own
+> header, either hide the site header on that page, or delete the `<header class="nav">`
 > block and use Squarespace's navigation instead.
 
 ### Option B — Host the file + iframe it (works on any plan)
