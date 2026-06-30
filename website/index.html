@@ -638,15 +638,12 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
       <a href="support.html">Support</a>
       <a href="https://github.com/ryancoopster/VectorLabel">GitHub</a>
     </div>
-    <div class="copy">© <span id="yr"></span> VectorLabel · Open alpha · Brady and Brother are trademarks of their respective owners.</div>
+    <div class="copy">VectorLabel · Open alpha · Brady and Brother are trademarks of their respective owners.</div>
   </div>
 </footer>
 
 <script>
 (function(){
-  // Year
-  var yr = document.getElementById('yr'); if(yr) yr.textContent = new Date().getFullYear();
-
   // Mobile menu: real open/close toggle with aria state (not a one-way self-removing button).
   var mb = document.querySelector('.menu-btn'), nav = document.getElementById('vl-nav');
   if(mb && nav){
