@@ -542,6 +542,20 @@ extension PrintWindowController: WKScriptMessageHandler {
                 scheduleWriteback()
             }
 
+        case "syncRecords":
+            // Bulk structural change (add row / paste / ripple / drag-fill): replace the
+            // in-memory records from the full snapshot and persist to the source CSV. The
+            // Print Window never adds columns — the column set is the source export's.
+            if let p = body["payload"] as? [String: Any],
+               let rowDicts = p["records"] as? [[String: Any]] {
+                records = rowDicts.map { row in
+                    var f: [String: String] = [:]
+                    for (k, v) in row { f[k] = v as? String ?? String(describing: v) }
+                    return WireRecord(side: f["_Side"] ?? "", wireID: f["Number"] ?? "", fields: f)
+                }
+                scheduleWriteback()
+            }
+
         case "openURL":
             // "Buy more" — open a bradyid.com supply URL in the system browser.
             // Only http(s) URLs are honored (never file:// or arbitrary schemes).

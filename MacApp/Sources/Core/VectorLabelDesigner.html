@@ -4472,6 +4472,40 @@ function renderFilterModal(){
 // The bound rows (the editor record set) and the column list.
 function dbRows(){ return RX||[]; }
 function dbCols(){ const bd=window._boundData; return (bd&&bd.columns)?bd.columns:[]; }
+
+// ── Add rows / columns (custom mode) ────────────────────────────────────────────
+// Structural edits live in window._boundData and are pushed to Swift (syncBoundData)
+// so they embed into the .vlcus on save. A from-scratch dataset (no import) starts
+// with 5 columns. We never write back to an imported source file.
+function dbSyncBoundData(){
+  const bd=window._boundData; if(!bd)return;
+  _vlPost('syncBoundData',{columns:bd.columns||[],records:bd.records||[]});
+}
+function dbAddRow(){
+  let bd=window._boundData;
+  if(!bd||!bd.columns||!bd.columns.length){
+    // No dataset yet → start a new in-document database with 5 columns.
+    const cols=[1,2,3,4,5].map(n=>'Column '+n);
+    const row={}; cols.forEach(c=>row[c]='');
+    window._boundData={records:[row],columns:cols.slice(),filename:'Custom data',headerRow:true,isXLSX:false};
+    RX=window._boundData.records;
+    window._columnOrder=cols.slice();
+  } else {
+    const row={}; bd.columns.forEach(c=>row[c]=''); bd.records.push(row); RX=bd.records;
+  }
+  S.recIdx=RX.length-1;
+  dbSyncBoundData(); markDirty(); R();
+}
+function dbAddColumn(){
+  const bd=window._boundData; if(!bd||!bd.columns)return;   // need an existing dataset (use + Row first)
+  let n=bd.columns.length+1, name='Column '+n;
+  while(bd.columns.includes(name)){ n++; name='Column '+n; }
+  bd.columns.push(name);
+  bd.records.forEach(r=>{ if(r[name]===undefined) r[name]=''; });
+  if(Array.isArray(window._columnOrder)&&!window._columnOrder.includes(name)) window._columnOrder.push(name);
+  if(Array.isArray(window._hiddenColumns)) window._hiddenColumns=window._hiddenColumns.filter(c=>c!==name);
+  dbSyncBoundData(); markDirty(); R();
+}
 // How many rows are currently print-enabled (checked).
 // Count of checked rows that are currently VISIBLE (the set that actually prints
 // under "Selected") — so the radio label matches dbPrintIndices.
@@ -4627,13 +4661,15 @@ function buildDatabasePanel(){
         <button class="btn${window._colMenuOpen?' on':''}" onclick="event.stopPropagation();toggleColumnsMenu()" style="padding:3px 10px;font-size:11px" title="Show / hide and reorder columns">Columns ▾</button>
         ${buildColumnsMenu()}
       </div>`:""}
+      <button class="btn" onclick="dbAddRow()" style="padding:3px 10px;font-size:11px" title="Add a new blank row">+ Row</button>
+      <button class="btn" onclick="dbAddColumn()" style="padding:3px 10px;font-size:11px"${bound?"":" disabled"} title="Add a new column">+ Column</button>
       <button class="btn" onclick="chooseDataSource()" style="padding:3px 10px;font-size:11px">Choose data file…</button>
       <button class="btn" onclick="clearDataSourceCustom()" style="padding:3px 10px;font-size:11px"${bound?"":" disabled"} title="Unbind the data source — back to a single label">Clear data</button>
-      <button class="btn" onclick="refreshDataSource()" style="padding:3px 10px;font-size:11px"${bound?"":" disabled"} title="Re-read the bound file from disk">↻ Refresh from source</button>
+      <button class="btn" onclick="refreshDataSource()" style="padding:3px 10px;font-size:11px"${(bound&&(window._boundData.filename||'')!=='Custom data')?"":" disabled"} title="Re-read the bound file from disk">↻ Refresh from source</button>
     </div>
     ${bound
       ? `<div style="flex:1;overflow:auto;min-height:0">${dbRecordTable()}</div>`
-      : `<div style="padding:10px 14px;color:var(--text3);font-size:11px">Choose a CSV or Excel file to bind print data — one label per row.</div>`}
+      : `<div style="padding:10px 14px;color:var(--text3);font-size:11px">Choose a CSV or Excel file to bind print data — one label per row — or <button class="btn" onclick="dbAddRow()" style="padding:2px 9px;font-size:11px">+ start a new data set</button> to build one here.</div>`}
   </div>`;
 }
 

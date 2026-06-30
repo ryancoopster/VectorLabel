@@ -85,9 +85,13 @@ public final class DesignerWindowController: NSObject {
     // flag in memory here — this is the in-memory doc that Phase 4's `.vlcus` will
     // persist. Template mode never sets any of this.
 
-    /// The bound data source for the Custom Designer, if the user picked one.
+    /// The bound data source for the Custom Designer. Either imported (path set) or
+    /// created on the fly in the document (path nil — the data lives only in the .vlcus).
     private struct BoundDataSource {
-        var path: URL
+        /// Source file URL, or nil for a from-scratch in-document dataset.
+        var path: URL?
+        /// Display name (the source file name, or a generic name for from-scratch data).
+        var filename: String
         /// Whether the first row of the file supplies column headers. Only
         /// meaningful for .xlsx; CSV always has a header row (WireExportParser).
         var headerRow: Bool
@@ -446,8 +450,11 @@ public final class DesignerWindowController: NSObject {
         // Rebuild the in-memory bound data source from the embedded snapshot so
         // "Refresh from source" can re-read the live file (if it still exists).
         let records = doc.records
-        if let url = doc.dataSourceURL, !records.isEmpty {
-            dataSource = BoundDataSource(path: url,
+        if !records.isEmpty {
+            // Keep the data even when there's no source file — a from-scratch dataset
+            // lives only in the .vlcus snapshot (path nil).
+            dataSource = BoundDataSource(path: doc.dataSourceURL,
+                                         filename: doc.dataSourceURL?.lastPathComponent ?? "Custom data",
                                          headerRow: doc.dataSourceHeaderRow,
                                          records: records,
                                          columns: doc.headers)
@@ -786,6 +793,7 @@ public final class DesignerWindowController: NSObject {
         let columns = columnOrder(for: records, preferred: fileColumns)
         // CSV always has headers; only persist the toggle's effect for xlsx.
         dataSource = BoundDataSource(path: url,
+                                     filename: url.lastPathComponent,
                                      headerRow: isXLSX ? headerRow : true,
                                      records: records,
                                      columns: columns)
@@ -816,8 +824,10 @@ public final class DesignerWindowController: NSObject {
     /// exists, show an open panel so the user can repoint it, then re-read.
     private func refreshDataSource() {
         guard mode == .custom, let ds = dataSource else { return }
-        if FileManager.default.fileExists(atPath: ds.path.path) {
-            loadAndBindDataSource(from: ds.path, headerRow: ds.headerRow)
+        // A from-scratch dataset (no source file) has nothing to refresh from.
+        guard let srcPath = ds.path else { return }
+        if FileManager.default.fileExists(atPath: srcPath.path) {
+            loadAndBindDataSource(from: srcPath, headerRow: ds.headerRow)
         } else {
             let panel = NSOpenPanel()
             var types: [UTType] = [.commaSeparatedText]
@@ -826,8 +836,8 @@ public final class DesignerWindowController: NSObject {
             panel.allowedContentTypes = types
             panel.allowsMultipleSelection = false
             panel.canChooseDirectories = false
-            panel.directoryURL = ds.path.deletingLastPathComponent()
-            panel.message = "“\(ds.path.lastPathComponent)” was moved or deleted. Choose the file again."
+            panel.directoryURL = srcPath.deletingLastPathComponent()
+            panel.message = "“\(srcPath.lastPathComponent)” was moved or deleted. Choose the file again."
             panel.level = .modalPanel
             NSApp.activate(ignoringOtherApps: true)   // .nonactivatingPanel → make the open panel clickable
             panel.begin { [weak self] response in
@@ -861,8 +871,8 @@ public final class DesignerWindowController: NSObject {
               let colData = try? JSONSerialization.data(withJSONObject: ds.columns),
               let colJSON = String(data: colData, encoding: .utf8)
         else { return }
-        let fnJSON = ds.path.lastPathComponent.jsonQuoted
-        let isXLSX = ds.path.pathExtension.lowercased() == "xlsx"
+        let fnJSON = ds.filename.jsonQuoted
+        let isXLSX = ds.path?.pathExtension.lowercased() == "xlsx"
         wv.evaluateJavaScript(
             "if(typeof initBoundData==='function')initBoundData(\(recJSON),\(colJSON),\(fnJSON),\(ds.headerRow),\(isXLSX));",
             completionHandler: nil)
@@ -1160,7 +1170,7 @@ public final class DesignerWindowController: NSObject {
         if let ds = dataSource {
             headers = ds.columns
             rows = ds.records.map { $0.fields }
-            srcPath = ds.path.path
+            srcPath = ds.path?.path ?? ""
             headerRow = ds.headerRow
         }
         return CustomLabelDocument(
@@ -1539,6 +1549,30 @@ extension DesignerWindowController: WKScriptMessageHandler {
                                                wireID: f["Number"] ?? ds.records[index].wireID,
                                                fields: f)
                 dataSource = ds
+            }
+
+        case "syncBoundData":
+            // Custom Designer only — the page mutated the dataset STRUCTURALLY (add row /
+            // add column / rename column / paste / ripple / drag-fill). Rebuild the in-memory
+            // dataSource from the full snapshot so it embeds into the .vlcus and drives
+            // print/preview. A from-scratch dataset (no prior import) keeps path nil — it
+            // lives only in the document. We never write back to the original file.
+            if mode == .custom,
+               let p = body["payload"] as? [String: Any],
+               let cols = p["columns"] as? [String],
+               let rowDicts = p["records"] as? [[String: Any]] {
+                let recs: [WireRecord] = rowDicts.map { row in
+                    var f: [String: String] = [:]
+                    for (k, v) in row { f[k] = v as? String ?? String(describing: v) }
+                    return WireRecord(side: f["_Side"] ?? "", wireID: f["Number"] ?? "", fields: f)
+                }
+                if var ds = dataSource {
+                    ds.columns = cols; ds.records = recs
+                    dataSource = ds
+                } else {
+                    dataSource = BoundDataSource(path: nil, filename: "Custom data",
+                                                 headerRow: true, records: recs, columns: cols)
+                }
             }
 
         case "printCustom":

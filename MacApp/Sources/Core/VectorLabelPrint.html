@@ -550,6 +550,22 @@ function saveCellEdit(){
   P.editCell=null; P.editVal=undefined; R();
 }
 
+// ── Add rows (print window — rows only; columns come from the source export) ─────
+function pSyncRecords(){
+  // Bulk push of the full record set to Swift so it persists back to the source CSV
+  // (write-back, just like inline cell edits).
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"syncRecords",payload:{records:P.records}});
+}
+function pAddRow(){
+  const cols=recordColumns(P.records);
+  if(!cols.length) return;                 // no data set to add to (Print never creates one)
+  const row={}; cols.forEach(c=>row[c]=''); P.records.push(row);
+  P.previewIdx=P.records.length-1;         // jump to the new row
+  P._visCache=null;                        // record count changed → recompute visible set
+  pSyncRecords(); R();
+}
+
 function toggleColumnsMenu(){ window._colMenuOpen=!window._colMenuOpen; R(); }
 function buildColumnsMenu(){
   if(!window._colMenuOpen)return '';
@@ -2428,6 +2444,7 @@ function R(){
           `:""}
           <button class="btn${window._colMenuOpen?' on':''}" onclick="event.stopPropagation();toggleColumnsMenu()" style="padding:2px 8px;font-size:11px">Columns ▾</button>
           ${buildColumnsMenu()}
+          <button class="btn" onclick="event.stopPropagation();pAddRow()" ${P.records.length?'':'disabled'} style="padding:2px 8px;font-size:11px" title="Add a new blank row (saved back to the CSV)">+ Row</button>
         </div>
         <!-- Active filter/sort summary, shown directly above the records -->
         ${(filterActive()||sortActive())?`<div style="padding:5px 16px;background:rgba(108,142,245,0.08);border-bottom:1px solid rgba(108,142,245,0.18);font-size:11px;color:var(--accent-soft);display:flex;align-items:center;gap:10px;flex-shrink:0;overflow:hidden">
