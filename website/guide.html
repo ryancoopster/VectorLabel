@@ -1,0 +1,1147 @@
+<!doctype html>
+<!-- VectorLabel support docs — generated from source-grounded research. The HTML is the source of truth; edit directly. See website/DOC-SYNC.md before changing software behavior. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VectorLabel User Guide</title>
+<meta name="description" content="The complete in-depth guide to VectorLabel — installation, the Vectorworks integration, designing labels, data and formulas, barcodes, printing, printers, supplies and calibration.">
+<link rel="stylesheet" href="support.css">
+</head>
+<body>
+<div class="alphabar">
+  <span class="pill">Alpha</span>
+  <b>VectorLabel is in open alpha</b> — docs and software are evolving.
+  <a href="https://github.com/ryancoopster/VectorLabel/issues">Report a problem →</a>
+</div>
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a href="index.html" class="brand"><svg class="mark" viewBox="0 0 32 32" fill="none"><rect x="1.5" y="1.5" width="29" height="29" rx="8" fill="#0e1116"/><path d="M9 10l5 12 5-12" stroke="#2f57ff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="20" y="9" width="3" height="14" rx="1.2" fill="#fff"/></svg> VectorLabel</a>
+    <nav class="nav-links" id="vl-nav">
+      <a href="support.html">Support</a>
+      <a href="quickstart.html">Quick start</a>
+      <a href="guide.html" class="active">User guide</a>
+      <a href="faq.html">FAQ</a>
+    </nav>
+    <div class="nav-cta">
+      <a href="https://github.com/ryancoopster/VectorLabel/releases" class="btn btn-primary">Download</a>
+      <button class="menu-btn" aria-label="Menu" aria-controls="vl-nav" aria-expanded="false">
+        <svg width="24" height="24" viewBox="0 0 24 24" stroke="#0e1116" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+<section class="doc-hero">
+  <div class="wrap">
+    <div class="breadcrumb"><a href="support.html">Support</a><span class="sep">/</span><span>User guide</span></div>
+    <div class="eyebrow">User guide</div>
+    <h1>The complete VectorLabel guide</h1>
+    <p class="sub">Everything the software does, explained end to end — from installing the apps and the Vectorworks plug-ins to designing labels, binding data, and printing on Brady and Brother thermal printers.</p>
+    <p class="meta">Open alpha · jump to any topic from the contents on the left.</p>
+  </div>
+</section>
+<div class="wrap">
+  <div class="layout">
+    <aside class="toc" aria-label="Contents">
+      <p class="toc-title">Contents</p>
+      <div class="group"><a href="#ch-setup">Getting started</a>
+<ul>
+<li><a href="#what-is-vectorlabel" class="sub">What VectorLabel is</a></li>
+<li><a href="#four-apps" class="sub">The four apps and how they coordinate</a></li>
+<li><a href="#system-requirements" class="sub">System requirements</a></li>
+<li><a href="#install-launch" class="sub">Installing and launching</a></li>
+<li><a href="#folder-layout" class="sub">On-disk layout: where your files and settings live</a></li>
+<li><a href="#first-run-usb" class="sub">First run and granting USB / printer access</a></li>
+<li><a href="#menu-bar-and-prefs" class="sub">The menu-bar Engine: status and Preferences</a></li>
+</ul></div>
+<div class="group"><a href="#ch-vectorworks">Vectorworks integration</a>
+<ul>
+<li><a href="#what-it-is" class="sub">What the integration does</a></li>
+<li><a href="#install-plugins" class="sub">Installing the two command plug-ins in Vectorworks</a></li>
+<li><a href="#two-commands" class="sub">The two commands: Selected vs All</a></li>
+<li><a href="#exported-fields" class="sub">What ConnectCAD data is exported (every column)</a></li>
+<li><a href="#output-format" class="sub">Output file: format, location, and naming</a></li>
+<li><a href="#retention-pruning" class="sub">How many exports are kept (datecode pruning)</a></li>
+<li><a href="#silent-export" class="sub">Export is silent</a></li>
+<li><a href="#autoprint-detection" class="sub">How VectorLabel detects the export and opens the print window</a></li>
+<li><a href="#end-to-end-procedure" class="sub">Step-by-step: export from Vectorworks and print</a></li>
+</ul></div>
+<div class="group"><a href="#ch-designers">Designing labels</a>
+<ul>
+<li><a href="#two-designers" class="sub">Template Designer vs Custom Designer</a></li>
+<li><a href="#choosing-supply" class="sub">Choosing a label supply (die-cut vs continuous)</a></li>
+<li><a href="#canvas-rotation" class="sub">Canvas behavior, zoom, and 90° rotation</a></li>
+<li><a href="#adding-objects" class="sub">Adding objects (text, barcode, image, symbol, line, shapes, arrow)</a></li>
+<li><a href="#text-properties" class="sub">Text box properties and data binding</a></li>
+<li><a href="#barcode-properties" class="sub">Barcode and 2-D code properties</a></li>
+<li><a href="#shape-properties" class="sub">Line, rectangle, oval, circle, and arrow properties</a></li>
+<li><a href="#selecting-moving" class="sub">Selecting, moving, and multi-select</a></li>
+<li><a href="#saving-opening" class="sub">Saving and opening templates and custom labels</a></li>
+<li><a href="#importing" class="sub">Importing Brady .BWT and Brother P-touch .lbx</a></li>
+<li><a href="#database-mode" class="sub">Custom Designer database mode (bind, browse, edit records)</a></li>
+</ul></div>
+<div class="group"><a href="#ch-databind">Data, formulas &amp; barcodes</a>
+<ul>
+<li><a href="#three-binding-modes" class="sub">The three content sources: Static, Field, Formula</a></li>
+<li><a href="#data-columns" class="sub">The built-in data columns (cable/connector data)</a></li>
+<li><a href="#formula-language" class="sub">The formula language: functions and operators</a></li>
+<li><a href="#formula-recipes" class="sub">Common formula recipes (copy-paste)</a></li>
+<li><a href="#barcodes-symbologies" class="sub">Barcodes and 2-D codes: supported symbologies</a></li>
+<li><a href="#barcode-shape-ecc" class="sub">Square vs stretchable codes, and error correction</a></li>
+<li><a href="#per-record-regeneration" class="sub">How content is rebuilt for every label at print time</a></li>
+</ul></div>
+<div class="group"><a href="#ch-printing">Printing &amp; printers</a>
+<ul>
+<li><a href="#print-window-overview" class="sub">What the Print window is and how it opens</a></li>
+<li><a href="#record-browser" class="sub">The Labels list: search, sort, filter, columns, inline editing, selection</a></li>
+<li><a href="#presets" class="sub">Filter/sort presets</a></li>
+<li><a href="#preview" class="sub">Live preview, the required-supply check, and expanded preview</a></li>
+<li><a href="#choose-printer-supply" class="sub">Choosing the printer and confirming the supply</a></li>
+<li><a href="#cut-and-feed" class="sub">Cut modes and "Feed to clear"</a></li>
+<li><a href="#send-modes" class="sub">Send modes: one-at-a-time vs full job</a></li>
+<li><a href="#progress-cancel" class="sub">Live progress, mid-run cancel, and job completion</a></li>
+<li><a href="#recent-reprint" class="sub">Recent Prints and reprint</a></li>
+<li><a href="#printer-setup" class="sub">Printer setup: scanning, network printers, and supported models</a></li>
+<li><a href="#cassette-detection" class="sub">Loaded media auto-detection</a></li>
+<li><a href="#calibration" class="sub">Per-printer calibration (alignment)</a></li>
+<li><a href="#supply-catalog" class="sub">The editable Supply Catalog</a></li>
+</ul></div>
+<div class="group"><a href="#ch-troubleshooting">Fixing common problems</a>
+<ul>
+<li><a href="#how-the-suite-fits-together" class="sub">How the four apps fit together (read this first)</a></li>
+<li><a href="#app-wont-open-gatekeeper" class="sub">The app won't open ('unidentified developer' / Gatekeeper)</a></li>
+<li><a href="#printer-not-detected-usb" class="sub">My Brady printer isn't detected over USB</a></li>
+<li><a href="#add-network-printer" class="sub">Adding a network (Wi-Fi/Ethernet) printer</a></li>
+<li><a href="#nothing-after-vectorworks-export" class="sub">Nothing happens after I export from Vectorworks</a></li>
+<li><a href="#export-is-empty" class="sub">My export is empty / 'No ConnectCAD circuits' in Vectorworks</a></li>
+<li><a href="#labels-misaligned" class="sub">Labels print misaligned, shifted, or off-center</a></li>
+<li><a href="#barcode-prints-solid-black" class="sub">A 2-D barcode (QR / Data Matrix) prints as a solid black block</a></li>
+<li><a href="#barcode-blank" class="sub">A barcode prints blank / 'this record can't be encoded'</a></li>
+<li><a href="#text-too-big-or-cut-off" class="sub">Text is too big, too small, or cut off</a></li>
+<li><a href="#template-wrong-size" class="sub">A template opens at the wrong size</a></li>
+<li><a href="#find-supply-edit-supplies" class="sub">I can't find my label supply or part number</a></li>
+<li><a href="#cut-and-feed-options" class="sub">Cutting and feed options (and what's not verified)</a></li>
+<li><a href="#where-are-my-files" class="sub">Where are my files (templates, exports, history)?</a></li>
+<li><a href="#supported-printers-alpha-honesty" class="sub">Which printers actually work today (alpha honesty)</a></li>
+<li><a href="#windows-and-requirements" class="sub">Does it run on Windows? Requirements</a></li>
+<li><a href="#how-to-report-a-bug" class="sub">How to report a bug</a></li>
+</ul></div>
+    </aside>
+    <main class="article">
+<h2 class="chapter" id="ch-setup">Getting started</h2>
+<section class="doc-sec" id="what-is-vectorlabel">
+<h2>What VectorLabel is</h2>
+<p>VectorLabel is a macOS menu-bar app suite for printing wrap-around wire and cable labels. Its original and primary job is to take a list of circuits exported from Vectorworks ConnectCAD and print one label per wire on a Brady M610 or M611 label printer, but it also supports designing your own label templates and printing from your own data files (CSV/XLSX).</p>
+<p>The app stays out of your way: by default it runs only in the menu bar (no Dock icon), watches a folder for new exports, and shows a print window automatically when one appears. You pick a template, choose which records to print, pick the printer, and print.</p>
+<p>Because this is open alpha software, expect rough edges. Some printers are fully working on real hardware, while others are written and tested only against recorded sample data and have not yet been confirmed on a physical unit. See the gotchas for what is and isn't verified.</p>
+
+
+<div class="callout tip"><span class="lab">Tips</span><p>The menu-bar icon is your main entry point — click it to open the dropdown with printers, recent prints, and the Open Designer / Preferences / Quit actions.</p><p>If you only have a Brady M611 or M610, the core printing path is the most mature part of the app.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>Hardware verification is uneven in alpha. Per the project's own status notes: the Brady M611 is hardware-validated; the Brady M610's cut behavior is noted as still unverified; and all three Brother P-touch drivers (PT-E550W, PT-P750W, PT-E560BT) are implemented and tested only against golden sample data, NOT yet confirmed on real hardware (docs/PTOUCH-DRIVER-STATUS.md).</p><p>The README's headline still describes the app narrowly as printing 'Brady M610/M611 wrap-around wire labels from Vectorworks ConnectCAD exports'; the suite has since grown to four apps and additional printers/designers.</p></div>
+</section>
+
+<section class="doc-sec" id="four-apps">
+<h2>The four apps and how they coordinate</h2>
+<p>The suite is built as four separate macOS applications, declared as four executables in Package.swift. Each is a self-contained .app with its own bundle identifier:</p>
+<p>1) VectorLabel Engine (com.sai.vectorlabel.engine) — the headless print engine and the menu-bar hub. This is the ONLY app that talks to USB printers (it is the one that links the libusb library). It owns the printers, runs the print queue, and publishes live printer/cassette status that the other apps read. The menu-bar icon and Preferences window belong to this app. Only one Engine is allowed to run at a time — it takes an exclusive lock (engine.lock) so two engines can't fight over the USB printer.</p>
+<p>2) VectorLabel Auto Print (com.sai.vectorlabel.autoprint) — a background helper with no Dock icon. It watches the Exports folder and, when a new CSV export appears (and you have auto-open enabled), it opens the print window. It does not print directly; it hands jobs to the Engine through the shared queue. It also hosts the print window's 'Edit' action, which opens the Template Designer in-process.</p>
+<p>3) VectorLabel Template Designer (com.sai.vectorlabel.templatedesigner) — a normal Dock app for designing reusable label templates (.vltmp files, formerly .vlt.json). Launched from the Engine's menu or by double-clicking a template file.</p>
+<p>4) VectorLabel Custom Designer (com.sai.vectorlabel.customdesigner) — a Dock app for free-form custom labels (.vlcus files) that can be bound to your own data file. Per code comments it is still partly a shell, with the database panel and print header arriving in later phases.</p>
+<p>How they coordinate: the Engine is the single source of truth for printing and printer status. The front-end apps never print themselves — they write job files into a shared queue folder and the Engine consumes them. The designers and Auto Print automatically start the Engine if it isn't running (ensureRunning), and they shut down when the Engine quits, so the whole suite comes up and goes down together. 'Reprint' from the menu bar is routed back to whichever app created the job (Auto Print or Custom Designer) so it can re-open the original window in its print-time state.</p>
+<pre><code>queue/       ready jobs
+processing/  claimed by the Engine
+done/        finished
+failed/      errored
+control/     cancel / detect-cassette requests
+status/      printers.json (Engine-published status)
+reprint/, reprint-custom/, cancelled/</code></pre>
+
+<div class="callout tip"><span class="lab">Tips</span><p>You normally only launch the Engine and Auto Print; the two designers open on demand from the Engine menu (Open Template Designer / Open Custom Designer) or by opening a .vltmp / .vlcus document in Finder.</p><p>Because the Custom Designer intentionally avoids touching the Templates folder on launch, it won't trigger a macOS Documents-access prompt just by opening.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>Only ONE Engine can own the USB printer at a time. If a second Engine launches it won't double-run — it nudges the live Engine to re-show its menu-bar icon and then exits. When testing the suite, quit any legacy single VectorLabel.app so it doesn't contend for the device.</p><p>The inter-app launching (Open Template/Custom Designer) only works in the installed, packaged suite where all four apps carry their expected bundle ids. In a developer 'swift run' build the launch simply no-ops.</p></div>
+</section>
+
+<section class="doc-sec" id="system-requirements">
+<h2>System requirements</h2>
+<p>VectorLabel requires macOS 14 (Sonoma) or later — this is set as the minimum platform in Package.swift (.macOS(.v14)).</p>
+<p>For end users, no extra software is required: the libusb USB library is bundled inside the Engine app (in Contents/Frameworks) and signed, so it runs on Macs that do not have Homebrew installed (docs/SIGNING.md). The app uses the Hardened Runtime and is NOT sandboxed, because it needs raw USB access and access to your ~/Documents folder.</p>
+<p>For USB printing (Brady M610, and the Brother P-touch models over USB) you connect the printer by USB cable. The Brady M611 can also be added as a network printer over TCP. For network printers you add them by host/IP in Preferences.</p>
+<p>For developers building from source, you additionally need Xcode, and you must install libusb and pkg-config via Homebrew first (brew install libusb pkg-config). On Apple Silicon the build expects libusb at /opt/homebrew; on Intel Macs you edit the module map to /usr/local.</p>
+<pre><code>brew install libusb pkg-config   # developers only, before building in Xcode</code></pre>
+
+<div class="callout tip"><span class="lab">Tips</span><p>Network (Wi-Fi) printing currently targets the M611 over raw TCP; USB is used for the M610 and the Brother PT models.</p><p>An Apple Developer account ($99/yr) is only needed if YOU want to sign/notarize your own builds — end users downloading official releases do not need one.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>The app is intentionally not sandboxed and needs raw USB plus ~/Documents access; this is expected for the kind of work it does, but it means the Engine app is the privileged piece of the suite.</p><p>Developer builds via plain 'swift run' do NOT enforce entitlements, and the inter-app launch features won't work because the four bundle ids aren't registered.</p></div>
+</section>
+
+<section class="doc-sec" id="install-launch">
+<h2>Installing and launching</h2>
+<p>For end users, official builds are distributed from the project's GitHub Releases page. Pushing a version tag runs a release workflow that signs (Developer ID), notarizes, staples, and attaches a guided .pkg installer plus a .zip and a .dmg to the Release (docs/SIGNING.md). The recommended path is the guided .pkg installer, which walks you through welcome / license / readme / conclusion panes and installs all four apps.</p>
+<p>After installation, launch VectorLabel Engine first — it places the menu-bar icon and brings the rest of the suite to life as needed. Auto Print also runs in the background. The two designers open on demand from the Engine menu or by double-clicking a template/custom-label document.</p>
+<p>The local install/build path (for developers or testers) is scripts/package-suite.sh to build the four .app bundles into dist/VectorLabel/, then scripts/install.sh to copy them into /Applications/VectorLabel/ and relaunch the always-on apps. A plain unsigned package runs on your own machine after a right-click → Open but is not distributable.</p>
+<p>In Xcode, developers open Package.swift, select the VectorLabel scheme with destination My Mac, and build (⌘B). Info.plist and entitlements must be set manually in the Xcode target because Swift Package Manager can't bundle them.</p>
+<pre><code>scripts/package-suite.sh   # build the 4 .app bundles into dist/VectorLabel/
+scripts/install.sh         # install into /Applications/VectorLabel/ and relaunch</code></pre>
+<ol class="steps">
+  <li>Download the latest release from the project's GitHub Releases page (.pkg installer recommended).</li>
+  <li>Run the .pkg installer and follow its panes; it installs all four apps.</li>
+  <li>Launch 'VectorLabel Engine' — the menu-bar icon appears.</li>
+  <li>Open a designer from the menu bar (Open Template Designer / Open Custom Designer) or trigger a print by exporting from Vectorworks.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tips</span><p>An unsigned .pkg (e.g. a local build) installs fine after a right-click → Open in Finder; official signed+notarized installers come from the release workflow.</p><p>You can verify a signed app on your Mac with: spctl --assess --type execute -vv on the app bundle — it should report 'accepted, source=Notarized Developer ID'.</p><p>The installer registers the designers with Launch Services so double-clicking a .vltmp or .vlcus file opens the correct designer.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>I could not find an end-user 'how to download' page bundled in the repo — the Releases page is the documented distribution channel, but the exact download URL is not in the source I read (put the real URL in only after confirming it).</p><p>scripts/install.sh installs into /Applications/VectorLabel/ (or ~/Applications if /Applications isn't writable) and deliberately leaves any legacy /Applications/VectorLabel.app untouched; quit that legacy app while testing the suite so they don't both grab the USB printer.</p></div>
+</section>
+
+<section class="doc-sec" id="folder-layout">
+<h2>On-disk layout: where your files and settings live</h2>
+<p>VectorLabel keeps your documents under your home Documents folder and keeps its internal coordination files under Application Support.</p>
+<p>Your documents live in ~/Documents/VectorLabel/. Inside it: Templates/ holds your label template files from the designer, and Exports/ holds one subfolder per Vectorworks project, each containing the exported CSV files. The CSVs are named with a date-time code (…_export_YYYYMMDD_HHMMSS.csv), and the app keeps at most 15 exports per project by default (older ones are pruned).</p>
+<p>The watch folder root and the Templates folder are both configurable in Preferences, so these paths can be moved.</p>
+<p>The apps coordinate through a hidden inter-process folder under ~/Library/Application Support/VectorLabel/ipc/ (the name becomes 'VectorLabel Beta' for beta builds). This holds the print queue and status: queue/, processing/, done/, failed/, control/, status/ (with printers.json), plus reprint/, reprint-custom/, and cancelled/. You normally never touch this folder.</p>
+<p>Your preferences are stored in the standard macOS UserDefaults (not a visible file you edit). They include the watch-folder path, Templates-folder path, max exports per project (default 15), default print range, appearance, per-printer calibration offsets keyed by serial number, and shared print-table column layout. Recent-print history and a small crash log (~/Library/Logs/VectorLabel-crash.log) are also kept.</p>
+<pre><code>~/Documents/VectorLabel/
+  Templates/         label templates (.vltmp / legacy .vlt.json)
+  Exports/
+    &lt;VWFileName&gt;/    &lt;VWFileName&gt;_export_YYYYMMDD_HHMMSS.csv  (max 15)
+
+~/Library/Application Support/VectorLabel/ipc/   internal queue + status</code></pre>
+
+<div class="callout tip"><span class="lab">Tips</span><p>Use the menu-bar 'Open Export Folder' command (⌘E) to jump straight to ~/Documents/VectorLabel/Exports/ in Finder.</p><p>Calibration offsets are saved per physical printer (by serial number), so they survive unplugging/reconnecting and relaunching.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>The README still shows the older template extension '.vlt.json'; the packaged designers now use '.vltmp' (templates) and '.vlcus' (custom labels), with .vlt.json supported as a legacy name.</p><p>A factory 'Reset Defaults' (Advanced tab) also clears per-printer alignment/calibration offsets.</p><p>Beta builds use a separate 'VectorLabel Beta' Application Support folder, so a beta and a production build keep independent IPC/status state.</p></div>
+</section>
+
+<section class="doc-sec" id="first-run-usb">
+<h2>First run and granting USB / printer access</h2>
+<p>On first run, launch the Engine; it adds the menu-bar icon and begins scanning for connected printers. For a USB printer (Brady M610, Brother PT models), plug it in by USB and the Engine's scan should detect it. You can also force a scan with the 'Scan USB' button in Preferences → Printers.</p>
+<p>Granting access to the printer: the Engine talks to USB printers via libusb and automatically detaches the macOS kernel/CUPS driver when it claims the device, so you generally don't need to remove the printer from System Settings first. If a printer is detected but can't be opened, the app reports 'Could not open printer (permissions?)' — this usually means another process (such as the system print driver or a second Engine) is holding the device.</p>
+<p>Documents access: because the app reads and writes ~/Documents/VectorLabel, macOS may show a one-time prompt to allow access to your Documents folder the first time the app reads it. The Custom Designer is deliberately written to avoid touching the Templates folder on launch so it doesn't trigger that prompt just by opening.</p>
+<p>Notifications: the Engine asks for permission to post local notifications (used for messages like a failed reprint). Granting this is optional — if you decline, those notifications are silently skipped.</p>
+<p>For a network M611, you don't scan USB — you add it in Preferences → Printers by entering its host/IP and choosing the model, then click 'Add'.</p>
+
+<ol class="steps">
+  <li>Launch VectorLabel Engine and look for the menu-bar icon.</li>
+  <li>Plug in your USB printer (or prepare to add a network printer by IP).</li>
+  <li>Open the menu bar → Preferences… → Printers tab.</li>
+  <li>For USB: click 'Scan USB' if the printer isn't already listed. For network: type the host/IP, pick the model, click 'Add'.</li>
+  <li>If macOS prompts to allow Documents access or notifications, allow them.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tips</span><p>Brady USB ids: M610 is VID 0x0E2E / PID 0x010B (confirmed). The M611 USB PID is noted in the README as 0x010C and 'assumed' — if your M611 isn't detected over USB, check Preferences → Printers and consider adding it as a network printer instead.</p><p>If the menu-bar icon ever disappears (macOS can drop it after long uptime or sleep), simply re-launching the Engine nudges the live one to re-show the icon and opens Preferences as a reliable on-screen entry point.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>The Brother USB transport detaches the macOS AppleUSBPrinter kext and does not reattach it; after using a Brother printer with VectorLabel you may need to unplug/replug for the system print driver to take it back.</p><p>'Could not open printer (permissions?)' almost always means the device is busy (claimed by another app or a second Engine), not a macOS privacy setting.</p></div>
+</section>
+
+<section class="doc-sec" id="menu-bar-and-prefs">
+<h2>The menu-bar Engine: status and Preferences</h2>
+<p>Clicking the menu-bar icon opens a dropdown that shows your connected printers and their live status (with per-printer detail), any active print queue, and a Recent Prints list where each item offers a 'Reprint' action.</p>
+<p>The dropdown's action rows are: 'Open Template Designer' (⌘T), 'Open Custom Designer', 'Open Export Folder' (⌘E), 'Preferences…' (⌘,), and 'Quit VectorLabel' (⌘Q). A version/build string is shown in the footer.</p>
+<p>Preferences is a six-tab window: Export, Printing, Templates, Recent, Printers, and Advanced. Export covers the watch folder (with a Browse… button), auto-open behaviour, and how many exports to keep per project. Printing covers the default print range (All / Selected / Range) and Per-Printer Settings…. Templates sets the templates folder. Recent shows print history with a Clear History action. Printers lists connected printers (Scan USB), lets you add/remove network printers, set the status refresh interval, open Per-Printer Settings…, and Edit Supplies…. Advanced has the Appearance control (dark / light / system) and a Reset Defaults (factory reset) button.</p>
+<p>Label supplies (sizes, part numbers, quantities/roll lengths, 90° feed rotation, buy links — grouped per printer model) are editable in-app with no code via Engine → Preferences → Printers → Edit Supplies….</p>
+
+
+<div class="callout tip"><span class="lab">Tips</span><p>The status-refresh interval (how often the Engine re-reads battery/ribbon/labels/supply/errors) defaults to 5 seconds and pauses while a job is printing.</p><p>Appearance applies everywhere at once — the menu, Preferences, and both web-based UIs (print window and designer).</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>The README mentions a 'Show in Dock' option and the setting exists in code (showInDock, default off = menu-bar-only), but I did not find a visible toggle for it in the Advanced tab portion of PreferencesView I read — its exact UI location is unconfirmed.</p><p>I did not read the per-printer cut/orientation and calibration controls in full, so exact wording of every Per-Printer Settings… field is not captured here.</p></div>
+</section>
+
+<h2 class="chapter" id="ch-vectorworks">Vectorworks integration</h2>
+<section class="doc-sec" id="what-it-is">
+<h2>What the integration does</h2>
+<p>ConnectCAD is the cabling/signal-flow design add-on inside Vectorworks. Every cable run you draw is a 'circuit' object that carries data about both of its ends: which device, which socket, which connector, the room, the rack, the signal type, the cable type and length, and so on.</p>
+<p>VectorLabel ships two Python command plug-ins for Vectorworks. When you run one, it reads those circuit objects and writes a CSV file (a plain spreadsheet) into ~/Documents/VectorLabel/Exports/. The VectorLabel AutoPrint app watches that folder and automatically opens the print window when a new file lands. Nothing is sent over a network and no copy/paste is needed.</p>
+<p>Each circuit produces TWO label rows in the CSV — one for the Source end and one for the Destination end — because a wire wrap label is usually applied near each end of the cable.</p>
+<pre><code>~/Documents/VectorLabel/Exports/&lt;VWFileName&gt;/&lt;VWFileName&gt;_export_YYYYMMDD_HHMMSS.csv</code></pre>
+
+<div class="callout tip"><span class="lab">Tip</span><p>You never open the CSV yourself. AutoPrint reads it for you. The CSV is just the hand-off format between Vectorworks and VectorLabel.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>This integration is specifically for ConnectCAD circuits. Other Vectorworks objects in your selection or on your layer are silently skipped (they are counted as 'non-circuit object(s) skipped').</p></div>
+</section>
+
+<section class="doc-sec" id="install-plugins">
+<h2>Installing the two command plug-ins in Vectorworks</h2>
+<p>There are TWO separate menu commands, one per Python file. Vectorworks shows one menu command per registered command plug-in, so you create two New Command plug-ins and paste a different script into each.</p>
+<p>The two script files live in the VectorworksPlugin folder of the VectorLabel project: export_selected.py and export_all.py. You paste the ENTIRE contents of each file — each script is self-contained, so there is no separate shared file to import.</p>
+<pre><code>VectorworksPlugin/export_selected.py
+VectorworksPlugin/export_all.py</code></pre>
+<ol class="steps">
+  <li>In Vectorworks, go to Tools menu, then Plug-ins, then Plug-in Manager.</li>
+  <li>Click New Command. Set Language to Python.</li>
+  <li>Name the command exactly: Export Selected Circuits to VectorLabel.</li>
+  <li>Open export_selected.py in a text editor, copy the whole file, and paste it into the command's script body. Save/close the Plug-in Manager.</li>
+  <li>Click New Command again (Language: Python). Name it exactly: Export All Circuits to VectorLabel.</li>
+  <li>Paste the entire contents of export_all.py into this second command.</li>
+  <li>Add the commands to your workspace: Tools menu, then Workspaces, then Edit Current Workspace. Drag both commands into a menu of your choice, then save the workspace.</li>
+  <li>The two commands now appear in the menu you chose and are ready to run.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tips</span><p>The command names matter for your own clarity but the script does the work; just keep the two scripts in separate commands so both menu items exist.</p><p>On Windows the path the scripts write to is the user's Documents/VectorLabel folder as well (the script uses the home folder); the documentation here describes the Mac path because the rest of VectorLabel is a Mac app.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>If you paste both scripts into a single command, you will only get one menu item and lose one of the two export modes. Create two distinct New Command plug-ins.</p><p>If a command does not appear in your menu after pasting, you most likely forgot the Edit Current Workspace step — installing in the Plug-in Manager alone does not place it in a menu.</p></div>
+</section>
+
+<section class="doc-sec" id="two-commands">
+<h2>The two commands: Selected vs All</h2>
+<p>'Export Selected Circuits to VectorLabel' exports only what you currently have selected. Internally it collects every object matching the selection criteria. If nothing is selected, it shows an alert: 'No objects selected. Select one or more ConnectCAD circuits.' If your selection contains objects but none are circuits, it shows 'No ConnectCAD circuits found in selection.' with a count of skipped objects.</p>
+<p>'Export All Circuits to VectorLabel' ignores your selection entirely and walks the ACTIVE DESIGN LAYER, exporting every ConnectCAD circuit found on it. If there are none, it shows 'No ConnectCAD circuits found on the active layer.' with a skipped count.</p>
+
+
+<div class="callout tip"><span class="lab">Tips</span><p>Use 'Export Selected' to print labels for just a few cables you fixed up. Use 'Export All' to relabel an entire design layer at once.</p><p>'Export All' is layer-scoped: it only sees the layer that is active in Vectorworks at the moment you run it. Switch to the layer you want before running.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>'Export All' uses the ACTIVE design layer only — circuits on other layers are not included.</p><p>An object counts as a 'circuit' only if it has a source device name, a destination device name, a Signal value, or a CircuitType value. A circuit missing all of these would be skipped.</p></div>
+</section>
+
+<section class="doc-sec" id="exported-fields">
+<h2>What ConnectCAD data is exported (every column)</h2>
+<p>For each circuit the script writes two rows — a 'Source' row and a 'Destination' row — marked by a column named _Side. Each row carries shared circuit-level fields plus the fields specific to that end of the cable, plus a few 'Other end' fields so a label can reference where the cable goes.</p>
+<p>Shared circuit-level columns (same value on both the Source and Destination rows): Number (the circuit/cable number), Cable, Signal, Circuits, CableLength, CableCalculatedLength, Number Display, Cable Type, Cable Outside Diameter, and CircuitType.</p>
+<p>End-specific columns take their value from the Source end on the Source row and from the Destination end on the Destination row: Device_Name, Device_Tag, Socket_Name, Socket_Tag, Socket_Signal, Connector, Socket_Circs, Room, Rack, and RackU.</p>
+<p>Cross-reference columns describe the OTHER end of the same cable: Other_Device, Other_Socket, and Other_Connector. On a Source row these point at the destination; on a Destination row they point back at the source.</p>
+<pre><code>_Side, Number, Cable, Signal, Circuits, CableLength, CableCalculatedLength, Number Display, Cable Type, Cable Outside Diameter, CircuitType, Device_Name, Device_Tag, Socket_Name, Socket_Tag, Socket_Signal, Connector, Socket_Circs, Room, Rack, RackU, Other_Device, Other_Socket, Other_Connector</code></pre>
+
+<div class="callout tip"><span class="lab">Tips</span><p>These exact column names are the field names you reference when you build a label template in the VectorLabel designer (for example Device_Name, Room, Rack, RackU, Connector, Number).</p><p>The 'Other_...' columns are useful for a 'TO:' line on a label — e.g. show this end's device and the other end's device on the same wrap.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>Field names come directly from ConnectCAD's parametric record. If your version of ConnectCAD names a field differently, that column may come through blank. Any field the script asks for that doesn't exist is written as an empty value, not an error.</p><p>Number Display, Cable Type, and Cable Outside Diameter contain spaces in their column names — match them exactly in templates.</p><p>Source-end fields are read from Src_* record fields and destination-end from Dst_* fields (e.g. Src_Dev_Name, Dst_Skt_Conn). These internal names are not the CSV column names; the CSV uses the friendlier names listed above.</p></div>
+</section>
+
+<section class="doc-sec" id="output-format">
+<h2>Output file: format, location, and naming</h2>
+<p>The export is a UTF-8 CSV file with a header row of column names followed by one row per label (two rows per circuit, Source and Destination).</p>
+<p>It is written to ~/Documents/VectorLabel/Exports/&lt;VWFileName&gt;/, where &lt;VWFileName&gt; is your Vectorworks document's name without its extension. Each Vectorworks project gets its own subfolder so exports from different drawings never mix.</p>
+<p>The filename embeds a date-and-time stamp: &lt;VWFileName&gt;_export_YYYYMMDD_HHMMSS.csv — for example ESM_Kodak_Hall_Master_export_20260614_172508.csv. The timestamp makes every export unique and lets VectorLabel sort them chronologically just from the name.</p>
+<pre><code>~/Documents/VectorLabel/Exports/ESM_Kodak_Hall_Master/ESM_Kodak_Hall_Master_export_20260614_172508.csv</code></pre>
+
+<div class="callout tip"><span class="lab">Tip</span><p>Because the folder is named after the Vectorworks file, renaming your .vwx file means the next export goes into a new subfolder.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>If your Vectorworks file has never been saved (no filename), the project-folder name is derived from an empty filename, which can produce an oddly named or empty-named folder. Save your Vectorworks document first.</p></div>
+</section>
+
+<section class="doc-sec" id="retention-pruning">
+<h2>How many exports are kept (datecode pruning)</h2>
+<p>Each project subfolder keeps a maximum of 15 exports. After each export the script deletes the oldest files beyond that limit so the folder doesn't grow forever.</p>
+<p>Pruning is based on the YYYYMMDD_HHMMSS datecode IN THE FILENAME, not on the file's modification date. This keeps it correct even after copying files, cloud sync, or Time Machine restores, which can scramble file-system timestamps.</p>
+<p>Files that don't match the VectorLabel export naming pattern are never touched, so anything else you keep in the folder is safe.</p>
+<pre><code>MAX_EXPORTS_PER_PROJECT = 15   # in export_selected.py and export_all.py</code></pre>
+
+<div class="callout tip"><span class="lab">Tips</span><p>The VectorLabel AutoPrint app also prunes the same folder to the same limit after it reads a new export, so the count stays at 15 from both sides.</p><p>The keep-count is adjustable on the VectorLabel side under Preferences with the label 'Exports to keep per project' (default 15).</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>The Python scripts hard-code the limit at 15 (MAX_EXPORTS_PER_PROJECT). Changing the Preferences value in the Mac app changes the app's pruning, but the script will still prune to 15 when it runs — keep them in mind together if you raise the app's limit.</p></div>
+</section>
+
+<section class="doc-sec" id="silent-export">
+<h2>Export is silent</h2>
+<p>A successful export shows NO confirmation dialog in Vectorworks. The command runs, writes the file, prunes old ones, and returns quietly — by design, so it stays out of your way.</p>
+<p>Vectorworks only shows an alert when something is wrong: nothing selected, no circuits found in the selection or on the layer. Those alerts include a count of non-circuit objects that were skipped.</p>
+
+
+<div class="callout tip"><span class="lab">Tip</span><p>The 'confirmation' you should look for is the VectorLabel print window appearing on your Mac, not a dialog in Vectorworks.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>Because success is silent, if you don't see the print window appear, check the troubleshooting points: AutoPrint must be running, auto-open must be on, and the file must have actually contained circuits.</p></div>
+</section>
+
+<section class="doc-sec" id="autoprint-detection">
+<h2>How VectorLabel detects the export and opens the print window</h2>
+<p>VectorLabel AutoPrint is a background menu-bar front end with no Dock icon. On launch it starts watching ~/Documents/VectorLabel/Exports/ using macOS FSEvents in recursive mode, so a new CSV dropped into ANY project subfolder is noticed immediately.</p>
+<p>When a new file appears, AutoPrint checks the filename matches the export pattern (_export_YYYYMMDD_HHMMSS.csv) and that it sits one level below the Exports root (inside a project subfolder). It waits a brief moment for the file to finish writing, parses it into label records, prunes the folder to the keep-limit, and then — if 'Auto-open print window when export is detected' is enabled — opens the print window with those records and brings the app to the front.</p>
+<p>If you happen to run an export TWICE for the same file path in one session, AutoPrint remembers it already handled that path and won't open the window twice. If a file isn't readable yet (still writing or cloud-syncing), AutoPrint releases its claim and retries when the file changes again.</p>
+<pre><code>AppSettings.shared.exportsFolderURL  →  ~/Documents/VectorLabel/Exports/</code></pre>
+
+<div class="callout tip"><span class="lab">Tips</span><p>The auto-open toggle is in VectorLabel's Engine Preferences under Export: 'Auto-open print window when export is detected' (on by default).</p><p>AutoPrint intentionally does NOT scan existing files at launch — it only reacts to a NEW export written while it is running. If you exported before opening the app, re-run the export.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>If AutoPrint is not running when you export, nothing pops up. The window only opens for exports created while the watcher is live.</p><p>If the print window doesn't appear, confirm the auto-open preference is enabled — with it off, the export is still saved and parsed but no window opens automatically.</p><p>Detection has a built-in latency (about half a second to coalesce Vectorworks' write burst, plus a short settle delay), so the window appears a moment after the export, not instantly.</p></div>
+</section>
+
+<section class="doc-sec" id="end-to-end-procedure">
+<h2>Step-by-step: export from Vectorworks and print</h2>
+<p>This is the full round trip from a finished ConnectCAD design to printed wrap labels.</p>
+
+<ol class="steps">
+  <li>Make sure VectorLabel (the AutoPrint front end / menu-bar app) is running on your Mac, and that 'Auto-open print window when export is detected' is enabled in its Preferences.</li>
+  <li>In Vectorworks, open and SAVE your project file (so it has a filename — that name becomes the export subfolder).</li>
+  <li>Decide your scope: to label specific cables, select those ConnectCAD circuits. To label a whole layer, switch to that design layer (no selection needed).</li>
+  <li>Run the matching menu command: 'Export Selected Circuits to VectorLabel' for your selection, or 'Export All Circuits to VectorLabel' for the active layer.</li>
+  <li>Nothing happens visibly in Vectorworks on success (silent export). The CSV is written to ~/Documents/VectorLabel/Exports/&lt;VWFile&gt;/.</li>
+  <li>Switch to your Mac: within a moment the VectorLabel print window opens automatically, populated with one row per cable end (Source and Destination).</li>
+  <li>In the print window pick your label template and printer/supply, review/filter the records, and print. (Template editing and printer setup are covered in the print-window and designer docs.)</li>
+</ol>
+<div class="callout tip"><span class="lab">Tips</span><p>If you change circuits in Vectorworks, just re-run the export — a fresh timestamped CSV is created and the print window reopens with the new data.</p><p>Old exports auto-clean to the 15 most recent per project, so you can re-export freely without housekeeping.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>If you get a Vectorworks alert instead of a print window, read it: 'No objects selected' means select circuits first; 'No ConnectCAD circuits found...' means your selection/layer had no recognizable circuits.</p><p>If no window appears and no alert showed, AutoPrint may not be running or auto-open may be off.</p></div>
+</section>
+
+<h2 class="chapter" id="ch-designers">Designing labels</h2>
+<section class="doc-sec" id="two-designers">
+<h2>Template Designer vs Custom Designer</h2>
+<p>VectorLabel ships two designer windows that look almost identical but are aimed at different jobs. The window title bar reads "VectorLabel — Template Designer" or "VectorLabel — Custom Designer", and the top-left subtitle under the VectorLabel logo says either "Template Designer" or "Custom Designer".</p>
+<p>Template Designer makes REUSABLE templates. A template is a layout with data-bound fields (for example a text box set to the "Cable Name" column). You save it as a .vltmp file, and the Print window later loads it, fills the fields from each row of your wire-export data, and prints one label per record. The Template Designer's New/Open/Save toolbar buttons are "New", "Open…", "Save as…" and "Save", and new documents start named "Untitled Template". When launched on its own it opens an Open Template picker so you choose a template rather than landing on a blank one. It can load a CSV (the "Load CSV…" button in the top bar) purely as a PREVIEW so you can see how fields will look — it does not print.</p>
+<p>Custom Designer makes ONE-OFF labels and can also print them itself. Its toolbar buttons are "New", "Open…" and "Save Label…", and new documents start named "Untitled Custom Design". It has an extra print header (printer picker, Copies, Cut, Feed to clear, Print) and a bottom "Database" pane. You can bind a CSV or Excel (.xlsx) file as print data and the Custom Designer will print one label per row; with no data bound it just prints the single label you designed. Saved files are .vlcus and embed both the design and a copy of the bound data so a Reprint reopens the exact label.</p>
+
+
+<div class="callout tip"><span class="lab">Tips</span><p>If you just want to print a handful of labels right now, use the Custom Designer. If you are building a layout to be reused across many print jobs from your wire data, use the Template Designer.</p><p>Both designers can also open Brady (.BWT) and Brother P-touch (.lbx) templates and convert them — see the Importing section.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>The two windows share the same underlying HTML canvas, so the editing controls are the same. The differences are the toolbar buttons, the default document name, and the Custom Designer's print header + Database pane.</p></div>
+</section>
+
+<section class="doc-sec" id="choosing-supply">
+<h2>Choosing a label supply (die-cut vs continuous)</h2>
+<p>Before you design, pick the label supply you will print on. Click the "Supply" button in the top bar (it shows the current size and a ▾ arrow) to open the "Choose a label supply" picker. Supplies are grouped by category with columns: Supply, Type, Label size, Printable, and Buy. Click a row to select it; the picker closes and the canvas resizes to match.</p>
+<p>There are two kinds of supply. Die-cut supplies are pre-cut to a FIXED size (for example 1" × 1.5"); both their overall size and printable area are fixed, shown as width × height. Continuous (tape) supplies have a fixed width but NO fixed length — you choose how long each label is. Continuous rows show their size as width × "definable".</p>
+<p>When a continuous supply is selected, a "Length" field (in inches) and a "⤢ Fit" button appear in the top bar. Type a length, or click Fit to set the length automatically to the farthest edge of your content (plus a small trailing margin). Die-cut supplies ignore length.</p>
+<p>If a printer is connected and reports a loaded cassette, the picker shows a "Use currently installed" button that jumps to the matching defined supply, and the matching row is tagged "● installed". If nothing is loaded it shows "No cassette detected". When more than one supply group exists, a "Supply group" dropdown lets you switch groups.</p>
+
+<ol class="steps">
+  <li>Click the "Supply" button in the top bar.</li>
+  <li>In the "Choose a label supply" window, find your part in the grouped list (use the "Supply group" dropdown if shown).</li>
+  <li>Click the row to select it — the canvas resizes to that supply.</li>
+  <li>For a continuous tape, set the "Length" (inches) in the top bar, or click "⤢ Fit" to fit it to your content.</li>
+  <li>Click "Close" if you opened the picker but didn't change anything.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tips</span><p>The supply list is editable and shared from the app's supply catalog; it updates live (about every 2 seconds) if you edit the catalog elsewhere while a designer is open.</p><p>If a continuous category note reads "any material of the listed width matches", any tape of that width will fit that entry.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>If a supply you previously used was removed from the catalog, the designer keeps the saved canvas size as a "ghost" (it shows "(supply unavailable)") so your layout doesn't suddenly resize — pick a new supply to fix it.</p><p>Changing supplies recenters the canvas and resets the continuous Length to that supply's default, so a length you set for one tape won't carry to another.</p></div>
+</section>
+
+<section class="doc-sec" id="canvas-rotation">
+<h2>Canvas behavior, zoom, and 90° rotation</h2>
+<p>The canvas shows your label at the printable size, centered in a scrollable area, with rulers along the top and left edges. The top bar has zoom controls: a − / percentage / + group, a "Reset" button (back to 100%), and a "⌖ Center" button to recenter the label in the view. A "Show wrap"/"Hide wrap" toggle shows or hides the soft-wrap preview guides for text.</p>
+<p>The "⟳ 90°" button rotates the label canvas 90 degrees so you can design in the other orientation. For continuous tape this switches between the default landscape and a portrait override. For die-cut it shows the canvas in portrait while the renderer keeps the physical label dimensions and rotates your design onto them. The button highlights when rotation is on. The rotation is saved with the template/label.</p>
+<p>Snapping is controlled in the second toolbar (the "Snap" row): "⊞ Grid" snaps objects to a grid, "⊡ Objects" snaps to other objects' edges, and a "Grid size" dropdown chooses the spacing (options shown in both millimeters and inches). These settings are remembered between sessions.</p>
+
+
+<div class="callout tip"><span class="lab">Tips</span><p>Arrow keys nudge the selected object; hold Shift for a finer nudge. When grid snapping is on, arrow keys move by one grid step.</p><p>The properties panel on the right is resizable — drag its left edge.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>Rotation is editor-only geometry for die-cut: the actual printed label keeps its physical size and the design is rotated onto it. Always confirm the printed result on the physical label in this alpha.</p></div>
+</section>
+
+<section class="doc-sec" id="adding-objects">
+<h2>Adding objects (text, barcode, image, symbol, line, shapes, arrow)</h2>
+<p>The left sidebar has an "Add" section with buttons for every object type: "Text", "Line", "Rect", "Arrow", "Circle", "Oval", "Image", "Symbol", and "Barcode". Clicking one drops a new object onto the canvas and selects it. Below the buttons is an "Objects (N)" list of everything on the canvas; clicking a row selects that object, and a "Delete selected" button appears when something is selected.</p>
+<p>Text starts as a small box reading "Text". Barcode starts as a QR Code containing "12345". Lines and arrows start as a 1-inch horizontal stroke. Rect, Circle and Oval are outline shapes. Image opens a file picker (PNG, JPG, JPEG, or SVG) followed by a monochrome-conversion dialog. Symbol opens the "Insert symbol" library.</p>
+<p>The symbol library (the "Symbol" button) offers monochrome safety/handling icons: Caution, High voltage, Laser, Flammable, Hot surface, No entry, No smoking, Eye protection, Ear protection, Head protection, Earth / ground, Fragile, This way up, and Mandatory. These are original recreations, not the official copyrighted artwork. Pick one to insert it; it is rasterized to a monochrome image and prints through the image path.</p>
+<p>Images are converted to pure black-and-white when added. The "Add image — convert to monochrome" dialog (or "Adjust image" when re-editing) has Brightness, Contrast, and Threshold sliders with a live preview; click "Add to label" / "Apply" or "Cancel". You can re-open it later from the image's properties via "Adjust monochrome…", and "Replace image…" swaps the picture.</p>
+
+<ol class="steps">
+  <li>Click an object type in the left "Add" sidebar (e.g. "Text" or "Barcode").</li>
+  <li>The new object appears selected on the canvas; edit it in the right-hand properties panel.</li>
+  <li>For "Image", choose a file, adjust Brightness/Contrast/Threshold, then click "Add to label".</li>
+  <li>For "Symbol", click an icon in the "Insert symbol" window.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tips</span><p>You can duplicate the selected object with Cmd-D, copy/paste with Cmd-C / Cmd-V, and delete with the Delete or Backspace key (or the Delete button).</p><p>The transparent parts of a PNG or SVG stay transparent through the monochrome conversion.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>Symbols are simplified vector recreations for visual reference, not certified standards-compliant safety marks.</p><p>Barcode-only or image-only content imported from some third-party files may not be supported — see the Importing section.</p></div>
+</section>
+
+<section class="doc-sec" id="text-properties">
+<h2>Text box properties and data binding</h2>
+<p>Select a text box to edit it in the right panel. The top "Text source" row has three mode buttons: "Static", "Field", and "Formula". Static is plain typed text (type in the box, or double-click the text on the canvas to type directly). Field binds the text to one data column — pick it from the "— choose column —" dropdown, or drag a column header from the Records panel (Template Designer) / Database pane (Custom Designer) onto the text box. Formula lets you write a spreadsheet-style expression starting with "=".</p>
+<p>Formulas support text joining with &amp; and the functions IF, LEFT, RIGHT, LEN, UPPER, LOWER, TRIM, and MID, plus = and &lt;&gt; comparisons; column names resolve to the current record's values. A "Fields ▾" button lists insertable field buttons, and "Editor ⤢" opens a larger formula editor with a live preview. Example placeholder: =IF(Number&lt;&gt;"",Number,"").</p>
+<p>Under "Text formatting" you have: a font picker (curated fonts plus your installed system fonts), "Size (pt)" (when Auto-scale is on it is labeled "Size (pt) — max"), a "Style" row with Bold (B), Italic (I) and Underline (U) toggles, "Horizontal align" (left, center, right, justify), "Vertical align" (top, middle, bottom), a "Wrap text" checkbox, an "Auto-scale to fit (max size)" checkbox (shrinks text to fit the box width; it never grows past the Size), "Tracking (px)" (space between characters), and "Width stretch (%)" (10–300%, horizontally stretches the glyphs). The "Position &amp; size" block at the bottom sets X, Y, width and height in inches.</p>
+<pre><code>=IF(Number&lt;&gt;"",Number,"")</code></pre>
+<ol class="steps">
+  <li>Click the text box on the canvas (or in the Objects list).</li>
+  <li>Choose "Static", "Field", or "Formula" under "Text source".</li>
+  <li>For Static, type your text. For Field, pick a column. For Formula, type an expression beginning with "=".</li>
+  <li>Set font, "Size (pt)", Style (B/I/U), alignment, and any wrap / auto-scale / tracking / stretch options.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tips</span><p>Turn on "Auto-scale to fit (max size)" for variable data so long values shrink to fit instead of overflowing the box.</p><p>You can drop a column header onto an empty spot on the canvas to instantly create a new field-bound text box.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>In the Template Designer the field list is the fixed wire-export columns; in the Custom Designer, once a CSV/Excel file is bound, the field list comes from that file's columns.</p><p>Field and Formula text only resolve when there is record data; with no data they preview blank.</p></div>
+</section>
+
+<section class="doc-sec" id="barcode-properties">
+<h2>Barcode and 2-D code properties</h2>
+<p>Select a barcode to edit it. The "Barcode" section has a "Type" dropdown with: QR Code, Data Matrix, Aztec Code, PDF417, Micro QR, Code 128, GS1-128, Code 39, Code 93, EAN-13, EAN-8, UPC-A, UPC-E, Interleaved 2 of 5, and Codabar. For symbologies that support it, an "Error correction" dropdown appears (QR/Micro QR show L/M/Q/H with their recovery percentages; PDF417 shows numbered levels).</p>
+<p>Under "Data source" the same three modes as text apply: "Static" (type the barcode value), "Field" (bind to a column), or "Formula". You can also drag a column header onto the barcode to bind it. The "Position &amp; size" block sets X, Y, width and height.</p>
+<p>Square 2-D codes (QR, Data Matrix, Aztec, Micro QR) keep a square shape so they stay scannable; linear codes and PDF417 can be stretched freely. The Custom Designer's Database pane flags any record whose barcode can't encode (it would print blank).</p>
+
+<ol class="steps">
+  <li>Add a Barcode and select it.</li>
+  <li>Pick the "Type" (symbology) from the dropdown.</li>
+  <li>Set "Error correction" if offered.</li>
+  <li>Under "Data source" choose Static / Field / Formula and enter or bind the value.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tips</span><p>For variable data, set the barcode to Field mode and bind the column carrying the code value.</p><p>Use higher QR error correction (Q or H) when labels may get scuffed or partly covered.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>If a record's value can't be encoded by the chosen symbology, that label's barcode prints blank — the Custom Designer Database pane warns about such rows.</p><p>Stretching a square 2-D code is prevented on purpose; only its overall (uniform) size changes.</p></div>
+</section>
+
+<section class="doc-sec" id="shape-properties">
+<h2>Line, rectangle, oval, circle, and arrow properties</h2>
+<p>Line: a "Weight (px)" field (1–10) plus X, Y and Width. Lines are horizontal strokes you position and size.</p>
+<p>Rectangle and Oval: a "Border (px)" field (1–10) plus the Position &amp; size block.</p>
+<p>Circle: a "Border (px)" field, plus "Diameter (in)" and "Radius (in)" fields (changing one updates the other), with position controls. Symbols also expose a single "Size (in)" because they stay square.</p>
+<p>Arrow: "Thickness (px)" (1–20), "Arrowhead size (px)" (4–60), and a "Heads" row with "◄ Start" and "End ►" toggles to put an arrowhead at either or both ends, plus X, Y and Length.</p>
+
+
+<div class="callout tip"><span class="lab">Tip</span><p>Use the dedicated Diameter/Radius fields on a Circle for precise sizing instead of dragging.</p></div>
+
+</section>
+
+<section class="doc-sec" id="selecting-moving">
+<h2>Selecting, moving, and multi-select</h2>
+<p>Click an object on the canvas to select it; drag it to move it. Double-click a Static text box to type directly into it on the canvas. Clicking empty canvas deselects everything. The properties panel shows "Click an object on the canvas to edit it. Shift-click to select several at once." when nothing is selected.</p>
+<p>Marquee (rubber-band) selection: press on an empty part of the canvas and drag a box; every object the box touches is selected. Holding Shift, Cmd, or Ctrl while marquee-ing ADDS to the current selection instead of replacing it.</p>
+<p>In the Objects list, standard macOS modifiers apply: Shift-click selects the range between the anchor and the clicked item; Cmd/Ctrl-click toggles a single item in or out of the selection; a plain click selects just that one. When several objects are selected, shared properties can be edited together and the Delete button reads "Delete N selected".</p>
+
+<ol class="steps">
+  <li>Click an object to select and drag to move it.</li>
+  <li>To select several: drag a box around them on the canvas, or Shift/Cmd-click them in the Objects list.</li>
+  <li>Shift/Cmd/Ctrl while dragging a marquee adds to the existing selection.</li>
+  <li>Press Delete (or click the delete button) to remove the selection.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tips</span><p>Arrow keys nudge the whole multi-selection at once.</p><p>Cmd-Z undoes the last change in the canvas.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>A plain single click on empty canvas clears the selection — if you meant to add to a selection, hold Shift/Cmd while marquee-ing.</p></div>
+</section>
+
+<section class="doc-sec" id="saving-opening">
+<h2>Saving and opening templates and custom labels</h2>
+<p>Template Designer: "Save" / "Save as…" save a .vltmp template. The "Save Template" dialog asks for a Template name and shows the label size and object count; templates live in ~/Documents/VectorLabel/Templates/. "Open…" shows an Open Template picker listing saved templates (with size and object count) and a "Browse file…" option. "New" / "New…" opens "New Template" where you set a name and label size and click "Create".</p>
+<p>The Template Designer's Open file picker also accepts legacy ".json"/".vlt.json" templates, plus Brady ".BWT" and Brother P-touch ".lbx" files (auto-converted).</p>
+<p>Custom Designer: "Save Label…" saves a .vlcus document that embeds the design AND a copy of any bound data. "Open…" accepts .vlcus, plus Brady .BWT and Brother .lbx (auto-converted). "New" opens "New Custom Design" (name + label size + "Create").</p>
+<p>Both designers warn before replacing the canvas (importing, opening, or starting new) if you have unsaved changes, with Save / Don't Save / Cancel choices. Finder double-clicking a .vltmp opens it in the Template Designer; a .vlcus opens in the Custom Designer.</p>
+<pre><code>~/Documents/VectorLabel/Templates/</code></pre>
+<ol class="steps">
+  <li>Template Designer: click "Save" (or "Save as…"), enter a Template name, then save into ~/Documents/VectorLabel/Templates/.</li>
+  <li>Template Designer: click "Open…" and pick a template card, or "Browse file…" for any folder.</li>
+  <li>Custom Designer: click "Save Label…" to write a .vlcus, or "Open…" to reopen one.</li>
+  <li>Use "New" / "New…" to start a blank document, choosing a name and label size.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tip</span><p>A .vlcus stores its own copy of the bound data, so reopening it (or reprinting) recreates the exact label even if the original spreadsheet moved.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>When the browser save dialog appears, navigate to the templates folder it names — the app cannot silently write the file for you.</p><p>Deleting a template from the Open picker permanently removes the file from the Templates folder and cannot be undone.</p></div>
+</section>
+
+<section class="doc-sec" id="importing">
+<h2>Importing Brady .BWT and Brother P-touch .lbx</h2>
+<p>Both designers can open third-party templates from their "Open…" dialog: Brady Workstation .BWT and Brother P-touch Editor .lbx. The app converts them into a VectorLabel design as a new, unsaved document, and warns first if you have unsaved changes (Replace / Cancel).</p>
+<p>Brady .BWT imports recover the label geometry (size and orientation) and text/prompt objects, turning each prompt into a data-bound text field so binding a data file whose columns match the prompt names fills them in. Object types not yet decoded (barcodes, images, shapes) are listed as import notes rather than dropped silently — so a partial import is never mistaken for a complete one. A Brady import fails if no readable text fields are found (for example a barcode-only or image-only template).</p>
+<p>Brother .lbx imports recover the tape geometry and map text:text to static text, barcode objects to barcodes (with QR error-correction level), and simple line shapes to lines. Images, groups, and unsupported barcode types are reported as warnings. Brother imports auto-select the closest matching P-touch tape width.</p>
+<p>After an import with anything that needs attention, an "Import note" dialog lists the items that couldn't be fully converted.</p>
+
+<ol class="steps">
+  <li>In either designer click "Open…".</li>
+  <li>Choose a .BWT or .lbx file (these may not show a file-type icon; the picker still accepts them).</li>
+  <li>Review any "Import note" listing items that need attention.</li>
+  <li>Adjust the converted design and save it as a .vltmp or .vlcus.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tip</span><p>For Brady files, name your bound data columns to match the original prompt names so the recovered fields fill automatically.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>Importers are reverse-engineered and validated against sample files; they decode a subset of object types. Barcodes/images/shapes from Brady files and images/groups/unsupported barcodes from Brother files are reported as warnings, not imported.</p><p>A Brady barcode-only or image-only template will not import (it reports no readable text fields).</p></div>
+</section>
+
+<section class="doc-sec" id="database-mode">
+<h2>Custom Designer database mode (bind, browse, edit records)</h2>
+<p>Only the Custom Designer has the bottom "Database" pane. Click "Choose data file…" to bind a CSV or Excel (.xlsx) file as print data — the designer prints one label per row. The pane header shows the file name, row and column counts, and how many rows are selected. "Clear data" unbinds (back to a single label) and "↻ Refresh from source" re-reads the file from disk (and re-prompts if it moved).</p>
+<p>Once bound, the pane is a record browser much like the Print window: a search box ("Search all fields…"), a "⧩ Filter &amp; sort" button, a "Columns ▾" show/hide-and-reorder menu, per-row checkboxes for selecting which rows print, and inline cell editing. Hover a cell and click the ✎ button to edit its value in place (Enter saves, Escape cancels). For Excel files a "First row is headers" toggle controls whether the first row supplies column names or columns are named Column 1, 2, 3….</p>
+<p>The print header's "Print" range control appears when data is bound and a field on the canvas actually uses it: "All", "Selected" (the checked rows), or "Range" (from–to). Filters, sorts, and saved presets are shared with the Print window, so a preset saved in either place shows up in both. The pane can be resized by dragging its top edge.</p>
+
+<ol class="steps">
+  <li>In the Custom Designer, click "Choose data file…" in the Database pane and pick a CSV or .xlsx.</li>
+  <li>Bind a canvas field to a column (Field mode, or drag a column header onto a text/barcode object).</li>
+  <li>Use the checkboxes, "Search all fields…", or "⧩ Filter &amp; sort" to choose which rows print.</li>
+  <li>In the print header set the "Print" range (All / Selected / Range), Copies, and Cut, then Print.</li>
+  <li>Use ✎ on a cell to fix a value inline; use "↻ Refresh from source" after editing the file externally.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tips</span><p>Edit small data fixes inline with the ✎ cell editor rather than reopening the spreadsheet.</p><p>"Clear data" returns you to designing/printing a single label.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>The Custom Designer prints one label per row, so a large bound file can be a big job — a confirmation appears for jobs over 10 labels.</p><p>Print/preview against sample data is for the on-canvas view; with no data bound, the actual printed label uses an empty record (static text prints, field/formula text is blank).</p></div>
+</section>
+
+<h2 class="chapter" id="ch-databind">Data, formulas &amp; barcodes</h2>
+<section class="doc-sec" id="three-binding-modes">
+<h2>The three content sources: Static, Field, Formula</h2>
+<p>When you select a text box (or a barcode), the properties panel shows three buttons to choose where its content comes from. The buttons are labelled Static, Field, and Formula.</p>
+<p>Static: you type a fixed value that is the same on every label. For a text box this is a multi-line text area with the placeholder "Type label text…". For a barcode the static input has the placeholder "Barcode data…". Use this for things that never change, like a fixed prefix, a company name, or a single test barcode value.</p>
+<p>Field: the object is bound to one column of your data. The panel shows a drop-down of available columns; pick one and the object displays that column's value for the current record, changing automatically label-to-label. The panel also tells you that you can drag a column header straight onto the box: "…or drag a column header from the Records panel onto the text box, or onto an empty spot to create a new field." (In the Custom designer the wording refers to the Database pane instead of the Records panel.) Dropping a column header on an existing text box switches it to Field mode bound to that column; dropping on an empty spot creates a new field-bound text box there.</p>
+<p>Formula: the object's content is computed by an Excel-style expression that must begin with an equals sign (=). This lets you combine several columns, add separators, change case, trim, take part of a string, and branch with IF. The formula bar is a monospace input with the example placeholder =IF(Number&lt;&gt;"",Number,""). Next to it are a "Fields ▾" button (drops down clickable buttons that insert a column name into the formula) and an "Editor ⤢" button that opens the full Formula editor with a live preview.</p>
+<p>Under the hood each object stores a mode of "static", "field", or "formula". Older designs that predate the mode flag still work: a legacy object with only a formula is treated as a formula, one with only a bound column as a field, and one with only plain text as static.</p>
+
+<ol class="steps">
+  <li>Click the text box or barcode you want to set up.</li>
+  <li>In the properties panel, click Static, Field, or Formula.</li>
+  <li>For Static, type the fixed value.</li>
+  <li>For Field, choose a column from the drop-down (or drag a column header onto the box).</li>
+  <li>For Formula, type an expression starting with = , or click Editor ⤢ to build it with a live preview, then Apply.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tips</span><p>Dragging a data column header onto an empty area of the label instantly creates a new field-bound text box — the fastest way to lay out data.</p><p>Switching an object to Formula when it had no formula yet starts you with ="" (an empty string) so the box is blank until you write the expression.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>A formula MUST start with =. If it doesn't, the whole thing is treated as plain static text and printed literally.</p><p>Field mode binds to the column's internal key (e.g. Cable, Device_Name), but the drop-down and formula buttons show the friendlier display name (e.g. "Cable Name", "Device Name").</p></div>
+</section>
+
+<section class="doc-sec" id="data-columns">
+<h2>The built-in data columns (cable/connector data)</h2>
+<p>When you are working from the built-in cable schedule data, these are the standard columns. The left side is the friendly display name you see in menus and formula buttons; the right side in parentheses is the underlying column key. A formula can refer to a column by either name (matching is case-insensitive).</p>
+<p>Number (Number), Cable Name (Cable), Signal (Signal), Connector (Connector), Device Name (Device_Name), Device Tag (Device_Tag), Socket Name (Socket_Name), Socket Tag (Socket_Tag), Other Device (Other_Device), Other Socket (Other_Socket), Other Connector (Other_Connector), Rack (Rack), Room (Room), Rack U (RackU), Side (_Side), Cable Type (Cable_Type), Cable Length (CableLength).</p>
+<p>In the Custom designer, when you bind your own spreadsheet/database, the column list comes from your imported data instead, and the display name and key are simply the column's own name.</p>
+<pre><code>Number, Cable Name (Cable), Signal, Connector, Device Name (Device_Name), Device Tag (Device_Tag), Socket Name (Socket_Name), Socket Tag (Socket_Tag), Other Device (Other_Device), Other Socket (Other_Socket), Other Connector (Other_Connector), Rack, Room, Rack U (RackU), Side (_Side), Cable Type (Cable_Type), Cable Length (CableLength)</code></pre>
+
+<div class="callout tip"><span class="lab">Tips</span><p>In a formula you can write either the friendly name or the raw key — =Cable Name and =Cable resolve to the same value.</p><p>If you type a column name that does not exist, the formula prints the name itself (not a blank), which makes typos easy to spot in the preview.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>Column keys with no spaces (like Device_Name) use underscores; the friendly names (like "Device Name") use spaces. Both work in formulas, but be consistent so your formulas stay readable.</p></div>
+</section>
+
+<section class="doc-sec" id="formula-language">
+<h2>The formula language: functions and operators</h2>
+<p>Formulas are Excel-style and always begin with =. They work on text. The complete set of built-in functions is small and fixed (these are the only functions supported):</p>
+<p>IF(condition, value_if_true, value_if_false) — returns the second argument when the condition is "true", otherwise the third. A condition is true when it is a non-empty value: any non-empty text counts as true (including the text "0" and "false"), and an empty string counts as false. Comparisons like Cable&lt;&gt;"" produce a true/false the IF can test.</p>
+<p>LEFT(text, n) — the first n characters. If you omit n it defaults to 1; n of 0 gives an empty string.</p>
+<p>RIGHT(text, n) — the last n characters (n defaults to 1).</p>
+<p>MID(text, start, length) — length characters starting at position start, where the first character is position 1.</p>
+<p>LEN(text) — the number of characters in text.</p>
+<p>UPPER(text) — converts to UPPER CASE.</p>
+<p>LOWER(text) — converts to lower case.</p>
+<p>TRIM(text) — removes leading and trailing spaces.</p>
+<p>Operators: &amp; joins (concatenates) two values into one string. = tests whether a field equals a value, and &lt;&gt; tests whether it is not equal (these are string comparisons). Parentheses ( ) group sub-expressions. Numbers and quoted "text literals" can be used directly. An integer-valued number prints without a decimal point (2, not 2.0).</p>
+<p>Important comparison rule: a comparison (= or &lt;&gt;) only fires immediately after a bare column name, with a single value on the right — for example Number&lt;&gt;"" or Side="Source". This matches how the live preview evaluates, so the preview and the printed label always agree.</p>
+<pre><code>Functions: IF  LEFT  RIGHT  MID  LEN  UPPER  LOWER  TRIM
+Operators: &amp;  (concatenate)   =  (equals)   &lt;&gt;  (not equal)   ( )  (grouping)
+Literals: "quoted text"   123 (numbers)</code></pre>
+
+<div class="callout tip"><span class="lab">Tips</span><p>Use &amp; to stitch pieces together with separators, e.g. Number&amp;" - "&amp;Cable produces "N044 - RIO 1 PRI".</p><p>Wrap optional pieces in IF so empty columns don't leave stray separators or dashes on the label.</p><p>The Formula editor (Editor ⤢ button) shows a Live preview with ‹ › arrows to step through your real records, so you can confirm the formula on several rows before applying.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>These eight functions (IF, LEFT, RIGHT, MID, LEN, UPPER, LOWER, TRIM) are the ENTIRE function set. There is no CONCATENATE, no FIND/SEARCH, no SUBSTITUTE, no arithmetic (+, -, *, /), and no number formatting — only text operations, &amp;, =, &lt;&gt;, and comparison-against-a-single-value.</p><p>If a formula has a syntax error it prints as a blank string rather than an error message, so check the live preview if a box comes up empty.</p><p>Comparison only works right after a column name (e.g. Cable&lt;&gt;""). You cannot compare two arbitrary expressions or chain comparisons.</p><p>Truthiness follows JavaScript: the text "0" is considered true in an IF because it is a non-empty string. Test with explicit comparisons (e.g. =IF(Field&lt;&gt;"",…)) when you mean "is this column filled in".</p></div>
+</section>
+
+<section class="doc-sec" id="formula-recipes">
+<h2>Common formula recipes (copy-paste)</h2>
+<p>These are real, working examples. The first four are the formulas actually used in the built-in label template, so they are known to be correct.</p>
+<p>Cable number with cable name, but drop the " - " separator when there is no cable name, and fall back to just the cable name when there is no number:</p>
+<p>Show a connector only when present:</p>
+<p>Show a rack only when present (right-aligned field on the template):</p>
+<p>Show the far end as "@ Device : Socket", omitting the socket part when blank, and printing nothing at all when there is no other device:</p>
+<p>Build them up from simple pieces with the recipes below.</p>
+<pre><code>=IF(Number&lt;&gt;"",Number&amp;IF(Cable&lt;&gt;""," - "&amp;Cable,""),IF(Cable&lt;&gt;"",Cable,""))
+=IF(Connector&lt;&gt;"",Connector,"")
+=IF(Rack&lt;&gt;"",Rack,"")
+=IF(Other_Device&lt;&gt;"","@ "&amp;Other_Device&amp;IF(Other_Socket&lt;&gt;""," : "&amp;Other_Socket,""),"")
+=UPPER(Cable)
+="CBL-"&amp;Number
+=LEFT(Number,3)
+=TRIM(Device_Name)</code></pre>
+
+<div class="callout tip"><span class="lab">Tips</span><p>UPPERCASE everything for high-visibility labels: =UPPER(Cable)</p><p>Join two columns with a slash, only adding the slash when both exist: =IF(Device_Name&lt;&gt;"",Device_Name&amp;IF(Socket_Name&lt;&gt;""," / "&amp;Socket_Name,""),"")</p><p>Prefix every value: ="CBL-"&amp;Number</p><p>First three characters of a code: =LEFT(Number,3)</p><p>Last four characters: =RIGHT(Cable,4)</p><p>Tidy stray spaces from imported data: =TRIM(Device_Name)</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>When concatenating, guard every optional piece with IF(col&lt;&gt;"", …, "") so you never print a lone dash, slash, or "@" with nothing after it.</p></div>
+</section>
+
+<section class="doc-sec" id="barcodes-symbologies">
+<h2>Barcodes and 2-D codes: supported symbologies</h2>
+<p>A barcode object is added as its own object type and gets its data from the same three sources (Static / Field / Formula) as text — so you can bind a barcode to a data column or build its value with a formula, and it changes per label. New barcodes default to a QR Code with error correction M and the sample value 12345.</p>
+<p>The complete list of supported symbologies, with the exact menu labels:</p>
+<p>2-D / matrix codes: QR Code (qrcode), Data Matrix (datamatrix), Aztec Code (azteccode), Micro QR (microqrcode).</p>
+<p>Stacked: PDF417 (pdf417).</p>
+<p>1-D / linear codes: Code 128 (code128), GS1-128 (gs1-128), Code 39 (code39), Code 93 (code93), EAN-13 (ean13), EAN-8 (ean8), UPC-A (upca), UPC-E (upce), Interleaved 2 of 5 (interleaved2of5), Codabar (codabar).</p>
+<p>All symbologies are produced by the same vendored bwip-js engine in both the on-screen preview and the print path, so the preview matches the printed code.</p>
+<pre><code>QR Code, Data Matrix, Aztec Code, Micro QR, PDF417, Code 128, GS1-128, Code 39, Code 93, EAN-13, EAN-8, UPC-A, UPC-E, Interleaved 2 of 5, Codabar</code></pre>
+<ol class="steps">
+  <li>Add a barcode object.</li>
+  <li>Pick the symbology from the Symbology drop-down.</li>
+  <li>Choose the content source (Static / Field / Formula) and set the value.</li>
+  <li>If the symbology supports error correction, pick a level from the Error correction drop-down.</li>
+  <li>Size the box on the canvas.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tips</span><p>For data that changes per label (serial numbers, asset IDs, cable numbers), bind the barcode to a Field or write a Formula — the code regenerates for every record at print time.</p><p>Drag a data column header onto a barcode to bind it to that column in one step.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>EAN/UPC and the other numeric/fixed-format symbologies will fail to encode if the value doesn't fit their rules (e.g. letters in an EAN-13, or the wrong digit count). When a value can't be encoded — or is empty — the label is printed BLANK for that code rather than printing a garbage barcode.</p><p>Which symbologies are hardware-scan-verified on which printers is not established in this area's source; treat scannability as something to test on your own scanner during alpha.</p></div>
+</section>
+
+<section class="doc-sec" id="barcode-shape-ecc">
+<h2>Square vs stretchable codes, and error correction</h2>
+<p>Square (fixed aspect) codes: QR Code, Data Matrix, Aztec Code, and Micro QR are always drawn square and centered in their box, regardless of the box shape. Making the box wider than it is tall just adds empty margin — the code stays square so it scans reliably.</p>
+<p>Stretchable codes: the linear 1-D codes (Code 128, GS1-128, Code 39, Code 93, EAN-13, EAN-8, UPC-A, UPC-E, Interleaved 2 of 5, Codabar) AND the stacked PDF417 stretch freely to fill the box on both width and height. You size their width and height independently.</p>
+<p>Error correction is offered only for the symbologies that support it, via an "Error correction" drop-down:</p>
+<p>QR Code and Micro QR: levels with friendly labels — QR offers "L — 7%", "M — 15%", "Q — 25%", "H — 30%"; Micro QR offers L, M, Q. Higher levels survive more damage/smudging but pack less data into the same size.</p>
+<p>PDF417: levels labelled "Level 0" through "Level 8".</p>
+<p>Data Matrix, Aztec, and all the 1-D codes have no user-selectable error-correction setting (Data Matrix and Aztec manage it automatically).</p>
+<p>A quiet zone (clear margin) is automatically included around every code so it scans even when placed next to other label content.</p>
+<pre><code>Error correction — QR / Micro QR: L (7%), M (15%), Q (25%), H (30%, QR only)
+Error correction — PDF417: Level 0 … Level 8
+Square (centered): QR, Data Matrix, Aztec, Micro QR
+Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Interleaved 2 of 5, Codabar, PDF417</code></pre>
+
+<div class="callout tip"><span class="lab">Tips</span><p>For labels that may get scuffed, scratched, or partly covered (cable wraps, dusty racks), choose a higher QR error-correction level (Q or H).</p><p>If a 2-D code looks merged into a solid block at small sizes, give it a slightly larger box — the renderer needs room to keep module edges crisp.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>If you change a barcode's symbology, its error-correction level is automatically clamped to a value the new symbology allows (or removed if the new type has none), so don't be surprised if the level resets when you switch types.</p><p>Making a square 2-D code's box very small can leave no room for even one whole module, in which case nothing is drawn (the code prints blank). Increase the box size if a code disappears.</p></div>
+</section>
+
+<section class="doc-sec" id="per-record-regeneration">
+<h2>How content is rebuilt for every label at print time</h2>
+<p>Nothing on a label is a fixed picture of one record. When you print, each label is generated from its own data row: Field objects pull that row's column value, Formula objects are re-evaluated against that row, and barcodes are encoded fresh from that row's value.</p>
+<p>Barcodes specifically are regenerated per record at full print resolution — they are not stored as a fixed-resolution image, so a field-bound barcode is sharp at any printer DPI and correct for each individual label.</p>
+<p>Because the preview and the print path use the same formula engine and the same barcode engine, the on-screen preview of any given record is an accurate proxy for what that label will print.</p>
+
+
+<div class="callout tip"><span class="lab">Tip</span><p>Use the record-stepping arrows in the Formula editor's Live preview to spot-check formulas and bound barcodes across several real rows before committing to a full print run.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>If a Field or Formula resolves to empty for a given row, that text box simply prints nothing for that label — there is no placeholder. Verify with the live preview that rows you expect to be filled actually are.</p><p>A barcode whose value is empty or unencodable for a particular row prints blank on that label only; other rows still print normally.</p></div>
+</section>
+
+<h2 class="chapter" id="ch-printing">Printing &amp; printers</h2>
+<section class="doc-sec" id="print-window-overview">
+<h2>What the Print window is and how it opens</h2>
+<p>The Print window is a single screen titled "VectorLabel — Print". It floats above your other windows so it stays in front when it pops up while you are working in another app. It has five main areas: a top bar (file name, Load CSV, Cancel), a Template bar, a Labels list (your records) with a live preview on the right, and a Print bar across the bottom (label selection, printer, cut, and the Print button).</p>
+<p>It opens by itself when VectorLabel sees a new CSV export drop into the watch folder (this auto-open can be turned off in Preferences ▸ Export ▸ "Auto-open print window when export is detected"). It also opens when you press Reprint on a past job in the menu bar. When the window closes after a print, focus returns to whatever app you exported from.</p>
+<p>The file the labels came from is shown in the top bar. "Load CSV…" lets you load a different export, and "✕ Cancel" closes the window. If you configured a job and then cancel, that configuration is still recorded in Recent Prints as a cancelled job so you can reopen and finish it later.</p>
+
+
+<div class="callout tip"><span class="lab">Tips</span><p>The Print button shortcut is shown on the button itself: ⌘ Return (Command-Return) prints, exactly like clicking it.</p><p>Up/Down arrow keys move the preview selection through the visible rows.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>The window only auto-opens if its watch folder is set correctly and auto-open is enabled — see the Export tab in Preferences.</p></div>
+</section>
+
+<section class="doc-sec" id="record-browser">
+<h2>The Labels list: search, sort, filter, columns, inline editing, selection</h2>
+<p>The Labels list shows every record (label) from your export. The header shows either the total count or "X of Y shown" when a filter or search is active. Click a row to preview that label on the right. The list is built to stay fast even with thousands of rows.</p>
+<p>Search: the "Search all fields…" box matches across every field. Space-separated terms must all appear in a row (e.g. "amp lan" finds rows containing both). A ✕ button clears the search.</p>
+<p>Filter &amp; sort: the "⧩ Filter &amp; sort" button opens a dialog where you build conditions. Each condition is a Field, an operator (Contains, Does not contain, Is exactly, Is not, =, ≠, &gt;, ≥, &lt;, ≤, Is empty, Is not empty), and a value (typed Text or another column's value via Field). Conditions combine with AND/OR inside a group, and you can add multiple groups combined with AND/OR. A "Show Source and Destination when only Source or Destination matches" checkbox keeps pairs together. Sort supports multiple levels (A→Z / Z→A) plus a pair mode: "Sort sources &amp; destinations (breaks pairs)", "Sort by source — destinations stay with sources", or "Sort by destination — sources stay with destinations".</p>
+<p>Columns: "Columns ▾" toggles which columns show. Drag a column header to reorder; drag its right edge to resize; right-click a header for "Hide column" / "Show all hidden columns". This column layout is shared with the designer.</p>
+<p>Inline editing: hover a cell and click the ✎ pencil (or use the inline editor) to change a value. Enter saves, Escape cancels. Edits update the previewed/printed label and are written back to the source CSV file (so a later reprint uses the corrected value).</p>
+<p>Selection / which labels print: each row has a print checkbox and a pair checkbox (the ⇅ icon toggles a Source+Destination pair together). The header checkbox selects/deselects all visible rows. Shift+click a checkbox extends the selection across all visible rows in between. "Sources" and "Destinations" buttons in the Print bar select one side at a time.</p>
+
+<ol class="steps">
+  <li>Use the search box or "⧩ Filter &amp; sort" to narrow the list.</li>
+  <li>Tick the rows (or pairs) you want, or use Select all / Sources / Destinations.</li>
+  <li>In the Print bar choose Selected, All, or Range.</li>
+  <li>Click a row to confirm the preview looks right, then Print.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tips</span><p>Range in the Print bar counts by visible position, so it respects the active filter/sort — not raw record order.</p><p>A ⚠ next to a row number means a barcode on that label can't encode that record's value and would print blank.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>If you inline-edit a row and it then gets filtered or searched out of view, the edit is abandoned (the editor is torn down).</p><p>Inline edits are written back to the source CSV; if that write fails the on-disk file can differ from what printed.</p></div>
+</section>
+
+<section class="doc-sec" id="presets">
+<h2>Filter/sort presets</h2>
+<p>You can save a filter+sort combination as a named preset. In the Filter &amp; sort dialog, "Save as preset…" prompts for a name. Saved presets appear as buttons in the Labels header; click one to apply it. The active preset is highlighted.</p>
+<p>Right-click a preset button for: Apply (activate), Edit…, Rename…, Update preset with current, and Delete. Presets are stored in app settings and shared between the Print window and the designer.</p>
+
+<ol class="steps">
+  <li>Open "⧩ Filter &amp; sort" and build your filter and/or sort.</li>
+  <li>Click "Save as preset…" and give it a name.</li>
+  <li>Later, click the preset button in the header to apply it.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tip</span><p>"Update preset with current" overwrites a preset with whatever filter/sort is active right now.</p></div>
+
+</section>
+
+<section class="doc-sec" id="preview">
+<h2>Live preview, the required-supply check, and expanded preview</h2>
+<p>The right-hand preview shows the selected label rendered with real data, scaled to fill the sidebar (drag the sidebar's left edge to resize; the width is remembered). Arrows (‹ ›) step through visible labels, and ⊞ opens the expanded preview.</p>
+<p>Under the preview, a "Required supply" panel shows the supply the template needs (displayed as "BM/M6-&lt;core&gt;" so the bulk box and the small roll are treated as the same), the Label size and Printable area, and "Buy" buttons for each part number. A green ✓ means the loaded cassette matches; "⚠ mismatch" means the loaded label size/part doesn't match and the print may be misaligned or cropped.</p>
+<p>The expanded preview (⊞ or the "Print preview" modal) shows every visible label in a grid. You can zoom (40%–300%, remembered), toggle "Show enabled only", and tick Print / Pair on each tile.</p>
+<p>"Inherit rack": when you sort by Rack with the inherit option on, a blank-Rack side of a pair borrows its partner's rack and shows it in parentheses, e.g. "(RIO RACK)", both in the preview and on the printed label.</p>
+
+
+<div class="callout tip"><span class="lab">Tip</span><p>The matched/mismatch check is based on the real loaded label size and part number reported by the printer, not just the part number text.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>A network Brother printer can't report its loaded tape, so it shows no loaded-cassette readout and won't show a match/mismatch.</p></div>
+</section>
+
+<section class="doc-sec" id="choose-printer-supply">
+<h2>Choosing the printer and confirming the supply</h2>
+<p>The printer dropdown in the Print bar lists every connected printer (name plus serial). A colored dot and a word show status: green/Ready, yellow/Busy, red/Offline. The list is populated from VectorLabel's live USB and network scan.</p>
+<p>The supply line under the printer shows the loaded part number (click it to re-detect), live telemetry if the printer supports it, and any pre-flight error. If nothing is detected you'll see a "Detect supply" button.</p>
+<p>Telemetry (M611 only): when available it shows Battery %, Labels %, and Ribbon %. A ⚠ appears when the job may need more labels or ribbon than remain.</p>
+<p>Pre-flight: printer-reported problems (printhead open, invalid supply, invalid ribbon) are shown in red and block printing until fixed; a "Re-detect" button re-reads the supply.</p>
+
+<ol class="steps">
+  <li>Pick the printer in the dropdown.</li>
+  <li>Check the status dot says Ready.</li>
+  <li>Confirm the loaded supply matches (green ✓) or press Detect supply / Re-detect.</li>
+  <li>If a pre-flight error shows, fix it on the printer and press Re-detect.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tip</span><p>You can switch printers at any time; the supply readout and cut options update for the selected printer.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>The Print button is disabled unless a template is chosen, at least one label is selected, the printer status is Ready, and there is no pre-flight error.</p></div>
+</section>
+
+<section class="doc-sec" id="cut-and-feed">
+<h2>Cut modes and "Feed to clear"</h2>
+<p>The "Cut" dropdown sets when the printer cuts. The options come from the selected printer's driver; the standard Brady set is "Every Label", "End of Job", and "None" (internally eachLabel / afterJobLast / never). If you don't change it, a sensible default is used per supply: continuous tape cuts after every label; die-cut stock cuts once at end of job.</p>
+<p>"Feed to clear" (a checkbox labelled "Feed to clear") feeds a blank lead label before the job to advance/clear the supply — for die-cut, one label (cut per your setting); for continuous, 1 inch, always cut. This setting is remembered between sessions.</p>
+<p>On the M611 the built-in cutter actuates automatically. On a printer with no auto-cutter set to "Every Label", the app prints one label at a time and pauses for a manual cut between labels (this manual-cut pause path exists for the M610 in code).</p>
+
+<ol class="steps">
+  <li>Pick when to cut from the Cut dropdown.</li>
+  <li>Optionally tick "Feed to clear" to advance a blank lead label first.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tip</span><p>Both the M610 and M611 cutters are full-cut only; a "half-cut" mode degrades to a single full cut at end of job.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>Cut suppression ("None"/never) on the Brother classic dialect is hardware-UNVERIFIED — the terminator may still feed and cut. Treat "None" on Brother as untested.</p><p>The M610's cut byte behavior overall is noted as not fully hardware-verified in the project's own memory.</p></div>
+</section>
+
+<section class="doc-sec" id="send-modes">
+<h2>Send modes: one-at-a-time vs full job</h2>
+<p>Send mode is a per-printer setting under Preferences ▸ Printers ▸ "Per-Printer Settings…". The choices are "One at a time" and "Full job".</p>
+<p>The app's own description: "One at a time: each label is its own print job — per-label progress, and you can cancel mid-run (the in-flight labels finish, the rest are dropped). Full job: the whole job is sent at once — fastest, but the M611 can't be cancelled once it starts and shows only 'Printing'. Both run at full speed."</p>
+<p>Some drivers report live progress on their own and always stream as one job; for those the Send mode picker is greyed out with the note "This printer reports live print progress on its own, so it always streams as one job." The M610 defaults to single-label (it has a SmartCell label counter, so it reports accurate per-label progress in both modes); the M611 defaults to Full job.</p>
+
+<ol class="steps">
+  <li>Open Preferences ▸ Printers ▸ Per-Printer Settings…</li>
+  <li>Find the printer card and set Send mode to "One at a time" or "Full job".</li>
+  <li>Apply (or Apply &amp; Close).</li>
+</ol>
+<div class="callout tip"><span class="lab">Tip</span><p>Choose "One at a time" if you want to be able to cancel partway through and see per-label progress.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>With the M611 in "Full job", you cannot cancel once printing starts and you only see a generic "Printing" indicator.</p></div>
+</section>
+
+<section class="doc-sec" id="progress-cancel">
+<h2>Live progress, mid-run cancel, and job completion</h2>
+<p>When you print, a "Printing…" dialog shows a progress bar and "Printing label X of Y…" as labels are sent (driven by the printer for drivers that report a counter or live telemetry). On completion a "Print complete" dialog confirms the count sent.</p>
+<p>After the job starts the Print window closes, returns you to your previous app, and the menu-bar popover opens so you can keep watching status there. Live job outcome (complete / cancelled / failed) is tracked by the Engine's menu bar after the window closes.</p>
+<p>Cancelling: in "One at a time" mode you can cancel mid-run — the in-flight labels finish and the remaining labels are dropped. The M610 then reports the count the hardware actually printed (from its SmartCell counter). The M611 has no firmware-level cancel; in single-label mode at most about two labels are in flight, so cancel stops within a label or two, but in full-job mode it cannot be cancelled.</p>
+<p>If nothing renders (e.g. every selected record fails to render) or the job can't be queued, the spinner is dismissed and an alert explains why ("Nothing to print" or "Couldn't start the print").</p>
+
+
+
+<div class="callout warn"><span class="lab">Heads up</span><p>The M611 waits/blocks until the printer reports the job actually finished before closing the port, so the spinner may persist briefly after the last label.</p></div>
+</section>
+
+<section class="doc-sec" id="recent-reprint">
+<h2>Recent Prints and reprint</h2>
+<p>Every print (and every configured-but-cancelled job) is recorded to Recent Prints, shown scrollable in the menu bar with buttons to jump to top/bottom and clear it. Pressing Reprint reopens the Print window with the same source file, selection, range, and filter/sort.</p>
+<p>If the source CSV is gone (exports get pruned), reprint offers "Reprint Without Editing" (re-send the original rendered labels) or Cancel. A job that was cancelled before any labels rendered cannot be reprinted that way and says so.</p>
+<p>Clearing history is in Preferences ▸ Recent ▸ "Clear History" (with a confirmation).</p>
+
+<ol class="steps">
+  <li>Open the menu bar, find the job, and press Reprint.</li>
+  <li>Adjust the selection/template if needed, then Print again.</li>
+</ol>
+
+<div class="callout warn"><span class="lab">Heads up</span><p>Exports are pruned per project (Preferences ▸ Export ▸ "Exports to keep per project"); recent-print records are kept even when their source file is gone.</p></div>
+</section>
+
+<section class="doc-sec" id="printer-setup">
+<h2>Printer setup: scanning, network printers, and supported models</h2>
+<p>Printers are managed in Preferences ▸ Printers. The "Scan" menu offers "Scan USB" and "Scan network (subnet)". A status-refresh interval (Preferences ▸ Printers ▸ "Refresh interval", 1–600 s) controls how often the app rescans and re-reads live status; it is paused while a job prints.</p>
+<p>Add a network printer with "Add network printer": type the IP/hostname (e.g. 192.168.1.50) and pick the model from the dropdown; the model decides which driver drives it (raw TCP). Network printers can be removed with a "Remove" button.</p>
+<p>Brady M610: USB only, 300 DPI, reads its loaded cassette via Brady SmartCell, supports self-laminating wire/cable wraps. No live telemetry (no battery/ribbon %).</p>
+<p>Brady M611: USB and network (raw TCP port 9100, telemetry on 9102), 300 DPI, built-in auto-cutter, live telemetry. Network discovery scans the subnet for the Brady control port 9102. Per the project's notes the M611 is the most hardware-validated printer.</p>
+<p>Brother P-touch: 180 DPI TZe tapes. PT-E550W and PT-P750W are Wi-Fi "W" models (USB plus raw TCP 9100); PT-E560BT is Bluetooth/USB hardware but prints over USB only (no Wi-Fi/9100). Add a network Brother by entering its IP and choosing PT-E550W as the model.</p>
+
+<ol class="steps">
+  <li>Open Preferences ▸ Printers.</li>
+  <li>For USB: connect the printer and choose Scan ▸ Scan USB.</li>
+  <li>For network: choose Scan ▸ Scan network, or use "Add network printer" with the IP and model.</li>
+  <li>Confirm the printer appears with a green Ready dot.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tip</span><p>Each printer's USB vendor/product IDs and which connection methods (USB, Network, Bluetooth) are enabled are editable per model in "Per-Printer Settings…".</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>All three Brother drivers are offline-tested only (golden vectors) and NONE are hardware-verified yet — orientation, cut behavior, media auto-detect, and the cut-suppression bit are all unverified (see docs/PTOUCH-DRIVER-STATUS.md). Test one model at a time.</p><p>Do not connect a PT-E560BT expecting the classic Brother dialect — it uses a different dialect; routing is by USB product ID to avoid a one-job hang.</p><p>A network Brother is print-only: it can't auto-detect the loaded tape, so the die-cut→continuous re-map won't trigger — use a continuous template or USB for that.</p></div>
+</section>
+
+<section class="doc-sec" id="cassette-detection">
+<h2>Loaded media auto-detection</h2>
+<p>Brady printers read the loaded cassette automatically: the M610/M611 use Brady SmartCell, which reports the real part number, label width/height, printable area, die-cut vs continuous, and supply level. This drives the green ✓ / ⚠ mismatch indicator and the cut default.</p>
+<p>Brother printers read the loaded tape over USB using the ESC i S status command (tape width, errors). This is implemented but hardware-unverified.</p>
+<p>You can force a re-read at any time: click the loaded part number or the "Detect supply" button in the Print window, or "Detect cassette" on the printer's row in Preferences.</p>
+
+<ol class="steps">
+  <li>Load the supply in the printer.</li>
+  <li>In the Print window click "Detect supply" (or the part number) to re-read it.</li>
+  <li>Confirm the Required supply panel shows a green ✓.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tip</span><p>Matching is by part number first, then by physical label size, so a bulk box and its cartridge both count as a match.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>Media auto-detect over the network is not available (it reads the USB IN endpoint), so network printers derive the tape from the rendered raster instead.</p><p>Brother media auto-detect (ESC i S) is implemented but not yet confirmed on hardware.</p></div>
+</section>
+
+<section class="doc-sec" id="calibration">
+<h2>Per-printer calibration (alignment)</h2>
+<p>If a printed label lands slightly off-center, you can nudge it per printer. In Preferences ▸ Printers, each printer's row has calibration controls: "Print calibration grid" (enabled only when the printer is Ready) prints a reference grid, then you enter a Horizontal and Vertical offset in pixels until the grid lands square on the label. A "Reset" button zeroes them.</p>
+<p>The controls show the reference scale (e.g. "300 px = 1 inch (300 DPI)"). Offsets are stored per printer serial, so they follow that physical printer, and are applied to every print from it.</p>
+<p>A factory reset (Advanced ▸ Reset Defaults) also clears all per-printer alignment offsets.</p>
+
+<ol class="steps">
+  <li>Open Preferences ▸ Printers and find the printer.</li>
+  <li>Click "Print calibration grid".</li>
+  <li>Compare the printed grid to the label edges.</li>
+  <li>Enter Horizontal and Vertical offsets (in px) and reprint the grid until it's centered.</li>
+  <li>Use "Reset" to return to zero if needed.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tip</span><p>Offsets are entered in the calibration reference DPI shown next to the button, not the internal master render DPI.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>"Print calibration grid" is disabled unless the printer is Ready.</p></div>
+</section>
+
+<section class="doc-sec" id="supply-catalog">
+<h2>The editable Supply Catalog</h2>
+<p>The list of label supplies is fully editable. Open it from Preferences ▸ Printers ▸ Label Supplies ▸ "Edit Supplies…". The structure is: Supply group → Category → Supply → Part number.</p>
+<p>A Supply group is assigned to one or more printer models (e.g. the "Brady M6" group serves M610 and M611; the "Brother P-touch" group serves PT-E550W/PT-P750W/PT-E560BT). You can add, duplicate, delete, import, and export groups, set the Group name and which Printers it serves, and "Restore defaults…".</p>
+<p>Inside a group you add Categories (named, reorderable) and drag supplies between them. Each Supply has a Name; a Type of Die-cut or Continuous; size fields (die-cut: Label W × H; continuous: Width × Default length, since the length is set at print time as "width × definable"); Printable W × H; a Self-laminating toggle (die-cut only); and a Material family (e.g. B-427).</p>
+<p>Each Supply has one or more Part numbers (the orderable SKUs). For die-cut you set a quantity per roll and a "Rotate 90°" checkbox (Brady feeds some labels rotated on the roll). For continuous you set a Material label (e.g. Vinyl) and a roll length in feet. Each part can have an override purchase URL (blank means a Brady part-number search is used). These become the "Buy" buttons in the Print window (e.g. "PN/250" for die-cut, "Vinyl PN/50'" for continuous).</p>
+<p>The catalog is saved, versioned, and migrated, so the app can add new default sizes for existing users without wiping their customizations. Edits sync live into open Print/Designer windows.</p>
+<p>"Buy" buttons open the supplier page in your browser; only http/https links are honored.</p>
+<pre><code>Preferences ▸ Printers ▸ Label Supplies ▸ Edit Supplies…</code></pre>
+<ol class="steps">
+  <li>Open Preferences ▸ Printers ▸ Label Supplies ▸ "Edit Supplies…".</li>
+  <li>Pick or add a Supply group and confirm the Printers it serves.</li>
+  <li>Add/rename Categories and drag supplies between them.</li>
+  <li>Select a supply and set its Name, Type, sizes, and Material family.</li>
+  <li>Under Part numbers, click "Add part" and fill in the part number, quantity or roll length, Rotate 90° (die-cut), and an optional URL.</li>
+  <li>Click Apply or Apply &amp; Close.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tips</span><p>Use "Duplicate" on a group to base a custom group on an existing one, then rename it.</p><p>Editing the defaults alone only affects fresh installs; the app's migration adds new default sizes to existing users additively by part number.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>"Restore defaults…" replaces every group, category, supply and part number with the built-in Brady defaults and warns that your customizations will be lost.</p><p>Deleting a group, category, supply, or part can't be undone (you get a confirmation first).</p><p>Some seeded Brother TZe part numbers are placeholders/best-effort and should be verified before ordering.</p></div>
+</section>
+
+<h2 class="chapter" id="ch-troubleshooting">Fixing common problems</h2>
+<section class="doc-sec" id="how-the-suite-fits-together">
+<h2>How the four apps fit together (read this first)</h2>
+<p>VectorLabel is not one app — it's a suite of four pieces that work together. The Engine is the background piece that does the real work: it lives in the macOS menu bar (top-right of your screen), watches for new exports, talks to the printers over USB/network, and sends the actual print jobs. If the Engine isn't running, nothing prints — its menu-bar icon must be present.</p>
+<p>The Template Designer and Custom Designer are separate windowed apps for building label layouts. Auto Print is the print window that pops up when a Vectorworks export arrives. The two designers and the print window can't reach a printer on their own — they hand the job to the Engine, which owns the USB connection.</p>
+<p>Most 'nothing happens' problems trace back to the Engine: it isn't running, or it's running but its menu-bar icon got pushed off-screen by a crowded menu bar.</p>
+<p>The Vectorworks plug-in scripts are a fifth, separate piece that runs inside Vectorworks itself and drops CSV files into the watch folder.</p>
+
+<ol class="steps">
+  <li>Look at your menu bar (top-right). If you don't see the VectorLabel icon, the Engine isn't running — launch VectorLabel.</li>
+  <li>If you launched it and still see no icon (a crowded menu bar can hide it), launch it again; the second launch is designed to surface the Preferences window so you have a way in.</li>
+  <li>Use the menu-bar icon to reach Preferences, the designers, and the export folder.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tips</span><p>The build number and short commit hash are shown in the menu-bar footer — quote them when reporting a bug.</p><p>Quitting the Engine (Quit VectorLabel, ⌘Q) stops all printing and watching until you relaunch.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>The designers and print window only know how to *launch* their siblings when you've installed the packaged suite (the .pkg/.dmg). If you're running a one-off dev build, the 'Open … Designer' menu items may do nothing.</p></div>
+</section>
+
+<section class="doc-sec" id="app-wont-open-gatekeeper">
+<h2>The app won't open ('unidentified developer' / Gatekeeper)</h2>
+<p>macOS blocks apps it can't verify. Releases of VectorLabel from the project's GitHub Releases page are signed with a Developer ID and notarized by Apple, so they should open normally. But if you have an unsigned or ad-hoc build (for example one you built yourself, or an unsigned .pkg installer), macOS will refuse to open it on a double-click and show a warning about an unidentified developer.</p>
+<p>The standard workaround for an app or installer macOS won't open directly is to right-click it and choose Open — that gives you a one-time override that a plain double-click doesn't.</p>
+<pre><code>spctl --assess --type execute -vv /Applications/VectorLabel.app</code></pre>
+<ol class="steps">
+  <li>In Finder, right-click (or Control-click) the app or the .pkg installer.</li>
+  <li>Choose Open from the menu.</li>
+  <li>In the dialog that appears, confirm Open again.</li>
+  <li>If macOS still refuses, open System Settings → Privacy &amp; Security, scroll down, and click the 'Open Anyway' button that appears after a blocked launch attempt.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tip</span><p>A properly notarized release verifies with: spctl --assess --type execute -vv /Applications/VectorLabel.app — it should report 'accepted, source=Notarized Developer ID'.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>Right-click → Open is only needed for unsigned/ad-hoc builds. If a *notarized* release is being blocked, something else is wrong (re-download it; a partial download can break the signature).</p></div>
+</section>
+
+<section class="doc-sec" id="printer-not-detected-usb">
+<h2>My Brady printer isn't detected over USB</h2>
+<p>The Engine finds USB printers by scanning for them. The Brady M610 is identified by a confirmed USB ID; the M611's USB ID is *assumed* in the code and not hardware-confirmed, so a real M611 can occasionally fail to be recognized.</p>
+<p>Detection also requires that the Engine actually be running and able to claim the USB device. The app talks to printers at the raw-USB level (it is intentionally not sandboxed so it can do this), so a power, cable, or 'another app grabbed the printer' problem will stop detection cold.</p>
+
+<ol class="steps">
+  <li>Confirm the Engine is running (menu-bar icon present).</li>
+  <li>Open Preferences and go to the Printers tab. The top row reads 'No printers detected' or 'N printer(s) connected'.</li>
+  <li>Use the Scan menu → Scan USB to force a re-scan.</li>
+  <li>Power-cycle the printer and reseat the USB cable; try a different cable/port (some cables are charge-only).</li>
+  <li>If an M611 still won't appear, it's the unconfirmed-USB-ID issue noted in the README — check Preferences → Printers and consider adding it over the network instead (see the network section).</li>
+</ol>
+<div class="callout tip"><span class="lab">Tips</span><p>Each connected printer shows a colored status dot in the Printers tab: green = ready, yellow = busy, dim = offline.</p><p>The status refresh interval (and thus how quickly a newly plugged printer appears) is set in Preferences → Printers → Status Refresh.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>Scanning is paused while a job is printing, and the app deliberately avoids scanning during an active job — finish or cancel the job before expecting a freshly plugged printer to show up.</p><p>The M611 USB ID is UNVERIFIED in the source; do not assume USB detection of an M611 is reliable yet (alpha).</p></div>
+</section>
+
+<section class="doc-sec" id="add-network-printer">
+<h2>Adding a network (Wi-Fi/Ethernet) printer</h2>
+<p>Some printers can be reached over the network instead of USB. There are two ways: let the Engine scan your subnet, or type the printer's IP address in by hand.</p>
+<p>The Brady M611 can be discovered automatically because it answers on a Brady-specific control port. A Brother P-touch 'W' model (PT-E550W / PT-P750W) only answers on the generic raw-print port, so the scanner can find that it's *a* raw printer but can't positively confirm it's a Brother — when added by scan it's guessed as a PT-E550W, which you can correct or remove.</p>
+
+<ol class="steps">
+  <li>Open Preferences → Printers.</li>
+  <li>To auto-discover: Scan menu → 'Scan network (subnet)'. New printers found are added automatically.</li>
+  <li>To add by hand: in the 'Add network printer' row, type the IP (e.g. 192.168.1.50) in the address field, pick the correct model from the dropdown, and click Add. Picking the model is what tells the Engine which driver to use.</li>
+  <li>Remove a wrongly-guessed or stale network printer with its Remove button.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tip</span><p>For a Brother Wi-Fi model, add it by IP and pick PT-E550W as the model so it routes to the Brother driver.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>A network-added printer is print-only: it can't auto-read the loaded tape/cassette over the network. So the automatic die-cut→continuous remap won't trigger, and there's no live loaded-supply readout — use a continuous template, or connect over USB, when you need that.</p><p>The PT-E560BT is a Bluetooth unit with no Wi-Fi; it can't be added over the network — it prints over USB only.</p><p>Brother P-touch drivers are all alpha and NOT hardware-verified — see the Brother section.</p></div>
+</section>
+
+<section class="doc-sec" id="nothing-after-vectorworks-export">
+<h2>Nothing happens after I export from Vectorworks</h2>
+<p>When you run the Vectorworks command, it writes a CSV file into ~/Documents/VectorLabel/Exports/&lt;YourVWFileName&gt;/ and the Engine is supposed to notice it and open the print window. The export is *silent on success* — there's deliberately no 'done' dialog — so 'nothing happened' is often actually a success you didn't see, plus the print window failing to open.</p>
+<p>For the print window to pop up automatically, the Engine must be running and 'Auto-open print window when export is detected' must be on. If the Engine is closed, the CSV is still written and will be picked up the next time the Engine starts.</p>
+<pre><code>~/Documents/VectorLabel/Exports/&lt;VWFileName&gt;/&lt;VWFileName&gt;_export_YYYYMMDD_HHMMSS.csv</code></pre>
+<ol class="steps">
+  <li>Check ~/Documents/VectorLabel/Exports/&lt;YourVWFileName&gt;/ for a new CSV named like &lt;name&gt;_export_YYYYMMDD_HHMMSS.csv. If it's there, the export worked.</li>
+  <li>Make sure the Engine is running (menu-bar icon).</li>
+  <li>Open Preferences → Export and confirm 'Auto-open print window when export is detected' is turned on.</li>
+  <li>Confirm the Watch Folder in Preferences → Export points at the same place Vectorworks is writing to (default ~/Documents/VectorLabel).</li>
+  <li>From the menu bar, you can also use 'Open Export Folder' (⌘E) to jump straight to the folder.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tip</span><p>The plug-in only alerts on *errors*. If you saw no error dialog in Vectorworks, the export almost certainly succeeded.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>If you moved/changed the Watch Folder in Preferences but the Vectorworks scripts still write to the default ~/Documents/VectorLabel/Exports/, the Engine won't see the files. Keep them aligned.</p><p>Old exports are pruned (default keep-15 per project) by the date code in the filename — a missing older CSV may simply have been pruned.</p></div>
+</section>
+
+<section class="doc-sec" id="export-is-empty">
+<h2>My export is empty / 'No ConnectCAD circuits' in Vectorworks</h2>
+<p>There are two Vectorworks commands. 'Export Selected Circuits to VectorLabel' exports whatever you currently have selected; 'Export All Circuits to VectorLabel' exports every ConnectCAD circuit on the active design layer, ignoring selection.</p>
+<p>The scripts only export objects they recognize as ConnectCAD circuits. Other objects (equipment, symbols, text) are skipped, and if nothing qualifies you get an alert instead of a file.</p>
+
+<ol class="steps">
+  <li>If you used the Selected command and nothing was selected, you'll see 'No objects selected. Select one or more ConnectCAD circuits.' — select your circuits first.</li>
+  <li>If your selection had objects but none were circuits: 'No ConnectCAD circuits found in selection. (N non-circuit object(s) skipped)' — you selected the wrong kind of object.</li>
+  <li>Make sure you're on the right *design layer* when using the All command — it only looks at the active layer.</li>
+  <li>Try the 'Export All Circuits' command to rule out a selection problem.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tip</span><p>The number of skipped non-circuit objects is shown in the alert — a high skip count usually means you grabbed the wrong objects.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>'All' is strictly the *active* design layer. Circuits on other layers won't be included.</p><p>Both scripts must be installed as two *separate* Vectorworks command plug-ins (one per .py file) and added to your workspace, per the README.</p></div>
+</section>
+
+<section class="doc-sec" id="labels-misaligned">
+<h2>Labels print misaligned, shifted, or off-center</h2>
+<p>If printed labels are consistently shifted in one direction, use the per-printer calibration controls. VectorLabel can print a calibration grid and then let you nudge the horizontal and vertical offset (in printer pixels) until the grid lands square on the label.</p>
+<p>A different cause of 'misaligned or cropped' is a supply mismatch: the loaded cassette/tape doesn't match the supply the template was designed for. The print window shows a green ✓ when they match and a red ⚠ warning when they don't — printing anyway risks cropping.</p>
+
+<ol class="steps">
+  <li>Open Preferences → Printers and find your printer.</li>
+  <li>Use the calibration control to print the calibration grid.</li>
+  <li>Adjust the Horizontal and Vertical offset fields (values are in printer pixels; the panel shows how many px = 1 inch for that printer's DPI).</li>
+  <li>Reprint the grid and repeat until it's square; there's a reset-to-zero option if you overshoot.</li>
+  <li>Separately, check the supply indicator in the print window: if it's a red ⚠, load the matching supply (or pick a template/supply that matches what's loaded) and click Re-detect.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tip</span><p>Calibration offsets are stored per printer serial number, so each unit keeps its own alignment.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>Calibration won't fix a *supply* mismatch — a label designed for a wider/narrower supply than what's loaded will still crop. Fix the supply first.</p><p>Network-added printers can't auto-detect the loaded supply, so the match indicator may not be meaningful for them.</p></div>
+</section>
+
+<section class="doc-sec" id="barcode-prints-solid-black">
+<h2>A 2-D barcode (QR / Data Matrix) prints as a solid black block</h2>
+<p>This is a known alpha gotcha. The app renders everything at a high-resolution master and then downscales to the printer's native resolution. For 2-D codes (QR, Data Matrix, Aztec, Micro QR), the size of each tiny module must line up exactly with that downscale step. If it doesn't, the modules blur together when downscaled and the whole code prints as one solid black rectangle that no scanner can read.</p>
+<p>Practically: make the 2-D code bigger on the label, or adjust its size so the modules are large enough to survive the downscale. Linear barcodes (Code 128, Code 39, etc.) and PDF417 stretch freely and don't have this exact-size requirement.</p>
+
+<ol class="steps">
+  <li>In the designer, select the 2-D barcode and increase its size noticeably.</li>
+  <li>Re-check the preview — if it still looks like a solid block at print size, make it larger again.</li>
+  <li>Prefer a linear barcode (e.g. Code 128) if you only need a small mark and a square 2-D code keeps merging.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tip</span><p>Square 2-D codes (QR / Data Matrix / Aztec / Micro QR) are kept square by the app; linear codes and PDF417 are allowed to stretch.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>This is an alignment-to-downscale issue (the master resolution divides down to native by a fixed factor — roughly ×3 for Brady, ×5 for Brother). It is not a data error: the code is being drawn, it's just too fine to survive scaling.</p><p>If a barcode genuinely can't encode the record's value, that's a *different* problem — the app warns and the barcode prints blank (see the next section).</p></div>
+</section>
+
+<section class="doc-sec" id="barcode-blank">
+<h2>A barcode prints blank / 'this record can't be encoded'</h2>
+<p>This is separate from the solid-black problem. Each barcode symbology (UPC-A, EAN-13, Code 39, etc.) only accepts certain characters or lengths. If a record's value can't be encoded by the chosen symbology — for example letters in a numeric-only barcode — the barcode can't be generated and that label prints blank where the code would be.</p>
+<p>The app warns you ahead of time. In the print window, a row carrying an un-encodable barcode is flagged ('A barcode on this label can't encode this record — it will print blank'), and the preview shows the message 'This record can't be encoded as &lt;type&gt;'.</p>
+
+<ol class="steps">
+  <li>Look for the barcode-warning marker on the flagged rows in the print window.</li>
+  <li>Either change the barcode symbology to one that accepts your data (Code 128 is the most permissive for mixed text), or fix the source data so it fits the symbology's rules.</li>
+  <li>If you see 'Barcode engine unavailable', the barcode renderer didn't load — relaunch the window/app.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tip</span><p>Code 128 accepts the widest range of characters; the EAN/UPC family is strict about digit count and check digits.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>A blank barcode is the app correctly refusing to print an invalid code, not a printer fault.</p><p>Don't confuse this with the solid-black 2-D issue — blank = can't encode; solid black = too small to downscale.</p></div>
+</section>
+
+<section class="doc-sec" id="text-too-big-or-cut-off">
+<h2>Text is too big, too small, or cut off</h2>
+<p>Text objects can auto-scale to fit their box. When a text object has auto-scale on (and word-wrap off), the app shrinks the font so a single line fits the box width. If auto-scale is off, long values can overflow and get clipped at the edge of the box.</p>
+<p>For continuous tape, you can also grow the label length to fit the content instead of shrinking the text, using the designer's fit-length action.</p>
+
+<ol class="steps">
+  <li>In the designer, select the text object and enable its auto-scale option so long values shrink to fit.</li>
+  <li>If you'd rather keep the font size, make the text box wider, or turn on word-wrap so it flows onto multiple lines.</li>
+  <li>On continuous supply, use the designer's 'fit label length to content' action to lengthen the label instead of shrinking text (you'll see 'Length fit to content').</li>
+  <li>Verify in the print preview before sending — the preview reflects the real rendered size.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tip</span><p>Auto-scale only shrinks a single line; turn on wrap if you want multi-line growth instead.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>With auto-scale off and wrap off, overflowing text is clipped (ellipsis/cut), not resized.</p><p>'Fit length to content' only applies to continuous supplies; die-cut stock has a fixed printable height from the catalog.</p></div>
+</section>
+
+<section class="doc-sec" id="template-wrong-size">
+<h2>A template opens at the wrong size</h2>
+<p>A template's on-canvas size comes from the *supply* it's assigned to in the catalog (the supply's printable width/height). If a template opens too big, too small, or the wrong shape, it's almost always pointing at a different supply than you expect — or at a supply whose dimensions were edited.</p>
+<p>Continuous supplies use the template's chosen printed length; die-cut supplies use the fixed printable height defined for that part number in the catalog. So switching a template between a continuous and a die-cut supply changes how its length is determined.</p>
+
+<ol class="steps">
+  <li>Open the template and check which supply/part number it's assigned to.</li>
+  <li>Open Preferences → Printers → Edit Supplies… and confirm that part number's printable dimensions are what you expect.</li>
+  <li>Reassign the template to the correct supply if it's pointing at the wrong one.</li>
+  <li>For continuous supplies, set the intended printed length on the template.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tip</span><p>The print window's supply indicator (green ✓ / red ⚠) tells you whether the template's supply matches what's physically loaded.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>If a previous user edited the supply catalog dimensions, every template on that supply changes size with it.</p><p>Die-cut height is fixed by the catalog and ignores any custom length you set.</p></div>
+</section>
+
+<section class="doc-sec" id="find-supply-edit-supplies">
+<h2>I can't find my label supply or part number</h2>
+<p>The label-supply catalog (categories, sizes, part numbers, roll lengths/quantities, 90° feed rotation, and buy links) is fully editable in the app — you don't need to touch any code to add a size or SKU. It's grouped per printer model (e.g. a Brady 'M6 / M7' group, a 'Brother P-touch' group).</p>
+<p>The catalog is versioned and migrated, so existing installs get new *default* sizes added automatically when the app updates. Anything you add yourself is preserved across updates.</p>
+
+<ol class="steps">
+  <li>Open Preferences → Printers.</li>
+  <li>Under 'Label Supplies', click 'Edit Supplies…'.</li>
+  <li>Find the right printer group, then add or edit a supply: set its category, size, part number, roll length/quantity, 90° rotation, and a buy link if you want.</li>
+  <li>Save — the new supply is now selectable on templates and in the print window.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tips</span><p>Each supply can carry a buy link; the print window shows a 'Buy &lt;part number&gt; on Brady' shortcut for stock you're low on.</p><p>The README points to the same place: Engine ▸ Preferences ▸ Printers ▸ Edit Supplies…</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>Brother TZe part numbers seeded by default (especially the 3.5 mm one) are best-effort placeholders and may need correcting in Edit Supplies — they're not all hardware-confirmed.</p><p>Adding a new *default* size for everyone requires a code-side catalog version bump; editing the catalog in-app only affects your install.</p></div>
+</section>
+
+<section class="doc-sec" id="cut-and-feed-options">
+<h2>Cutting and feed options (and what's not verified)</h2>
+<p>The print window lets you choose when the supply is cut for a job ('Cut' dropdown), and whether to feed a blank lead label first to clear/advance the supply. By default, continuous tape is cut after every label (so each printed length separates) and die-cut stock is cut once at the end of the job. You can override this per job.</p>
+<p>Be aware that on Brady M610, the exact cut byte sequences are not yet hardware-verified (alpha). On the Brother classic models, suppressing the cut entirely ('never') is also unverified — the job terminator may still feed and cut. Treat cut behavior as experimental until you've tested it on your unit.</p>
+
+<ol class="steps">
+  <li>In the print window, set the 'Cut' dropdown to the behavior you want (cut every label / cut at end / don't cut, depending on the supply).</li>
+  <li>Turn on the lead-label/feed-to-clear option if the first label is coming out mis-fed — for die-cut it feeds one label, for continuous it feeds about 1 inch and always cuts it off.</li>
+  <li>Test on a small batch before committing a long run.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tip</span><p>The cut default adapts to the loaded supply when the printer reports it (continuous vs die-cut).</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>M610 cut bytes are UNVERIFIED on hardware — if cutting misbehaves on an M610, that's a known unverified area.</p><p>Brother 'never cut' is UNVERIFIED — the strip may still be cut even when you ask for no cut.</p></div>
+</section>
+
+<section class="doc-sec" id="where-are-my-files">
+<h2>Where are my files (templates, exports, history)?</h2>
+<p>Everything VectorLabel writes lives under ~/Documents/VectorLabel/ by default. Templates from the designer go in Templates/; CSV exports from Vectorworks land in Exports/&lt;VWFileName&gt;/, one folder per project file.</p>
+<p>Recent print history is kept separately so you can reprint, and old exports are pruned automatically (default: keep the newest 15 per project), using the date code in the filename rather than file metadata so it stays correct under cloud sync.</p>
+<pre><code>~/Documents/VectorLabel/\n  Templates/\n  Exports/&lt;VWFileName&gt;/</code></pre>
+<ol class="steps">
+  <li>Templates: ~/Documents/VectorLabel/Templates/</li>
+  <li>Exports: ~/Documents/VectorLabel/Exports/&lt;VWFileName&gt;/</li>
+  <li>Jump to the export folder quickly from the menu bar: 'Open Export Folder' (⌘E).</li>
+  <li>Change the watch/templates folders in Preferences → Export and Preferences → Templates if you keep them elsewhere.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tip</span><p>Reprint past jobs from the menu bar's Recent Prints section, or clear that history from Preferences → Recent.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>If you reprint an export whose CSV was pruned or moved, you'll get a 'Source file not found' alert — you can reprint the original labels but can't re-edit them.</p><p>Pruning is by the filename's date code; renaming exports can confuse pruning.</p></div>
+</section>
+
+<section class="doc-sec" id="supported-printers-alpha-honesty">
+<h2>Which printers actually work today (alpha honesty)</h2>
+<p>The app's primary target is Brady M610/M611 wrap-around wire labels over USB. The M610's USB ID is confirmed; the M611's USB ID is assumed and the M611's cut/orientation behavior is more validated than the M610's, but M610 cut bytes specifically remain unverified.</p>
+<p>Brother P-touch support (PT-E550W, PT-P750W classic dialect; PT-E560BT D460BT dialect) is implemented and passes offline 'golden vector' tests, but NONE of the Brother models are hardware-verified yet. Orientation, cut behavior, USB claim, and media auto-detect on Brother are all still pending real-hardware testing. Use Brother at your own risk and verify on your unit.</p>
+
+<ol class="steps">
+  <li>Brady M610/M611: the main supported path (USB; M611 also network).</li>
+  <li>Brother PT-E550W / PT-P750W: implemented, network-capable, but hardware-UNVERIFIED.</li>
+  <li>Brother PT-E560BT: implemented (USB only — its Bluetooth isn't supported), hardware-UNVERIFIED.</li>
+  <li>If you test on real Brother hardware and something's mirrored or upside-down, that's an expected unverified area (orientation flips exist in code but aren't confirmed).</li>
+</ol>
+<div class="callout tip"><span class="lab">Tip</span><p>The authoritative, up-to-date status is in docs/PTOUCH-DRIVER-STATUS.md — it tracks per-model what's verified vs implemented-only.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>Never feed a PT-E560BT (USB 04F9:2203) the classic Brother dialect — wrong routing makes it print one job then hang until power-cycled. The app routes by USB product ID to prevent this, but it's the known failure mode to watch for.</p><p>Adding more printer types is supported via docs/ADDING-PRINTER-TYPES.md, but new cut/feed bytes ship disabled until hardware-verified.</p></div>
+</section>
+
+<section class="doc-sec" id="windows-and-requirements">
+<h2>Does it run on Windows? Requirements</h2>
+<p>No. VectorLabel is a macOS-only suite — it's built as native macOS apps and talks to printers through macOS USB facilities. There is no Windows or Linux build.</p>
+<p>To run the released app you just need a Mac and a release from the project's GitHub Releases page. Building it yourself additionally needs Xcode plus libusb and pkg-config from Homebrew, but end users installing the signed release do not need Homebrew — libusb is bundled inside the app.</p>
+<pre><code>brew install libusb pkg-config</code></pre>
+<ol class="steps">
+  <li>End users: download a signed/notarized release (.dmg or .pkg installer) and install on macOS.</li>
+  <li>Developers building from source: brew install libusb pkg-config, then open Package.swift in Xcode (see README).</li>
+  <li>Vectorworks side: install the two Python command plug-ins into your Vectorworks workspace (README has the steps).</li>
+</ol>
+<div class="callout tip"><span class="lab">Tip</span><p>The app is not sandboxed by design (it needs raw USB and ~/Documents access); that's expected and is why it's distributed notarized rather than via the App Store.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>A self-built unsigned/ad-hoc app runs only on your machine and isn't distributable; only the notarized release is shareable.</p></div>
+</section>
+
+<section class="doc-sec" id="how-to-report-a-bug">
+<h2>How to report a bug</h2>
+<p>When something misbehaves, the most useful thing you can include is the build identifier. The Engine shows its build number and short commit hash in the menu-bar footer — include that, plus your printer model and how it's connected (USB vs network).</p>
+<p>Describe what you did, what you expected, and what happened, and note whether you saw any of the app's alert dialogs (quote their text). For printing problems, note the supply/part number loaded and whether the print window showed the green ✓ or red ⚠ supply indicator.</p>
+
+<ol class="steps">
+  <li>Open the menu-bar dropdown and note the build number + commit hash in the footer.</li>
+  <li>Note printer model, connection type (USB or network IP), and the loaded supply part number.</li>
+  <li>Capture the exact text of any alert dialog you saw.</li>
+  <li>Report the issue on the project's GitHub repository (Issues), including the above.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tip</span><p>For signing/notarization failures specifically, the notarization log can be fetched with xcrun notarytool log &lt;submission-id&gt; (developer scenario).</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>Because this is alpha, some behaviors (M610 cutting, all Brother models, M611 USB ID) are known-unverified — mention if your issue is in one of those areas so it's triaged correctly.</p></div>
+</section>
+      <div class="pager">
+        <a href="quickstart.html">← Quick start</a>
+        <a class="nxt" href="faq.html">FAQ →</a>
+      </div>
+    </main>
+  </div>
+</div>
+<footer>
+  <div class="wrap foot">
+    <a href="index.html" class="brand"><svg class="mark" viewBox="0 0 32 32" fill="none"><rect x="1.5" y="1.5" width="29" height="29" rx="8" fill="#0e1116"/><path d="M9 10l5 12 5-12" stroke="#2f57ff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="20" y="9" width="3" height="14" rx="1.2" fill="#fff"/></svg> VectorLabel</a>
+    <div class="foot-links">
+      <a href="support.html">Support</a>
+      <a href="quickstart.html">Quick start</a>
+      <a href="guide.html">User guide</a>
+      <a href="faq.html">FAQ</a>
+      <a href="https://github.com/ryancoopster/VectorLabel">GitHub</a>
+    </div>
+    <div class="copy">© 2026 VectorLabel · Open alpha · Docs synced to commit e84bb5b · 2026-06-29 · Brady and Brother are trademarks of their respective owners.</div>
+  </div>
+</footer>
+<script>
+(function(){
+  // scroll-spy: highlight the TOC link for the section in view
+  var links=[].slice.call(document.querySelectorAll('.toc a.sub'));
+  var map={}; links.forEach(function(l){var id=l.getAttribute('href').slice(1);var t=document.getElementById(id);if(t)map[id]=l;});
+  var ids=Object.keys(map);
+  function onScroll(){
+    var best=null,bestTop=-Infinity;
+    ids.forEach(function(id){var r=document.getElementById(id).getBoundingClientRect();if(r.top<140&&r.top>bestTop){bestTop=r.top;best=id;}});
+    links.forEach(function(l){l.classList.remove('active');});
+    if(best&&map[best])map[best].classList.add('active');
+  }
+  document.addEventListener('scroll',onScroll,{passive:true}); onScroll();
+})();
+</script>
+<script>
+(function(){
+  var mb=document.querySelector('.menu-btn'), nav=document.getElementById('vl-nav');
+  if(mb&&nav){
+    mb.addEventListener('click',function(){var o=nav.classList.toggle('open');mb.setAttribute('aria-expanded',o?'true':'false');});
+    nav.addEventListener('click',function(e){if(e.target.closest('a')){nav.classList.remove('open');mb.setAttribute('aria-expanded','false');}});
+  }
+})();
+</script>
+</body>
+</html>

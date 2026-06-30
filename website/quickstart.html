@@ -1,0 +1,135 @@
+<!doctype html>
+<!-- VectorLabel support docs — hand-authored. The HTML is the source of truth. See website/DOC-SYNC.md before changing software behavior. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VectorLabel Quick Start</title>
+<meta name="description" content="Get printing with VectorLabel in about ten minutes — install the apps, then either export from Vectorworks ConnectCAD or design a label from scratch, and print to a Brady or Brother thermal printer.">
+<link rel="stylesheet" href="support.css">
+</head>
+<body>
+<div class="alphabar">
+  <span class="pill">Alpha</span>
+  <b>VectorLabel is in open alpha</b> — docs and software are evolving.
+  <a href="https://github.com/ryancoopster/VectorLabel/issues">Report a problem →</a>
+</div>
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a href="index.html" class="brand"><svg class="mark" viewBox="0 0 32 32" fill="none"><rect x="1.5" y="1.5" width="29" height="29" rx="8" fill="#0e1116"/><path d="M9 10l5 12 5-12" stroke="#2f57ff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="20" y="9" width="3" height="14" rx="1.2" fill="#fff"/></svg> VectorLabel</a>
+    <nav class="nav-links" id="vl-nav">
+      <a href="support.html">Support</a>
+      <a href="quickstart.html" class="active">Quick start</a>
+      <a href="guide.html">User guide</a>
+      <a href="faq.html">FAQ</a>
+    </nav>
+    <div class="nav-cta">
+      <a href="https://github.com/ryancoopster/VectorLabel/releases" class="btn btn-primary">Download</a>
+      <button class="menu-btn" aria-label="Menu" aria-controls="vl-nav" aria-expanded="false">
+        <svg width="24" height="24" viewBox="0 0 24 24" stroke="#0e1116" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<section class="doc-hero">
+  <div class="wrap">
+    <div class="breadcrumb"><a href="support.html">Support</a><span class="sep">/</span><span>Quick start</span></div>
+    <div class="eyebrow">Quick start</div>
+    <h1>Print your first labels in about 10 minutes</h1>
+    <p class="sub">Install the apps once, then pick your path: pull cable data straight from <strong>Vectorworks ConnectCAD</strong>, or <strong>design a label from scratch</strong>. Both finish at the same print window.</p>
+  </div>
+</section>
+
+<div class="wrap" style="max-width:820px">
+  <main class="article" style="padding:40px 0 80px;max-width:none">
+
+    <h2 id="install">1 · Install VectorLabel</h2>
+    <p>VectorLabel is a small suite of macOS apps: a background <strong>Engine</strong> that owns your printers and lives in the menu bar, an <strong>Auto Print</strong> helper that opens the print window when new data arrives, and two label <strong>Designers</strong>. The installer sets up all of them.</p>
+    <ol class="steps">
+      <li>Download the latest release from the <a href="https://github.com/ryancoopster/VectorLabel/releases">GitHub Releases page</a> (the <code>.pkg</code> installer is easiest).</li>
+      <li>Run the installer and follow its panes — it installs all four apps.</li>
+      <li>Launch <strong>VectorLabel Engine</strong>. Its icon appears in your menu bar; that icon is your home base.</li>
+      <li>Plug in your printer by USB (or have its IP address ready for a network printer).</li>
+    </ol>
+    <div class="callout note"><span class="lab">macOS Gatekeeper</span><p>Official releases are signed and notarized and open normally. If macOS ever says an app is from an “unidentified developer”, <strong>right-click the app → Open</strong> the first time to approve it. Requires <strong>macOS 14 (Sonoma) or later</strong>; VectorLabel is Mac-only.</p></div>
+
+    <h3 id="connect-printer">Connect your printer</h3>
+    <ol class="steps">
+      <li>Click the menu-bar icon → <strong>Preferences…</strong> → <strong>Printers</strong>.</li>
+      <li><strong>USB:</strong> click <strong>Scan USB</strong> if your printer isn’t already listed. <strong>Network:</strong> type the host/IP, choose the model, and click <strong>Add</strong>.</li>
+      <li>If macOS asks to allow Documents access or notifications, allow them.</li>
+    </ol>
+    <div class="callout tip"><span class="lab">Tip</span><p>Most-mature path today is a <strong>Brady M611</strong> (USB or network) or <strong>M610</strong> (USB). Brother P-touch drivers are included but not yet hardware-confirmed in alpha — see the <a href="faq.html#faq-troubleshooting-alpha">FAQ</a>.</p></div>
+
+    <h2 id="path-a">2 · Path A — print from Vectorworks</h2>
+    <p>If your cable schedule lives in a Vectorworks ConnectCAD drawing, VectorLabel can label every wire with no re-typing. You install two small plug-in commands once, then export whenever you need labels.</p>
+
+    <h3 id="install-plugins">Install the two plug-ins (one time)</h3>
+    <ol class="steps">
+      <li>In Vectorworks: <strong>Tools → Plug-ins → Plug-in Manager</strong>.</li>
+      <li>Click <strong>New Command</strong>, set <strong>Language: Python</strong>, and name it exactly <em>Export Selected Circuits to VectorLabel</em>. Paste in the full contents of <code>export_selected.py</code>.</li>
+      <li>Click <strong>New Command</strong> again and create <em>Export All Circuits to VectorLabel</em> from <code>export_all.py</code>.</li>
+      <li><strong>Tools → Workspaces → Edit Current Workspace</strong>, drag both commands into a menu, and save.</li>
+    </ol>
+
+    <h3 id="export-print">Export &amp; print</h3>
+    <ol class="steps">
+      <li>Make sure VectorLabel is running on your Mac and “Auto-open print window when an export is detected” is on in its Preferences.</li>
+      <li>In Vectorworks, <strong>save</strong> your file (its name becomes the export folder). Select the circuits you want — or switch to the layer you want to label.</li>
+      <li>Run <strong>Export Selected Circuits</strong> (for your selection) or <strong>Export All Circuits</strong> (for the whole layer). The export is silent — nothing pops up in Vectorworks.</li>
+      <li>Switch to your Mac: the <strong>print window opens automatically</strong>, one row per cable end.</li>
+      <li>Pick a template and printer, review/filter the rows, and <strong>Print</strong>.</li>
+    </ol>
+    <div class="callout tip"><span class="lab">Tip</span><p>Changed the drawing? Just run the export again — a fresh export is created and the print window reopens with the new data.</p></div>
+
+    <h2 id="path-b">3 · Path B — design a label yourself</h2>
+    <p>No CAD required. Use the <strong>Custom Designer</strong> for one-off labels (with an optional database mode for batches), or the <strong>Template Designer</strong> for reusable, data-bound templates.</p>
+    <ol class="steps">
+      <li>Open a designer from the Engine menu (<strong>Open Custom Designer</strong> / <strong>Open Template Designer</strong>).</li>
+      <li>Click <strong>Supply</strong> in the top bar and pick your label stock. The canvas resizes to it. For continuous tape, set a <strong>Length</strong> or click <strong>⤢ Fit</strong>.</li>
+      <li>Add objects from the left <strong>Add</strong> sidebar — <strong>Text</strong>, <strong>Barcode</strong>, <strong>Image</strong>, <strong>Symbol</strong>, lines and shapes — and edit each in the right-hand properties panel.</li>
+      <li>For data-driven labels, set a text or barcode object’s source to a <strong>field</strong> or a <strong>formula</strong> (see <a href="guide.html#three-binding-modes">data binding</a>).</li>
+      <li>Save your work, then print from the print window — choose printer, confirm the supply shows a green ✓, and go.</li>
+    </ol>
+    <div class="callout note"><span class="lab">Handy keys</span><p><kbd>⌘D</kbd> duplicate · <kbd>⌘C</kbd>/<kbd>⌘V</kbd> copy &amp; paste · <kbd>Delete</kbd> remove the selected object.</p></div>
+
+    <h2 id="next">You’re set — what next?</h2>
+    <p>That’s the whole loop: get data in, lay out a label, print. When you want the depth:</p>
+    <ul>
+      <li><a href="guide.html">User guide</a> — every feature explained: the designer, formulas, barcodes, printers, supplies and calibration.</li>
+      <li><a href="guide.html#ch-troubleshooting">Fixing common problems</a> — step-by-step troubleshooting.</li>
+      <li><a href="faq.html">FAQ</a> — quick answers to common questions.</li>
+    </ul>
+
+    <div class="pager">
+      <a href="support.html">← Support home</a>
+      <a class="nxt" href="guide.html">User guide →</a>
+    </div>
+  </main>
+</div>
+
+<footer>
+  <div class="wrap foot">
+    <a href="index.html" class="brand"><svg class="mark" viewBox="0 0 32 32" fill="none"><rect x="1.5" y="1.5" width="29" height="29" rx="8" fill="#0e1116"/><path d="M9 10l5 12 5-12" stroke="#2f57ff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="20" y="9" width="3" height="14" rx="1.2" fill="#fff"/></svg> VectorLabel</a>
+    <div class="foot-links">
+      <a href="support.html">Support</a>
+      <a href="quickstart.html">Quick start</a>
+      <a href="guide.html">User guide</a>
+      <a href="faq.html">FAQ</a>
+      <a href="https://github.com/ryancoopster/VectorLabel">GitHub</a>
+    </div>
+    <div class="copy">© 2026 VectorLabel · Open alpha · Brady and Brother are trademarks of their respective owners.</div>
+  </div>
+</footer>
+<script>
+(function(){
+  var mb=document.querySelector('.menu-btn'), nav=document.getElementById('vl-nav');
+  if(mb&&nav){
+    mb.addEventListener('click',function(){var o=nav.classList.toggle('open');mb.setAttribute('aria-expanded',o?'true':'false');});
+    nav.addEventListener('click',function(e){if(e.target.closest('a')){nav.classList.remove('open');mb.setAttribute('aria-expanded','false');}});
+  }
+})();
+</script>
+</body>
+</html>
