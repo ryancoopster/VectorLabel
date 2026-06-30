@@ -69,12 +69,20 @@ public struct PrinterCapabilities {
     /// (Brady = `bradyStandard`; Brother adds half-cut). Defaults to the Brady set so
     /// existing drivers need no change.
     public let cutOptions: [CutOption]
+    /// Whether this printer supports "feed to clear" — prepending a blank lead label to
+    /// advance/clear the supply before the real job. Brady M610/M611 support it; Brother
+    /// P-touch (TZe tape with an auto-cutter) does not. The Engine relays this per printer
+    /// so the front-ends only offer the tick box when the selected printer supports it, and
+    /// the Engine refuses to synthesize the lead for a printer that doesn't. Defaults false —
+    /// a driver opts in.
+    public let supportsFeedToClear: Bool
 
     public init(model: String, supportedTransports: Set<PrinterTransport>,
                 hasLiveTelemetry: Bool,
                 hasAutoCutter: Bool = false, ribbonLengthInches: Double = 0,
                 sendMode: SendModeSupport = .selectable(defaultSingle: false),
-                cutOptions: [CutOption] = CutOption.bradyStandard) {
+                cutOptions: [CutOption] = CutOption.bradyStandard,
+                supportsFeedToClear: Bool = false) {
         self.model = model
         self.supportedTransports = supportedTransports
         self.hasLiveTelemetry = hasLiveTelemetry
@@ -82,6 +90,7 @@ public struct PrinterCapabilities {
         self.ribbonLengthInches = ribbonLengthInches
         self.sendMode = sendMode
         self.cutOptions = cutOptions
+        self.supportsFeedToClear = supportsFeedToClear
     }
 }
 

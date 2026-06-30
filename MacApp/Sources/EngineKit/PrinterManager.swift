@@ -296,6 +296,10 @@ public final class PrinterManager: ObservableObject {
         // single-label setting decide whether this job reports per-label progress.
         let device = printers.first { $0.id == printerID }
         let module = device.flatMap { PrinterModuleRegistry.shared.module(forModel: $0.model) }
+        // Gate feed-to-clear on the driver capability: refuse the synthetic blank lead for a
+        // printer that doesn't support it (Brother). The front-ends already hide the tick box;
+        // this also guards in-process callers and a stale per-printer setting after a swap.
+        let feedToClear = feedToClear && (module?.capabilities.supportsFeedToClear ?? false)
         let settings = PrinterModelStore.printSettings(forName: device?.model ?? "")
         // The driver owns the send strategy. When it's user-selectable, honor the per-printer
         // "one label at a time" setting; a `.fixed` driver always handles it (and reports good

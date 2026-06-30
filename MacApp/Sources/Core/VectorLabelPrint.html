@@ -598,8 +598,11 @@ let P={
   // (continuous → eachLabel; else afterJobLast). One of
   // "afterJobLast" | "eachLabel" | "never", carried in PrintJobFile.cutMode.
   cutMode: null,
-  // "Feed to clear before printing" — persisted; injected from AppSettings at init.
-  feedToClear: false,
+  // "Feed to clear" — PER PRINTER, keyed by serial (falls back to model/id), injected from
+  // AppSettings at init. feedToClearDefault is the legacy global, used for a printer that
+  // has no stored value yet (carries an existing user's single preference forward).
+  feedToClearByPrinter: {},
+  feedToClearDefault: false,
 };
 
 // The default cut mode for a given supply part number: continuous tape is cut
@@ -630,11 +633,22 @@ function effCutMode(){
   const opts=cutOptions();
   return opts.some(o=>o.mode===want)?want:(opts[0]?opts[0].mode:"afterJobLast");
 }
-// "Feed to clear before printing" — toggle + persist (AppSettings) via the bridge.
+// "Feed to clear" — the stable per-printer key (serial, falling back to model/id).
+function ftcKey(p){ p=p||printer(); return p.serial||p.model||p.id||""; }
+// Effective state for the SELECTED printer — only ever on for a printer whose driver
+// supports it (Brady); a printer with no stored value uses the legacy global default.
+function feedToClearOn(){
+  const p=printer();
+  if(!p||!p.supportsFeedToClear) return false;
+  const k=ftcKey(p);
+  return (k in P.feedToClearByPrinter)?!!P.feedToClearByPrinter[k]:!!P.feedToClearDefault;
+}
+// Toggle + persist PER PRINTER via the bridge.
 function setFeedToClear(v){
-  P.feedToClear=!!v;
+  const k=ftcKey(printer());
+  P.feedToClearByPrinter[k]=!!v;
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
-    window.webkit.messageHandlers.vectorlabel.postMessage({action:"setFeedToClear",payload:{value:P.feedToClear}});
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"setFeedToClear",payload:{key:k,value:!!v}});
   R();
 }
 function printer(){
@@ -1797,11 +1811,11 @@ function buildPrintBar(){
             <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:9px;pointer-events:none">▼</div>
           </div>
         </div>
-        <!-- Feed to clear before printing -->
-        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:var(--text2)" title="Feed a blank lead label before the job to clear/advance the supply — die-cut: one label (cut per your setting); continuous: 1 inch, always cut">
-          <input type="checkbox" ${P.feedToClear?"checked":""} onchange="setFeedToClear(this.checked)" style="cursor:pointer">
+        <!-- Feed to clear before printing — only for a printer whose driver supports it (Brady) -->
+        ${printer().supportsFeedToClear?`<label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:var(--text2)" title="Feed a blank lead label before the job to clear/advance the supply — die-cut: one label (cut per your setting); continuous: 1 inch, always cut">
+          <input type="checkbox" ${feedToClearOn()?"checked":""} onchange="setFeedToClear(this.checked)" style="cursor:pointer">
           Feed to clear
-        </label>
+        </label>`:""}
       </div>
       <!-- Supplies level (under the printer selection): part #, telemetry, pre-flight -->
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end">
@@ -1898,7 +1912,7 @@ function buildPrintPayloadBody(indices){
     filter: P.filter,
     sort: P.sort,
     cutMode: effCutMode(),   // Phase 6 cut setting → PrintJobFile.cutMode
-    feedToClear: !!P.feedToClear,   // prepend a blank lead label to clear the supply
+    feedToClear: feedToClearOn(),   // per-printer; false unless this printer supports it
   };
 }
 
@@ -2571,8 +2585,9 @@ function initPrintWindow(opts){
   if(Array.isArray(opts.filterSortPresets)) window._presets=opts.filterSortPresets;
   if(!window._presets) window._presets=[];
 
-  // "Feed to clear before printing" (persisted in AppSettings).
-  if(opts.feedToClear!==undefined) P.feedToClear=!!opts.feedToClear;
+  // "Feed to clear" — per-printer map + legacy default (persisted in AppSettings).
+  if(opts.feedToClearByPrinter&&typeof opts.feedToClearByPrinter==='object') P.feedToClearByPrinter=opts.feedToClearByPrinter;
+  if(opts.feedToClearDefault!==undefined) P.feedToClearDefault=!!opts.feedToClearDefault;
 
   // Real data has arrived from Swift — safe to render now.
   P._ready=true;
@@ -2609,7 +2624,8 @@ function initPrintWindow(opts){
       serial: p.serial||"",
       supportsTelemetry: !!p.supportsTelemetry,
       hasAutoCutter: !!p.hasAutoCutter,
-      ribbonLengthInches: +p.ribbonLengthInches||0
+      ribbonLengthInches: +p.ribbonLengthInches||0,
+      supportsFeedToClear: !!p.supportsFeedToClear
     }));
     P.activePrinter=window._swiftPrinters.find(p=>p.status==="ready")?.id
                    ||window._swiftPrinters[0]?.id
@@ -2668,7 +2684,8 @@ function updatePrinters(printers){
     serial: p.serial||"",
     supportsTelemetry: !!p.supportsTelemetry,
     hasAutoCutter: !!p.hasAutoCutter,
-    ribbonLengthInches: +p.ribbonLengthInches||0
+    ribbonLengthInches: +p.ribbonLengthInches||0,
+    supportsFeedToClear: !!p.supportsFeedToClear
   }));
   // Keep the current selection if that printer is still present; otherwise pick
   // a ready printer (or the first available one).

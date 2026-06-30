@@ -160,6 +160,39 @@ public final class AppSettings: ObservableObject {
         printerCalibration[serial] = [dx, dy]
     }
 
+    // MARK: – Feed to clear (per printer)
+
+    /// "Feed to clear" enabled per printer, keyed by the front-end's stable printer key
+    /// (serial, falling back to model) so it follows the physical printer like
+    /// `printerCalibration`. Only printers whose driver reports `supportsFeedToClear`
+    /// (Brady M610/M611) ever surface the tick box. A printer with no stored value falls
+    /// back to the legacy global `feedToClearBeforePrint`, so an existing user's single
+    /// preference carries over the first time they print on a given printer.
+    @Published public var feedToClearByPrinter: [String: Bool] {
+        didSet {
+            if let data = try? JSONEncoder().encode(feedToClearByPrinter) {
+                UserDefaults.standard.set(data, forKey: "feedToClearByPrinter")
+            }
+        }
+    }
+
+    /// Whether feed-to-clear is on for a printer key. Falls back to the legacy global
+    /// default when this printer has no stored value yet.
+    public func feedToClear(forKey key: String) -> Bool {
+        feedToClearByPrinter[key] ?? feedToClearBeforePrint
+    }
+    /// Persist the feed-to-clear choice for a printer key (empty key ⇒ the legacy global).
+    public func setFeedToClear(forKey key: String, _ on: Bool) {
+        if key.isEmpty { feedToClearBeforePrint = on } else { feedToClearByPrinter[key] = on }
+    }
+    /// The per-printer feed-to-clear map as a JSON object string ("{}" on failure), for
+    /// injecting into the WKWebView front-ends.
+    public func feedToClearByPrinterJSON() -> String {
+        guard let d = try? JSONEncoder().encode(feedToClearByPrinter),
+              let s = String(data: d, encoding: .utf8) else { return "{}" }
+        return s
+    }
+
     // MARK: – App behaviour
 
     /// UI appearance: "dark" (default) or "light". Applies to the menu, the
@@ -284,6 +317,12 @@ public final class AppSettings: ObservableObject {
         } else {
             printerCalibration = [:]
         }
+        if let d = defaults.data(forKey: "feedToClearByPrinter"),
+           let m = try? JSONDecoder().decode([String: Bool].self, from: d) {
+            feedToClearByPrinter = m
+        } else {
+            feedToClearByPrinter = [:]
+        }
         filterSortPresetsJSON = defaults.string(forKey: "filterSortPresetsJSON") ?? "[]"
         appearance        = defaults.string(forKey: "appearance") ?? "dark"
         showInDock        = defaults.object(forKey: "showInDock") as? Bool ?? false
@@ -312,6 +351,7 @@ public final class AppSettings: ObservableObject {
         templatesFolderPath  = (base as NSString).appendingPathComponent("Templates")
         refreshIntervalSec   = 5
         feedToClearBeforePrint = false
+        feedToClearByPrinter = [:]    // factory reset clears per-printer feed-to-clear too
         defaultPrintRange    = "all"
         defaultTemplateID    = ""
         recordColumnOrder    = []

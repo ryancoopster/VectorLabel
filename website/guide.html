@@ -722,12 +722,12 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
 <section class="doc-sec" id="cut-and-feed">
 <h2>Cut modes and "Feed to clear"</h2>
 <p>The "Cut" dropdown sets when the printer cuts. The options come from the selected printer's driver; the standard Brady set is "Every Label", "End of Job", and "None" (internally eachLabel / afterJobLast / never). If you don't change it, a sensible default is used per supply: continuous tape cuts after every label; die-cut stock cuts once at end of job.</p>
-<p>"Feed to clear" (a checkbox labelled "Feed to clear") feeds a blank lead label before the job to advance/clear the supply — for die-cut, one label (cut per your setting); for continuous, 1 inch, always cut. This setting is remembered between sessions.</p>
+<p>"Feed to clear" (a checkbox labelled "Feed to clear") feeds a blank lead label before the job to advance/clear the supply — for die-cut, one label (cut per your setting); for continuous, 1 inch, always cut. The checkbox only appears when the selected printer's driver supports it — the Brady M610 and M611 do; Brother P-touch does not. The choice is remembered <strong>per printer</strong>, so each printer keeps its own setting.</p>
 <p>On the M611 the built-in cutter actuates automatically. On a printer with no auto-cutter set to "Every Label", the app prints one label at a time and pauses for a manual cut between labels (this manual-cut pause path exists for the M610 in code).</p>
 
 <ol class="steps">
   <li>Pick when to cut from the Cut dropdown.</li>
-  <li>Optionally tick "Feed to clear" to advance a blank lead label first.</li>
+  <li>Optionally tick "Feed to clear" to advance a blank lead label first (Brady printers only; remembered per printer).</li>
 </ol>
 <div class="callout tip"><span class="lab">Tip</span><p>Both the M610 and M611 cutters are full-cut only; a "half-cut" mode degrades to a single full cut at end of job.</p></div>
 <div class="callout warn"><span class="lab">Heads up</span><p>Cut suppression ("None"/never) on the Brother classic dialect is hardware-UNVERIFIED — the terminator may still feed and cut. Treat "None" on Brother as untested.</p><p>The M610's cut byte behavior overall is noted as not fully hardware-verified in the project's own memory.</p></div>
@@ -1035,7 +1035,7 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
 
 <ol class="steps">
   <li>In the print window, set the 'Cut' dropdown to the behavior you want (cut every label / cut at end / don't cut, depending on the supply).</li>
-  <li>Turn on the lead-label/feed-to-clear option if the first label is coming out mis-fed — for die-cut it feeds one label, for continuous it feeds about 1 inch and always cuts it off.</li>
+  <li>On a Brady printer, turn on the lead-label/feed-to-clear option if the first label is coming out mis-fed — for die-cut it feeds one label, for continuous it feeds about 1 inch and always cuts it off. (The checkbox only shows for printers that support it; Brother P-touch doesn't.)</li>
   <li>Test on a small batch before committing a long run.</li>
 </ol>
 <div class="callout tip"><span class="lab">Tip</span><p>The cut default adapts to the loaded supply when the printer reports it (continuous vs die-cut).</p></div>

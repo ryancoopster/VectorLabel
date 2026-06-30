@@ -91,22 +91,30 @@ public struct PrinterStatusEntry: Codable {
     /// half-cut). Front-ends build the per-job cut dropdown from these so it matches
     /// the selected printer. Empty for a status file written before this field existed.
     public var cutOptions: [CutOption]
+    /// Whether this printer's driver supports "feed to clear" (prepend a blank lead label).
+    /// Brady M610/M611 do; Brother P-touch does not. Front-ends only show the tick box when
+    /// the selected printer reports true. Defaults false for a status file written before
+    /// this field existed (and for any driver that doesn't opt in).
+    public var supportsFeedToClear: Bool
 
     public init(id: String, name: String, model: String, serial: String,
                 status: String, cassette: CassetteStatus?, activeJobCount: Int,
                 supportsTelemetry: Bool = false, hasAutoCutter: Bool = false,
-                ribbonLengthInches: Double = 0, cutOptions: [CutOption] = []) {
+                ribbonLengthInches: Double = 0, cutOptions: [CutOption] = [],
+                supportsFeedToClear: Bool = false) {
         self.id = id; self.name = name; self.model = model; self.serial = serial
         self.status = status; self.cassette = cassette; self.activeJobCount = activeJobCount
         self.supportsTelemetry = supportsTelemetry
         self.hasAutoCutter = hasAutoCutter
         self.ribbonLengthInches = ribbonLengthInches
         self.cutOptions = cutOptions
+        self.supportsFeedToClear = supportsFeedToClear
     }
 
     enum CodingKeys: String, CodingKey {
         case id, name, model, serial, status, cassette, activeJobCount
         case supportsTelemetry, hasAutoCutter, ribbonLengthInches, cutOptions
+        case supportsFeedToClear
     }
     // Tolerant decode so a status file written before `supportsTelemetry` existed still
     // decodes (default false) rather than dropping the whole printers array.
@@ -123,6 +131,7 @@ public struct PrinterStatusEntry: Codable {
         hasAutoCutter = (try? c.decode(Bool.self, forKey: .hasAutoCutter)) ?? false
         ribbonLengthInches = (try? c.decode(Double.self, forKey: .ribbonLengthInches)) ?? 0
         cutOptions = (try? c.decode([CutOption].self, forKey: .cutOptions)) ?? []
+        supportsFeedToClear = (try? c.decode(Bool.self, forKey: .supportsFeedToClear)) ?? false
     }
 }
 

@@ -27,7 +27,8 @@ public final class M611Module: PrinterModule {
         ribbonLengthInches: 75 * 12,                          // 75 ft ribbon
         // No hardware label counter + no printer-side cancel, so the user picks: single =
         // per-label progress + responsive cancel; full job = fastest, coarse, no cancel.
-        sendMode: .selectable(defaultSingle: false))
+        sendMode: .selectable(defaultSingle: false),
+        supportsFeedToClear: true)                            // Brady supply: blank lead clears/advances
 
     static let printPort: UInt16 = 9100
     static let telemetryPort: UInt16 = 9102

@@ -336,6 +336,7 @@ public final class PrintWindowController: NSObject {
             ["id": p.id, "name": p.name, "model": p.model, "serial": p.serial,
              "status": p.status, "supportsTelemetry": p.supportsTelemetry,
              "hasAutoCutter": p.hasAutoCutter, "ribbonLengthInches": p.ribbonLengthInches,
+             "supportsFeedToClear": p.supportsFeedToClear,
              "cutOptions": p.cutOptions.map { ["mode": $0.mode.rawValue, "label": $0.label] }]
         }
     }
@@ -411,7 +412,8 @@ public final class PrintWindowController: NSObject {
               cassettes: \(cassettesJSONString()),
               columnConfig: \(AppSettings.shared.columnConfigJSON()),
               filterSortPresets: \(AppSettings.shared.filterSortPresetsJSON),
-              feedToClear: \(AppSettings.shared.feedToClearBeforePrint),
+              feedToClearByPrinter: \(AppSettings.shared.feedToClearByPrinterJSON()),
+              feedToClearDefault: \(AppSettings.shared.feedToClearBeforePrint),
               reprint: \(reprintJSON)
             });
           }
@@ -592,9 +594,11 @@ extension PrintWindowController: WKScriptMessageHandler {
             sendInitialState()
 
         case "setFeedToClear":
-            // Persist the "feed to clear before printing" tick box so it survives reopen.
-            AppSettings.shared.feedToClearBeforePrint =
-                ((body["payload"] as? [String: Any])?["value"] as? Bool) ?? false
+            // Persist the feed-to-clear tick box PER PRINTER (key from the payload) so each
+            // printer remembers its own choice across reopen.
+            let payload = body["payload"] as? [String: Any]
+            AppSettings.shared.setFeedToClear(forKey: (payload?["key"] as? String) ?? "",
+                                              (payload?["value"] as? Bool) ?? false)
 
         default:
             break

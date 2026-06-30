@@ -514,7 +514,7 @@ public final class DesignerWindowController: NSObject {
         guard let wv = webView else { return }
         let s = AppSettings.shared
         wv.evaluateJavaScript(
-            "if(typeof initDesignerPrefs==='function')initDesignerPrefs({snapGrid:\(s.designerSnapGrid),snapObjects:\(s.designerSnapObjects),gridSize:\(s.designerGridSize),recH:\(s.designerRecordsHeight),propW:\(s.designerPropsWidth),dbH:\(s.designerDatabaseHeight),feedToClear:\(s.feedToClearBeforePrint)});",
+            "if(typeof initDesignerPrefs==='function')initDesignerPrefs({snapGrid:\(s.designerSnapGrid),snapObjects:\(s.designerSnapObjects),gridSize:\(s.designerGridSize),recH:\(s.designerRecordsHeight),propW:\(s.designerPropsWidth),dbH:\(s.designerDatabaseHeight),feedToClearByPrinter:\(s.feedToClearByPrinterJSON()),feedToClearDefault:\(s.feedToClearBeforePrint)});",
             completionHandler: nil
         )
     }
@@ -913,6 +913,7 @@ public final class DesignerWindowController: NSObject {
             ["id": p.id, "name": p.name, "model": p.model, "serial": p.serial,
              "status": p.status, "supportsTelemetry": p.supportsTelemetry,
              "hasAutoCutter": p.hasAutoCutter, "ribbonLengthInches": p.ribbonLengthInches,
+             "supportsFeedToClear": p.supportsFeedToClear,
              "cutOptions": p.cutOptions.map { ["mode": $0.mode.rawValue, "label": $0.label] }]
         }
         guard let data = try? JSONSerialization.data(withJSONObject: dicts),
@@ -1613,9 +1614,11 @@ extension DesignerWindowController: WKScriptMessageHandler {
             }
 
         case "setFeedToClear":
-            // Persist the "feed to clear before printing" tick box so it survives reopen.
-            AppSettings.shared.feedToClearBeforePrint =
-                ((body["payload"] as? [String: Any])?["value"] as? Bool) ?? false
+            // Persist the feed-to-clear tick box PER PRINTER (key from the payload) so each
+            // printer remembers its own choice across reopen.
+            let payload = body["payload"] as? [String: Any]
+            AppSettings.shared.setFeedToClear(forKey: (payload?["key"] as? String) ?? "",
+                                              (payload?["value"] as? Bool) ?? false)
 
         case "editReturn":
             // Save first (if requested) so the print window refreshes with the

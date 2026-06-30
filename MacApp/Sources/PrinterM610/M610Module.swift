@@ -42,7 +42,8 @@ public final class M610Module: PrinterModule {
     public let capabilities = PrinterCapabilities(
         model: "M610", supportedTransports: [.usb], hasLiveTelemetry: false,
         ribbonLengthInches: 75 * 12,                   // 75 ft ribbon
-        sendMode: .selectable(defaultSingle: true))    // single-label = per-label progress via SmartCell counter
+        sendMode: .selectable(defaultSingle: true),    // single-label = per-label progress via SmartCell counter
+        supportsFeedToClear: true)                     // Brady supply: blank lead clears/advances
 
     /// The M610 print head's native resolution. Labels are rendered at the master
     /// render DPI (`RenderDPI.master`) and downscaled to this in `encode()`.

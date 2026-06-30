@@ -351,7 +351,9 @@ let S={
   // (continuous → eachLabel; die-cut → afterJobLast). One of
   // "afterJobLast" | "eachLabel" | "never", carried in PrintJobFile.cutMode.
   cutMode:null,
-  feedToClear:false,   // "Feed to clear before printing" — persisted; injected at init
+  // "Feed to clear" — PER PRINTER (keyed by serial/model), injected at init;
+  // feedToClearDefault is the legacy global default for a printer with no stored value.
+  feedToClearByPrinter:{}, feedToClearDefault:false,
   // Continuous-supply label length (inches); null ⇒ use the catalog default.
   // Ignored for die-cut supplies.
   labelLen:null,
@@ -392,14 +394,25 @@ function initDesignerPrefs(p){
   if(typeof p.recH==='number'&&p.recH>0)S.recH=p.recH;
   if(typeof p.dbH==='number'&&p.dbH>0)S.dbH=p.dbH;
   if(typeof p.propW==='number'&&p.propW>0)S.propW=Math.max(PROP_MIN,Math.min(PROP_MAX,p.propW));
-  if(typeof p.feedToClear==='boolean')S.feedToClear=p.feedToClear;
+  if(p.feedToClearByPrinter&&typeof p.feedToClearByPrinter==='object')S.feedToClearByPrinter=p.feedToClearByPrinter;
+  if(typeof p.feedToClearDefault==='boolean')S.feedToClearDefault=p.feedToClearDefault;
   R();
 }
-// "Feed to clear before printing" — toggle + persist (AppSettings) via the bridge.
+// "Feed to clear" — stable per-printer key (serial → model → id) and effective state for
+// the selected printer (only on for a printer whose driver supports it — Brady).
+function dFtcKey(p){ p=p||dPrinter(); return (p&&(p.serial||p.model||p.id))||""; }
+function dFeedToClearOn(){
+  const p=dPrinter();
+  if(!p||!p.supportsFeedToClear) return false;
+  const k=dFtcKey(p);
+  return (k in S.feedToClearByPrinter)?!!S.feedToClearByPrinter[k]:!!S.feedToClearDefault;
+}
+// Toggle + persist PER PRINTER via the bridge.
 function dSetFeedToClear(v){
-  S.feedToClear=!!v;
+  const k=dFtcKey(dPrinter());
+  S.feedToClearByPrinter[k]=!!v;
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
-    window.webkit.messageHandlers.vectorlabel.postMessage({action:"setFeedToClear",payload:{value:S.feedToClear}});
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"setFeedToClear",payload:{key:k,value:!!v}});
   R();
 }
 function saveDesignerPrefs(){
@@ -2856,7 +2869,8 @@ function updateDesignerPrinters(printers){
     model:p.model||"M6xx", status:p.status||"ready", serial:p.serial||"",
     supportsTelemetry:!!p.supportsTelemetry,
     hasAutoCutter:!!p.hasAutoCutter,
-    ribbonLengthInches:+p.ribbonLengthInches||0
+    ribbonLengthInches:+p.ribbonLengthInches||0,
+    supportsFeedToClear:!!p.supportsFeedToClear
   }));
   // Keep the current selection if still present; else pick a ready printer.
   if(!window._dprinters.find(p=>p.id===S.activePrinter)){
@@ -3183,10 +3197,12 @@ function buildCustomPrintHeader(){
         <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Copies</span>
         <input type="number" class="inp" min="1" max="999" value="${copies}" style="width:58px;padding:4px 6px;font-size:12px" onchange="S.copies=Math.max(1,Math.min(999,parseInt(this.value)||1));R()">
       </div>`;
-  const feedCtl=`<label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:var(--text2)" title="Feed a blank lead label before the job to clear/advance the supply — die-cut: one label (cut per your setting); continuous: 1 inch, always cut">
-        <input type="checkbox" ${S.feedToClear?"checked":""} onchange="dSetFeedToClear(this.checked)" style="cursor:pointer">
+  // Only for a printer whose driver supports feed-to-clear (Brady); empty otherwise so it
+  // simply doesn't appear in either the multi- or single-label layout below.
+  const feedCtl=dPrinter().supportsFeedToClear?`<label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;color:var(--text2)" title="Feed a blank lead label before the job to clear/advance the supply — die-cut: one label (cut per your setting); continuous: 1 inch, always cut">
+        <input type="checkbox" ${dFeedToClearOn()?"checked":""} onchange="dSetFeedToClear(this.checked)" style="cursor:pointer">
         Feed to clear
-      </label>`;
+      </label>`:"";
   // Two-row bar so the window needn't be as wide: LEFT = printer + status (top) over
   // supply level (bottom); RIGHT = cut [+ copies when multi] (top) over [copies when
   // single] + feed + range (bottom); the Print button is anchored far right, both rows.
@@ -3309,7 +3325,7 @@ function doCustomPrint(){
     copies:Math.max(1,S.copies||1),
     printerID:S.activePrinter||"",
     cutMode:dEffCutMode(),   // Phase 6 cut setting → PrintJobFile.cutMode
-    feedToClear:!!S.feedToClear,   // prepend a blank lead label to clear the supply
+    feedToClear:dFeedToClearOn(),   // per-printer; false unless this printer supports it
     record:customPrintRecord()
   };
   // When a data source is bound, send the chosen subset of bound-row indices so
