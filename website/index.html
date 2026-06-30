@@ -1,5 +1,8 @@
+<!doctype html>
 <!-- VectorLabel — marketing site. Single self-contained file (no external deps). -->
-<!-- Embed in Squarespace via a Code Block, or host on GitHub Pages and iframe it. -->
+<!-- Recommended embed: host on GitHub Pages and iframe it into Squarespace (full style isolation). -->
+<html lang="en">
+<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VectorLabel — Design and print any label, your way</title>
@@ -21,7 +24,7 @@
 :root{
   --ink:#0e1116;
   --ink-soft:#3a424e;
-  --muted:#6b7480;
+  --muted:#5e6672;
   --line:#e6e8ec;
   --bg:#ffffff;
   --bg-soft:#f6f7f9;
@@ -102,7 +105,7 @@ header.nav{
 .nav-links a:hover{color:var(--ink)}
 .nav-cta{display:flex;align-items:center;gap:14px}
 .nav-cta .btn{padding:9px 18px;font-size:14px}
-.menu-btn{display:none;background:none;border:0;cursor:pointer}
+.menu-btn{display:none;background:none;border:0;cursor:pointer;padding:10px;margin:-10px -8px -10px 0;line-height:0;color:var(--ink)}
 
 /* ---------- Hero ---------- */
 .hero{padding:80px 0 72px}
@@ -210,6 +213,7 @@ header.nav{
 
 /* ---------- Data binding animation ---------- */
 .bind{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center}
+.bind>*{min-width:0}
 .bind-visual{border:1px solid var(--line);border-radius:var(--radius);padding:24px;background:#fff;
   box-shadow:0 24px 50px -34px rgba(14,17,22,.4)}
 .csv{font:12.5px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--bg-soft);border:1px solid var(--line);
@@ -269,7 +273,11 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
 
 /* ---------- Responsive ---------- */
 @media(max-width:900px){
-  .nav-links{display:none}
+  .nav-links{display:none;position:absolute;top:100%;left:0;right:0;flex-direction:column;align-items:stretch;gap:0;
+    background:rgba(255,255,255,.98);backdrop-filter:saturate(180%) blur(14px);-webkit-backdrop-filter:saturate(180%) blur(14px);
+    border-bottom:1px solid var(--line);padding:6px 0;box-shadow:0 16px 30px -20px rgba(14,17,22,.4)}
+  .nav-links.open{display:flex}
+  .nav-links a{padding:13px 24px;font-size:15px}
   .menu-btn{display:block}
   .hero-grid{grid-template-columns:1fr;gap:40px}
   .suite{grid-template-columns:repeat(2,1fr)}
@@ -291,6 +299,9 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
   .reveal{opacity:1;transform:none}
 }
 </style>
+</head>
+
+<body>
 
 <!-- ============================== ALPHA BANNER ============================== -->
 <div class="alphabar">
@@ -310,7 +321,7 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
       </svg>
       VectorLabel
     </a>
-    <nav class="nav-links">
+    <nav class="nav-links" id="vl-nav">
       <a href="#suite">The suite</a>
       <a href="#how">How it works</a>
       <a href="#features">Features</a>
@@ -321,7 +332,7 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Download
       </a>
-      <button class="menu-btn" aria-label="Menu" onclick="document.querySelector('.nav-links').style.display='flex';this.remove()">
+      <button class="menu-btn" aria-label="Menu" aria-controls="vl-nav" aria-expanded="false">
         <svg width="24" height="24" viewBox="0 0 24 24" stroke="#0e1116" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16" stroke-linecap="round"/></svg>
       </button>
     </div>
@@ -531,21 +542,26 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
     <div class="reveal">
       <div class="eyebrow">Design once, print hundreds</div>
       <h2>Your data flows into the label automatically.</h2>
-      <p class="lead muted" style="margin-bottom:22px">Map each part of the label to a column from your data — whether it came from Vectorworks or your own spreadsheet — or build it with a formula. Then every record prints with its own text and its own barcode, no manual edits.</p>
-      <p class="muted" style="font-size:14.5px"><code style="background:#fff;border:1px solid var(--line);padding:3px 8px;border-radius:6px;font-size:13px">=IF(Number&lt;&gt;"",Number&amp;" - "&amp;Cable,Cable)</code><br><span style="display:inline-block;margin-top:10px">A formula like this builds a clean label from whatever fields are present — VectorLabel evaluates it for every row.</span></p>
+      <p class="lead muted" style="margin-bottom:22px">Map each part of the label to a column from your data — whether it came from Vectorworks or your own spreadsheet — or build it with a formula. Then every record prints with its own text, no manual edits.</p>
+      <p class="muted" style="font-size:14.5px"><code style="background:#fff;border:1px solid var(--line);padding:3px 8px;border-radius:6px;font-size:12.5px;display:inline-block;line-height:1.6">=IF(Number&lt;&gt;"",Number&amp;IF(Cable&lt;&gt;""," - "&amp;Cable,""),IF(Cable&lt;&gt;"",Cable,""))</code><br><span style="display:inline-block;margin-top:10px">That's the actual main-line formula from the <strong>1_5x4 V1</strong> template — VectorLabel evaluates it for every record.</span></p>
     </div>
     <div class="bind-visual reveal">
       <div class="csv">
-        <div class="row head">Device, Socket, Connector, Cable, Rack</div>
-        <div class="row">AMP&nbsp;3, <span class="hl">OUT&nbsp;L</span>, XLR-M, <span class="hl">C-1042</span>, FOH-A1</div>
-        <div class="row">DSP&nbsp;1, IN&nbsp;7, XLR-F, C-1043, FOH-A1</div>
-        <div class="row">WALL&nbsp;12, AUX, TRS, C-1044, STAGE-L</div>
+        <div class="row head">Number, Cable, Connector, Device_Name, Socket_Name, Rack</div>
+        <div class="row"><span class="hl">127</span>, <span class="hl">C-1042</span>, XLR-M, AMP&nbsp;3, OUT&nbsp;L, FOH-A1</div>
+        <div class="row">128, C-1043, XLR-F, DSP&nbsp;1, IN&nbsp;7, FOH-A1</div>
+        <div class="row">129, C-1044, TRS, WALL&nbsp;12, AUX, STAGE-L</div>
       </div>
       <div class="bind-label">
-        <span class="tag">Label preview</span>
-        <div class="bf flash">AMP 3 · OUT L <small>=Device&amp;Socket</small></div>
-        <div class="bf flash">Cable C-1042 <small>=Cable</small></div>
-        <div class="bf flash" style="font:600 13px ui-monospace,Menlo,monospace;letter-spacing:.18em">▌▎█▍▌▎▏█▍▎▌ <small>Code 128</small></div>
+        <span class="tag">Label preview · 1_5x4 V1</span>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+          <span class="bf flash" style="margin:0;font-size:13px;animation-delay:0s">XLR-M <small>=Connector</small></span>
+          <span class="bf flash" style="margin:0;font-size:13px;animation-delay:.3s">FOH-A1 <small>=Rack</small></span>
+        </div>
+        <div class="bf flash" style="text-align:center;font-weight:700;font-size:21px;letter-spacing:-.01em;margin:11px 0 9px;animation-delay:.6s">127&nbsp;-&nbsp;C-1042 <small style="font-weight:500">=IF(Number…)</small></div>
+        <div style="height:1.5px;background:var(--ink);margin:0 0 11px"></div>
+        <div class="bf flash" style="text-align:center;margin:0;font-size:14px;animation-delay:.9s">@ AMP&nbsp;3 : OUT&nbsp;L <small>=IF(Device_Name…)</small></div>
+        <div style="text-align:center;margin-top:15px;font-size:11.5px;color:var(--muted)">Brady M6-33-427 · 1.5″ × 4″ self-laminating wrap</div>
       </div>
     </div>
   </div>
@@ -557,7 +573,7 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
     <div class="section-head reveal">
       <div class="eyebrow">Hardware</div>
       <h2>One app, your printers.</h2>
-      <p class="lead muted">VectorLabel speaks directly to thermal label printers over USB and the network — auto-discovering devices, detecting loaded media, and reporting status live.</p>
+      <p class="lead muted">VectorLabel speaks directly to thermal label printers over USB and the network — discovering Brady printers automatically, detecting loaded media, and reporting status live on supported models.</p>
     </div>
     <div class="printers">
       <div class="pcard reveal">
@@ -576,8 +592,8 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
         <ul>
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg> 180 DPI continuous TZe tape, 3.5–24 mm widths</li>
           <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg> PT-E550W · PT-P750W · PT-E560BT <span class="badge">drivers ready</span></li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg> USB and Wi-Fi (network) transports</li>
-          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg> Automatic tape-width detection</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg> USB on all models; Wi-Fi (network) on the “W” models — PT-E550W &amp; PT-P750W</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg> Automatic tape-width detection over USB (pending hardware verification)</li>
         </ul>
       </div>
     </div>
@@ -635,8 +651,22 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
 </footer>
 
 <script>
+(function(){
   // Year
-  document.getElementById('yr').textContent = new Date().getFullYear();
+  var yr = document.getElementById('yr'); if(yr) yr.textContent = new Date().getFullYear();
+
+  // Mobile menu: real open/close toggle with aria state (not a one-way self-removing button).
+  var mb = document.querySelector('.menu-btn'), nav = document.getElementById('vl-nav');
+  if(mb && nav){
+    mb.addEventListener('click', function(){
+      var open = nav.classList.toggle('open');
+      mb.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    // Close the menu after picking a destination.
+    nav.addEventListener('click', function(e){
+      if(e.target.closest('a')){ nav.classList.remove('open'); mb.setAttribute('aria-expanded','false'); }
+    });
+  }
 
   // Smooth in-page scrolling that DOESN'T let Squarespace hijack "#" links into a blank page load.
   document.querySelectorAll('a[href^="#"]').forEach(function(a){
@@ -655,4 +685,7 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
     el.style.transitionDelay = (Math.min(i%4,3)*70)+'ms';
     io.observe(el);
   });
+})();
 </script>
+</body>
+</html>

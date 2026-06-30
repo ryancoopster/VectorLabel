@@ -1,9 +1,12 @@
 # VectorLabel marketing website
 
-A single, self-contained marketing page for VectorLabel. Everything — styles, SVG
-icons, and CSS/SVG animations — is inline in [`index.html`](index.html). There are
-**no external dependencies, fonts, or scripts**, so it works offline and can't break
-from a dead CDN link.
+A single, self-contained marketing page for VectorLabel — a standalone HTML5 document
+with all styles, SVG icons, and CSS/SVG animations inline in [`index.html`](index.html).
+There are **no external dependencies, fonts, or scripts**, so it works offline and can't
+break from a dead CDN link.
+
+**Live:** https://ryancoopster.github.io/VectorLabel/ (auto-deploys from this folder on
+every push — see [`.github/workflows/pages.yml`](../.github/workflows/pages.yml)).
 
 ## Preview locally
 
@@ -11,28 +14,25 @@ from a dead CDN link.
 node website/serve.js      # serves at http://127.0.0.1:4599
 ```
 
-(`serve.js` is a dev-only helper — it is not part of the page.)
+(`serve.js` is a dev-only helper — it is not published to GitHub Pages.)
 
-## Putting it on Squarespace
+## Putting it on Squarespace — use the iframe embed
 
-Two easy options:
+Add an **Embed** block (or a Code block) pointing at the live URL:
 
-### Option A — Code Block (simplest, needs a Business plan or higher)
-1. Edit the page → add a **Code** block.
-2. Open `index.html`, copy **everything**, and paste it into the Code block.
-3. Turn **off** "Display Source" so it renders instead of showing the code.
+```html
+<iframe src="https://ryancoopster.github.io/VectorLabel/"
+        style="width:100%; height:100vh; border:0;" title="VectorLabel"></iframe>
+```
 
-> The in-page nav links scroll via JavaScript (they never change the URL hash), so
-> Squarespace won't hijack a click into a blank page load — that's the fix for the
-> "nav buttons go to a blank page" problem. If the top nav overlaps Squarespace's own
-> header, either hide the site header on that page, or delete the `<header class="nav">`
-> block and use Squarespace's navigation instead.
+The iframe fully **isolates** the page's CSS and JavaScript from the rest of your
+Squarespace site.
 
-### Option B — Host the file + iframe it (works on any plan)
-1. Push this `website/` folder to **GitHub Pages** (Settings → Pages → deploy from
-   the repo). You'll get a URL like `https://ryancoopster.github.io/VectorLabel/`.
-2. On Squarespace, add an **Embed** block and point it at that URL, or paste an
-   `<iframe src="…">` into a Code block.
+> **Do not paste the raw `index.html` into a Squarespace Code Block.** This page uses a
+> global CSS reset (`*`, `html`, `body`, and bare element selectors) by design; pasted
+> inline, those rules leak out and restyle your entire Squarespace page. The iframe is
+> the supported embed. The in-page nav also scrolls via JavaScript without changing the
+> URL hash, so Squarespace can't hijack a click into a blank page.
 
 ## Customizing
 
