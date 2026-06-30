@@ -1,0 +1,29 @@
+#!/bin/bash
+# Runs as root only if the user selected "Vectorworks ConnectCAD plug-ins". Copies the
+# .vsm plug-in bundles into EACH installed Vectorworks version's user Plug-ins folder, so
+# Vectorworks registers the two Export commands on its next launch. No-op if Vectorworks
+# isn't installed. The user still adds the commands to their workspace once
+# (Tools ▸ Workspaces ▸ Edit Current Workspace ▸ drag them into a menu).
+set +e
+STAGE="/Library/Application Support/VectorLabel/VectorworksPlugins"
+
+USER_CONSOLE=$(stat -f %Su /dev/console 2>/dev/null)
+[ -n "$USER_CONSOLE" ] && [ "$USER_CONSOLE" != "root" ] || exit 0
+USER_HOME=$(/usr/bin/dscl . -read "/Users/$USER_CONSOLE" NFSHomeDirectory 2>/dev/null | awk '{print $2}')
+[ -n "$USER_HOME" ] || exit 0
+VW_BASE="$USER_HOME/Library/Application Support/Vectorworks"
+[ -d "$VW_BASE" ] || exit 0   # Vectorworks not installed → nothing to do
+
+for ver in "$VW_BASE"/*/; do
+  base=$(basename "$ver")
+  case "$base" in [0-9][0-9][0-9][0-9]) ;; *) continue ;; esac   # numeric year folders only
+  dest="${ver}Plug-ins"
+  /bin/mkdir -p "$dest"
+  for src in "$STAGE"/*.vsm; do
+    [ -e "$src" ] || continue
+    case "$(basename "$src")" in ._*) continue ;; esac           # skip AppleDouble sidecars
+    /bin/cp "$src" "$dest/"                                       # overwrite: this is THE plug-in
+    /usr/sbin/chown "$USER_CONSOLE" "$dest/$(basename "$src")"
+  done
+done
+exit 0

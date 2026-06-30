@@ -60,13 +60,27 @@ TPL_ROOT="$WORK/tpl"
 TPL_STAGE="$TPL_ROOT/Library/Application Support/VectorLabel/SampleTemplates"; mkdir -p "$TPL_STAGE"
 TPL_COUNT=0
 if [ -d "$TEMPLATES_SRC" ]; then
-  while IFS= read -r -d '' f; do cp "$f" "$TPL_STAGE/"; TPL_COUNT=$((TPL_COUNT+1)); done \
+  while IFS= read -r -d '' f; do cp -X "$f" "$TPL_STAGE/"; TPL_COUNT=$((TPL_COUNT+1)); done \
     < <(find "$TEMPLATES_SRC" -maxdepth 1 -name '*.vltmp' -print0)
 fi
 echo "  staged $TPL_COUNT template(s) from $TEMPLATES_SRC"
 chmod +x "$INST/scripts-templates/postinstall"
 pkgbuild --root "$TPL_ROOT" --identifier "$PKGID_TPL" --version "$VERSION" \
   --install-location / --scripts "$INST/scripts-templates" "$WORK/VectorLabel-templates.pkg"
+
+# ── Vectorworks plug-ins component (optional choice): the .vsm bundles, copied into each
+#    installed Vectorworks version's user Plug-ins folder by its postinstall (no-op if VW
+#    isn't installed). Always built so the choice exists.
+PKGID_VW="com.sai.vectorlabel${SUFFIX}.vwplugins"
+VW_ROOT="$WORK/vw"
+VW_STAGE="$VW_ROOT/Library/Application Support/VectorLabel/VectorworksPlugins"; mkdir -p "$VW_STAGE"
+VW_COUNT=0
+while IFS= read -r -d '' f; do cp -X "$f" "$VW_STAGE/"; VW_COUNT=$((VW_COUNT+1)); done \
+  < <(find VectorworksPlugin -maxdepth 1 -name '*.vsm' -print0)
+echo "  staged $VW_COUNT Vectorworks plug-in(s)"
+chmod +x "$INST/scripts-vwplugins/postinstall"
+pkgbuild --root "$VW_ROOT" --identifier "$PKGID_VW" --version "$VERSION" \
+  --install-location / --scripts "$INST/scripts-vwplugins" "$WORK/VectorLabel-vwplugins.pkg"
 
 # ── Installer resources (welcome / license / conclusion). The license pane is the real
 #    LICENSE file, rendered as plain text; accepting it is required to continue.
@@ -90,6 +104,7 @@ cat > "$DISTXML" <<XML
     <choices-outline>
         <line choice="apps"/>
         <line choice="templates"/>
+        <line choice="vwplugins"/>
     </choices-outline>
     <choice id="apps" title="VectorLabel apps" enabled="false" selected="true"
             description="The four VectorLabel apps, installed to ${INSTALL_DIR}.">
@@ -99,8 +114,13 @@ cat > "$DISTXML" <<XML
             description="Install starter label templates into your Documents/VectorLabel/Templates folder. Templates you already have (same filename) are never overwritten.">
         <pkg-ref id="$PKGID_TPL"/>
     </choice>
+    <choice id="vwplugins" title="Vectorworks ConnectCAD plug-ins" selected="true"
+            description="Install the two ConnectCAD 'Export … Circuits to VectorLabel' commands into Vectorworks. Skipped automatically if Vectorworks isn't installed. One-time step afterward: add the commands to your workspace via Tools ▸ Workspaces ▸ Edit Current Workspace.">
+        <pkg-ref id="$PKGID_VW"/>
+    </choice>
     <pkg-ref id="$PKGID_APPS" version="$VERSION">VectorLabel-apps.pkg</pkg-ref>
     <pkg-ref id="$PKGID_TPL" version="$VERSION">VectorLabel-templates.pkg</pkg-ref>
+    <pkg-ref id="$PKGID_VW" version="$VERSION">VectorLabel-vwplugins.pkg</pkg-ref>
 </installer-gui-script>
 XML
 

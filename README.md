@@ -69,7 +69,13 @@ If you're on Intel, change it to:
 ## Vectorworks plugin
 
 There are **two** menu commands, one per script. Each is its own command
-plug-in (Vectorworks shows one menu command per registered plug-in):
+plug-in (Vectorworks shows one menu command per registered plug-in).
+
+**Easiest:** the macOS installer's optional **"Vectorworks ConnectCAD plug-ins"**
+choice copies the ready-made `.vsm` bundles
+(`VectorworksPlugin/*.vsm`) into your Vectorworks Plug-ins folder automatically —
+then just do step 4 below (add them to your workspace). To register them manually
+instead:
 
 1. Vectorworks → Tools → Plug-ins → Plug-in Manager → **New Command**
 2. Name it **Export Selected Circuits to VectorLabel**, Language: Python,
