@@ -1,0 +1,90 @@
+name: Installer (signed test artifact)
+
+# Manually-run build that signs + NOTARIZES the installer .pkg and uploads it as an
+# Actions artifact — NO public release. Use this to test the signed installer before
+# publishing a release (release.yml, triggered by a version tag). Uses the SAME repo
+# Secrets as release.yml (see docs/SIGNING.md). Run it from the Actions tab
+# ("Run workflow") or:  gh workflow run installer-test.yml
+#
+# Note: on a PUBLIC repo, Actions artifacts can be downloaded by anyone with the run
+# link (they expire after 90 days and aren't a listed Release) — for a fully private
+# artifact the repo must be private.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  installer:
+    name: Build, sign, notarize installer (artifact)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history → correct build-number stamp
+
+      - name: Install libusb
+        run: brew install libusb
+
+      - name: Import Developer ID certificate
+        env:
+          CERT_B64: ${{ secrets.DEVELOPER_ID_CERT_P12_BASE64 }}
+          CERT_PWD: ${{ secrets.DEVELOPER_ID_CERT_PASSWORD }}
+          KC_PWD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN=$RUNNER_TEMP/signing.keychain-db
+          echo "$CERT_B64" | base64 --decode > $RUNNER_TEMP/cert.p12
+          security create-keychain -p "$KC_PWD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KC_PWD" "$KEYCHAIN"
+          security import $RUNNER_TEMP/cert.p12 -k "$KEYCHAIN" -P "$CERT_PWD" \
+            -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KC_PWD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          rm -f $RUNNER_TEMP/cert.p12
+
+      - name: Build, package & sign suite
+        env:
+          SIGN_IDENTITY: ${{ secrets.DEVELOPER_ID_IDENTITY }}
+        run: ./scripts/package-suite.sh   # → dist/VectorLabel/ (4 signed apps)
+
+      - name: Notarize & staple apps
+        env:
+          KEY_B64: ${{ secrets.NOTARY_API_KEY_P8_BASE64 }}
+          KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          ISSUER: ${{ secrets.NOTARY_API_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          echo "$KEY_B64" | base64 --decode > $RUNNER_TEMP/AuthKey.p8
+          ditto -c -k --keepParent "dist/VectorLabel" dist/VectorLabel-notarize.zip
+          xcrun notarytool submit dist/VectorLabel-notarize.zip \
+            --key $RUNNER_TEMP/AuthKey.p8 --key-id "$KEY_ID" --issuer "$ISSUER" --wait
+          for app in dist/VectorLabel/*.app; do xcrun stapler staple "$app"; done
+          rm -f $RUNNER_TEMP/AuthKey.p8
+
+      - name: Build guided installer (.pkg)
+        env:
+          DEVELOPER_ID_INSTALLER_IDENTITY: ${{ secrets.DEVELOPER_ID_INSTALLER_IDENTITY }}
+        run: ./scripts/build-installer.sh   # → dist/VectorLabel-Installer-<version>.pkg
+
+      - name: Notarize & staple installer
+        env:
+          KEY_B64: ${{ secrets.NOTARY_API_KEY_P8_BASE64 }}
+          KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          ISSUER: ${{ secrets.NOTARY_API_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          PKG=$(ls dist/VectorLabel-Installer-*.pkg | head -n1)
+          echo "$KEY_B64" | base64 --decode > $RUNNER_TEMP/AuthKey.p8
+          xcrun notarytool submit "$PKG" \
+            --key $RUNNER_TEMP/AuthKey.p8 --key-id "$KEY_ID" --issuer "$ISSUER" --wait
+          xcrun stapler staple "$PKG"
+          spctl --assess --type install --verbose=4 "$PKG"   # should pass once stapled
+          rm -f $RUNNER_TEMP/AuthKey.p8
+
+      - name: Upload signed installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VectorLabel-Installer-signed-notarized
+          path: dist/VectorLabel-Installer-*.pkg
+          if-no-files-found: error
