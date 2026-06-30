@@ -1,0 +1,652 @@
+<!-- VectorLabel — marketing site. Single self-contained file (no external deps). -->
+<!-- Embed in Squarespace via a Code Block, or host on GitHub Pages and iframe it. -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VectorLabel — Print wire & cable labels straight from Vectorworks</title>
+<meta name="description" content="VectorLabel designs and prints barcode-ready wire, cable and patch labels straight from Vectorworks ConnectCAD to Brady and Brother thermal printers.">
+
+<style>
+/* ---------- Theme ---------- */
+:root{
+  --ink:#0e1116;
+  --ink-soft:#3a424e;
+  --muted:#6b7480;
+  --line:#e6e8ec;
+  --bg:#ffffff;
+  --bg-soft:#f6f7f9;
+  --bg-ink:#0e1116;
+  --accent:#2f57ff;
+  --accent-soft:#eef1ff;
+  --radius:16px;
+  --maxw:1120px;
+  --font:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+}
+
+/* ---------- Reset ---------- */
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:var(--font);
+  color:var(--ink);
+  background:var(--bg);
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+img,svg{display:block;max-width:100%}
+a{color:inherit;text-decoration:none}
+
+/* ---------- Layout ---------- */
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+section{padding:96px 0}
+.eyebrow{
+  font-size:12.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--accent);margin-bottom:16px;
+}
+h1,h2,h3{letter-spacing:-.02em;line-height:1.08;font-weight:700}
+h1{font-size:clamp(38px,6vw,64px)}
+h2{font-size:clamp(28px,3.6vw,42px)}
+h3{font-size:20px;letter-spacing:-.01em}
+.lead{font-size:clamp(17px,1.6vw,20px);color:var(--ink-soft);max-width:620px}
+.muted{color:var(--muted)}
+.center{text-align:center}
+.center .lead{margin-left:auto;margin-right:auto}
+
+/* ---------- Buttons ---------- */
+.btn{
+  display:inline-flex;align-items:center;gap:9px;
+  font-weight:600;font-size:15px;
+  padding:13px 22px;border-radius:999px;
+  border:1px solid transparent;cursor:pointer;transition:transform .15s ease,background .2s ease,border-color .2s ease;
+}
+.btn:hover{transform:translateY(-1px)}
+.btn-primary{background:var(--ink);color:#fff}
+.btn-primary:hover{background:#000}
+.btn-ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn-ghost:hover{border-color:var(--ink)}
+.btn svg{width:17px;height:17px}
+
+/* ---------- Nav ---------- */
+header.nav{
+  position:sticky;top:0;z-index:50;
+  background:rgba(255,255,255,.78);
+  backdrop-filter:saturate(180%) blur(14px);
+  -webkit-backdrop-filter:saturate(180%) blur(14px);
+  border-bottom:1px solid var(--line);
+}
+.nav-inner{display:flex;align-items:center;justify-content:space-between;height:64px}
+.brand{display:flex;align-items:center;gap:11px;font-weight:700;letter-spacing:-.02em;font-size:18px}
+.brand .mark{width:26px;height:26px}
+.nav-links{display:flex;align-items:center;gap:30px}
+.nav-links a{font-size:14.5px;color:var(--ink-soft);font-weight:500;transition:color .15s}
+.nav-links a:hover{color:var(--ink)}
+.nav-cta{display:flex;align-items:center;gap:14px}
+.nav-cta .btn{padding:9px 18px;font-size:14px}
+.menu-btn{display:none;background:none;border:0;cursor:pointer}
+
+/* ---------- Hero ---------- */
+.hero{padding:84px 0 72px}
+.hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
+.hero h1{margin-bottom:22px}
+.hero .lead{margin-bottom:30px}
+.hero-actions{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:26px}
+.hero-note{font-size:13.5px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.hero-note .dot{width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.18)}
+
+/* ---------- Printer / label animation ---------- */
+.stage{
+  position:relative;aspect-ratio:1/.92;border-radius:var(--radius);
+  background:radial-gradient(120% 120% at 70% 0%,#fbfcfe 0%,#eef1f6 60%,#e7ebf2 100%);
+  border:1px solid var(--line);overflow:hidden;
+  box-shadow:0 30px 60px -30px rgba(14,17,22,.25);
+}
+.grid-bg{position:absolute;inset:0;opacity:.5;
+  background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
+  background-size:26px 26px;mask-image:radial-gradient(70% 70% at 50% 35%,#000 40%,transparent 100%);
+  -webkit-mask-image:radial-gradient(70% 70% at 50% 35%,#000 40%,transparent 100%);}
+
+.label{
+  position:absolute;left:50%;top:16%;width:62%;transform:translateX(-50%);
+  background:#fff;border-radius:10px;padding:18px 18px 16px;
+  box-shadow:0 18px 40px -16px rgba(14,17,22,.4);
+  border:1px solid #eceef2;
+}
+.label .ll{height:11px;border-radius:3px;background:#e9ecf1;margin:0 0 9px;overflow:hidden;position:relative}
+.label .ll::after{content:"";position:absolute;inset:0;width:0;background:var(--ink);border-radius:3px;animation:fill 6s ease-in-out infinite}
+.label .ll.t{height:15px;width:78%}
+.label .ll.t::after{background:var(--accent)}
+.label .ll.s{width:55%}
+.label .ll.m{width:88%}
+.ll.s::after{animation-delay:.25s}
+.ll.m::after{animation-delay:.5s}
+@keyframes fill{0%{width:0}14%,72%{width:100%}86%,100%{width:0}}
+
+.barcode{display:flex;gap:3px;align-items:flex-end;height:42px;margin-top:13px}
+.barcode i{flex:1;background:var(--ink);border-radius:1px;transform:scaleY(0);transform-origin:bottom;animation:bars 6s ease-in-out infinite}
+@keyframes bars{0%,18%{transform:scaleY(0)}30%,72%{transform:scaleY(1)}86%,100%{transform:scaleY(0)}}
+
+.qr{position:absolute;right:16px;bottom:16px;width:54px;height:54px;display:grid;grid-template-columns:repeat(6,1fr);gap:2px}
+.qr span{background:var(--ink);border-radius:1px;opacity:0;animation:qr 6s steps(1) infinite}
+@keyframes qr{0%,20%{opacity:0}34%,72%{opacity:1}86%,100%{opacity:0}}
+
+.scanline{position:absolute;left:50%;top:16%;width:62%;height:3px;transform:translateX(-50%);
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);border-radius:3px;
+  filter:blur(.3px);opacity:0;animation:scan 6s ease-in-out infinite}
+@keyframes scan{0%,8%{opacity:0;top:18%}12%{opacity:1}30%{top:54%;opacity:1}40%{opacity:0;top:54%}100%{opacity:0}}
+
+.printer{position:absolute;left:50%;bottom:8%;width:74%;transform:translateX(-50%)}
+.printer .body{height:74px;border-radius:14px;background:linear-gradient(180deg,#23272e,#15181d);box-shadow:0 14px 30px -12px rgba(0,0,0,.5);position:relative}
+.printer .slot{position:absolute;top:-7px;left:8%;right:8%;height:8px;background:#0a0c0f;border-radius:6px}
+.printer .led{position:absolute;left:18px;bottom:14px;width:9px;height:9px;border-radius:50%;background:#22c55e;box-shadow:0 0 10px #22c55e;animation:blink 6s ease-in-out infinite}
+@keyframes blink{0%,40%{opacity:.4}45%,70%{opacity:1}100%{opacity:.4}}
+.printer .brand-strip{position:absolute;right:16px;bottom:13px;font:600 10px var(--font);letter-spacing:.12em;color:#7d8694}
+
+/* ---------- Pills / strip ---------- */
+.strip{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--bg-soft);padding:26px 0}
+.strip-inner{display:flex;flex-wrap:wrap;gap:14px 34px;align-items:center;justify-content:center;
+  font-size:14px;color:var(--muted);font-weight:500}
+.strip-inner b{color:var(--ink-soft);font-weight:600}
+.strip-inner .sep{width:5px;height:5px;border-radius:50%;background:var(--line)}
+
+/* ---------- Cards / grids ---------- */
+.section-head{max-width:680px;margin-bottom:54px}
+.section-head.center{margin-left:auto;margin-right:auto}
+
+.suite{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+.app{border:1px solid var(--line);border-radius:var(--radius);padding:26px 22px;background:#fff;transition:transform .2s,box-shadow .2s,border-color .2s}
+.app:hover{transform:translateY(-3px);box-shadow:0 20px 40px -26px rgba(14,17,22,.35);border-color:#d7dbe2}
+.app .ico{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);margin-bottom:16px}
+.app .ico svg{width:22px;height:22px}
+.app h3{margin-bottom:7px}
+.app p{font-size:14.5px;color:var(--muted)}
+
+.features{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.feature{padding:26px;border-radius:var(--radius);background:var(--bg-soft);border:1px solid transparent;transition:border-color .2s,background .2s}
+.feature:hover{background:#fff;border-color:var(--line)}
+.feature .ico{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;background:#fff;border:1px solid var(--line);color:var(--ink);margin-bottom:15px}
+.feature .ico svg{width:20px;height:20px}
+.feature h3{font-size:17px;margin-bottom:7px}
+.feature p{font-size:14px;color:var(--muted)}
+
+/* ---------- Workflow ---------- */
+.flow{background:var(--bg-ink);color:#fff;border-radius:24px;padding:54px 40px}
+.flow .eyebrow{color:#8ea0ff}
+.flow h2{color:#fff}
+.flow .lead{color:#aab2c0}
+.flow-stages{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-top:46px;position:relative}
+.fstage{position:relative;padding:0 18px;text-align:center}
+.fstage .num{width:46px;height:46px;border-radius:50%;margin:0 auto 16px;display:grid;place-items:center;
+  background:#1a1f27;border:1px solid #2a313c;color:#fff;position:relative;z-index:2}
+.fstage .num svg{width:22px;height:22px}
+.fstage h3{font-size:16px;color:#fff;margin-bottom:6px}
+.fstage p{font-size:13.5px;color:#8b94a3}
+.fline{position:absolute;top:23px;left:0;right:0;height:2px;background:#252b34;z-index:1}
+.fpulse{position:absolute;top:19px;left:0;width:10px;height:10px;border-radius:50%;
+  background:#8ea0ff;box-shadow:0 0 16px 3px rgba(142,160,255,.7);z-index:3;
+  animation:pulse-move 5s linear infinite}
+@keyframes pulse-move{0%{left:8%;opacity:0}6%{opacity:1}94%{opacity:1}100%{left:92%;opacity:0}}
+.fstage .num.lit{animation:litglow 5s ease-in-out infinite}
+.fstage:nth-child(1) .num{animation-delay:0s}
+.fstage:nth-child(2) .num{animation-delay:1.1s}
+.fstage:nth-child(3) .num{animation-delay:2.2s}
+.fstage:nth-child(4) .num{animation-delay:3.3s}
+@keyframes litglow{0%,12%{background:#1a1f27;border-color:#2a313c;color:#fff}
+  18%,30%{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 0 22px -2px var(--accent)}
+  40%,100%{background:#1a1f27;border-color:#2a313c}}
+
+/* ---------- Data binding animation ---------- */
+.bind{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center}
+.bind-visual{border:1px solid var(--line);border-radius:var(--radius);padding:24px;background:#fff;
+  box-shadow:0 24px 50px -34px rgba(14,17,22,.4)}
+.csv{font:12.5px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--bg-soft);border:1px solid var(--line);
+  border-radius:10px;padding:12px 14px;color:var(--ink-soft);overflow:hidden}
+.csv .row{white-space:nowrap}
+.csv .row.head{color:var(--muted)}
+.csv .hl{background:var(--accent-soft);color:var(--accent);border-radius:4px;padding:1px 4px;font-weight:600}
+.bind-label{margin-top:20px;border:1px dashed #c8cdd6;border-radius:10px;padding:16px;position:relative}
+.bind-label .tag{position:absolute;top:-9px;left:14px;background:#fff;padding:0 8px;font-size:11px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.bf{font:600 15px var(--font);color:var(--ink);margin:4px 0}
+.bf small{font:500 12px ui-monospace,Menlo,monospace;color:var(--accent);background:var(--accent-soft);
+  padding:1px 6px;border-radius:5px;margin-left:6px}
+.bf.flash{animation:flash 4s ease-in-out infinite}
+.bf:nth-child(2){animation-delay:.6s}
+.bf:nth-child(3){animation-delay:1.2s}
+@keyframes flash{0%,40%{background:transparent}50%,70%{background:var(--accent-soft);border-radius:6px}80%,100%{background:transparent}}
+
+/* ---------- Printers ---------- */
+.printers{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
+.pcard{border:1px solid var(--line);border-radius:var(--radius);padding:30px;background:#fff}
+.pcard .pbrand{font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:14px}
+.pcard ul{list-style:none;display:flex;flex-direction:column;gap:11px;margin-top:18px}
+.pcard li{display:flex;gap:11px;font-size:14.5px;color:var(--ink-soft)}
+.pcard li svg{width:18px;height:18px;color:var(--accent);flex-shrink:0;margin-top:2px}
+.pcard .badge{display:inline-block;font-size:11.5px;font-weight:600;padding:3px 10px;border-radius:999px;
+  background:var(--bg-soft);color:var(--muted);margin-left:8px}
+.badge.live{background:#e9f9ee;color:#15803d}
+
+/* ---------- Specs ---------- */
+.specs{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;text-align:center;margin-top:10px}
+.spec .n{font-size:clamp(30px,4vw,44px);font-weight:700;letter-spacing:-.03em}
+.spec .l{font-size:13.5px;color:var(--muted);margin-top:4px}
+
+/* ---------- CTA / download ---------- */
+.cta{background:var(--bg-ink);color:#fff;border-radius:24px;padding:64px 48px;text-align:center}
+.cta h2{color:#fff;margin-bottom:16px}
+.cta .lead{color:#aab2c0;margin:0 auto 30px}
+.cta-actions{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+.cta .btn-primary{background:#fff;color:var(--ink)}
+.cta .btn-primary:hover{background:#eef1ff}
+.cta .btn-ghost{color:#fff;border-color:#333a44}
+.cta .btn-ghost:hover{border-color:#fff}
+.cta-sub{font-size:13px;color:#79828f;margin-top:18px}
+
+/* ---------- Footer ---------- */
+footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
+.foot{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+.foot .brand{font-size:16px}
+.foot-links{display:flex;gap:24px;font-size:14px;color:var(--muted)}
+.foot-links a:hover{color:var(--ink)}
+.foot .copy{font-size:13px;color:var(--muted);width:100%}
+
+/* ---------- Reveal ---------- */
+.reveal{opacity:0;transform:translateY(18px);transition:opacity .7s ease,transform .7s ease}
+.reveal.in{opacity:1;transform:none}
+
+/* ---------- Responsive ---------- */
+@media(max-width:900px){
+  .nav-links{display:none}
+  .menu-btn{display:block}
+  .hero-grid{grid-template-columns:1fr;gap:40px}
+  .suite{grid-template-columns:repeat(2,1fr)}
+  .features{grid-template-columns:1fr 1fr}
+  .flow-stages{grid-template-columns:1fr 1fr;gap:36px 0}
+  .fline,.fpulse{display:none}
+  .bind{grid-template-columns:1fr}
+  .printers{grid-template-columns:1fr}
+  .specs{grid-template-columns:1fr 1fr;gap:32px}
+  section{padding:72px 0}
+}
+@media(max-width:560px){
+  .suite{grid-template-columns:1fr}
+  .features{grid-template-columns:1fr}
+  .flow,.cta{padding:40px 24px}
+  .hero-actions .btn{flex:1;justify-content:center}
+}
+@media(prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+  .reveal{opacity:1;transform:none}
+}
+</style>
+
+<!-- ============================== NAV ============================== -->
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a href="#top" class="brand">
+      <svg class="mark" viewBox="0 0 32 32" fill="none">
+        <rect x="1.5" y="1.5" width="29" height="29" rx="8" fill="#0e1116"/>
+        <path d="M9 10l5 12 5-12" stroke="#2f57ff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="20" y="9" width="3" height="14" rx="1.2" fill="#fff"/>
+      </svg>
+      VectorLabel
+    </a>
+    <nav class="nav-links">
+      <a href="#suite">The suite</a>
+      <a href="#workflow">Workflow</a>
+      <a href="#features">Features</a>
+      <a href="#printers">Printers</a>
+      <a href="#integration">Vectorworks</a>
+    </nav>
+    <div class="nav-cta">
+      <a href="#download" class="btn btn-primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Download
+      </a>
+      <button class="menu-btn" aria-label="Menu" onclick="document.querySelector('.nav-links').style.display='flex';this.remove()">
+        <svg width="24" height="24" viewBox="0 0 24 24" stroke="#0e1116" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<a id="top"></a>
+
+<!-- ============================== HERO ============================== -->
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="eyebrow">macOS · Vectorworks ConnectCAD</div>
+      <h1>Wire labels,<br>printed straight from<br>your drawings.</h1>
+      <p class="lead">VectorLabel turns your Vectorworks ConnectCAD circuits into barcode-ready wire, cable and patch labels — designed once, bound to your data, and sent to Brady and Brother thermal printers in a couple of clicks.</p>
+      <div class="hero-actions">
+        <a href="#download" class="btn btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Download for macOS
+        </a>
+        <a href="#workflow" class="btn btn-ghost">See it in action</a>
+      </div>
+      <div class="hero-note"><span class="dot"></span> No re-typing. No spreadsheets. Select circuits in Vectorworks, print.</div>
+    </div>
+
+    <!-- Animated printer + label -->
+    <div class="stage" aria-hidden="true">
+      <div class="grid-bg"></div>
+      <div class="label">
+        <div class="ll t"></div>
+        <div class="ll s"></div>
+        <div class="ll m"></div>
+        <div class="barcode">
+          <i style="animation-delay:.30s"></i><i style="animation-delay:.34s"></i><i style="animation-delay:.38s"></i>
+          <i style="animation-delay:.42s"></i><i style="animation-delay:.46s"></i><i style="animation-delay:.50s"></i>
+          <i style="animation-delay:.54s"></i><i style="animation-delay:.58s"></i><i style="animation-delay:.62s"></i>
+          <i style="animation-delay:.66s"></i><i style="animation-delay:.70s"></i><i style="animation-delay:.74s"></i>
+          <i style="animation-delay:.78s"></i><i style="animation-delay:.82s"></i><i style="animation-delay:.86s"></i>
+        </div>
+        <div class="qr">
+          <span style="animation-delay:.40s"></span><span style="animation-delay:.46s"></span><span style="animation-delay:.52s"></span><span style="animation-delay:.58s"></span><span style="animation-delay:.64s"></span><span style="animation-delay:.70s"></span>
+          <span style="animation-delay:.43s"></span><span style="animation-delay:.49s"></span><span style="animation-delay:.55s"></span><span style="animation-delay:.61s"></span><span style="animation-delay:.67s"></span><span style="animation-delay:.73s"></span>
+          <span style="animation-delay:.46s"></span><span style="animation-delay:.52s"></span><span style="animation-delay:.58s"></span><span style="animation-delay:.64s"></span><span style="animation-delay:.70s"></span><span style="animation-delay:.76s"></span>
+          <span style="animation-delay:.49s"></span><span style="animation-delay:.55s"></span><span style="animation-delay:.61s"></span><span style="animation-delay:.67s"></span><span style="animation-delay:.73s"></span><span style="animation-delay:.79s"></span>
+          <span style="animation-delay:.52s"></span><span style="animation-delay:.58s"></span><span style="animation-delay:.64s"></span><span style="animation-delay:.70s"></span><span style="animation-delay:.76s"></span><span style="animation-delay:.82s"></span>
+          <span style="animation-delay:.55s"></span><span style="animation-delay:.61s"></span><span style="animation-delay:.67s"></span><span style="animation-delay:.73s"></span><span style="animation-delay:.79s"></span><span style="animation-delay:.85s"></span>
+        </div>
+      </div>
+      <div class="scanline"></div>
+      <div class="printer">
+        <div class="body">
+          <div class="slot"></div>
+          <div class="led"></div>
+          <div class="brand-strip">THERMAL · 300 DPI</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== TRUST STRIP ============================== -->
+<div class="strip">
+  <div class="wrap strip-inner">
+    <span><b>Brady M610 &amp; M611</b></span><span class="sep"></span>
+    <span><b>Brother P-touch</b></span><span class="sep"></span>
+    <span><b>15</b> barcode &amp; 2-D symbologies</span><span class="sep"></span>
+    <span>USB &amp; <b>Network</b> printing</span><span class="sep"></span>
+    <span>Brady &amp; Brother <b>template import</b></span>
+  </div>
+</div>
+
+<!-- ============================== THE SUITE ============================== -->
+<section id="suite">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow">One suite, four apps</div>
+      <h2>Everything from drawing to printed label.</h2>
+      <p class="lead muted">VectorLabel is a coordinated set of macOS apps. Design templates, watch for new exports, and drive your printers — each piece does one job well.</p>
+    </div>
+    <div class="suite">
+      <div class="app reveal">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M5 12h14M12 5v14" stroke-linecap="round"/><rect x="3" y="3" width="18" height="18" rx="3"/></svg></div>
+        <h3>Engine</h3>
+        <p>The print engine and menu-bar hub. Owns the printers, manages the queue, detects cassettes and publishes live status.</p>
+      </div>
+      <div class="app reveal">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 3v6m0 0l3-3m-3 3L9 6" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 13a8 8 0 0016 0" stroke-linecap="round"/></svg></div>
+        <h3>AutoPrint</h3>
+        <p>Watches your Vectorworks export folder. The moment a new export lands, the print window opens with your records loaded.</p>
+      </div>
+      <div class="app reveal">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 17l6-6 4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="9" cy="11" r="0"/></svg></div>
+        <h3>Template Designer</h3>
+        <p>Build reusable label templates, bind fields to your circuit data, and reuse them across every project.</p>
+      </div>
+      <div class="app reveal">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v16" stroke-linecap="round"/></svg></div>
+        <h3>Custom Designer</h3>
+        <p>Design one-off labels with no template binding — full layout freedom, plus a database mode for browsing and editing records inline.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== WORKFLOW ============================== -->
+<section id="workflow">
+  <div class="wrap">
+    <div class="flow reveal">
+      <div class="eyebrow">The workflow</div>
+      <h2>From ConnectCAD circuit to printed label.</h2>
+      <p class="lead">Two Python commands live inside Vectorworks. Select your circuits, run the command, and VectorLabel takes it from there — automatically.</p>
+      <div class="flow-stages">
+        <div class="fline"></div>
+        <div class="fpulse"></div>
+        <div class="fstage">
+          <div class="num lit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6l8-3 8 3-8 3-8-3z"/><path d="M4 6v8l8 3 8-3V6" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <h3>Select in Vectorworks</h3>
+          <p>Pick circuits in ConnectCAD, or export every circuit on the layer.</p>
+        </div>
+        <div class="fstage">
+          <div class="num lit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5" stroke-linecap="round"/></svg></div>
+          <h3>Export silently</h3>
+          <p>A clean CSV of names, sockets, cables and racks lands in your project folder.</p>
+        </div>
+        <div class="fstage">
+          <div class="num lit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 17l6-6 4 4 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <h3>Auto-loaded</h3>
+          <p>AutoPrint spots the file and opens the print window — records ready, preview live.</p>
+        </div>
+        <div class="fstage">
+          <div class="num lit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="9" width="14" height="8" rx="1.5"/><path d="M7 9V4h10v5M7 17v3h10v-3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <h3>Print &amp; cut</h3>
+          <p>Choose a template and printer, hit print — with live per-label progress.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== FEATURES ============================== -->
+<section id="features">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow">Built for the rack room</div>
+      <h2>Designed for accurate, barcode-ready labels.</h2>
+      <p class="lead muted">Every feature is aimed at one thing: getting the right text and codes onto the right label, fast, with no manual re-keying.</p>
+    </div>
+    <div class="features">
+      <div class="feature reveal">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 13h6M7 16h10" stroke-linecap="round"/></svg></div>
+        <h3>Visual template designer</h3>
+        <p>Drag text, barcodes, images, symbols, lines, rectangles and arrows onto a true-to-size canvas. Rotate anything; auto-scale text to fit.</p>
+      </div>
+      <div class="feature reveal">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5v14M8 5v14M11 5v14M15 5v14M18 5v14M21 5v14" stroke-linecap="round"/></svg></div>
+        <h3>15 barcode &amp; 2-D codes</h3>
+        <p>QR, Data Matrix, Aztec, Micro QR, PDF417, Code 128, GS1-128, Code 39/93, EAN/UPC and more — regenerated per record at print time.</p>
+      </div>
+      <div class="feature reveal">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h7M4 12h7M4 17h7" stroke-linecap="round"/><path d="M15 9l3 3-3 3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <h3>Field &amp; formula binding</h3>
+        <p>Bind any element to a data column, or compute it with Excel-style formulas — <code>IF</code>, <code>LEFT</code>, <code>MID</code>, <code>UPPER</code>, concatenation and more.</p>
+      </div>
+      <div class="feature reveal">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M3 12h18M3 18h18" stroke-linecap="round"/><circle cx="8" cy="6" r="1.6" fill="currentColor"/><circle cx="15" cy="12" r="1.6" fill="currentColor"/><circle cx="10" cy="18" r="1.6" fill="currentColor"/></svg></div>
+        <h3>Filter, sort &amp; presets</h3>
+        <p>Print only the labels you need — filter by field, sort by column or rack/RackU, and save filter-and-sort presets for next time.</p>
+      </div>
+      <div class="feature reveal">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v16" stroke-linecap="round"/><path d="M12 13l2 2 3-3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <h3>Inline record editing</h3>
+        <p>Spot a typo? Click a cell in the record browser, fix it, and the change syncs straight back to the export — no context switch.</p>
+      </div>
+      <div class="feature reveal">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15V6a2 2 0 00-2-2H5a2 2 0 00-2 2v9" stroke-linecap="round"/><path d="M3 15h18l-2 4H5l-2-4z" stroke-linejoin="round"/></svg></div>
+        <h3>Editable supply catalog</h3>
+        <p>A full catalog of Brady and Brother supplies — sizes, part numbers, quantities and buy links — all editable in-app, no code needed.</p>
+      </div>
+      <div class="feature reveal">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3a9 9 0 100 18 9 9 0 000-18z"/><path d="M12 7v5l3 2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <h3>Live print progress</h3>
+        <p>A per-label progress bar, responsive mid-run cancel, and a Recent Prints history you can reprint from in one click.</p>
+      </div>
+      <div class="feature reveal">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7l8 4 8-4-8-4-8 4z" stroke-linejoin="round"/><path d="M4 12l8 4 8-4M4 17l8 4 8-4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <h3>Import existing templates</h3>
+        <p>Migrate from Brady Workstation <code>.BWT</code> or Brother P-touch <code>.lbx</code> files — geometry, text and barcodes come across intact.</p>
+      </div>
+      <div class="feature reveal">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2" stroke-linecap="round"/></svg></div>
+        <h3>Per-printer calibration</h3>
+        <p>Print a calibration grid, dial in the offset once, and every label lands perfectly aligned — settings survive app updates.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== DATA BINDING ============================== -->
+<section style="background:var(--bg-soft);border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+  <div class="wrap bind">
+    <div class="reveal">
+      <div class="eyebrow">Design once, print hundreds</div>
+      <h2>Your data flows into the label automatically.</h2>
+      <p class="lead muted" style="margin-bottom:22px">Map each part of the label to a column from your export — or build it with a formula. Then every record prints with its own text and its own barcode, no manual edits.</p>
+      <p class="muted" style="font-size:14.5px"><code style="background:#fff;border:1px solid var(--line);padding:3px 8px;border-radius:6px;font-size:13px">=IF(Number&lt;&gt;"",Number&amp;" - "&amp;Cable,Cable)</code><br><span style="display:inline-block;margin-top:10px">A formula like this builds a clean label from whatever fields are present — VectorLabel evaluates it for every row.</span></p>
+    </div>
+    <div class="bind-visual reveal">
+      <div class="csv">
+        <div class="row head">Device, Socket, Connector, Cable, Rack</div>
+        <div class="row">AMP&nbsp;3, <span class="hl">OUT&nbsp;L</span>, XLR-M, <span class="hl">C-1042</span>, FOH-A1</div>
+        <div class="row">DSP&nbsp;1, IN&nbsp;7, XLR-F, C-1043, FOH-A1</div>
+        <div class="row">WALL&nbsp;12, AUX, TRS, C-1044, STAGE-L</div>
+      </div>
+      <div class="bind-label">
+        <span class="tag">Label preview</span>
+        <div class="bf flash">AMP 3 · OUT L <small>=Device&amp;Socket</small></div>
+        <div class="bf flash">Cable C-1042 <small>=Cable</small></div>
+        <div class="bf flash" style="font:600 13px ui-monospace,Menlo,monospace;letter-spacing:.18em">▌▎█▍▌▎▏█▍▎▌ <small>Code 128</small></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== PRINTERS ============================== -->
+<section id="printers">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="eyebrow">Hardware</div>
+      <h2>One app, your printers.</h2>
+      <p class="lead muted">VectorLabel speaks directly to thermal label printers over USB and the network — auto-discovering devices, detecting loaded media, and reporting status live.</p>
+    </div>
+    <div class="printers">
+      <div class="pcard reveal">
+        <div class="pbrand">Brady</div>
+        <h3>M610 &amp; M611 wire-label printers</h3>
+        <ul>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg> 300 DPI thermal, self-laminating wire wraps</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg> M611 network printing &amp; live telemetry <span class="badge live">verified</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg> SmartCell cassette auto-detection</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg> Built-in cutter — cut after job, every label, or never</li>
+        </ul>
+      </div>
+      <div class="pcard reveal">
+        <div class="pbrand">Brother</div>
+        <h3>P-touch label printers</h3>
+        <ul>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg> 180 DPI continuous TZe tape, 3.5–24 mm widths</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg> PT-E550W · PT-P750W · PT-E560BT <span class="badge">drivers ready</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg> USB and Wi-Fi (network) transports</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg> Automatic tape-width detection</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="specs reveal" style="margin-top:42px">
+      <div class="spec"><div class="n">900<span style="font-size:.5em;letter-spacing:0"> DPI</span></div><div class="l">Master render, downscaled per printer</div></div>
+      <div class="spec"><div class="n">15</div><div class="l">Barcode &amp; 2-D symbologies</div></div>
+      <div class="spec"><div class="n">1500+</div><div class="l">Records scroll smoothly per print</div></div>
+      <div class="spec"><div class="n">2</div><div class="l">Vectorworks export commands</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== VECTORWORKS INTEGRATION ============================== -->
+<section id="integration" style="background:var(--bg-soft);border-top:1px solid var(--line)">
+  <div class="wrap bind">
+    <div class="bind-visual reveal" style="order:2">
+      <div style="font:600 12px var(--font);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:14px">Vectorworks · Plug-in Manager</div>
+      <div style="border:1px solid var(--line);border-radius:10px;overflow:hidden">
+        <div style="padding:13px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;background:#fff">
+          <div style="width:30px;height:30px;border-radius:8px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6l8-3 8 3-8 3-8-3z"/></svg></div>
+          <div><div style="font-weight:600;font-size:14.5px">Export Selected Circuits</div><div style="font-size:12.5px;color:var(--muted)">Only the circuits you've selected</div></div>
+        </div>
+        <div style="padding:13px 16px;display:flex;align-items:center;gap:12px;background:#fff">
+          <div style="width:30px;height:30px;border-radius:8px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round"/></svg></div>
+          <div><div style="font-weight:600;font-size:14.5px">Export All Circuits</div><div style="font-size:12.5px;color:var(--muted)">Every circuit on the active layer</div></div>
+        </div>
+      </div>
+      <div style="margin-top:16px;font:12.5px/1.7 ui-monospace,Menlo,monospace;color:var(--ink-soft);background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:12px 14px">
+        ~/Documents/VectorLabel/Exports/<br>&nbsp;&nbsp;<span style="color:var(--accent)">Theatre_Renovation/</span><br>&nbsp;&nbsp;&nbsp;&nbsp;Theatre_export_20260629.csv
+      </div>
+    </div>
+    <div class="reveal" style="order:1">
+      <div class="eyebrow">Native Vectorworks integration</div>
+      <h2>It lives inside Vectorworks.</h2>
+      <p class="lead muted" style="margin-bottom:20px">Install two Python commands through the Plug-in Manager and they appear right in your menus. They read ConnectCAD circuits directly — device names, sockets, connectors, cable numbers, racks and RackU — and write a clean CSV.</p>
+      <p class="muted" style="font-size:15px;margin-bottom:18px">No copy-paste, no exporting to Excel and reformatting. The data your drawing already holds becomes the data on your labels.</p>
+      <div class="hero-note"><span class="dot"></span> Export runs silently — VectorLabel detects the new file and opens automatically.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== DOWNLOAD / CTA ============================== -->
+<section id="download">
+  <div class="wrap">
+    <div class="cta reveal">
+      <div class="eyebrow" style="color:#8ea0ff">Get VectorLabel</div>
+      <h2>Ready to stop re-typing labels?</h2>
+      <p class="lead">Download the latest build, install the Vectorworks plug-ins, and print your first rack of labels in minutes.</p>
+      <div class="cta-actions">
+        <a href="https://github.com/ryancoopster/VectorLabel/releases" class="btn btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Download from GitHub
+        </a>
+        <a href="https://github.com/ryancoopster/VectorLabel" class="btn btn-ghost">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.5 2 2 6.6 2 12.2c0 4.5 2.9 8.3 6.8 9.6.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.2-3.4-1.2-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.7.3-1.1.6-1.4-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.7 1a9.4 9.4 0 015 0c1.9-1.3 2.7-1 2.7-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.3 4.7-4.6 5 .4.3.7.9.7 1.9v2.8c0 .3.2.6.7.5A10.2 10.2 0 0022 12.2C22 6.6 17.5 2 12 2z"/></svg>
+          View source &amp; docs
+        </a>
+      </div>
+      <div class="cta-sub">macOS · Free &amp; open source · Brady and Brother thermal printers</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== FOOTER ============================== -->
+<footer>
+  <div class="wrap foot">
+    <a href="#top" class="brand">
+      <svg class="mark" viewBox="0 0 32 32" fill="none">
+        <rect x="1.5" y="1.5" width="29" height="29" rx="8" fill="#0e1116"/>
+        <path d="M9 10l5 12 5-12" stroke="#2f57ff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="20" y="9" width="3" height="14" rx="1.2" fill="#fff"/>
+      </svg>
+      VectorLabel
+    </a>
+    <div class="foot-links">
+      <a href="#features">Features</a>
+      <a href="#printers">Printers</a>
+      <a href="#integration">Vectorworks</a>
+      <a href="https://github.com/ryancoopster/VectorLabel">GitHub</a>
+    </div>
+    <div class="copy">© <span id="yr"></span> VectorLabel · Built for Vectorworks ConnectCAD · Brady and Brother are trademarks of their respective owners.</div>
+  </div>
+</footer>
+
+<script>
+  // Year
+  document.getElementById('yr').textContent = new Date().getFullYear();
+  // Scroll reveal
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} });
+  },{threshold:.12, rootMargin:'0px 0px -40px 0px'});
+  document.querySelectorAll('.reveal').forEach(function(el,i){
+    el.style.transitionDelay = (Math.min(i%4,3)*70)+'ms';
+    io.observe(el);
+  });
+</script>
