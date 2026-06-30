@@ -1259,7 +1259,10 @@ function buildMultiProps(sels){
   function openFontPicker(e){
     e.preventDefault(); e.stopPropagation(); closeFontPicker();
     const btn=e.currentTarget;
-    const all=FONTS.concat(SYS_FONTS.filter(f=>FONTS.indexOf(f)<0));
+    // Read the injected system list LIVE (not the load-time SYS_FONTS const) so a slow /
+    // late injection can't leave us with only the curated fonts.
+    const sys=Array.isArray(window.__VL_FONTS__)?window.__VL_FONTS__:SYS_FONTS;
+    const all=FONTS.concat(sys.filter(f=>FONTS.indexOf(f)<0));
     const curFont=sh('font','Arial').v||'';
     const r=btn.getBoundingClientRect();
     const pop=document.createElement('div'); pop.id='vl-font-pop';
@@ -1267,7 +1270,7 @@ function buildMultiProps(sels){
       +'width:'+Math.max(220,r.width)+'px;max-height:300px;display:flex;flex-direction:column;background:var(--surface);'
       +'border:1px solid var(--bd4);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.5);overflow:hidden';
     pop.innerHTML='<style>#vl-font-pop .vl-font-opt:hover{background:var(--bd3)}</style>'
-      +'<input id="vl-font-search" class="inp" placeholder="Search fonts…" autocomplete="off" style="margin:5px;width:auto;flex:0 0 auto">'
+      +'<input id="vl-font-search" class="inp" placeholder="Search '+all.length+' fonts…" autocomplete="off" style="margin:5px;width:auto;flex:0 0 auto">'
       +'<div id="vl-font-list" style="overflow-y:auto"></div>';
     document.body.appendChild(pop);
     const listEl=pop.querySelector('#vl-font-list'), searchEl=pop.querySelector('#vl-font-search');

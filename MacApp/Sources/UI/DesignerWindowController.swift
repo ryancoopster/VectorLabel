@@ -1422,6 +1422,10 @@ extension DesignerWindowController: WKNavigationDelegate {
         // Only handle our designer webview
         guard webView === self.webView else { return }
         webViewReady = true   // page loaded — warm reopens may inject directly now
+        // Re-assert the installed font families after load, in case the document-start
+        // injection raced the page's own script (the font picker reads window.__VL_FONTS__
+        // live, so this guarantees the full system list is present).
+        webView.evaluateJavaScript("window.__VL_FONTS__=\(Self.systemFontFamiliesJSON());", completionHandler: nil)
         // Apply the current light/dark theme.
         webView.evaluateJavaScript("if(typeof setTheme==='function')setTheme('\(AppSettings.shared.effectiveTheme)')", completionHandler: nil)
         // Inject the most recent CSV with ≥10 records — TEMPLATE MODE ONLY. The
