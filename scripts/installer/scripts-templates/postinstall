@@ -9,11 +9,12 @@ log() { /usr/bin/logger -t VectorLabel "templates postinstall: $*"; }
 
 USER_CONSOLE=$(stat -f %Su /dev/console 2>/dev/null)
 [ -n "$USER_CONSOLE" ] && [ "$USER_CONSOLE" != "root" ] || exit 0
-# Resolve the home dir with the username as a LITERAL dscl argument — never via `eval`
-# (this runs as ROOT, so eval on the Open Directory RecordName would execute shell
-# metacharacters). NFSHomeDirectory is single-valued, so its value follows the key on one
-# line; sed keeps spaces in the path intact (the old `awk '{print $2}'` truncated them).
-USER_HOME=$(/usr/bin/dscl . -read "/Users/$USER_CONSOLE" NFSHomeDirectory 2>/dev/null | /usr/bin/sed -n 's/^NFSHomeDirectory: //p')
+# Resolve the home dir with the username as a LITERAL argument — never via `eval` (this
+# runs as ROOT, so eval on the Open Directory RecordName would execute shell metacharacters).
+# dscacheutil prints `dir: <path>` on ONE line, so a home path containing spaces survives
+# intact — unlike the old `awk '{print $2}'` (truncated at the space) and unlike `dscl -read`
+# (wraps a spaced single-valued attribute onto a continuation line the key-prefix sed misses).
+USER_HOME=$(/usr/bin/dscacheutil -q user -a name "$USER_CONSOLE" 2>/dev/null | /usr/bin/sed -n 's/^dir: //p' | /usr/bin/head -1)
 [ -n "$USER_HOME" ] && [ -d "$USER_HOME" ] || { log "could not resolve home for $USER_CONSOLE"; exit 0; }
 
 DOCS="$USER_HOME/Documents"
