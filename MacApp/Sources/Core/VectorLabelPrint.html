@@ -743,6 +743,7 @@ function rippleField(label,key,type,placeholder){ const rp=window._ripple; const
   return '<label style="display:block;margin-bottom:9px"><span style="display:block;color:var(--text2);margin-bottom:3px;font-size:11px">'+esc(label)+'</span>'
     +'<input type="'+type+'" value="'+v+'"'+(placeholder?' placeholder="'+escAttr(placeholder)+'"':'')+' oninput="window._ripple.'+key+'=this.value;rippleValidate()" onkeydown="if(event.key===\'Enter\'){event.preventDefault();rippleApply();}" style="width:100%;padding:6px 8px;font-size:12px;border:1px solid var(--bd3);border-radius:5px;background:var(--bg);color:var(--text);box-sizing:border-box"></label>'; }
 function rippleValidate(){ const b=document.getElementById('ripple-apply'); if(!b)return; const rp=window._ripple; const ok=!!rp&&/^\d+$/.test(String(rp.count).trim())&&parseInt(rp.count,10)>=1; b.disabled=!ok; b.style.opacity=ok?'1':'0.4'; b.style.cursor=ok?'pointer':'not-allowed'; b.style.pointerEvents=ok?'':'none'; }
+function rippleSetAll(){ const rp=window._ripple; if(!rp)return; const vis=feVisRows(); const pos=vis.indexOf(rp.absRow); const n=pos>=0?(vis.length-pos):0; rp.count=String(n); const inp=document.getElementById('ripple-count'); if(inp)inp.value=rp.count; rippleValidate(); }
 function rippleRender(){ rippleClose(true); const rp=window._ripple; if(!rp)return;
   const wrap=document.createElement('div'); wrap.id='ripple-overlay';
   wrap.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:99999;display:flex;align-items:center;justify-content:center';
@@ -752,7 +753,9 @@ function rippleRender(){ rippleClose(true); const rp=window._ripple; if(!rp)retu
     +'<div style="color:var(--text3);font-size:11px;margin-bottom:13px">Auto-enumerate down column “'+esc(colLabel(rp.col))+'”. Each value is <b>prefix + counter + postfix</b>.</div>'
     +rippleField('Prefix','prefix','text')+rippleField('Start (number or letter)','start','text')
     +rippleField('Increment (e.g. 1 → 1,2,3 · 2 → 1,3,5)','inc','number')+rippleField('Postfix','postfix','text')
-    +rippleField('Number of records','count','number','Enter a quantity')
+    +'<label style="display:block;margin-bottom:9px"><span style="display:block;color:var(--text2);margin-bottom:3px;font-size:11px">Number of records</span>'
+    +'<div style="display:flex;gap:6px"><input id="ripple-count" type="number" value="'+escAttr(String(rp.count))+'" placeholder="Enter a quantity" oninput="window._ripple.count=this.value;rippleValidate()" onkeydown="if(event.key===\'Enter\'){event.preventDefault();rippleApply();}" style="flex:1;padding:6px 8px;font-size:12px;border:1px solid var(--bd3);border-radius:5px;background:var(--bg);color:var(--text);box-sizing:border-box">'
+    +'<button class="btn" onmousedown="event.preventDefault()" onclick="rippleSetAll()" title="All records from the selected one to the end of the data set" style="padding:6px 13px;font-size:12px;flex-shrink:0">All</button></div></label>'
     +'<div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">'
     +'<button class="btn" onclick="rippleClose()" style="padding:5px 12px">Cancel</button>'
     +'<button id="ripple-apply" class="btn on" onclick="rippleApply()" style="padding:5px 16px">Apply</button></div></div>';
