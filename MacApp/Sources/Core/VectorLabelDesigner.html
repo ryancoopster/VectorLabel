@@ -59,6 +59,7 @@ label.lbl{font-size:10px;color:var(--text2);display:block;margin-bottom:3px}
 /* Free-edit grid */
 .fe-cell{position:relative;border-right:1px solid var(--bd1);min-height:28px;box-sizing:border-box;cursor:cell;user-select:none}
 .fe-cell.fe-sel{background:rgba(108,142,245,0.16)}
+.fe-cell.fe-fill{background:rgba(108,142,245,0.30);outline:1px dashed var(--accent);outline-offset:-2px}
 .fe-cell.fe-act{box-shadow:inset 0 0 0 2px var(--accent);z-index:6}
 .fe-inp{flex:1;width:100%;min-width:0;border:none;outline:none;background:var(--bg);color:var(--text);font-size:11px;padding:5px 8px;box-sizing:border-box}
 .fe-handle{position:absolute;right:-3px;bottom:-3px;width:8px;height:8px;background:var(--accent);border:1px solid #fff;border-radius:1px;cursor:crosshair;z-index:8}
@@ -4619,7 +4620,7 @@ function feSelectRange(r0,c0,r1,c1){ const f=feInit(); f.active={r:r0,c:c0}; f.s
 function feCellHTML(visR,colIdx,colName,absIdx){
   const o=feRowObj(absIdx); const v=(o&&o[colName]!=null)?String(o[colName]):'';
   const sel=feInSel(visR,colIdx), act=feIsActive(visR,colIdx);
-  const attrs='class="fe-cell'+(sel?' fe-sel':'')+(act?' fe-act':'')+'" data-r="'+visR+'" data-c="'+colIdx+'" data-abs="'+absIdx+'" onmousedown="feDown(event,'+visR+','+colIdx+')" onmouseenter="feEnter('+visR+','+colIdx+')" oncontextmenu="feMenu(event,'+absIdx+',\''+jsAttr(colName)+'\')"';
+  const attrs='class="fe-cell'+(sel?' fe-sel':'')+(act?' fe-act':'')+'" data-r="'+visR+'" data-c="'+colIdx+'" data-abs="'+absIdx+'" onmousedown="feDown(event,'+visR+','+colIdx+')" onmouseenter="feEnter('+visR+','+colIdx+')" oncontextmenu="feMenu(event,'+visR+','+colIdx+')"';
   if(act){
     return '<div '+attrs+' style="position:relative;padding:0;display:flex">'
       +'<input id="fe-editor" class="fe-inp" value="'+escAttr(v)+'" spellcheck="false" oninput="feInput('+visR+','+colIdx+',this.value)" onkeydown="feKey(event,'+visR+','+colIdx+')" onmousedown="event.stopPropagation()">'
@@ -4635,7 +4636,9 @@ function feEnter(r,c){ const f=window._fe; if(!f)return;
   if(f.fill){ f.fill.r=r; f.fill.c=c; feApplyHighlight(); return; }
   if(f.drag&&f.active){ f.sel={r0:f.active.r,c0:f.active.c,r1:r,c1:c}; feApplyHighlight(); } }
 function feUp(e){ const f=window._fe; if(!f)return; if(f.fill){ feDoFill(e&&e.altKey); f.fill=null; R(); setTimeout(feFocusActive,0); } f.drag=false; }
-function feApplyHighlight(){ document.querySelectorAll('.fe-cell').forEach(el=>{ const r=+el.dataset.r,c=+el.dataset.c; el.classList.toggle('fe-sel',feInSel(r,c)); }); }
+function feApplyHighlight(){ const f=window._fe; let fl=null;
+  if(f&&f.fill){ fl={sc:f.fill.fromC,lo:Math.min(f.fill.fromR,f.fill.r),hi:Math.max(f.fill.fromR,f.fill.r)}; }
+  document.querySelectorAll('.fe-cell').forEach(el=>{ const r=+el.dataset.r,c=+el.dataset.c; el.classList.toggle('fe-sel',feInSel(r,c)); el.classList.toggle('fe-fill',!!(fl&&c===fl.sc&&r>=fl.lo&&r<=fl.hi)); }); }
 function feInput(r,c,val){ const vis=feVisRows(),cols=feGridCols(); if(vis[r]==null||cols[c]==null)return; feWriteCellAbs(vis[r],cols[c],val); feBulkSync(); feMarkDirty(); }
 function feMove(r,c){ const f=feInit(),vis=feVisRows(),cols=feGridCols(); if(!vis.length||!cols.length)return;
   r=Math.max(0,Math.min(vis.length-1,r)); c=Math.max(0,Math.min(cols.length-1,c)); f.active={r,c}; f.sel={r0:r,c0:c,r1:r,c1:c}; R();
@@ -4672,7 +4675,34 @@ function feDoFill(noInc){ const f=window._fe; if(!f||!f.fill)return; const vis=f
     if(m&&!noInc){ const k=r-srcR,base=parseInt(m[2],10),num=base+k; let s=String(Math.abs(num)); const w=m[2].replace('-','').length; if(w>s.length)s=s.padStart(w,'0'); out=m[1]+(num<0?'-':'')+s; }
     feWriteCellAbs(vis[r],colName,out); }
   feSelectRange(lo,sc,hi,sc); feBulkSyncNow(); feMarkDirty(); }
-function feMenu(e,absRow,col){ e.preventDefault(); rippleOpen(absRow,col); }
+function feMenu(e,visR,colIdx){ e.preventDefault(); const f=feInit();
+  if(!feInSel(visR,colIdx)){ f.active={r:visR,c:colIdx}; f.sel={r0:visR,c0:colIdx,r1:visR,c1:colIdx}; R(); }
+  feShowMenu(e.clientX,e.clientY,visR,colIdx); }
+function feSelCount(){ const f=window._fe; if(!f||!f.sel)return 0; const n=feNorm(f.sel); return (n.r1-n.r0+1)*(n.c1-n.c0+1); }
+function feClearSelection(){ const f=window._fe; if(!f||!f.sel)return; const n=feNorm(f.sel),vis=feVisRows(),cols=feGridCols();
+  for(let r=n.r0;r<=n.r1;r++){ for(let c=n.c0;c<=n.c1;c++){ if(vis[r]!=null&&cols[c]!=null)feWriteCellAbs(vis[r],cols[c],''); } }
+  feBulkSyncNow(); feMarkDirty(); R(); setTimeout(feFocusActive,0); }
+function feCloseMenu(){ const m=document.getElementById('fe-ctx'); if(m)m.remove(); document.removeEventListener('mousedown',feMenuOutside,true); document.removeEventListener('keydown',feMenuEsc,true); }
+function feMenuOutside(e){ const m=document.getElementById('fe-ctx'); if(m&&!m.contains(e.target))feCloseMenu(); }
+function feMenuEsc(e){ if(e.key==='Escape')feCloseMenu(); }
+function feShowMenu(x,y,visR,colIdx){ feCloseMenu(); const vis=feVisRows(),cols=feGridCols(); const absRow=vis[visR],col=cols[colIdx];
+  const menu=document.createElement('div'); menu.id='fe-ctx';
+  menu.style.cssText='position:fixed;z-index:99998;background:var(--surface);border:1px solid var(--bd3);border-radius:7px;box-shadow:0 8px 28px rgba(0,0,0,0.45);padding:4px;min-width:150px;font-size:12px;color:var(--text);user-select:none';
+  function item(label,fn){ const b=document.createElement('div'); b.innerHTML=label; b.style.cssText='padding:6px 12px;border-radius:4px;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:7px'; b.onmouseenter=function(){b.style.background='var(--bd2)';}; b.onmouseleave=function(){b.style.background='';}; b.onmousedown=function(ev){ev.preventDefault();ev.stopPropagation();}; b.onclick=function(){ feCloseMenu(); fn(); }; menu.appendChild(b); }
+  function sep(){ const s=document.createElement('div'); s.style.cssText='height:1px;background:var(--bd2);margin:4px 6px'; menu.appendChild(s); }
+  item(RIPPLE_ICON+'Ripple…',function(){ rippleOpen(absRow,col); });
+  item('Clear cell'+(feSelCount()>1?'s':''),function(){ feClearSelection(); });
+  sep();
+  item('Copy',function(){ feCopy(); });
+  item('Paste',function(){ fePaste(); });
+  document.body.appendChild(menu);
+  const r=menu.getBoundingClientRect(); let px=x,py=y;
+  if(px+r.width>window.innerWidth)px=Math.max(4,window.innerWidth-r.width-6);
+  if(py+r.height>window.innerHeight)py=Math.max(4,window.innerHeight-r.height-6);
+  menu.style.left=px+'px'; menu.style.top=py+'px';
+  setTimeout(function(){ document.addEventListener('mousedown',feMenuOutside,true); document.addEventListener('keydown',feMenuEsc,true); },0); }
+// Ripple icon: an "R" with a down arrow (used by the cell editor + the context menu).
+const RIPPLE_ICON='<svg width="14" height="14" viewBox="0 0 16 16" style="display:block;flex-shrink:0"><text x="0.5" y="12.5" font-size="13" font-weight="800" fill="currentColor">R</text><path d="M11.5 2.5V10M9.5 8l2 2 2-2" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 // --- Ripple dialog (self-contained overlay; shared with the Print window) ---
 function rippleOpen(absRow,col,prefixOverride){
@@ -4781,7 +4811,7 @@ function dbCell(c,r,i,vp,ci){
       <input id="db-cell-edit-input" value="${ev}" oninput="S._dbEditVal=this.value" onkeydown="if(event.key==='Enter'){event.preventDefault();dbSaveCellEdit()}else if(event.key==='Escape'){event.preventDefault();dbCancelCellEdit()}" style="flex:1;min-width:80px;width:120px;padding:2px 5px;font-size:11px;border:1px solid var(--bd3);border-radius:3px;background:var(--bg);color:var(--text)">
       <button class="btn" onclick="event.stopPropagation();dbSaveCellEdit()" title="Save (Enter)" style="padding:1px 7px;font-size:12px;color:var(--green)">✓</button>
       <button class="btn" onclick="event.stopPropagation();dbCancelCellEdit()" title="Cancel (Esc)" style="padding:1px 7px;font-size:12px;color:var(--red)">✕</button>
-      <button class="btn" onclick="event.stopPropagation();dbRippleFromEdit(${i},'${jsAttr(c)}')" title="Ripple — auto-enumerate this value down the column" style="padding:1px 7px;font-size:11px">Ripple…</button>
+      <button class="btn" onclick="event.stopPropagation();dbRippleFromEdit(${i},'${jsAttr(c)}')" title="Ripple — auto-enumerate this value down the column" style="padding:2px 6px;color:var(--accent);display:flex;align-items:center">${RIPPLE_ICON}</button>
     </div>`;
   }
   const v=r[c]; const has=v!==undefined&&v!=='';
