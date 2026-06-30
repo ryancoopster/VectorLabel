@@ -3399,6 +3399,12 @@ function sanitizeObjs(objs){
   return (objs||[]).map(function(o){
     const c=Object.assign({},o);
     c.id=mid();
+    // Strip everything but letters/digits/space/hyphen BEFORE the font reaches the inline
+    // style attribute (font-family:'…') — otherwise a crafted template font like
+    //   x';" onmouseover="…
+    // closes the declaration + the attribute quote and injects a live event handler into
+    // this privileged WebView (attribute-breakout / stored-XSS). Mirrors the Print front-end.
+    if(typeof c.font==='string') c.font=c.font.replace(/[^A-Za-z0-9 \-]/g,'');
     if(typeof c.font!=='string' || !c.font.trim()) c.font='Arial';
     if(c.src!=null && !/^data:image\//i.test(String(c.src))) c.src='';
     if(c.sym!=null && !(String(c.sym) in SYMBOLS)) c.sym='';

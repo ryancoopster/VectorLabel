@@ -641,9 +641,18 @@ struct SupplyCatalogEditorView: View {
             showAlert("Import failed", "That file is a category, not a supply group. Use “Import category…” below the category list.")
             return
         }
-        draft.groups.append(g.withFreshIDs())          // fresh ids so it can't collide
+        draft.groups.append(g.withFreshIDs().sanitized())   // fresh ids so it can't collide; clamp untrusted dims
         groupIndex = draft.groups.count - 1
         selectedSupply = nil
+        // If another group already serves the same printer model, both stay selectable by
+        // name in the designer's group picker — note it so the import isn't silently shadowed.
+        let models = Set(g.printerModels.map { $0.trimmingCharacters(in: .whitespaces).lowercased() })
+        if !models.isEmpty,
+           draft.groups.dropLast().contains(where: { other in
+               other.printerModels.contains { models.contains($0.trimmingCharacters(in: .whitespaces).lowercased()) } }) {
+            showAlert("Imported “\(g.name)”",
+                      "Another supply group already serves the same printer model. Both are available — pick the one you want from the group selector in the designer.")
+        }
     }
     private func importCategory() {
         guard draft.groups.indices.contains(groupIndex) else { return }
@@ -652,7 +661,7 @@ struct SupplyCatalogEditorView: View {
             showAlert("Import failed", "That file is a supply group, not a category. Use the Import button next to the supply-group selector.")
             return
         }
-        draft.groups[groupIndex].categories.append(cat.withFreshIDs())
+        draft.groups[groupIndex].categories.append(cat.withFreshIDs().sanitized())
     }
 
     private static let supplyFileTypes: [UTType] = [UTType(filenameExtension: "vlsupply") ?? .json, .json]
@@ -678,6 +687,10 @@ struct SupplyCatalogEditorView: View {
               let exp = try? JSONDecoder().decode(SupplyExport.self, from: data),
               exp.format == SupplyExport.formatTag else {
             showAlert("Import failed", "That file isn’t a VectorLabel supply export.")
+            return nil
+        }
+        guard exp.version <= SupplyExport.currentVersion else {
+            showAlert("Import failed", "That file was made by a newer version of VectorLabel. Update VectorLabel to import it.")
             return nil
         }
         return exp

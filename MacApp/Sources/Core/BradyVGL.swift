@@ -178,11 +178,22 @@ public enum BradyVGL {
         return job
     }
 
-    /// ESC Z <lo> <hi> - skip N blank raster lines (little-endian 16-bit)
+    /// ESC Z <lo> <hi> - skip N blank raster lines (little-endian 16-bit).
+    ///
+    /// The count is chunked into 0xFFFF-line commands: a blank run longer than 65535
+    /// lines (reachable from a crafted/oversized IPC raster — up to ~66k feed lines at
+    /// the 200_000 px master clamp) would otherwise wrap the 16-bit field and misposition
+    /// everything after the gap. Sequential ESC Z skips accumulate additively, so summing
+    /// the chunks equals one large skip.
     private static func skipLinesCommand(count: Int) -> [UInt8] {
-        let lo = UInt8(count & 0xFF)
-        let hi = UInt8((count >> 8) & 0xFF)
-        return [0x1B, 0x5A, lo, hi]
+        var bytes: [UInt8] = []
+        var n = max(0, count)
+        while n > 0 {
+            let c = min(n, 0xFFFF)
+            bytes += [0x1B, 0x5A, UInt8(c & 0xFF), UInt8((c >> 8) & 0xFF)]
+            n -= c
+        }
+        return bytes
     }
 
     /// ESC <opcode> <lo> <hi> [data] - raster line, length = lo + (hi << 8)

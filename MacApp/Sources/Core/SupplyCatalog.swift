@@ -209,16 +209,58 @@ public extension SupplyGroup {
     }
 }
 
+// MARK: – Sanitize untrusted supplies (import / on-disk load)
+//
+// A hand-edited or corrupt .vlsupply / SupplyCatalog.json can carry a 0, negative, NaN,
+// or absurd dimension, or a blank part number. The render path clamps geometry so this
+// never crashes, but it would still surface a degenerate 1px label and a broken buy
+// button with no feedback. Clamp on every untrusted ingress — the editor's own numField
+// applies the same intent for interactively-typed values, which import otherwise bypasses.
+
+public extension Supply {
+    /// Clamp dimensions to a finite, positive, sane range and drop blank part numbers.
+    /// Preserves ids (so it is safe on the on-disk load path); pair with `withFreshIDs()`
+    /// on import.
+    func sanitized() -> Supply {
+        func dim(_ v: Double, _ fallback: Double) -> Double {
+            guard v.isFinite, v > 0 else { return fallback }
+            return min(v, 60.0)   // 60in ceiling — larger than any real Brady/Brother supply
+        }
+        let w = dim(widthInches, 1), h = dim(heightInches, 1)
+        return Supply(name: name, kind: kind, selfLaminating: selfLaminating, materialFamily: materialFamily,
+                      widthInches: w, heightInches: h,
+                      printableWidthInches: dim(printableWidthInches, w),
+                      printableHeightInches: dim(printableHeightInches, h),
+                      parts: parts.filter { !$0.partNumber.trimmingCharacters(in: .whitespaces).isEmpty },
+                      id: id)
+    }
+}
+public extension SupplyCategory {
+    func sanitized() -> SupplyCategory {
+        SupplyCategory(name: name, supplies: supplies.map { $0.sanitized() }, id: id)
+    }
+}
+public extension SupplyGroup {
+    func sanitized() -> SupplyGroup {
+        SupplyGroup(name: name, printerModels: printerModels,
+                    categories: categories.map { $0.sanitized() }, id: id)
+    }
+}
+
 /// A portable supply export — exactly one of `group` / `category` is set. A versioned
 /// envelope so import can validate the file is ours and the format can evolve.
 public struct SupplyExport: Codable {
     public static let formatTag = "vectorlabel-supply"
+    /// Current export schema version. Import rejects files written by a newer build
+    /// (version > currentVersion) so an incompatible future format fails loudly instead
+    /// of being silently best-effort-decoded.
+    public static let currentVersion = 1
     public var format: String
     public var version: Int
     public var group: SupplyGroup?
     public var category: SupplyCategory?
     public init(group: SupplyGroup? = nil, category: SupplyCategory? = nil) {
-        self.format = SupplyExport.formatTag; self.version = 1
+        self.format = SupplyExport.formatTag; self.version = SupplyExport.currentVersion
         self.group = group; self.category = category
     }
 }
@@ -313,6 +355,16 @@ public struct SupplyCatalog: Codable, Hashable {
             }
         }
         c.version = 4
+        return c
+    }
+
+    /// Clamp every supply to a sane range (see `Supply.sanitized()`). Applied on the
+    /// on-disk load path so a hand-edited / corrupt `SupplyCatalog.json` surfaces clamped
+    /// sizes instead of degenerate 1px labels and broken buy buttons — independent of the
+    /// version-gated `migrated()` (which no-ops for an already-current catalog).
+    public func sanitizedCatalog() -> SupplyCatalog {
+        var c = self
+        c.groups = groups.map { $0.sanitized() }
         return c
     }
 }

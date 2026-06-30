@@ -33,6 +33,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
     private var statusItem: NSStatusItem?
     private var menuPopover: NSPopover?
+    /// Last time the cross-process reassert nudge surfaced Preferences/activated the app —
+    /// used to debounce a flood on the system-wide notification bus (focus-steal DoS guard).
+    private var lastReassertSurface: Date?
     private var preferencesWindow: NSWindow?
     private var preferencesCloseObserver: NSObjectProtocol?
     private var cancellables: Set<AnyCancellable> = []
@@ -85,7 +88,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         let root = AppEnvironment.ipcRoot
         try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let fd = open(root.appendingPathComponent("engine.lock").path, O_CREAT | O_RDWR, 0o644)
-        guard fd >= 0 else { return true }            // can't create a lock → don't block startup
+        guard fd >= 0 else {
+            // Couldn't open the lock file (environmental: fd exhaustion, permissions, full
+            // disk). Failing OPEN here risks two Engines double-owning the USB device and
+            // racing the status file. Log loudly, and refuse ONLY if another instance of
+            // this bundle is already running — never block the legitimate first Engine for a
+            // benign open() failure.
+            NSLog("[Engine] could not open the single-instance lock (errno \(errno)); falling back to a running-process check.")
+            let bid = Bundle.main.bundleIdentifier ?? "com.sai.vectorlabel.engine"
+            let mine = ProcessInfo.processInfo.processIdentifier
+            let another = NSRunningApplication.runningApplications(withBundleIdentifier: bid)
+                .contains { $0.processIdentifier != mine && !$0.isTerminated }
+            return !another
+        }
         if flock(fd, LOCK_EX | LOCK_NB) != 0 {
             close(fd)
             return false                              // held by another Engine
@@ -178,12 +193,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         DistributedNotificationCenter.default().addObserver(
             forName: Self.reassertNotification, object: nil, queue: .main
         ) { [weak self] _ in MainActor.assumeIsolated {
-            self?.reassertStatusItem()
-            NSApp.activate(ignoringOtherApps: true)
+            guard let self else { return }
+            // Re-showing the icon is harmless — always do it.
+            self.reassertStatusItem()
             // The menu-bar icon can be parked off-screen by a CROWDED menu bar (many
             // menu-bar apps + the notch leave no room), so re-creating it isn't enough.
             // Surfacing Preferences guarantees a re-launch lands a usable on-screen window.
-            self?.openPreferences()
+            // But DistributedNotificationCenter is a system-wide bus ANY local process can
+            // post, so debounce the focus-stealing side effects: a flood can't continuously
+            // yank the Engine frontmost, while a genuine relaunch (one post) still surfaces.
+            let now = Date()
+            if let last = self.lastReassertSurface, now.timeIntervalSince(last) < 2.0 { return }
+            self.lastReassertSurface = now
+            NSApp.activate(ignoringOtherApps: true)
+            self.openPreferences()
         } }
     }
 
@@ -197,6 +220,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     /// Tear down + re-create the menu-bar status item — recovery for an icon the system
     /// dropped (the process keeps running, but the icon is gone). Cheap + idempotent.
     private func reassertStatusItem() {
+        // Close any popover first — it's anchored to the old status item's button; tearing
+        // the item out from under a shown popover would orphan it and wedge the toggle.
+        if let p = menuPopover { p.performClose(nil) }
+        menuPopover = nil
         if let old = statusItem { NSStatusBar.system.removeStatusItem(old) }
         statusItem = nil
         setupStatusItem()

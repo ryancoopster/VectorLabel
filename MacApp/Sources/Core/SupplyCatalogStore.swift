@@ -74,7 +74,7 @@ public final class SupplyCatalogStore: ObservableObject {
               let decoded = try? JSONDecoder().decode(SupplyCatalog.self, from: data),
               !decoded.groups.isEmpty
         else { return nil }
-        return decoded
+        return decoded.sanitizedCatalog()   // clamp untrusted on-disk dimensions
     }
 
     /// Persist the current catalog to disk now (and refresh the snapshot).

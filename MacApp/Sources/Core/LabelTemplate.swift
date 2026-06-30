@@ -1,6 +1,7 @@
 import Foundation
 import CoreGraphics
 import CoreText
+import ImageIO
 import AppKit
 
 // WireRecord is defined in ExportWatcher.swift.
@@ -256,19 +257,39 @@ public enum LabelRenderer {
         let designerPx = max(7.0, (obj.fs ?? 14.0) * designerDPI / 100.0)
         var fontSize   = designerPx * (Double(dpi) / designerDPI)
 
-        var traits: NSFontTraitMask = []
-        if obj.bold   == true { traits.insert(.boldFontMask) }
-        if obj.italic == true { traits.insert(.italicFontMask) }
+        var symbolic: CTFontSymbolicTraits = []
+        if obj.bold   == true { symbolic.insert(.traitBold) }
+        if obj.italic == true { symbolic.insert(.traitItalic) }
 
-        let fontManager = NSFontManager.shared
         func makeFont(_ size: Double) -> NSFont {
-            // `font(withFamily:)` resolves a family DISPLAY name that `NSFont(name:)` (which
-            // wants a PostScript name) would miss — e.g. "Helvetica Neue" vs "HelveticaNeue"
-            // — so any installed system font the designer offers renders correctly.
-            let base = fontManager.font(withFamily: family, traits: [], weight: 5, size: CGFloat(size))
-                    ?? NSFont(name: family, size: CGFloat(size))
-                    ?? NSFont.systemFont(ofSize: CGFloat(size), weight: obj.bold == true ? .bold : .regular)
-            return traits.isEmpty ? base : fontManager.convert(base, toHaveTrait: traits)
+            // Resolve the family DISPLAY name (e.g. "Helvetica Neue", which a PostScript
+            // `NSFont(name:)` lookup would miss) via CoreText. CoreText is thread-safe;
+            // the render runs off the main thread, so we must NOT touch NSFontManager — a
+            // shared mutable singleton the main thread also queries to build the font list.
+            let sz = CGFloat(size)
+            let desc = CTFontDescriptorCreateWithAttributes(
+                [kCTFontFamilyNameAttribute as String: family] as CFDictionary)
+            let base = CTFontCreateWithFontDescriptor(desc, sz, nil)
+
+            // CoreText silently substitutes a default face for an unknown family; detect
+            // that and fall back to a PostScript-name lookup, then the system font.
+            let resolved: CTFont
+            if (CTFontCopyFamilyName(base) as String).compare(family, options: .caseInsensitive) == .orderedSame {
+                resolved = base
+            } else if let named = NSFont(name: family, size: sz) {
+                resolved = named as CTFont
+            } else {
+                NSLog("VectorLabel: font family \"%@\" not installed; substituting the system font.", family)
+                resolved = NSFont.systemFont(ofSize: sz, weight: obj.bold == true ? .bold : .regular) as CTFont
+            }
+
+            guard !symbolic.isEmpty else { return resolved as NSFont }
+            // Apply bold/italic. CoreText does not synthesize a missing face, so a family
+            // lacking the requested variant keeps its base face (same as the old behavior).
+            if let traited = CTFontCreateCopyWithSymbolicTraits(resolved, sz, nil, symbolic, symbolic) {
+                return traited as NSFont
+            }
+            return resolved as NSFont
         }
 
         let stretchFactor = (obj.stretch ?? 100.0) / 100.0
@@ -400,7 +421,10 @@ public enum LabelRenderer {
         guard let src = obj.src,
               let comma = src.firstIndex(of: ","),
               let data = Data(base64Encoded: String(src[src.index(after: comma)...])),
-              let cg = NSBitmapImageRep(data: data)?.cgImage
+              // ImageIO (thread-safe) instead of NSBitmapImageRep, so the off-main render
+              // path touches no AppKit shared state.
+              let imgSrc = CGImageSourceCreateWithData(data as CFData, nil),
+              let cg = CGImageSourceCreateImageAtIndex(imgSrc, 0, nil)
         else { return }
         let r = rect(for: obj, dpi: dpi)
         ctx.saveGState()

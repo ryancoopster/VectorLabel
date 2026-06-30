@@ -5,19 +5,31 @@
 # has (matched by filename), so re-installing is safe.
 set +e
 STAGE="/Library/Application Support/VectorLabel/SampleTemplates"
+log() { /usr/bin/logger -t VectorLabel "templates postinstall: $*"; }
 
 USER_CONSOLE=$(stat -f %Su /dev/console 2>/dev/null)
 [ -n "$USER_CONSOLE" ] && [ "$USER_CONSOLE" != "root" ] || exit 0
-USER_HOME=$(/usr/bin/dscl . -read "/Users/$USER_CONSOLE" NFSHomeDirectory 2>/dev/null | awk '{print $2}')
-[ -n "$USER_HOME" ] || exit 0
+# Space-safe home resolution: `dscl … | awk '{print $2}'` silently truncated a home path
+# containing a space (relocated/network homes), pointing every mkdir/cp/chown at the wrong
+# location. Tilde expansion via getpwnam handles spaces.
+USER_HOME=$(eval echo "~$USER_CONSOLE")
+[ -n "$USER_HOME" ] && [ -d "$USER_HOME" ] || { log "could not resolve home for $USER_CONSOLE"; exit 0; }
 
 DEST="$USER_HOME/Documents/VectorLabel/Templates"
-/bin/mkdir -p "$DEST"
+/bin/mkdir -p "$DEST" || log "mkdir $DEST failed"
+# Chown ONLY the directories we may have just created (non-recursive). The old recursive
+# chown of the whole ~/Documents/VectorLabel tree reassigned ownership of the user's own
+# templates and synced Exports content; this touches nothing pre-existing under it.
+/usr/sbin/chown "$USER_CONSOLE" "$USER_HOME/Documents/VectorLabel" "$DEST" 2>/dev/null
 for f in "$STAGE"/*.vltmp; do
   [ -e "$f" ] || continue
   base=$(basename "$f")
   case "$base" in ._*) continue ;; esac               # skip AppleDouble sidecars
-  [ -e "$DEST/$base" ] || /bin/cp "$f" "$DEST/$base"   # don't clobber the user's own
+  [ -e "$DEST/$base" ] && continue                     # don't clobber the user's own
+  if /bin/cp "$f" "$DEST/$base"; then
+    /usr/sbin/chown "$USER_CONSOLE" "$DEST/$base" || log "chown $base failed"
+  else
+    log "copy of $base failed"
+  fi
 done
-/usr/sbin/chown -R "$USER_CONSOLE" "$USER_HOME/Documents/VectorLabel"
 exit 0

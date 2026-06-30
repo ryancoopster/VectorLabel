@@ -4,9 +4,10 @@
 # Engine + Auto Print in the logged-in user's GUI session (best-effort).
 set +e
 APPS="/Applications/VectorLabel"
+log() { /usr/bin/logger -t VectorLabel "apps postinstall: $*"; }
 
 LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
-[ -x "$LSREGISTER" ] && "$LSREGISTER" -f "$APPS"/*.app
+[ -x "$LSREGISTER" ] && { "$LSREGISTER" -f "$APPS"/*.app || log "lsregister failed"; }
 
 # Don't leave the downloaded apps quarantined (defensive; notarized installs are clean).
 /usr/bin/xattr -dr com.apple.quarantine "$APPS" 2>/dev/null
@@ -14,7 +15,7 @@ LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchS
 # Launch in the active user's session — postinstall runs as root, so use launchctl asuser.
 UID_CONSOLE=$(stat -f %u /dev/console 2>/dev/null)
 if [ -n "$UID_CONSOLE" ] && [ "$UID_CONSOLE" != "0" ]; then
-  /bin/launchctl asuser "$UID_CONSOLE" /usr/bin/open "$APPS/VectorLabelEngine.app"
-  /bin/launchctl asuser "$UID_CONSOLE" /usr/bin/open "$APPS/VectorLabelAutoPrint.app"
+  /bin/launchctl asuser "$UID_CONSOLE" /usr/bin/open "$APPS/VectorLabelEngine.app" || log "launch Engine failed"
+  /bin/launchctl asuser "$UID_CONSOLE" /usr/bin/open "$APPS/VectorLabelAutoPrint.app" || log "launch AutoPrint failed"
 fi
 exit 0

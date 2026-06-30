@@ -6,11 +6,13 @@
 # (Tools ▸ Workspaces ▸ Edit Current Workspace ▸ drag them into a menu).
 set +e
 STAGE="/Library/Application Support/VectorLabel/VectorworksPlugins"
+log() { /usr/bin/logger -t VectorLabel "vwplugins postinstall: $*"; }
 
 USER_CONSOLE=$(stat -f %Su /dev/console 2>/dev/null)
 [ -n "$USER_CONSOLE" ] && [ "$USER_CONSOLE" != "root" ] || exit 0
-USER_HOME=$(/usr/bin/dscl . -read "/Users/$USER_CONSOLE" NFSHomeDirectory 2>/dev/null | awk '{print $2}')
-[ -n "$USER_HOME" ] || exit 0
+# Space-safe home resolution (see templates postinstall — awk '{print $2}' truncated spaced homes).
+USER_HOME=$(eval echo "~$USER_CONSOLE")
+[ -n "$USER_HOME" ] && [ -d "$USER_HOME" ] || { log "could not resolve home for $USER_CONSOLE"; exit 0; }
 VW_BASE="$USER_HOME/Library/Application Support/Vectorworks"
 [ -d "$VW_BASE" ] || exit 0   # Vectorworks not installed → nothing to do
 
@@ -18,12 +20,18 @@ for ver in "$VW_BASE"/*/; do
   base=$(basename "$ver")
   case "$base" in [0-9][0-9][0-9][0-9]) ;; *) continue ;; esac   # numeric year folders only
   dest="${ver}Plug-ins"
-  /bin/mkdir -p "$dest"
+  /bin/mkdir -p "$dest" || { log "mkdir $dest failed"; continue; }
+  # A Plug-ins dir we just created as root would be root-owned inside the user's tree,
+  # blocking Vectorworks (runs as the user) from writing plugin caches/siblings into it.
+  /usr/sbin/chown "$USER_CONSOLE" "$dest" 2>/dev/null
   for src in "$STAGE"/*.vsm; do
     [ -e "$src" ] || continue
     case "$(basename "$src")" in ._*) continue ;; esac           # skip AppleDouble sidecars
-    /bin/cp "$src" "$dest/"                                       # overwrite: this is THE plug-in
-    /usr/sbin/chown "$USER_CONSOLE" "$dest/$(basename "$src")"
+    if /bin/cp "$src" "$dest/"; then                             # overwrite: this is THE plug-in
+      /usr/sbin/chown "$USER_CONSOLE" "$dest/$(basename "$src")" || log "chown $(basename "$src") failed"
+    else
+      log "copy of $(basename "$src") to $dest failed"
+    fi
   done
 done
 exit 0
