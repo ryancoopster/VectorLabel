@@ -180,7 +180,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         ) { [weak self] _ in MainActor.assumeIsolated {
             self?.reassertStatusItem()
             NSApp.activate(ignoringOtherApps: true)
+            // The menu-bar icon can be parked off-screen by a CROWDED menu bar (many
+            // menu-bar apps + the notch leave no room), so re-creating it isn't enough.
+            // Surfacing Preferences guarantees a re-launch lands a usable on-screen window.
+            self?.openPreferences()
         } }
+    }
+
+    /// Clicking the Dock icon (Dock mode) — or re-opening with no window — surfaces
+    /// Preferences, the reliable on-screen entry point when the menu-bar icon is hidden.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag { openPreferences() }
+        return true
     }
 
     /// Tear down + re-create the menu-bar status item — recovery for an icon the system
