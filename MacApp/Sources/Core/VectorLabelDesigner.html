@@ -1238,15 +1238,55 @@ function buildMultiProps(sels){
   function check(key,lbl,def){ const s=sh(key,def); return `<div style="margin-bottom:8px"><label class="lbl" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" ${(!s.multi&&s.v===true)?'checked':''} onchange="uobjAll({${key}:this.checked})"> ${lbl}${s.multi?' <span style=\"color:var(--text3)\">(mixed)</span>':''}</label></div>`; }
   function fontsel(){
     const s=sh('font','Arial');
-    const ho=s.multi?'<option value="__m__" selected>Multiple</option>':'';
-    const opt=f=>`<option value="${escAttr(f)}"${!s.multi&&s.v===f?' selected':''}>${esc(f)}</option>`;
-    // If the current font isn't in either list (e.g. a font from another machine), show it
-    // anyway so the dropdown reflects the real value rather than silently snapping.
-    const known=FONTS.indexOf(s.v)>=0||SYS_FONTS.indexOf(s.v)>=0;
-    const cur=(!s.multi&&s.v&&!known)?`<option value="${escAttr(s.v)}" selected>${esc(s.v)} (not installed)</option>`:'';
-    const curated=`<optgroup label="Common">${FONTS.map(opt).join('')}</optgroup>`;
-    const sys=SYS_FONTS.length?`<optgroup label="System fonts">${SYS_FONTS.filter(f=>FONTS.indexOf(f)<0).map(opt).join('')}</optgroup>`:'';
-    return `<div style="margin-bottom:8px"><label class="lbl">Font</label><select class="inp" onchange="if(this.value!=='__m__')uobjAll({font:this.value})">${ho}${cur}${curated}${sys}</select></div>`;
+    const cur=s.multi?'Multiple':(s.v||'Arial');
+    const prev=(!s.multi&&s.v)?s.v:'Arial';
+    return `<div style="margin-bottom:8px"><label class="lbl">Font</label>`
+      + `<button class="inp" type="button" onclick="openFontPicker(event)" title="Choose a font (type to search)" `
+      + `style="display:flex;align-items:center;justify-content:space-between;gap:6px;text-align:left;cursor:pointer">`
+      + `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'${escAttr(prev)}',Arial,sans-serif">${esc(cur)}</span>`
+      + `<span style="opacity:.5">▾</span></button></div>`;
+  }
+  // Searchable font picker: the curated FONTS plus every installed system family
+  // (window.__VL_FONTS__ → SYS_FONTS). Each row previews in its own face. The popup is
+  // appended to <body> so it survives the params-panel re-render.
+  function closeFontPicker(){
+    const p=document.getElementById('vl-font-pop'); if(p)p.remove();
+    document.removeEventListener('keydown',_fontPickKey,true);
+    document.removeEventListener('mousedown',_fontPickOutside,true);
+  }
+  function _fontPickKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeFontPicker(); } }
+  function _fontPickOutside(e){ const p=document.getElementById('vl-font-pop'); if(p&&!p.contains(e.target))closeFontPicker(); }
+  function openFontPicker(e){
+    e.preventDefault(); e.stopPropagation(); closeFontPicker();
+    const btn=e.currentTarget;
+    const all=FONTS.concat(SYS_FONTS.filter(f=>FONTS.indexOf(f)<0));
+    const curFont=sh('font','Arial').v||'';
+    const r=btn.getBoundingClientRect();
+    const pop=document.createElement('div'); pop.id='vl-font-pop';
+    pop.style.cssText='position:fixed;z-index:2600;left:'+r.left+'px;top:'+Math.min(r.bottom+2,window.innerHeight-310)+'px;'
+      +'width:'+Math.max(220,r.width)+'px;max-height:300px;display:flex;flex-direction:column;background:var(--surface);'
+      +'border:1px solid var(--bd4);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,0.5);overflow:hidden';
+    pop.innerHTML='<style>#vl-font-pop .vl-font-opt:hover{background:var(--bd3)}</style>'
+      +'<input id="vl-font-search" class="inp" placeholder="Search fonts…" autocomplete="off" style="margin:5px;width:auto;flex:0 0 auto">'
+      +'<div id="vl-font-list" style="overflow-y:auto"></div>';
+    document.body.appendChild(pop);
+    const listEl=pop.querySelector('#vl-font-list'), searchEl=pop.querySelector('#vl-font-search');
+    function draw(q){
+      q=(q||'').trim().toLowerCase();
+      const items=q?all.filter(f=>f.toLowerCase().indexOf(q)>=0):all;
+      listEl.innerHTML=items.length?items.map(f=>{
+        const on=f===curFont;
+        return '<div class="vl-font-opt"'+(on?' data-sel="1"':'')+' data-f="'+escAttr(f)+'" '
+          +"style=\"padding:5px 10px;cursor:pointer;white-space:nowrap;font-family:'"+escAttr(f)+"',Arial,sans-serif;"
+          +(on?'background:var(--accent);color:#fff':'')+'">'+esc(f)+'</div>';
+      }).join(''):'<div style="padding:8px 10px;opacity:.5;font-size:12px">No matches</div>';
+    }
+    draw('');
+    searchEl.addEventListener('input',()=>draw(searchEl.value));
+    searchEl.addEventListener('keydown',ev=>{ if(ev.key==='Enter'){ const f=listEl.querySelector('.vl-font-opt'); if(f){ uobjAll({font:f.dataset.f}); closeFontPicker(); } } });
+    listEl.addEventListener('mousedown',ev=>{ const d=ev.target.closest('.vl-font-opt'); if(d){ ev.preventDefault(); uobjAll({font:d.dataset.f}); closeFontPicker(); } });
+    const selEl=listEl.querySelector('[data-sel]'); if(selEl)selEl.scrollIntoView({block:'center'});
+    setTimeout(()=>{ searchEl.focus(); document.addEventListener('mousedown',_fontPickOutside,true); document.addEventListener('keydown',_fontPickKey,true); },0);
   }
 
   let body='';
