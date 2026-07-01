@@ -24,6 +24,7 @@
   var P    = new URLSearchParams(location.search);
   var view = P.get('view') || 'full';        // full | canvas
   var key  = P.get('tpl')  || '1_5x4';
+  var anim = P.get('anim') === '1';          // slowly cycle records so the canvas label updates
   var tpl  = (window.VL_DEMO && VL_DEMO.templates[key]) || null;
 
   var APPW = 1060, APPH = 940;
@@ -37,7 +38,22 @@
     try { w.setTheme('light'); } catch(e){}
     try { if (w.centerCanvasWhenReady) w.centerCanvasWhenReady(0); else w.centerCanvas && w.centerCanvas(); } catch(e){}
     requestAnimationFrame(function(){ requestAnimationFrame(frame); });
+    if (anim) startAnim(w);
   });
+
+  // Slowly step through the bound records so the canvas label updates — the real
+  // designer showing your data drive the label. Paused while off-screen / tab hidden.
+  function startAnim(w){
+    var visible = true;
+    if ('IntersectionObserver' in window && window.frameElement) {
+      new IntersectionObserver(function(es){ visible = es[0].isIntersecting; }, {threshold:0.05})
+        .observe(window.frameElement);
+    }
+    setInterval(function(){
+      if (!visible || document.hidden) return;
+      try { w.eval('if(typeof S!=="undefined"&&typeof RX!=="undefined"&&RX.length){S.recIdx=(S.recIdx+1)%RX.length;R();}'); } catch(e){}
+    }, 2800);
+  }
 
   var tries = 0;
   function frame(){
