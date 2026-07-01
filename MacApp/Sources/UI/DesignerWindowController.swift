@@ -35,7 +35,15 @@ public final class DesignerWindowController: NSObject {
     public let mode: DesignerMode
 
     private var window: NSWindow?
-    private var webView: WKWebView?
+    private var tabBar: BrowserTabBar?
+    private var contentArea: NSView?
+    /// One open document per tab, each with its own WKWebView (full live state — canvas,
+    /// undo, bound data). The print-edit round-trip uses a single tab with the bar hidden.
+    private var tabs: [DesignerTab] = []
+    private var activeID: String?
+    private var activeTab: DesignerTab? { tabs.first { $0.id == activeID } }
+    /// Back-compat accessor → the active tab's web view (most of the controller uses this).
+    private var webView: WKWebView? { activeTab?.webView }
     private var closeObserver: NSObjectProtocol?
     private var cancellables: Set<AnyCancellable> = []
 
@@ -44,12 +52,15 @@ public final class DesignerWindowController: NSObject {
     /// True while the designer is open to edit a template for the print window.
     private var designerForPrintEdit = false
 
-    /// A template to inject into the designer once it loads (Finder open of a
-    /// ".vltmp" — template mode). Cleared after it's applied.
-    private var pendingOpenTemplate: VLTemplate?
-    /// A custom-label document to load once the designer loads (Finder open of a
-    /// ".vlcus" — custom mode). Cleared after it's applied.
-    private var pendingOpenCustomDoc: CustomLabelDocument?
+    /// A template/doc to inject into the ACTIVE tab once it loads (a new tab is created
+    /// per open; these live on the tab so didFinish applies the right one). Computed →
+    /// the active tab.
+    private var pendingOpenTemplate: VLTemplate? {
+        get { activeTab?.pendingOpenTemplate } set { activeTab?.pendingOpenTemplate = newValue }
+    }
+    private var pendingOpenCustomDoc: CustomLabelDocument? {
+        get { activeTab?.pendingOpenCustomDoc } set { activeTab?.pendingOpenCustomDoc = newValue }
+    }
 
     /// Invoked when the print-edit round-trip ends — either the user saved and
     /// returned, or closed the designer. `saved` is whether a save happened on
@@ -100,19 +111,40 @@ public final class DesignerWindowController: NSObject {
         /// Column names in display order (the union across records, header order).
         var columns: [String]
     }
-    private var dataSource: BoundDataSource?
+
+    /// One open designer document — its own WKWebView + per-document state.
+    @MainActor
+    private final class DesignerTab {
+        let id = UUID().uuidString
+        let webView: WKWebView
+        var dataSource: BoundDataSource?
+        var isDirty = false
+        var pendingOpenTemplate: VLTemplate?
+        var pendingOpenCustomDoc: CustomLabelDocument?
+        var webViewReady = false
+        var title: String
+        init(webView: WKWebView, title: String) { self.webView = webView; self.title = title }
+    }
+
+    private var dataSource: BoundDataSource? {
+        get { activeTab?.dataSource } set { activeTab?.dataSource = newValue }
+    }
 
     // MARK: – Unsaved-changes / close handling
-    /// Mirrors the web designer's unsaved-changes state (setDirty messages).
-    private var isDirty = false
-    /// What to do once a save triggered from the close prompt completes.
-    private enum AfterSave { case none, close, terminate, openCustomDoc }
+    /// Mirrors the web designer's unsaved-changes state (setDirty messages). Per tab.
+    private var isDirty: Bool {
+        get { activeTab?.isDirty ?? false } set { activeTab?.isDirty = newValue }
+    }
+    /// What to do once a save triggered from a close prompt completes. The save always
+    /// runs on the ACTIVE tab (close flows activate the target tab first).
+    private enum AfterSave { case none, closeTab, closeTabThenSweep, closeTabThenTerminate, terminate }
     private var afterSave: AfterSave = .none
 
-    /// True once the designer webview has finished loading (didFinish). A reopen must
-    /// not push a doc into an un-loaded page (initCustomDocument is undefined then and
-    /// the doc would be silently dropped) — it waits for didFinish instead.
-    private var webViewReady = false
+    /// True once the active tab's webview has finished loading (didFinish). A reopen must
+    /// not push a doc into an un-loaded page. Per tab.
+    private var webViewReady: Bool {
+        get { activeTab?.webViewReady ?? false } set { activeTab?.webViewReady = newValue }
+    }
     /// Polls the Engine's on-disk supply catalog (this designer is a separate
     /// process) and pushes changes into the web UI live.
     private var catalogPollTimer: Timer?
@@ -146,50 +178,22 @@ public final class DesignerWindowController: NSObject {
     /// Template Designer's Finder ".vltmp" open handler). If a window is already on
     /// screen it's reused and the template injected immediately.
     public func openTemplate(_ template: VLTemplate) {
-        pendingOpenTemplate = template
-        if window != nil {
-            NSApp.activate(ignoringOtherApps: true)
-            window?.makeKeyAndOrderFront(nil)
-            window?.makeFirstResponder(webView)
-            applyPendingOpenTemplate()
-        } else {
-            present(editTemplateIndex: nil)
-        }
+        // Each open lands in its own tab (full live state), so there's never a canvas to
+        // clobber. A fresh tab applies its pending template on didFinish.
+        let tab: DesignerTab?
+        if window == nil { present(editTemplateIndex: nil); tab = activeTab } else { tab = addTab() }
+        tab?.pendingOpenTemplate = template
+        if let t = tab, !template.name.isEmpty { t.title = template.name; refreshTabBar() }
     }
 
-    /// Open (or focus) the designer and load `doc`'s canvas + embedded data (custom
-    /// mode — used by the Custom Designer's Finder ".vlcus" open handler).
+    /// Open the designer and load `doc`'s canvas + embedded data in a new tab (custom
+    /// mode — used by the Custom Designer's Finder ".vlcus" open handler and Reprint).
     public func openCustomDocument(_ doc: CustomLabelDocument) {
         guard mode == .custom else { return }
-        // Cold: create the window; didFinish loads the doc once the page is ready.
-        guard window != nil else {
-            pendingOpenCustomDoc = doc
-            present(editTemplateIndex: nil)
-            return
-        }
-        NSApp.activate(ignoringOtherApps: true)
-        window?.makeKeyAndOrderFront(nil)
-        window?.makeFirstResponder(webView)
-        // Warm window: opening replaces the canvas, so don't silently clobber unsaved
-        // work — prompt first. (Both Reprint and a Finder ".vlcus" open land here.)
-        if isDirty {
-            pendingOpenCustomDoc = doc
-            let alert = NSAlert()
-            alert.alertStyle = .warning
-            alert.messageText = "Save the changes to this custom label first?"
-            alert.informativeText = "Opening this design replaces what’s on the canvas. Your unsaved changes will be lost if you don’t save them."
-            alert.addButton(withTitle: "Save…")
-            alert.addButton(withTitle: "Don’t Save")
-            alert.addButton(withTitle: "Cancel")
-            switch alert.runModal() {
-            case .alertFirstButtonReturn:  triggerSave(saveAs: true, then: .openCustomDoc)  // save → finishSave loads it
-            case .alertSecondButtonReturn: applyPendingOpenCustomDocIfReady()                // Don't Save → load now
-            default:                       pendingOpenCustomDoc = nil                        // Cancel → abort
-            }
-            return
-        }
-        pendingOpenCustomDoc = doc
-        applyPendingOpenCustomDocIfReady()
+        let tab: DesignerTab?
+        if window == nil { present(editTemplateIndex: nil); tab = activeTab } else { tab = addTab() }
+        tab?.pendingOpenCustomDoc = doc
+        if let t = tab, !doc.name.isEmpty { t.title = doc.name; refreshTabBar() }
     }
 
     /// Apply a pending Custom Designer reopen only if the page has finished loading;
@@ -216,45 +220,27 @@ public final class DesignerWindowController: NSObject {
             return
         }
 
-        // The HTML lives in VectorLabelCore's resource bundle. Prefer a live repo
-        // copy during development (so git pull is reflected without a rebuild),
-        // then fall back to the bundled Core resource.
+        buildWindow()
+        guard window != nil else { return }
+        addTab()   // first tab; a pending open template/doc is applied on its didFinish
+    }
+
+    /// Build a fresh WKWebView for a tab — its own message handler + HTML load. Returns
+    /// nil if the designer HTML can't be located.
+    private func makeWebView() -> WKWebView? {
         guard let htmlURL = devHTMLURL("VectorLabelDesigner")
                             ?? CoreResources.url("VectorLabelDesigner", "html")
-        else {
-            // Couldn't load the designer HTML. In print-edit mode the print window
-            // was orderOut'd and only onEditReturn re-shows it — fire it so a
-            // headless host (Auto Print) isn't left with no visible window.
-            if designerForPrintEdit {
-                let idx = pendingEditTemplateIndex
-                designerForPrintEdit = false
-                pendingEditTemplateIndex = nil
-                onEditReturn?(false, idx)
-            }
-            return
-        }
-
-        // WKWebView with navigation delegate so we can inject records after load,
-        // plus a message handler so the designer can save/list/browse templates
-        // through Swift (WKWebView has no File System Access API).
+        else { return nil }
         let config = WKWebViewConfiguration()
-        // Web Inspector only in dev (VL_DEV_HTML set) — not in shipped builds.
         config.preferences.setValue(ProcessInfo.processInfo.environment["VL_DEV_HTML"] != nil,
                                     forKey: "developerExtrasEnabled")
         let contentController = WKUserContentController()
         contentController.add(self, name: "vectorlabel")
-        // Set the theme before first paint (avoids a flash of the old theme when
-        // the designer reopens after a light/dark switch). Also stamp the designer
-        // mode at document start so the HTML can gate the custom-mode print header
-        // (window._designerMode==='custom') before its first render.
         let theme = AppSettings.shared.isLight ? "light" : ""
         let modeJS = (mode == .custom) ? "window._designerMode='custom';" : ""
         contentController.addUserScript(WKUserScript(
             source: "document.documentElement.dataset.theme='\(theme)';\(modeJS)",
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        // Inject the editable supply catalog (window.__VL_CATALOG__) at document start
-        // so the designer builds its BL table from it before first render. "" ⇒ the
-        // default group (one group today; keyed by printer model once more exist).
         contentController.addUserScript(WKUserScript(
             source: "window.__VL_BUILD__='\(BuildInfo.build)'; window.__VL_CATALOG__=\(SupplyCatalogStore.webCatalogJSON(forModel: ""));"
                   + " window.__VL_FONTS__=\(Self.systemFontFamiliesJSON());",
@@ -264,7 +250,134 @@ public final class DesignerWindowController: NSObject {
         wv.navigationDelegate = self
         wv.uiDelegate = self   // so <input type=file> shows an NSOpenPanel (image picker)
         wv.loadFileURL(htmlURL, allowingReadAccessTo: htmlURL.deletingLastPathComponent())
-        webView = wv
+        return wv
+    }
+
+    /// Open a new tab (blank, or destined to receive a pending open template/doc on load).
+    @discardableResult
+    private func addTab(title: String? = nil) -> DesignerTab? {
+        guard let wv = makeWebView() else {
+            // HTML not found. In print-edit mode fire onEditReturn so the host isn't
+            // left with no visible window.
+            if designerForPrintEdit {
+                let idx = pendingEditTemplateIndex
+                designerForPrintEdit = false; pendingEditTemplateIndex = nil
+                onEditReturn?(false, idx)
+            }
+            return nil
+        }
+        let tab = DesignerTab(webView: wv,
+                              title: title ?? (mode == .custom ? "Untitled Custom Design" : "Untitled Template"))
+        tabs.append(tab)
+        if let area = contentArea {
+            wv.translatesAutoresizingMaskIntoConstraints = false
+            area.addSubview(wv)
+            NSLayoutConstraint.activate([
+                wv.leadingAnchor.constraint(equalTo: area.leadingAnchor),
+                wv.trailingAnchor.constraint(equalTo: area.trailingAnchor),
+                wv.topAnchor.constraint(equalTo: area.topAnchor),
+                wv.bottomAnchor.constraint(equalTo: area.bottomAnchor)])
+        }
+        activateTab(tab.id)
+        return tab
+    }
+
+    private func activateTab(_ id: String) {
+        guard tabs.contains(where: { $0.id == id }) else { return }
+        activeID = id
+        for t in tabs { t.webView.isHidden = (t.id != id) }
+        refreshTabBar()
+        NSApp.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
+        window?.makeFirstResponder(activeTab?.webView)
+    }
+
+    private func refreshTabBar() {
+        tabBar?.setItems(tabs.map { .init(id: $0.id, title: $0.title, dirty: $0.isDirty) }, active: activeID)
+    }
+
+    /// User clicked a tab's ✕ — prompt if that tab has unsaved changes, then close it.
+    private func requestCloseTab(_ id: String) {
+        guard let tab = tabs.first(where: { $0.id == id }) else { return }
+        activateTab(id)   // the tab being closed becomes active, so save/finishSave hit it
+        if tab.isDirty {
+            if promptUnsaved(allowCancel: true, then: .closeTab) { closeActiveTab() }  // Don't Save
+            // Save → finishSave closes it; Cancel → it stays open.
+        } else {
+            closeActiveTab()
+        }
+    }
+
+    /// Close the active tab (no prompt — callers handle unsaved). Closing the last tab
+    /// closes the whole window.
+    private func closeActiveTab() {
+        guard let tab = activeTab, let idx = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
+        tab.webView.configuration.userContentController.removeScriptMessageHandler(forName: "vectorlabel")
+        tab.webView.navigationDelegate = nil
+        tab.webView.removeFromSuperview()
+        tabs.remove(at: idx)
+        if tabs.isEmpty { window?.close(); return }
+        activateTab(tabs[min(idx, tabs.count - 1)].id)
+    }
+
+    /// Window-✕ path: close every tab, prompting once per tab with unsaved changes, then
+    /// close the window. Drives the async saves — a Save resolves via finishSave, which
+    /// re-enters this sweep for the next dirty tab. Cancel on any tab aborts the close.
+    private func sweepDirtyTabsThenClose() {
+        guard let dirty = tabs.first(where: { $0.isDirty }) else {
+            window?.close()   // nothing left unsaved → drop the remaining clean tabs + close
+            return
+        }
+        activateTab(dirty.id)   // show the user which document they're being asked about
+        if promptUnsaved(allowCancel: true, then: .closeTabThenSweep) {
+            closeActiveTab()               // Don't Save → discard this tab…
+            sweepDirtyTabsThenClose()      // …and continue with the next
+        }
+        // Save → finishSave(.closeTabThenSweep) continues the sweep; Cancel → stop here.
+    }
+
+    /// Broadcast a script to every tab's web view (printer/theme/catalog updates keep all
+    /// open documents current, not just the visible one).
+    private func evalAll(_ js: String) { for t in tabs { t.webView.evaluateJavaScript(js, completionHandler: nil) } }
+
+    /// Create the window shell: an NSPanel hosting a tab bar (normal mode) over a content
+    /// area that holds the active tab's web view. Print-edit mode omits the tab bar.
+    private func buildWindow() {
+        guard (devHTMLURL("VectorLabelDesigner") ?? CoreResources.url("VectorLabelDesigner", "html")) != nil else {
+            if designerForPrintEdit {
+                let idx = pendingEditTemplateIndex
+                designerForPrintEdit = false; pendingEditTemplateIndex = nil
+                onEditReturn?(false, idx)
+            }
+            return
+        }
+        let area = NSView(); area.translatesAutoresizingMaskIntoConstraints = false
+        self.contentArea = area
+        let container = NSView()
+        if designerForPrintEdit {
+            // Single-document editor for the print window: no tab bar.
+            container.addSubview(area)
+            NSLayoutConstraint.activate([
+                area.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                area.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                area.topAnchor.constraint(equalTo: container.topAnchor),
+                area.bottomAnchor.constraint(equalTo: container.bottomAnchor)])
+        } else {
+            let bar = BrowserTabBar(showsAdd: true)
+            bar.onSelect = { [weak self] id in self?.activateTab(id) }
+            bar.onClose  = { [weak self] id in self?.requestCloseTab(id) }
+            bar.onAdd    = { [weak self] in self?.addTab() }
+            self.tabBar = bar
+            container.addSubview(bar); container.addSubview(area)
+            NSLayoutConstraint.activate([
+                bar.topAnchor.constraint(equalTo: container.topAnchor),
+                bar.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                bar.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                area.topAnchor.constraint(equalTo: bar.bottomAnchor),
+                area.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                area.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                area.bottomAnchor.constraint(equalTo: container.bottomAnchor)])
+        }
 
         // Use NSPanel with .nonactivatingPanel so the window appears without
         // stealing activation from a host menu bar status item.
@@ -275,7 +388,7 @@ public final class DesignerWindowController: NSObject {
         )
         win.title = (mode == .custom) ? "VectorLabel — Custom Designer"
                                       : "VectorLabel — Template Designer"
-        win.contentView = wv
+        win.contentView = container
         win.delegate = self   // unsaved-changes prompt on close (windowShouldClose)
         win.hidesOnDeactivate = false
         win.isReleasedWhenClosed = false
@@ -283,36 +396,28 @@ public final class DesignerWindowController: NSObject {
                           defaultContentSize: NSSize(width: 1280, height: 860))
         NSApp.activate(ignoringOtherApps: true)
         win.makeKeyAndOrderFront(nil)
-        // Make the web view first responder so keyboard shortcuts (arrow-key
-        // nudge, delete, undo) reach the designer immediately.
-        win.makeFirstResponder(wv)
         window = win
 
         // Custom mode only: own a print backend, observe its status, and inject
         // printer/cassette state into the designer once the page loads.
         if mode == .custom { startPrintBackendIfNeeded() }
 
-        // Keep the designer's column config in sync with the shared setting.
+        // Keep every open tab's column config / presets / theme / catalog current.
         AppSettings.shared.$recordColumnOrder.dropFirst().receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.injectColumnConfig() }.store(in: &cancellables)
         AppSettings.shared.$recordHiddenColumns.dropFirst().receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.injectColumnConfig() }.store(in: &cancellables)
         AppSettings.shared.$recordColumnWidths.dropFirst().receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.injectColumnConfig() }.store(in: &cancellables)
-        // Keep filter/sort presets in sync with the shared store (so a preset saved
-        // in the Print window — or another designer window — appears here live).
         AppSettings.shared.$filterSortPresetsJSON.dropFirst().receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.injectFilterSortPresets() }.store(in: &cancellables)
-        // Push the light/dark theme to the designer webview when it changes.
-        // Re-theme the web view on any appearance change, including the OS flipping
-        // while in "system" mode. Push the EFFECTIVE light/dark, not the raw mode.
         AppSettings.shared.$appearance.dropFirst().receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                self?.webView?.evaluateJavaScript("if(typeof setTheme==='function')setTheme('\(AppSettings.shared.effectiveTheme)')", completionHandler: nil)
+                self?.evalAll("if(typeof setTheme==='function')setTheme('\(AppSettings.shared.effectiveTheme)')")
             }.store(in: &cancellables)
         AppSettings.shared.$systemAppearanceTick.dropFirst().receive(on: RunLoop.main)
             .sink { [weak self] _ in
-                self?.webView?.evaluateJavaScript("if(typeof setTheme==='function')setTheme('\(AppSettings.shared.effectiveTheme)')", completionHandler: nil)
+                self?.evalAll("if(typeof setTheme==='function')setTheme('\(AppSettings.shared.effectiveTheme)')")
             }.store(in: &cancellables)
         // Live-sync the supply catalog from the Engine's edits.
         catalogPollTimer?.invalidate()
@@ -329,12 +434,13 @@ public final class DesignerWindowController: NSObject {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self = self else { return }
-                self.webView?.navigationDelegate = nil
-                self.webView?.configuration.userContentController
-                    .removeScriptMessageHandler(forName: "vectorlabel")
-                self.webView = nil
-                self.webViewReady = false
-                self.window = nil
+                for t in self.tabs {
+                    t.webView.navigationDelegate = nil
+                    t.webView.configuration.userContentController
+                        .removeScriptMessageHandler(forName: "vectorlabel")
+                }
+                self.tabs.removeAll(); self.activeID = nil
+                self.window = nil; self.tabBar = nil; self.contentArea = nil
                 self.catalogPollTimer?.invalidate(); self.catalogPollTimer = nil   // stop the 2s disk poll
                 self.cancellables.removeAll()
                 // Custom mode: tear down the print backend's status watcher.
@@ -1327,28 +1433,40 @@ public final class DesignerWindowController: NSObject {
     /// Called by the save handlers after a successful save: clears the dirty flag
     /// and performs any pending close/terminate from the close prompt.
     private func finishSave() {
-        isDirty = false
+        isDirty = false   // setter → active tab
         webView?.evaluateJavaScript("if(typeof markClean==='function')markClean()", completionHandler: nil)
+        refreshTabBar()
         let action = afterSave; afterSave = .none
         switch action {
-        case .close:         window?.close()
-        case .terminate:     NSApp.terminate(nil)
-        case .openCustomDoc: applyPendingOpenCustomDocIfReady()   // saved → now load the reopened design
-        case .none:          break
+        case .closeTab:              closeActiveTab()
+        case .closeTabThenSweep:     closeActiveTab(); sweepDirtyTabsThenClose()
+        case .closeTabThenTerminate: closeActiveTab(); sweepDirtyTabsThenTerminate()
+        case .terminate:             NSApp.terminate(nil)
+        case .none:                  break
         }
     }
 
     /// A pending save-on-close was abandoned (e.g. the save panel was dismissed).
     private func cancelPendingSave() { afterSave = .none }
 
-    /// The Engine quit: close this designer — prompting to save first (no Cancel,
-    /// since the suite is shutting down) — then terminate.
+    /// The Engine quit: prompt to save every tab with unsaved changes (no Cancel, since
+    /// the suite is shutting down), then terminate.
     public func closeForEngineQuit() {
-        guard window != nil, isDirty, !designerForPrintEdit else { NSApp.terminate(nil); return }
-        if promptUnsaved(allowCancel: false, then: .terminate) {
-            NSApp.terminate(nil)   // Don't Save → quit now
+        guard window != nil, !designerForPrintEdit, tabs.contains(where: { $0.isDirty })
+        else { NSApp.terminate(nil); return }
+        sweepDirtyTabsThenTerminate()
+    }
+
+    /// Like `sweepDirtyTabsThenClose`, but for the Engine-quit shutdown: no Cancel, and it
+    /// terminates once every tab is saved or discarded.
+    private func sweepDirtyTabsThenTerminate() {
+        guard let dirty = tabs.first(where: { $0.isDirty }) else { NSApp.terminate(nil); return }
+        activateTab(dirty.id)
+        if promptUnsaved(allowCancel: false, then: .closeTabThenTerminate) {
+            closeActiveTab()                    // Don't Save → discard…
+            sweepDirtyTabsThenTerminate()       // …and continue
         }
-        // Save / Save As returned false: finishSave() terminates on completion.
+        // Save → finishSave(.closeTabThenTerminate) continues the sweep.
     }
 
     // MARK: – Dev HTML loader
@@ -1419,8 +1537,12 @@ extension DesignerWindowController: NSWindowDelegate {
                 return true                    // close the designer now
             }
         }
-        if !isDirty { return true }
-        return promptUnsaved(allowCancel: true, then: .close)
+        // Normal mode: closing the window closes every tab. If none have unsaved changes
+        // it closes at once; otherwise the sweep prompts per dirty tab and closes the
+        // window once they're all resolved (Cancel on any tab aborts the whole close).
+        if !tabs.contains(where: { $0.isDirty }) { return true }
+        sweepDirtyTabsThenClose()
+        return false
     }
 
     /// True while the designer has an on-screen window. The window is an NSPanel,
@@ -1463,9 +1585,13 @@ extension DesignerWindowController: WKNavigationDelegate {
     }
 
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        // Only handle our designer webview
-        guard webView === self.webView else { return }
-        webViewReady = true   // page loaded — warm reopens may inject directly now
+        // Route to the tab whose web view just loaded.
+        guard let tab = tabs.first(where: { $0.webView === webView }) else { return }
+        tab.webViewReady = true   // page loaded — warm reopens may inject directly now
+        // The per-tab injection below uses the active-tab accessors, so make the just-
+        // loaded tab active (a no-op in the normal one-open-at-a-time flow — the tab is
+        // already active; only matters if two opens raced).
+        if tab.id != activeID { activateTab(tab.id) }
         // Re-assert the installed font families after load, in case the document-start
         // injection raced the page's own script (the font picker reads window.__VL_FONTS__
         // live, so this guarantees the full system list is present).
@@ -1530,6 +1656,13 @@ extension DesignerWindowController: WKScriptMessageHandler {
               let body = message.body as? [String: Any],
               let action = body["action"] as? String
         else { return }
+
+        // Route to the sending tab. Messages come from the visible (active) tab in normal
+        // use; activating here keeps the active-tab accessors (dataSource/isDirty/webView)
+        // pointed at the real sender if a background tab ever posts.
+        if let mt = tabs.first(where: { $0.webView === message.webView }), mt.id != activeID {
+            activateTab(mt.id)
+        }
 
         switch action {
         case "saveTemplate":
@@ -1651,6 +1784,7 @@ extension DesignerWindowController: WKScriptMessageHandler {
             // The web designer mirrors its unsaved-changes state here.
             isDirty = (body["payload"] as? [String: Any])?["dirty"] as? Bool ?? false
             if isDirty { afterSave = .none }   // a new edit cancels a pending close
+            refreshTabBar()                    // reflect the unsaved dot on the tab chip
 
         case "jsError":
             // Uncaught error inside the WKWebView — log prominently for diagnosis.

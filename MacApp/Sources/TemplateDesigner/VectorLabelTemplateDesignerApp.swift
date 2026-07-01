@@ -50,9 +50,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         designer = DesignerWindowController(mode: .template)
         // If Finder handed us a document before launch finished, open it directly;
         // otherwise show the normal picker.
-        if let url = pendingOpenURLs.last {
-            pendingOpenURLs.removeAll()
-            openTemplate(at: url)
+        if !pendingOpenURLs.isEmpty {
+            let urls = pendingOpenURLs; pendingOpenURLs.removeAll()
+            for url in urls { openTemplate(at: url) }   // one tab per file
         } else {
             designer.open()
         }
@@ -84,12 +84,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// before applicationDidFinishLaunching, so stash the URL until the designer
     /// exists, then load it into the canvas.
     func application(_ application: NSApplication, open urls: [URL]) {
-        guard let url = urls.last(where: { TemplateStore.isTemplateFile($0) }) ?? urls.last
-        else { return }
+        // Open every selected ".vltmp" as its own tab. If none are valid, keep the last
+        // URL so openTemplate(at:) surfaces the read error.
+        let templates = urls.filter { TemplateStore.isTemplateFile($0) }
+        let toOpen = templates.isEmpty ? Array(urls.suffix(1)) : templates
+        guard !toOpen.isEmpty else { return }
         if designer == nil {
-            pendingOpenURLs = [url]   // applicationDidFinishLaunching will consume it
+            pendingOpenURLs = toOpen   // applicationDidFinishLaunching will consume them
         } else {
-            openTemplate(at: url)
+            for url in toOpen { openTemplate(at: url) }
         }
     }
 

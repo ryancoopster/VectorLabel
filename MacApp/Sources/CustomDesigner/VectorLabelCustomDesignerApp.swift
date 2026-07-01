@@ -71,18 +71,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // request the Engine wrote just before this (possibly cold) launch — DRAIN it,
         // don't discard it; else open the empty Custom Designer.
         let pendingReprints = queue.pendingCustomReprintURLs()
-        if let url = pendingOpenURLs.last {
-            pendingOpenURLs.removeAll()
-            openCustomDocument(at: url)
-        } else if let first = pendingReprints.first {
-            // Only one window can show a reprint; open the first and drain the extras so
-            // they don't linger (each handleReprintRequest reopens into the single window,
-            // so processing them all would just clobber down to the last one).
-            for extra in pendingReprints.dropFirst() { queue.deleteReprint(extra) }
-            handleReprintRequest(first)
-        } else {
-            designer.open()
-        }
+        let anyPending = !pendingOpenURLs.isEmpty || !pendingReprints.isEmpty
+        // Each Finder-opened file and each queued reprint gets its own tab.
+        for url in pendingOpenURLs { openCustomDocument(at: url) }
+        pendingOpenURLs.removeAll()
+        for r in pendingReprints { handleReprintRequest(r) }
+        if !anyPending { designer.open() }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -141,12 +135,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Finder double-click / `open` of a ".vlcus". May fire before
     /// applicationDidFinishLaunching, so stash the URL until the designer exists.
     func application(_ application: NSApplication, open urls: [URL]) {
-        guard let url = urls.last(where: { CustomLabelStore.isCustomLabelFile($0) }) ?? urls.last
-        else { return }
+        // Open every selected ".vlcus" as its own tab. If none are valid, keep the last
+        // URL so openCustomDocument(at:) surfaces the read error.
+        let custom = urls.filter { CustomLabelStore.isCustomLabelFile($0) }
+        let toOpen = custom.isEmpty ? Array(urls.suffix(1)) : custom
+        guard !toOpen.isEmpty else { return }
         if designer == nil {
-            pendingOpenURLs = [url]
+            pendingOpenURLs = toOpen
         } else {
-            openCustomDocument(at: url)
+            for url in toOpen { openCustomDocument(at: url) }
         }
     }
 
