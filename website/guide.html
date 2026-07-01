@@ -358,12 +358,25 @@ VectorworksPlugin/export_all.py</code></pre>
 <section class="doc-sec" id="two-designers">
 <h2>Template Designer vs Custom Designer</h2>
 <p>VectorLabel ships two designer windows that look almost identical but are aimed at different jobs. The window title bar reads "VectorLabel — Template Designer" or "VectorLabel — Custom Designer", and the top-left subtitle under the VectorLabel logo says either "Template Designer" or "Custom Designer".</p>
-<p>Template Designer makes REUSABLE templates. A template is a layout with data-bound fields (for example a text box set to the "Cable Name" column). You save it as a .vltmp file, and the Print window later loads it, fills the fields from each row of your wire-export data, and prints one label per record. The Template Designer's New/Open/Save toolbar buttons are "New", "Open…", "Save as…" and "Save", and new documents start named "Untitled Template". When launched on its own it opens an Open Template picker so you choose a template rather than landing on a blank one. It can load a CSV (the "Load CSV…" button in the top bar) purely as a PREVIEW so you can see how fields will look — it does not print.</p>
-<p>Custom Designer makes ONE-OFF labels and can also print them itself. Its toolbar buttons are "New", "Open…" and "Save Label…", and new documents start named "Untitled Custom Design". It has an extra print header (printer picker, Copies, Cut, Feed to clear, Print) and a bottom "Database" pane. You can bind a CSV or Excel (.xlsx) file as print data and the Custom Designer will print one label per row; with no data bound it just prints the single label you designed. Saved files are .vlcus and embed both the design and a copy of the bound data so a Reprint reopens the exact label.</p>
+<p>Template Designer makes REUSABLE templates. A template is a layout with data-bound fields (for example a text box set to the "Cable Name" column). You save it as a .vltmp file, and the Print window later loads it, fills the fields from each row of your wire-export data, and prints one label per record. Its file-toolbar buttons are "Open…", "Save as…" and "Save" — a <em>new</em> blank template is created with the <strong>+</strong> on the tab bar (see <a href="#tabs">Working in tabs</a>). New documents start named "Untitled Template" until you save them; the tab shows the template's name. When launched on its own it opens an Open Template picker so you choose a template rather than landing on a blank one. It can load a CSV purely as a PREVIEW so you can see how fields will look — the "Load CSV…" button is in the <strong>Records panel</strong> at the bottom of the window (not the top toolbar) — and it does not print.</p>
+<p>Custom Designer makes ONE-OFF labels and can also print them itself. Its file-toolbar buttons are "Open…" and "Save Label…" (a new blank design is the <strong>+</strong> on the tab bar), and new documents start named "Untitled Custom Design". It has an extra print header (printer picker, Copies, Cut, Feed to clear, Print) and a bottom "Database" pane. You can bind a CSV or Excel (.xlsx) file as print data and the Custom Designer will print one label per row; with no data bound it just prints the single label you designed. Saved files are .vlcus and embed both the design and a copy of the bound data so a Reprint reopens the exact label.</p>
 
 
 <div class="callout tip"><span class="lab">Tips</span><p>If you just want to print a handful of labels right now, use the Custom Designer. If you are building a layout to be reused across many print jobs from your wire data, use the Template Designer.</p><p>Both designers can also open Brady (.BWT) and Brother P-touch (.lbx) templates and convert them — see the Importing section.</p></div>
 <div class="callout warn"><span class="lab">Heads up</span><p>The two windows share the same underlying HTML canvas, so the editing controls are the same. The differences are the toolbar buttons, the default document name, and the Custom Designer's print header + Database pane.</p></div>
+</section>
+
+<section class="doc-sec" id="tabs">
+<h2>Working in tabs</h2>
+<p>Both designers and the Print window are <strong>tabbed</strong>, so you can keep several labels open at once. A bar of tabs runs across the top of the window; each tab is one open document (or, in the Print window, one exported job) and keeps its own full state — canvas, selection, zoom, undo history and bound data.</p>
+<ul>
+  <li><strong>New tab / new document</strong> — click the <strong>+</strong> at the end of the tab bar (in the two designers). In the Custom Designer this gives you a fresh blank design; in the Template Designer it opens the template picker.</li>
+  <li><strong>Opening a file opens a new tab.</strong> Using "Open…", double-clicking a <code>.vltmp</code>/<code>.vlcus</code> in the Finder, or importing a Brady <code>.BWT</code> / Brother <code>.lbx</code> all open in their <em>own</em> new tab — whatever you were working on is left untouched. You can select several files at once and each opens in its own tab.</li>
+  <li><strong>The tab shows the document name</strong> (the file name, or "Untitled…" until you save). A dot (•) in front of the name means that tab has unsaved changes.</li>
+  <li><strong>Too many tabs to fit?</strong> The strip scrolls, and <strong>‹ ›</strong> arrows appear at the ends so you can page through them.</li>
+  <li><strong>Closing.</strong> Click a tab's <strong>✕</strong> to close just that document — you'll be asked to save if it has unsaved changes. Closing the whole window (its title-bar ✕) closes every tab; a designer prompts for each unsaved document, and the Print window asks once before clearing all tabs.</li>
+</ul>
+<p>In the Print window, each export from Vectorworks arrives as a new tab and the window jumps to the most recent one; printing or cancelling closes just that tab when others are open, or the whole window when it's the last one.</p>
 </section>
 
 <section class="doc-sec" id="choosing-supply">
@@ -657,9 +670,9 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
 <h2 class="chapter" id="ch-printing">Printing &amp; printers</h2>
 <section class="doc-sec" id="print-window-overview">
 <h2>What the Print window is and how it opens</h2>
-<p>The Print window is a single screen titled "VectorLabel — Print". It floats above your other windows so it stays in front when it pops up while you are working in another app. It has five main areas: a top bar (file name, Load CSV, Cancel), a Template bar, a Labels list (your records) with a live preview on the right, and a Print bar across the bottom (label selection, printer, cut, and the Print button).</p>
+<p>The Print window is titled "VectorLabel — Print" and floats above your other windows so it stays in front when it pops up while you are working in another app. It is <strong>tabbed</strong> — each export appears as its own tab and the window jumps to the most recent one (see <a href="#tabs">Working in tabs</a>). Within a tab there are five main areas: a top bar (Load CSV, Cancel), a Template bar, a Labels list (your records) with a live preview on the right, and a Print bar across the bottom (label selection, printer, cut, and the Print button). The current export's name is shown on its tab.</p>
 <p>It opens by itself when VectorLabel sees a new CSV export drop into the watch folder (this auto-open can be turned off in Preferences ▸ Export ▸ "Auto-open print window when export is detected"). It also opens when you press Reprint on a past job in the menu bar. When the window closes after a print, focus returns to whatever app you exported from.</p>
-<p>The file the labels came from is shown in the top bar. "Load CSV…" lets you load a different export, and "✕ Cancel" closes the window. If you configured a job and then cancel, that configuration is still recorded in Recent Prints as a cancelled job so you can reopen and finish it later.</p>
+<p>The file each export came from is shown on its tab. "Load CSV…" lets you load a different export into a tab, and "✕ Cancel" closes it (the whole window when it is the last tab). If you configured a job and then cancel, that configuration is still recorded in Recent Prints as a cancelled job so you can reopen and finish it later.</p>
 
 
 <div class="callout tip"><span class="lab">Tips</span><p>The Print button shortcut is shown on the button itself: ⌘ Return (Command-Return) prints, exactly like clicking it.</p><p>Up/Down arrow keys move the preview selection through the visible rows.</p></div>
@@ -995,7 +1008,7 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
 
 <section class="doc-sec" id="text-too-big-or-cut-off">
 <h2>Text is too big, too small, or cut off</h2>
-<p>Text objects can auto-scale to fit their box. When a text object has auto-scale on (and word-wrap off), the app shrinks the font so a single line fits the box width. If auto-scale is off, long values can overflow and get clipped at the edge of the box.</p>
+<p>Text objects can auto-scale to fit their box. When a text object has auto-scale on (and word-wrap off), the app shrinks the font so a single line fits the box width — the whole value is always shown and is never truncated with a "…". If auto-scale is off, long values can overflow and get clipped at the edge of the box.</p>
 <p>For continuous tape, you can also grow the label length to fit the content instead of shrinking the text, using the designer's fit-length action.</p>
 
 <ol class="steps">
@@ -1127,7 +1140,7 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
       <a href="faq.html">FAQ</a>
       <a href="https://github.com/ryancoopster/VectorLabel">GitHub</a>
     </div>
-    <div class="copy">VectorLabel · Open alpha · Docs synced to commit 390724b · 2026-06-30 · Brady and Brother are trademarks of their respective owners.</div>
+    <div class="copy">VectorLabel · Open alpha · Docs synced to commit 70da2a9 · 2026-06-30 · Brady and Brother are trademarks of their respective owners.</div>
   </div>
 </footer>
 <script>
