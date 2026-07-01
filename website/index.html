@@ -101,6 +101,8 @@ header.nav{
 .nav-inner{display:flex;align-items:center;justify-content:space-between;height:64px}
 .brand{display:flex;align-items:center;gap:11px;font-weight:700;letter-spacing:-.02em;font-size:18px}
 .brand .mark{width:26px;height:26px}
+.brand-text{display:flex;flex-direction:column;line-height:1.02}
+.brand-tag{font-size:10px;font-weight:600;letter-spacing:.04em;color:var(--muted);margin-top:2px}
 .nav-links{display:flex;align-items:center;gap:30px}
 .nav-links a{font-size:14.5px;color:var(--ink-soft);font-weight:500;transition:color .15s}
 .nav-links a:hover{color:var(--ink)}
@@ -117,53 +119,42 @@ header.nav{
 .hero-note{font-size:13.5px;color:var(--muted);display:flex;align-items:center;gap:8px}
 .hero-note .dot{width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.18)}
 
-/* ---------- Printer / label animation ---------- */
-.stage{
-  position:relative;aspect-ratio:1/.92;border-radius:var(--radius);
+/* ---------- App-window mockup (the actual Custom Designer) ---------- */
+.stage{position:relative;aspect-ratio:1/.9;border-radius:var(--radius);padding:22px;
   background:radial-gradient(120% 120% at 70% 0%,#fbfcfe 0%,#eef1f6 60%,#e7ebf2 100%);
-  border:1px solid var(--line);overflow:hidden;
-  box-shadow:0 30px 60px -30px rgba(14,17,22,.25);
-}
-.grid-bg{position:absolute;inset:0;opacity:.5;
-  background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
-  background-size:26px 26px;mask-image:radial-gradient(70% 70% at 50% 35%,#000 40%,transparent 100%);
-  -webkit-mask-image:radial-gradient(70% 70% at 50% 35%,#000 40%,transparent 100%);}
-
-.label{
-  position:absolute;left:50%;top:16%;width:62%;transform:translateX(-50%);
-  background:#fff;border-radius:10px;padding:18px 18px 16px;
-  box-shadow:0 18px 40px -16px rgba(14,17,22,.4);
-  border:1px solid #eceef2;
-}
-.label .ll{height:11px;border-radius:3px;background:#e9ecf1;margin:0 0 9px;overflow:hidden;position:relative}
-.label .ll::after{content:"";position:absolute;inset:0;width:0;background:var(--ink);border-radius:3px;animation:fill 6s ease-in-out infinite}
-.label .ll.t{height:15px;width:78%}
-.label .ll.t::after{background:var(--accent)}
-.label .ll.s{width:55%}
-.label .ll.m{width:88%}
-.ll.s::after{animation-delay:.25s}
-.ll.m::after{animation-delay:.5s}
-@keyframes fill{0%{width:0}14%,72%{width:100%}86%,100%{width:0}}
-
-.barcode{display:flex;gap:3px;align-items:flex-end;height:42px;margin-top:13px}
-.barcode i{flex:1;background:var(--ink);border-radius:1px;transform:scaleY(0);transform-origin:bottom;animation:bars 6s ease-in-out infinite}
-@keyframes bars{0%,18%{transform:scaleY(0)}30%,72%{transform:scaleY(1)}86%,100%{transform:scaleY(0)}}
-
-.qr{position:absolute;right:16px;bottom:16px;width:54px;height:54px;display:grid;grid-template-columns:repeat(6,1fr);gap:2px}
-.qr span{background:var(--ink);border-radius:1px;opacity:0;animation:qr 6s steps(1) infinite}
-@keyframes qr{0%,20%{opacity:0}34%,72%{opacity:1}86%,100%{opacity:0}}
-
-.scanline{position:absolute;left:50%;top:16%;width:62%;height:3px;transform:translateX(-50%);
-  background:linear-gradient(90deg,transparent,var(--accent),transparent);border-radius:3px;
-  filter:blur(.3px);opacity:0;animation:scan 6s ease-in-out infinite}
-@keyframes scan{0%,8%{opacity:0;top:18%}12%{opacity:1}30%{top:54%;opacity:1}40%{opacity:0;top:54%}100%{opacity:0}}
-
-.printer{position:absolute;left:50%;bottom:8%;width:74%;transform:translateX(-50%)}
-.printer .body{height:74px;border-radius:14px;background:linear-gradient(180deg,#23272e,#15181d);box-shadow:0 14px 30px -12px rgba(0,0,0,.5);position:relative}
-.printer .slot{position:absolute;top:-7px;left:8%;right:8%;height:8px;background:#0a0c0f;border-radius:6px}
-.printer .led{position:absolute;left:18px;bottom:14px;width:9px;height:9px;border-radius:50%;background:#22c55e;box-shadow:0 0 10px #22c55e;animation:blink 6s ease-in-out infinite}
-@keyframes blink{0%,40%{opacity:.4}45%,70%{opacity:1}100%{opacity:.4}}
-.printer .brand-strip{position:absolute;right:16px;bottom:13px;font:600 10px var(--font);letter-spacing:.12em;color:#7d8694}
+  border:1px solid var(--line);overflow:hidden;box-shadow:0 30px 60px -30px rgba(14,17,22,.25)}
+.app-win{position:absolute;inset:22px;background:#fff;border:1px solid #e4e7ee;border-radius:12px;overflow:hidden;
+  display:flex;flex-direction:column;box-shadow:0 22px 46px -22px rgba(14,17,22,.42)}
+.app-bar{height:32px;display:flex;align-items:center;gap:7px;padding:0 12px;background:#f3f5f9;border-bottom:1px solid #e6e9f0}
+.app-bar .tl{width:11px;height:11px;border-radius:50%}
+.tl.r{background:#ff5f57}.tl.y{background:#febc2e}.tl.g{background:#28c840}
+.app-bar .app-title{margin-left:8px;font-size:11.5px;font-weight:600;color:var(--muted)}
+.app-tabs{display:flex;align-items:center;gap:4px;padding:5px 8px;background:#eef1f6;border-bottom:1px solid #e2e6ee}
+.app-tabs .tab{font-size:11px;padding:4px 10px;border-radius:6px;color:var(--muted);white-space:nowrap}
+.app-tabs .tab.on{background:rgba(47,87,255,.14);color:var(--accent);font-weight:600}
+.app-tabs .tab-add{margin-left:2px;color:var(--muted);font-size:15px;line-height:1;padding:0 6px}
+.app-body{flex:1;display:flex;min-height:0}
+.canvas{flex:1;position:relative;background-color:#f7f8fb;
+  background-image:linear-gradient(#e9ecf2 1px,transparent 1px),linear-gradient(90deg,#e9ecf2 1px,transparent 1px);background-size:20px 20px}
+.lbl{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:76%;
+  background:#fff;border:1px solid #dfe3ea;border-radius:6px;padding:15px 16px 12px;
+  box-shadow:0 12px 26px -14px rgba(14,17,22,.3);outline:1.5px solid var(--accent);outline-offset:2px}
+.lbl-row{display:flex;justify-content:space-between;font-size:11px;font-weight:600;color:var(--ink-soft)}
+.lbl-id{text-align:center;font-weight:800;font-size:21px;letter-spacing:-.01em;margin:8px 0}
+.lbl-sep{height:2px;background:var(--ink);margin:0 0 8px}
+.lbl-dev{text-align:center;font-size:12.5px;font-weight:600;color:var(--ink-soft)}
+.lbl-obj{opacity:0;animation:objin 6s ease-in-out infinite}
+@keyframes objin{0%,5%{opacity:0;transform:translateY(4px)}15%,80%{opacity:1;transform:none}92%,100%{opacity:0;transform:translateY(4px)}}
+.lbl .h{position:absolute;width:7px;height:7px;background:var(--accent);border:1.5px solid #fff;border-radius:50%}
+.lbl .h.tl{left:-4px;top:-4px}.lbl .h.tr{right:-4px;top:-4px}.lbl .h.bl{left:-4px;bottom:-4px}.lbl .h.br{right:-4px;bottom:-4px}
+.canvas .sweep{position:absolute;left:11%;right:11%;height:3px;border-radius:3px;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:0;animation:sweep 6s ease-in-out infinite}
+@keyframes sweep{0%,56%{opacity:0;top:32%}62%{opacity:1;top:32%}80%{opacity:1;top:66%}86%,100%{opacity:0;top:66%}}
+.inspector{width:70px;flex-shrink:0;background:#fbfcfe;border-left:1px solid #e6e9f0;padding:10px 8px;display:flex;flex-direction:column;gap:7px}
+.ins-h{height:6px;width:62%;border-radius:3px;background:#dfe3ea}
+.ins-b{height:20px;border-radius:5px;background:#eef1f6;border:1px solid #e2e6ee}
+.ins-b.sm{height:13px}
+.ins-row{display:flex;gap:5px}.ins-row .ins-b{flex:1;height:15px}
 
 /* ---------- Pills / strip ---------- */
 .strip{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--bg-soft);padding:26px 0}
@@ -232,6 +223,19 @@ header.nav{
 .bf:nth-child(2){animation-delay:.6s}
 .bf:nth-child(3){animation-delay:1.2s}
 @keyframes flash{0%,40%{background:transparent}50%,70%{background:var(--accent-soft);border-radius:6px}80%,100%{background:transparent}}
+/* Record browser table — mirrors the Print window's record list */
+.rec-table{width:100%;border-collapse:collapse;font-size:12.5px;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.rec-table th,.rec-table td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+.rec-table thead th{background:var(--bg-soft);color:var(--muted);font-weight:600;font-size:11px;letter-spacing:.02em}
+.rec-table tbody tr:last-child td{border-bottom:none}
+.rec-table td.chk,.rec-table th.chk{width:20px;text-align:center;color:var(--accent);font-weight:700}
+.rec-table tbody tr.sel td{background:var(--accent-soft)}
+.rec-table td.hl{color:var(--accent);font-weight:600}
+.preview-row{display:flex;gap:16px;margin-top:20px;flex-wrap:wrap;align-items:stretch}
+.preview-row .bind-label{margin-top:0}
+.preview-row .bind-label.wrap{flex:1;min-width:230px}
+.preview-row .bind-label.sq{flex:0 0 168px;width:168px;display:flex;flex-direction:column;justify-content:center}
+@media(max-width:560px){.preview-row .bind-label.sq{flex:1;width:auto}}
 
 /* ---------- Printers ---------- */
 .printers{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
@@ -316,7 +320,7 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
         <path d="M9 10l5 12 5-12" stroke="#2f57ff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
         <rect x="20" y="9" width="3" height="14" rx="1.2" fill="#fff"/>
       </svg>
-      VectorLabel
+      <span class="brand-text">VectorLabel<small class="brand-tag">Labeling… Open&nbsp;Source</small></span>
     </a>
     <nav class="nav-links" id="vl-nav">
       <a href="#suite">The suite</a>
@@ -356,35 +360,38 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
       <div class="hero-note"><span class="dot"></span> Design from scratch, or bring your data — barcodes, QR and 2-D codes built in.</div>
     </div>
 
-    <!-- Animated printer + label -->
+    <!-- Animated view of the actual Custom Designer: tabs, canvas, a live wire-wrap label -->
     <div class="stage" aria-hidden="true">
-      <div class="grid-bg"></div>
-      <div class="label">
-        <div class="ll t"></div>
-        <div class="ll s"></div>
-        <div class="ll m"></div>
-        <div class="barcode">
-          <i style="animation-delay:.30s"></i><i style="animation-delay:.34s"></i><i style="animation-delay:.38s"></i>
-          <i style="animation-delay:.42s"></i><i style="animation-delay:.46s"></i><i style="animation-delay:.50s"></i>
-          <i style="animation-delay:.54s"></i><i style="animation-delay:.58s"></i><i style="animation-delay:.62s"></i>
-          <i style="animation-delay:.66s"></i><i style="animation-delay:.70s"></i><i style="animation-delay:.74s"></i>
-          <i style="animation-delay:.78s"></i><i style="animation-delay:.82s"></i><i style="animation-delay:.86s"></i>
+      <div class="app-win">
+        <div class="app-bar">
+          <span class="tl r"></span><span class="tl y"></span><span class="tl g"></span>
+          <span class="app-title">VectorLabel — Custom Designer</span>
         </div>
-        <div class="qr">
-          <span style="animation-delay:.40s"></span><span style="animation-delay:.46s"></span><span style="animation-delay:.52s"></span><span style="animation-delay:.58s"></span><span style="animation-delay:.64s"></span><span style="animation-delay:.70s"></span>
-          <span style="animation-delay:.43s"></span><span style="animation-delay:.49s"></span><span style="animation-delay:.55s"></span><span style="animation-delay:.61s"></span><span style="animation-delay:.67s"></span><span style="animation-delay:.73s"></span>
-          <span style="animation-delay:.46s"></span><span style="animation-delay:.52s"></span><span style="animation-delay:.58s"></span><span style="animation-delay:.64s"></span><span style="animation-delay:.70s"></span><span style="animation-delay:.76s"></span>
-          <span style="animation-delay:.49s"></span><span style="animation-delay:.55s"></span><span style="animation-delay:.61s"></span><span style="animation-delay:.67s"></span><span style="animation-delay:.73s"></span><span style="animation-delay:.79s"></span>
-          <span style="animation-delay:.52s"></span><span style="animation-delay:.58s"></span><span style="animation-delay:.64s"></span><span style="animation-delay:.70s"></span><span style="animation-delay:.76s"></span><span style="animation-delay:.82s"></span>
-          <span style="animation-delay:.55s"></span><span style="animation-delay:.61s"></span><span style="animation-delay:.67s"></span><span style="animation-delay:.73s"></span><span style="animation-delay:.79s"></span><span style="animation-delay:.85s"></span>
+        <div class="app-tabs">
+          <span class="tab on">Rack&nbsp;Wraps</span>
+          <span class="tab">Patch&nbsp;IDs</span>
+          <span class="tab">Panel&nbsp;Asset</span>
+          <span class="tab-add">+</span>
         </div>
-      </div>
-      <div class="scanline"></div>
-      <div class="printer">
-        <div class="body">
-          <div class="slot"></div>
-          <div class="led"></div>
-          <div class="brand-strip">THERMAL · 300 DPI</div>
+        <div class="app-body">
+          <div class="canvas">
+            <div class="lbl">
+              <div class="lbl-row">
+                <span class="lbl-obj" style="animation-delay:0s">XLR-M</span>
+                <span class="lbl-obj" style="animation-delay:.12s">FOH-A1</span>
+              </div>
+              <div class="lbl-id lbl-obj" style="animation-delay:.28s">127&nbsp;-&nbsp;C-1042</div>
+              <div class="lbl-sep"></div>
+              <div class="lbl-dev lbl-obj" style="animation-delay:.44s">@ AMP&nbsp;3 : OUT&nbsp;L</div>
+              <span class="h tl"></span><span class="h tr"></span><span class="h bl"></span><span class="h br"></span>
+            </div>
+            <div class="sweep"></div>
+          </div>
+          <div class="inspector">
+            <div class="ins-h"></div><div class="ins-b"></div>
+            <div class="ins-row"><div class="ins-b"></div><div class="ins-b"></div></div>
+            <div class="ins-b sm"></div><div class="ins-h"></div><div class="ins-b sm"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -544,22 +551,41 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
       <p class="muted" style="font-size:14.5px"><code style="background:#fff;border:1px solid var(--line);padding:3px 8px;border-radius:6px;font-size:12.5px;display:inline-block;line-height:1.6">=IF(Number&lt;&gt;"",Number&amp;IF(Cable&lt;&gt;""," - "&amp;Cable,""),IF(Cable&lt;&gt;"",Cable,""))</code><br><span style="display:inline-block;margin-top:10px">That's the actual main-line formula from the <strong>1_5x4 V1</strong> template — VectorLabel evaluates it for every record.</span></p>
     </div>
     <div class="bind-visual reveal">
-      <div class="csv">
-        <div class="row head">Number, Cable, Connector, Device_Name, Socket_Name, Rack</div>
-        <div class="row"><span class="hl">127</span>, <span class="hl">C-1042</span>, XLR-M, AMP&nbsp;3, OUT&nbsp;L, FOH-A1</div>
-        <div class="row">128, C-1043, XLR-F, DSP&nbsp;1, IN&nbsp;7, FOH-A1</div>
-        <div class="row">129, C-1044, TRS, WALL&nbsp;12, AUX, STAGE-L</div>
-      </div>
-      <div class="bind-label">
-        <span class="tag">Label preview · 1_5x4 V1</span>
-        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
-          <span class="bf flash" style="margin:0;font-size:13px;animation-delay:0s">XLR-M <small>=Connector</small></span>
-          <span class="bf flash" style="margin:0;font-size:13px;animation-delay:.3s">FOH-A1 <small>=Rack</small></span>
+      <!-- The record browser, just like the Print window: pick rows, see them fill the label -->
+      <table class="rec-table">
+        <thead><tr>
+          <th class="chk">✓</th><th>Number</th><th>Cable</th><th>Connector</th><th>Device_Name</th><th>Socket_Name</th><th>Rack</th>
+        </tr></thead>
+        <tbody>
+          <tr class="sel"><td class="chk">✓</td><td class="hl">127</td><td class="hl">C-1042</td><td>XLR-M</td><td>AMP&nbsp;3</td><td>OUT&nbsp;L</td><td>FOH-A1</td></tr>
+          <tr><td class="chk">✓</td><td>128</td><td>C-1043</td><td>XLR-F</td><td>DSP&nbsp;1</td><td>IN&nbsp;7</td><td>FOH-A1</td></tr>
+          <tr><td class="chk">✓</td><td>129</td><td>C-1044</td><td>TRS</td><td>WALL&nbsp;12</td><td>AUX</td><td>STAGE-L</td></tr>
+        </tbody>
+      </table>
+
+      <!-- The selected row (127) rendered into two of your templates -->
+      <div class="preview-row">
+        <!-- 1.5 × 1.5 die-cut square -->
+        <div class="bind-label sq">
+          <span class="tag">1_5x1_5 V1</span>
+          <div class="bf flash" style="text-align:center;margin:0 0 4px;font-size:11px;animation-delay:0s">XLR-M <small>=Connector</small></div>
+          <div class="bf flash" style="text-align:center;font-weight:700;font-size:22px;letter-spacing:-.01em;margin:2px 0;animation-delay:.6s">127</div>
+          <div class="bf flash" style="text-align:center;font-weight:600;font-size:14px;margin:0 0 7px;animation-delay:.6s">C-1042</div>
+          <div style="height:1.5px;background:var(--ink);margin:0 auto 7px;width:72%"></div>
+          <div class="bf flash" style="text-align:center;margin:0;font-size:11px;animation-delay:.9s">FOH-A1 <small>=Rack</small></div>
         </div>
-        <div class="bf flash" style="text-align:center;font-weight:700;font-size:21px;letter-spacing:-.01em;margin:11px 0 9px;animation-delay:.6s">127&nbsp;-&nbsp;C-1042 <small style="font-weight:500">=IF(Number…)</small></div>
-        <div style="height:1.5px;background:var(--ink);margin:0 0 11px"></div>
-        <div class="bf flash" style="text-align:center;margin:0;font-size:14px;animation-delay:.9s">@ AMP&nbsp;3 : OUT&nbsp;L <small>=IF(Device_Name…)</small></div>
-        <div style="text-align:center;margin-top:15px;font-size:11.5px;color:var(--muted)">Brady M6-33-427 · 1.5″ × 4″ self-laminating wrap</div>
+        <!-- 1.5 × 4 self-laminating wrap -->
+        <div class="bind-label wrap">
+          <span class="tag">1_5x4 V1</span>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+            <span class="bf flash" style="margin:0;font-size:13px;animation-delay:0s">XLR-M <small>=Connector</small></span>
+            <span class="bf flash" style="margin:0;font-size:13px;animation-delay:.3s">FOH-A1 <small>=Rack</small></span>
+          </div>
+          <div class="bf flash" style="text-align:center;font-weight:700;font-size:21px;letter-spacing:-.01em;margin:11px 0 9px;animation-delay:.6s">127&nbsp;-&nbsp;C-1042 <small style="font-weight:500">=IF(Number…)</small></div>
+          <div style="height:1.5px;background:var(--ink);margin:0 0 11px"></div>
+          <div class="bf flash" style="text-align:center;margin:0;font-size:14px;animation-delay:.9s">@ AMP&nbsp;3 : OUT&nbsp;L <small>=IF(Device_Name…)</small></div>
+          <div style="text-align:center;margin-top:14px;font-size:11.5px;color:var(--muted)">Brady M6-33-427 · 1.5″ × 4″ self-laminating wrap</div>
+        </div>
       </div>
     </div>
   </div>
@@ -571,7 +597,7 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
     <div class="section-head reveal">
       <div class="eyebrow">Hardware</div>
       <h2>One app, your printers.</h2>
-      <p class="lead muted">VectorLabel speaks directly to thermal label printers over USB and the network — discovering Brady printers automatically, detecting loaded media, and reporting status live on supported models.</p>
+      <p class="lead muted">VectorLabel speaks directly to thermal label printers over USB and the network — discovering printers automatically, detecting loaded media, and reporting status live on supported models.</p>
     </div>
     <div class="printers">
       <div class="pcard reveal">
