@@ -259,13 +259,18 @@ public final class AppSettings: ObservableObject {
     /// scrollbars, and the menu/preferences chrome render in the chosen mode).
     /// "system" leaves NSApp.appearance nil so the OS drives it.
     public func applyNativeAppearance() {
-        DispatchQueue.main.async {
+        let apply = {
             switch self.appearance {
             case "light": NSApp.appearance = NSAppearance(named: .aqua)
             case "dark":  NSApp.appearance = NSAppearance(named: .darkAqua)
-            default:      NSApp.appearance = nil
+            default:      NSApp.appearance = nil   // "system": follow the OS
             }
         }
+        // Apply SYNCHRONOUSLY on the main thread so NSApp.effectiveAppearance is up to date
+        // BEFORE the $appearance / $systemAppearanceTick observers read effectiveTheme. If this
+        // ran async, switching to "system" pushed the STALE theme to the web views — the native
+        // chrome flipped to the OS mode but the WKWebView canvas stayed on the old theme.
+        if Thread.isMainThread { apply() } else { DispatchQueue.main.async(execute: apply) }
     }
 
     /// Whether to also show VectorLabel in the Dock (menu-bar-only by default).
