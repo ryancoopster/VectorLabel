@@ -19,6 +19,12 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
+# The "Create GitHub Release" step (softprops/action-gh-release) needs write access to
+# create the release + upload assets + generate notes. Without this the token is read-only
+# and publishing fails with "403 Resource not accessible by integration".
+permissions:
+  contents: write
+
 jobs:
   release:
     name: Build, sign, notarize
