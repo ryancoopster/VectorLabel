@@ -150,7 +150,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Load the ".vlcus" at `url` into the Custom Designer (or report a read failure).
     private func openCustomDocument(at url: URL) {
         if let doc = CustomLabelStore.load(from: url) {
-            designer.openCustomDocument(doc)
+            designer.openCustomDocument(doc, displayName: url.deletingPathExtension().lastPathComponent)
         } else {
             designer.open()
             let alert = NSAlert()

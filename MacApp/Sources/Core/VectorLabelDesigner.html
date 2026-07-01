@@ -338,7 +338,37 @@ function autoFitPx(text,o,basePx,boxW,pad){
   w*=((o.stretch||100)/100);
   const avail=boxW-(pad||0);
   if(w<=avail||w<=0) return basePx;
-  return Math.max(3,basePx*(avail/w));
+  // Cheap first guess only. canvas.measureText diverges from real DOM layout
+  // (font-fallback, letter-spacing, sub-pixel, and scaleX not affecting layout),
+  // so leave headroom and let fitAutoScaleText() correct against true layout.
+  return Math.max(3,basePx*(avail/w)*0.96);
+}
+
+// Post-render GUARANTEE that auto-scale text fits: measure the real laid-out box
+// (scrollWidth vs clientWidth — the same width the DOM uses for overflow/clip)
+// and shrink font-size until the whole string is visible. Immune to
+// canvas.measureText error. Reads first, then writes → one reflow. Auto-scale
+// text renders with text-overflow:clip (never ellipsis), so a residual sub-pixel
+// overshoot degrades to a hairline clip, never "…".
+function fitAutoScaleText(root){
+  if(!root) return;
+  const els=[...root.querySelectorAll('[data-autofit]')];
+  if(!els.length) return;
+  const reads=els.map(el=>{
+    const sx=parseFloat(el.getAttribute('data-sx'))||1;
+    const avail=el.clientWidth;                 // inner content width (box − padding)
+    const actual=el.scrollWidth*(sx>1?sx:1);    // stretch>100 widens the drawn line
+    const cur=parseFloat(el.style.fontSize)||0;
+    return {el,avail,actual,cur};
+  });
+  for(const r of reads){
+    // Don't resize the node being inline-edited (would fight caret/focus); a
+    // style-only fontSize change is otherwise safe (no textContent/focus change).
+    if(r.el===document.activeElement) continue;
+    if(r.cur>0 && r.actual>r.avail+0.5 && r.actual>0){
+      r.el.style.fontSize=Math.max(3,r.cur*(r.avail/r.actual)*0.99)+'px';
+    }
+  }
 }
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -1154,12 +1184,18 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
       const rb=single&&!readOnly?resizeHandles(o.id):"";
       const dropAttr=readOnly?"":`ondragenter="onColTextEnter(event,this)" ondragover="event.preventDefault();if(event.dataTransfer)event.dataTransfer.dropEffect='copy'" ondragleave="onColTextLeave(this)" ondrop="onColTextLeave(this);onColDropToText(event,'${o.id}')"`;
       const isStatic=txMode(o)==="static";
+      // Auto-scale (non-wrap) text is corrected against real layout post-render by
+      // fitAutoScaleText(); tag it so that pass can find it. NEVER ellipsis when
+      // auto-scaling — clip so any residual overshoot is a hairline, not "…".
+      const autoFit=!!(o.autoScale&&!o.wrapText);
+      const autoFitAttrs=autoFit?`data-autofit="1" data-sx="${scaleX}"`:"";
+      const ovf=(o.wrapText||o.autoScale)?"clip":"ellipsis";
       const editing=!readOnly&&isStatic&&S.editingId===o.id;
       const editAttrs=editing?`contenteditable="true" onmousedown="event.stopPropagation()" oninput="setStaticText('${o.id}',this.innerText)" onblur="endTextEdit()" onkeydown="if(event.key==='Escape')this.blur()"`:"";
       const pe=editing?"pointer-events:auto;outline:none;cursor:text;":"pointer-events:none;";
       const curs=readOnly?"default":(editing?"text":"move");   // caret while editing; otherwise grab-to-move
       return `<div data-obj="${o.id}" ${drag} ${dropAttr} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${Math.max(h,12)}px;${rotCss}${ss}border-radius:2px;cursor:${curs};display:flex;align-items:${va};padding:0 2px;box-sizing:border-box">
-        <div data-txt="${o.id}" ${editAttrs} style="width:100%;font-family:'${o.font||"Arial"}',Arial,sans-serif;font-size:${fz}px;font-weight:${fontWeight};font-style:${fontStyle};text-decoration:${textDecoration};color:${txtColor};white-space:${whiteSpace};word-break:${wordBreak};overflow:hidden;text-overflow:${o.wrapText?"clip":"ellipsis"};line-height:1.15;letter-spacing:${letterSpacing};text-align:${textAlign};transform:scaleX(${scaleX});transform-origin:left center;${pe}">${dispVal}</div>
+        <div data-txt="${o.id}" ${autoFitAttrs} ${editAttrs} style="width:100%;font-family:'${o.font||"Arial"}',Arial,sans-serif;font-size:${fz}px;font-weight:${fontWeight};font-style:${fontStyle};text-decoration:${textDecoration};color:${txtColor};white-space:${whiteSpace};word-break:${wordBreak};overflow:hidden;text-overflow:${ovf};line-height:1.15;letter-spacing:${letterSpacing};text-align:${textAlign};transform:scaleX(${scaleX});transform-origin:left center;${pe}">${dispVal}</div>
         ${rotH}${rb}</div>`;
     }
     if(o.t==="ln"){
@@ -1649,6 +1685,7 @@ function renderCanvasOnly(){
   if(!host){ R(); return; }
   const rec=(window._editorRecords||RX)[S.recIdx];
   host.innerHTML=buildCanvas(S.spec,S.objs,S.selId,rec,S.wrap,false);
+  fitAutoScaleText(host);   // shrink auto-scale text to real layout so nothing clips
   scheduleRulers();
 }
 let _rafCanvas=false;
@@ -1665,12 +1702,24 @@ function centerCanvas(){
   el.scrollLeft=Math.max(0,(el.scrollWidth-el.clientWidth)/2);
   el.scrollTop=Math.max(0,(el.scrollHeight-el.clientHeight)/2);
 }
-// Center once the canvas container has actually been laid out. On initial open the
-// webview can fire our centering frame before it has a width (so scrollWidth/clientWidth
-// are 0 and centering is a no-op) — retry a few frames until it's sized.
+// Center once the canvas container has actually been laid out AND its width has settled.
+// With the multi-tab layout the webview is an AutoLayout subview whose width is 0 — or a
+// transient intermediate value — for the first frame(s) on open/tab-activation. Checking
+// only "clientWidth !== 0" would accept a wrong intermediate width and center against a
+// stale scrollWidth, then never correct. So wait until the width is non-zero AND unchanged
+// across two consecutive frames (AutoLayout settled) before centering. The frame cap bounds
+// the wait to ~1/3 s worst case.
+let _ccrLastW=-1;
 function centerCanvasWhenReady(tries){
   const el=document.getElementById('canvas-scroll'); if(!el)return;
-  if(el.clientWidth===0 && (tries||0)<20){ requestAnimationFrame(function(){ centerCanvasWhenReady((tries||0)+1); }); return; }
+  const t=(tries||0);
+  if(t===0)_ccrLastW=-1;                 // reset the stability tracker at the start of a request
+  const w=el.clientWidth;
+  if((w===0 || w!==_ccrLastW) && t<20){
+    _ccrLastW=w;
+    requestAnimationFrame(function(){ centerCanvasWhenReady(t+1); });
+    return;
+  }
   centerCanvas();
 }
 
@@ -1727,9 +1776,6 @@ function R(){
       </div>
       <button onclick="S.zoom=1;R()" class="btn" style="padding:4px 7px;font-size:10px">Reset</button>
       <button onclick="centerCanvas()" class="btn" title="Center the label in the view" style="padding:4px 7px;font-size:10px">⌖ Center</button>
-      <div style="display:flex;align-items:center;gap:6px;margin-left:4px">
-        <span style="color:var(--text2);font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escAttr(S.tplName)}">${esc(S.tplName)}</span>
-      </div>
       <div style="width:1px;height:20px;background:var(--bd2)"></div>
       ${isCustomMode()?"":`<button class="btn" onclick="loadDesignerCSV()" style="padding:4px 9px;font-size:11px" title="${S._csvName||'No CSV loaded'}">
         ${S._csvName?'📄 '+S._csvName.replace(/_export_\d{8}_\d{6}\.csv$/i,'').replace(/_/g,' ').slice(-24):'Load CSV…'}
@@ -1890,14 +1936,14 @@ function R(){
       `;
     }else if(isCustomMode()){
       // Custom Designer: save the canvas + embedded data as a ".vlcus" document.
+      // (New tab = the + in the tab bar, so no "New" button here.)
       tb.innerHTML=`
-        <button class="btn" onclick="showModal('new')" style="padding:4px 10px">New</button>
         <button class="btn" onclick="openCustomFile()" title="Open a VectorLabel label (.vlcus), or a Brady (.BWT) / Brother P-touch (.lbx) template — auto-converted" style="padding:4px 10px">Open…</button>
         <button class="btn" onclick="saveCustomDocument()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600;padding:5px 14px">Save Label…</button>
       `;
     }else{
+      // Template Designer. (New tab = the + in the tab bar, so no "New" button here.)
       tb.innerHTML=`
-        <button class="btn" onclick="showModal('new')" style="padding:4px 10px">New</button>
         <button class="btn" onclick="openTemplate()" style="padding:4px 10px">Open…</button>
         <button class="btn" onclick="saveAsTemplate()" style="padding:4px 10px">Save as…</button>
         <button class="btn" onclick="saveTemplate()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600;padding:5px 14px">Save</button>
@@ -1919,6 +1965,9 @@ function R(){
   }else{
     _restoreScroll(_savedScroll);
   }
+
+  // Shrink any auto-scale text to fit its real laid-out box (post-innerHTML).
+  fitAutoScaleText(document.getElementById("canvas-host"));
 
   // Render modal if active
   renderModal();

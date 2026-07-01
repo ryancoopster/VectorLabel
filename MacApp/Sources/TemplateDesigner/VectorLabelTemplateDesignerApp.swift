@@ -99,7 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Load the template at `url` into the designer (or report a read failure).
     private func openTemplate(at url: URL) {
         if let tpl = TemplateStore.loadTemplate(from: url) {
-            designer.openTemplate(tpl)
+            designer.openTemplate(tpl, displayName: url.deletingPathExtension().lastPathComponent)
         } else {
             designer.open()
             let alert = NSAlert()

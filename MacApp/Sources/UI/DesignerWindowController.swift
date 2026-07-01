@@ -122,6 +122,9 @@ public final class DesignerWindowController: NSObject {
         var pendingOpenTemplate: VLTemplate?
         var pendingOpenCustomDoc: CustomLabelDocument?
         var webViewReady = false
+        /// Set when the tab finished loading while it wasn't the visible tab (its canvas
+        /// had 0 width, so it couldn't self-center). `activateTab` centers it when shown.
+        var needsCenter = false
         var title: String
         init(webView: WKWebView, title: String) { self.webView = webView; self.title = title }
     }
@@ -177,23 +180,29 @@ public final class DesignerWindowController: NSObject {
     /// Open (or focus) the designer and load `template` (template mode — used by the
     /// Template Designer's Finder ".vltmp" open handler). If a window is already on
     /// screen it's reused and the template injected immediately.
-    public func openTemplate(_ template: VLTemplate) {
+    public func openTemplate(_ template: VLTemplate, displayName: String? = nil) {
         // Each open lands in its own tab (full live state), so there's never a canvas to
-        // clobber. A fresh tab applies its pending template on didFinish.
+        // clobber. A fresh tab applies its pending template on didFinish. The tab title is
+        // the file name (preferred) — hosts pass it in; falls back to the template's name.
         let tab: DesignerTab?
         if window == nil { present(editTemplateIndex: nil); tab = activeTab } else { tab = addTab() }
         tab?.pendingOpenTemplate = template
-        if let t = tab, !template.name.isEmpty { t.title = template.name; refreshTabBar() }
+        if let t = tab, let title = displayName ?? (template.name.isEmpty ? nil : template.name) {
+            t.title = title; refreshTabBar()
+        }
     }
 
     /// Open the designer and load `doc`'s canvas + embedded data in a new tab (custom
     /// mode — used by the Custom Designer's Finder ".vlcus" open handler and Reprint).
-    public func openCustomDocument(_ doc: CustomLabelDocument) {
+    /// The tab title is the file name (preferred); falls back to the doc's name.
+    public func openCustomDocument(_ doc: CustomLabelDocument, displayName: String? = nil) {
         guard mode == .custom else { return }
         let tab: DesignerTab?
         if window == nil { present(editTemplateIndex: nil); tab = activeTab } else { tab = addTab() }
         tab?.pendingOpenCustomDoc = doc
-        if let t = tab, !doc.name.isEmpty { t.title = doc.name; refreshTabBar() }
+        if let t = tab, let title = displayName ?? (doc.name.isEmpty ? nil : doc.name) {
+            t.title = title; refreshTabBar()
+        }
     }
 
     /// Apply a pending Custom Designer reopen only if the page has finished loading;
@@ -290,6 +299,17 @@ public final class DesignerWindowController: NSObject {
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
         window?.makeFirstResponder(activeTab?.webView)
+        // A tab that loaded while hidden couldn't center its canvas (0 width). Now that it
+        // has real bounds, force a layout pass and ask it to center — once.
+        if let t = activeTab, t.needsCenter, t.webViewReady {
+            t.needsCenter = false
+            let wv = t.webView
+            wv.layoutSubtreeIfNeeded()
+            DispatchQueue.main.async {
+                wv.evaluateJavaScript("if(typeof centerCanvasWhenReady==='function')centerCanvasWhenReady(0);",
+                                      completionHandler: nil)
+            }
+        }
     }
 
     private func refreshTabBar() {
@@ -394,6 +414,10 @@ public final class DesignerWindowController: NSObject {
         win.isReleasedWhenClosed = false
         win.applyVLSizing(autosaveName: (mode == .custom) ? "VLCustomDesignerWindow" : "VLDesignerWindow",
                           defaultContentSize: NSSize(width: 1280, height: 860))
+        // Floor the width so the top-bar buttons never wrap/overflow (the Template Designer
+        // header is the widest). Applies to both modes; templates get a bit more headroom.
+        win.contentMinSize = (mode == .custom) ? NSSize(width: 1080, height: 520)
+                                               : NSSize(width: 1180, height: 520)
         NSApp.activate(ignoringOtherApps: true)
         win.makeKeyAndOrderFront(nil)
         window = win
@@ -1377,6 +1401,8 @@ public final class DesignerWindowController: NSObject {
                 guard response == .OK, let url = panel.url else { self.cancelPendingSave(); return }
                 do {
                     try CustomLabelStore.save(doc, to: url)
+                    // The tab now carries the saved file name (the header no longer shows it).
+                    if let t = self.activeTab { t.title = CustomLabelStore.stem(url); self.refreshTabBar() }
                     self.webView?.evaluateJavaScript(
                         "if(typeof showToast==='function')showToast('Saved: '+\(CustomLabelStore.stem(url).jsonQuoted));",
                         completionHandler: nil)
@@ -1588,10 +1614,15 @@ extension DesignerWindowController: WKNavigationDelegate {
         // Route to the tab whose web view just loaded.
         guard let tab = tabs.first(where: { $0.webView === webView }) else { return }
         tab.webViewReady = true   // page loaded — warm reopens may inject directly now
-        // The per-tab injection below uses the active-tab accessors, so make the just-
-        // loaded tab active (a no-op in the normal one-open-at-a-time flow — the tab is
-        // already active; only matters if two opens raced).
-        if tab.id != activeID { activateTab(tab.id) }
+        // A tab that finished loading while it wasn't the visible tab loaded hidden (0-width
+        // canvas → it can't self-center), so center it when it's next shown.
+        tab.needsCenter = (tab.id != activeID)
+        // Point the active-tab accessors (webView/dataSource/pending*) at THIS tab for the
+        // injection below WITHOUT changing which tab is visible — so a background load
+        // (e.g. opening several files at once) never steals focus from the active tab.
+        let _prevActive = activeID
+        activeID = tab.id
+        defer { activeID = _prevActive }
         // Re-assert the installed font families after load, in case the document-start
         // injection raced the page's own script (the font picker reads window.__VL_FONTS__
         // live, so this guarantees the full system list is present).
@@ -1657,17 +1688,20 @@ extension DesignerWindowController: WKScriptMessageHandler {
               let action = body["action"] as? String
         else { return }
 
-        // Route to the sending tab. Messages come from the visible (active) tab in normal
-        // use; activating here keeps the active-tab accessors (dataSource/isDirty/webView)
-        // pointed at the real sender if a background tab ever posts.
-        if let mt = tabs.first(where: { $0.webView === message.webView }), mt.id != activeID {
-            activateTab(mt.id)
-        }
+        // Resolve the sending tab. User actions come from the visible (active) tab, so the
+        // active-tab accessors are already correct; a background tab only posts during load
+        // (e.g. setDirty), which we route explicitly below rather than activating it — so a
+        // background load never steals focus.
+        let msgTab = tabs.first(where: { $0.webView === message.webView })
 
         switch action {
         case "saveTemplate":
             if TemplateStore.shared.save(fromPayload: body["payload"]) {
                 injectDesignerTemplates()   // refresh the Open list with the new file
+                // The tab carries the saved name (the header no longer shows it).
+                if let nm = (body["payload"] as? [String: Any])?["name"] as? String, !nm.isEmpty {
+                    (msgTab ?? activeTab)?.title = nm; refreshTabBar()
+                }
                 finishSave()
             }
 
@@ -1781,10 +1815,12 @@ extension DesignerWindowController: WKScriptMessageHandler {
             }
 
         case "setDirty":
-            // The web designer mirrors its unsaved-changes state here.
-            isDirty = (body["payload"] as? [String: Any])?["dirty"] as? Bool ?? false
-            if isDirty { afterSave = .none }   // a new edit cancels a pending close
-            refreshTabBar()                    // reflect the unsaved dot on the tab chip
+            // The web designer mirrors its unsaved-changes state here. Route to the sending
+            // tab (a background tab can post this during load) so the right chip updates.
+            let d = (body["payload"] as? [String: Any])?["dirty"] as? Bool ?? false
+            (msgTab ?? activeTab)?.isDirty = d
+            if d { afterSave = .none }          // a new edit cancels a pending close
+            refreshTabBar()                     // reflect the unsaved dot on the tab chip
 
         case "jsError":
             // Uncaught error inside the WKWebView — log prominently for diagnosis.
