@@ -44,11 +44,23 @@ directly (keep the existing component classes from `support.css`).
 | `guide.html` | Full user guide (sidebar TOC, 6 chapters) | Yes |
 | `faq.html` | Searchable FAQ (75 Q&As, 10 groups) | Yes |
 | `support.css` | Shared stylesheet for the four support pages | Yes |
+| `downloads.html` | Every release + its changelog (built from `CHANGELOG.md`) | Yes |
+| `embeds/` | Live app-HTML previews used by `index`/`quickstart`/`guide` | See below |
 | `serve.js` | Local dev preview server (not published) | — |
 
 > **Embedding:** the support pages link `support.css` relatively, so embed them on
 > Squarespace via an **iframe** to the live URL (not by pasting raw HTML into a Code Block).
 > See [`README.md`](README.md).
+
+### Live app-HTML previews (`embeds/`)
+
+The homepage, quick start and guide show the **real app front-ends** in iframes rather
+than mockups. `embeds/{print,designer}-app.html` and `embeds/bwip-js.js` are **verbatim,
+git-ignored copies** of `MacApp/Sources/Core/VectorLabel{Print,Designer}.html` + `bwip-js.js`,
+refreshed by `scripts/sync-web-embeds.sh` locally and re-copied fresh at Pages deploy time
+(a change to those front-ends now also triggers a Pages redeploy). If you change a front-end's
+**observable UI**, the previews update automatically. If the shipping default templates change,
+update the JSON in [`embeds/vl-demo.js`](embeds/vl-demo.js). See [`embeds/README.md`](embeds/README.md).
 
 ## Known doc gaps / things to confirm against hardware
 

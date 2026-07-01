@@ -1,0 +1,71 @@
+<!doctype html>
+<!-- LIVE preview of the REAL VectorLabel Template Designer (embeds/designer-app.html),
+     bootstrapped with a current template on the canvas + the app's own sample
+     records, forced to light mode. Embedded in the marketing pages via <iframe>.
+     Query params:
+       tpl  = 1_5x1_5 | 1_5x4     (which current template to open on the canvas)
+       view = full | canvas       (whole window, or just the canvas)  -->
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VectorLabel Designer preview</title>
+<style>
+  html,body{margin:0;height:100%;background:#fff;overflow:hidden}
+  #clip{position:relative;width:100%;height:100%;overflow:hidden;background:#fff}
+  #f{position:absolute;top:0;left:0;border:0;transform-origin:0 0;background:#fff}
+</style>
+</head>
+<body>
+<div id="clip"><iframe id="f" src="designer-app.html" scrolling="no" title="VectorLabel Template Designer"></iframe></div>
+<script src="vl-demo.js"></script>
+<script>
+(function(){
+  var P    = new URLSearchParams(location.search);
+  var view = P.get('view') || 'full';        // full | canvas
+  var key  = P.get('tpl')  || '1_5x4';
+  var tpl  = (window.VL_DEMO && VL_DEMO.templates[key]) || null;
+
+  var APPW = 1060, APPH = 940;
+  var f = document.getElementById('f'), clip = document.getElementById('clip');
+  f.style.width = APPW + 'px';
+  f.style.height = APPH + 'px';
+
+  f.addEventListener('load', function(){
+    var w = f.contentWindow;
+    try { if (tpl) w.initOpenTemplate(tpl); } catch(e){}
+    try { w.setTheme('light'); } catch(e){}
+    try { if (w.centerCanvasWhenReady) w.centerCanvasWhenReady(0); else w.centerCanvas && w.centerCanvas(); } catch(e){}
+    requestAnimationFrame(function(){ requestAnimationFrame(frame); });
+  });
+
+  var tries = 0;
+  function frame(){
+    var w = f.contentWindow, d = w && w.document;
+    if (!d) return;
+    if (view === 'canvas') {
+      var t = d.getElementById('canvas-host');
+      var r = t && t.getBoundingClientRect();
+      if (!r || r.width < 4) { if (tries++ < 25) return void setTimeout(frame,120); fitFull(); return; }
+      var cw = clip.clientWidth, ch = clip.clientHeight;
+      var s = Math.min(cw / r.width, ch / r.height);
+      var ox = (cw - r.width * s) / 2;
+      f.style.transform = 'translate(' + ox + 'px,0) scale(' + s + ') translate(' + (-r.left) + 'px,' + (-r.top) + 'px)';
+      return;
+    }
+    fitFull();
+  }
+
+  function fitFull(){
+    var s = clip.clientWidth / APPW;
+    f.style.transform = 'scale(' + s + ')';
+    clip.style.height = (APPH * s) + 'px';
+    if (window.frameElement) window.frameElement.style.height = (APPH * s) + 'px';
+  }
+
+  var rt;
+  addEventListener('resize', function(){ clearTimeout(rt); rt = setTimeout(frame, 150); });
+})();
+</script>
+</body>
+</html>

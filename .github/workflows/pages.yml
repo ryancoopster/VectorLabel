@@ -11,6 +11,11 @@ on:
     paths:
       - 'website/**'
       - '.github/workflows/pages.yml'
+      # The site's live previews embed these app front-ends verbatim (copied in below),
+      # so a change to them must redeploy the site to keep the previews current.
+      - 'MacApp/Sources/Core/VectorLabelPrint.html'
+      - 'MacApp/Sources/Core/VectorLabelDesigner.html'
+      - 'MacApp/Sources/Core/bwip-js.js'
   workflow_dispatch:
 
 permissions:
@@ -40,7 +45,17 @@ jobs:
         run: |
           mkdir -p _site
           cp -R website/. _site/
-          rm -f _site/serve.js _site/README.md
+          rm -f _site/serve.js _site/README.md _site/embeds/README.md
+
+      - name: Refresh live-preview embeds from the shipping app front-ends
+        # The homepage/quickstart/guide previews (embeds/print.html, designer.html) iframe
+        # the REAL app HTML. Copy it fresh from source at deploy time so the published
+        # previews can never drift from the shipping front-ends. Kept out of git (.gitignore).
+        run: |
+          mkdir -p _site/embeds
+          cp MacApp/Sources/Core/VectorLabelPrint.html    _site/embeds/print-app.html
+          cp MacApp/Sources/Core/VectorLabelDesigner.html _site/embeds/designer-app.html
+          cp MacApp/Sources/Core/bwip-js.js               _site/embeds/bwip-js.js
 
       - name: Upload the Pages artifact
         uses: actions/upload-pages-artifact@v3

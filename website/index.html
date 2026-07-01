@@ -204,6 +204,27 @@ header.nav{
 .steps li b{color:#fff;font-weight:600}
 
 /* ---------- Data binding animation ---------- */
+/* ── Live app-HTML previews ──────────────────────────────────────────────────
+   A macOS-style window frame around an <iframe> that renders the REAL VectorLabel
+   front-end (website/embeds/) in light mode with the current templates. */
+.embed-win{border:1px solid #e4e7ee;border-radius:13px;overflow:hidden;background:#fff;
+  box-shadow:0 30px 70px -34px rgba(16,22,40,.30),0 2px 8px rgba(16,22,40,.05)}
+.embed-bar{height:34px;display:flex;align-items:center;gap:7px;padding:0 13px;background:#f3f5f9;border-bottom:1px solid #e6e9f0}
+.embed-bar .tl{width:11px;height:11px;border-radius:50%}
+.embed-bar .tl.r{background:#ff5f57}.embed-bar .tl.y{background:#febc2e}.embed-bar .tl.g{background:#28c840}
+.embed-bar .t{margin-left:8px;font-size:11.5px;font-weight:600;color:var(--muted)}
+.embed-frame{display:block;width:100%;height:520px;border:0;background:#fff}
+/* Label preview: a clipped window showing just the rendered label from the app. */
+.label-card{border:1px dashed #c8cdd6;border-radius:12px;padding:15px 16px 14px;position:relative;background:#fff;text-align:center}
+.label-card .tag{position:absolute;top:-9px;left:14px;background:#fff;padding:0 8px;font-size:11px;font-weight:600;color:var(--accent);letter-spacing:.02em}
+.label-card .clip{width:100%;max-width:230px;margin:8px auto 0;overflow:hidden;border:1px solid var(--line);border-radius:7px;background:#fff;line-height:0}
+.label-card .clip iframe{display:block;width:100%;height:120px;border:0}
+.label-card .cap{margin-top:10px;font-size:11.5px;color:var(--muted)}
+.bind-showcase{display:grid;grid-template-columns:1.55fr 1fr;gap:22px;align-items:start;margin-top:32px}
+.bind-showcase>*{min-width:0}
+.label-row{display:flex;flex-direction:column;gap:18px}
+@media(max-width:860px){.bind-showcase{grid-template-columns:1fr}.label-row{flex-direction:row;align-items:flex-start}.label-row>*{flex:1}}
+@media(max-width:520px){.label-row{flex-direction:column}}
 .bind{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center}
 .bind>*{min-width:0}
 .bind-visual{border:1px solid var(--line);border-radius:var(--radius);padding:24px;background:#fff;
@@ -353,40 +374,14 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
       <div class="hero-note"><span class="dot"></span> Design from scratch, or bring your data — barcodes, QR and 2-D codes built in.</div>
     </div>
 
-    <!-- Animated view of the actual Custom Designer: tabs, canvas, a live wire-wrap label -->
-    <div class="stage" aria-hidden="true">
-      <div class="app-win">
-        <div class="app-bar">
-          <span class="tl r"></span><span class="tl y"></span><span class="tl g"></span>
-          <span class="app-title">VectorLabel — Custom Designer</span>
-        </div>
-        <div class="app-tabs">
-          <span class="tab on">Rack&nbsp;Wraps</span>
-          <span class="tab">Patch&nbsp;IDs</span>
-          <span class="tab">Panel&nbsp;Asset</span>
-          <span class="tab-add">+</span>
-        </div>
-        <div class="app-body">
-          <div class="canvas">
-            <div class="lbl">
-              <div class="lbl-row">
-                <span class="lbl-obj" style="animation-delay:0s">XLR-M</span>
-                <span class="lbl-obj" style="animation-delay:.12s">FOH-A1</span>
-              </div>
-              <div class="lbl-id lbl-obj" style="animation-delay:.28s">127&nbsp;-&nbsp;C-1042</div>
-              <div class="lbl-sep"></div>
-              <div class="lbl-dev lbl-obj" style="animation-delay:.44s">@ AMP&nbsp;3 : OUT&nbsp;L</div>
-              <span class="h tl"></span><span class="h tr"></span><span class="h bl"></span><span class="h br"></span>
-            </div>
-            <div class="sweep"></div>
-          </div>
-          <div class="inspector">
-            <div class="ins-h"></div><div class="ins-b"></div>
-            <div class="ins-row"><div class="ins-b"></div><div class="ins-b"></div></div>
-            <div class="ins-b sm"></div><div class="ins-h"></div><div class="ins-b sm"></div>
-          </div>
-        </div>
+    <!-- The REAL VectorLabel Template Designer, rendering your current 1_5x1_5 template. -->
+    <div class="embed-win" aria-label="VectorLabel Template Designer">
+      <div class="embed-bar">
+        <span class="tl r"></span><span class="tl y"></span><span class="tl g"></span>
+        <span class="t">VectorLabel — Template Designer</span>
       </div>
+      <iframe class="embed-frame" src="embeds/designer.html?tpl=1_5x1_5&view=full"
+              title="VectorLabel Template Designer" loading="eager" scrolling="no"></iframe>
     </div>
   </div>
 </section>
@@ -525,48 +520,35 @@ footer{border-top:1px solid var(--line);padding:42px 0;margin-top:8px}
 
 <!-- ============================== DATA BINDING ============================== -->
 <section style="background:var(--bg-soft);border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
-  <div class="wrap bind">
-    <div class="reveal">
+  <div class="wrap">
+    <div class="reveal" style="max-width:760px;margin:0 auto;text-align:center">
       <div class="eyebrow">Design once, print hundreds</div>
       <h2>Your data flows into the label automatically.</h2>
-      <p class="lead muted" style="margin-bottom:22px">Map each part of the label to a column from your data — whether it came from Vectorworks or your own spreadsheet — or build it with a formula. Then every record prints with its own text, no manual edits.</p>
+      <p class="lead muted" style="margin-bottom:20px">Map each part of the label to a column from your data — whether it came from Vectorworks or your own spreadsheet — or build it with a formula. Then every record prints with its own text, no manual edits.</p>
       <p class="muted" style="font-size:14.5px"><code style="background:#fff;border:1px solid var(--line);padding:3px 8px;border-radius:6px;font-size:12.5px;display:inline-block;line-height:1.6">=IF(Number&lt;&gt;"",Number&amp;IF(Cable&lt;&gt;""," - "&amp;Cable,""),IF(Cable&lt;&gt;"",Cable,""))</code><br><span style="display:inline-block;margin-top:10px">That's the actual main-line formula from the <strong>1_5x4 V1</strong> template — VectorLabel evaluates it for every record.</span></p>
     </div>
-    <div class="bind-visual reveal">
-      <!-- The record browser, just like the Print window: pick rows, see them fill the label -->
-      <table class="rec-table">
-        <thead><tr>
-          <th class="chk">✓</th><th>Number</th><th>Cable</th><th>Connector</th><th>Device_Name</th><th>Socket_Name</th><th>Rack</th>
-        </tr></thead>
-        <tbody>
-          <tr class="sel"><td class="chk">✓</td><td class="hl">127</td><td class="hl">C-1042</td><td>XLR-M</td><td>AMP&nbsp;3</td><td>OUT&nbsp;L</td><td>FOH-A1</td></tr>
-          <tr><td class="chk">✓</td><td>128</td><td>C-1043</td><td>XLR-F</td><td>DSP&nbsp;1</td><td>IN&nbsp;7</td><td>FOH-A1</td></tr>
-          <tr><td class="chk">✓</td><td>129</td><td>C-1044</td><td>TRS</td><td>WALL&nbsp;12</td><td>AUX</td><td>STAGE-L</td></tr>
-        </tbody>
-      </table>
 
-      <!-- The selected row (127) rendered into two of your templates -->
-      <div class="preview-row">
-        <!-- 1.5 × 1.5 die-cut square -->
-        <div class="bind-label sq">
-          <span class="tag">1_5x1_5 V1</span>
-          <div class="bf flash" style="text-align:center;margin:0 0 4px;font-size:11px;animation-delay:0s">XLR-M <small>=Connector</small></div>
-          <div class="bf flash" style="text-align:center;font-weight:700;font-size:22px;letter-spacing:-.01em;margin:2px 0;animation-delay:.6s">127</div>
-          <div class="bf flash" style="text-align:center;font-weight:600;font-size:14px;margin:0 0 7px;animation-delay:.6s">C-1042</div>
-          <div style="height:1.5px;background:var(--ink);margin:0 auto 7px;width:72%"></div>
-          <div class="bf flash" style="text-align:center;margin:0;font-size:11px;animation-delay:.9s">FOH-A1 <small>=Rack</small></div>
+    <!-- Real app HTML: the Print window on the left (your records as a table, the selected
+         row live on the label), and the same record on two of your current templates. -->
+    <div class="bind-showcase reveal">
+      <div class="embed-win" aria-label="VectorLabel Print window">
+        <div class="embed-bar">
+          <span class="tl r"></span><span class="tl y"></span><span class="tl g"></span>
+          <span class="t">VectorLabel — Print</span>
         </div>
-        <!-- 1.5 × 4 self-laminating wrap -->
-        <div class="bind-label wrap">
+        <iframe class="embed-frame" src="embeds/print.html?tpl=1_5x1_5&view=full&anim=1"
+                title="VectorLabel Print window" loading="lazy" scrolling="no"></iframe>
+      </div>
+      <div class="label-row">
+        <div class="label-card">
+          <span class="tag">1_5x1_5 V1</span>
+          <div class="clip"><iframe src="embeds/print.html?tpl=1_5x1_5&view=label&anim=1" title="1.5 by 1.5 label" loading="lazy" scrolling="no"></iframe></div>
+          <div class="cap">Brady M6-32-427 · 1.5″ × 1.5″ die-cut</div>
+        </div>
+        <div class="label-card">
           <span class="tag">1_5x4 V1</span>
-          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
-            <span class="bf flash" style="margin:0;font-size:13px;animation-delay:0s">XLR-M <small>=Connector</small></span>
-            <span class="bf flash" style="margin:0;font-size:13px;animation-delay:.3s">FOH-A1 <small>=Rack</small></span>
-          </div>
-          <div class="bf flash" style="text-align:center;font-weight:700;font-size:21px;letter-spacing:-.01em;margin:11px 0 9px;animation-delay:.6s">127&nbsp;-&nbsp;C-1042 <small style="font-weight:500">=IF(Number…)</small></div>
-          <div style="height:1.5px;background:var(--ink);margin:0 0 11px"></div>
-          <div class="bf flash" style="text-align:center;margin:0;font-size:14px;animation-delay:.9s">@ AMP&nbsp;3 : OUT&nbsp;L <small>=IF(Device_Name…)</small></div>
-          <div style="text-align:center;margin-top:14px;font-size:11.5px;color:var(--muted)">Brady M6-33-427 · 1.5″ × 4″ self-laminating wrap</div>
+          <div class="clip"><iframe src="embeds/print.html?tpl=1_5x4&view=label&anim=1" title="1.5 by 4 label" loading="lazy" scrolling="no"></iframe></div>
+          <div class="cap">Brady M6-33-427 · 1.5″ × 4″ self-laminating wrap</div>
         </div>
       </div>
     </div>

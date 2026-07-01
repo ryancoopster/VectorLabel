@@ -1,0 +1,93 @@
+<!doctype html>
+<!-- LIVE preview of the REAL VectorLabel print window (embeds/print-app.html),
+     bootstrapped with a current template + the app's own sample records, forced
+     to light mode. Embedded in the marketing pages via <iframe>.
+     Query params:
+       tpl  = 1_5x1_5 | 1_5x4        (which current template to load)
+       view = full | label | table   (what to frame)  -->
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VectorLabel preview</title>
+<style>
+  html,body{margin:0;height:100%;background:#fff;overflow:hidden}
+  #clip{position:relative;width:100%;height:100%;overflow:hidden;background:#fff}
+  #f{position:absolute;top:0;left:0;border:0;transform-origin:0 0;background:#fff}
+</style>
+</head>
+<body>
+<div id="clip"><iframe id="f" src="print-app.html" scrolling="no" title="VectorLabel print window"></iframe></div>
+<script src="vl-demo.js"></script>
+<script>
+(function(){
+  var P    = new URLSearchParams(location.search);
+  var view = P.get('view') || 'full';        // full | label | table
+  var key  = P.get('tpl')  || '1_5x1_5';
+  var anim = P.get('anim') === '1';          // slowly cycle records so the label updates
+  var tpl  = (window.VL_DEMO && VL_DEMO.templates[key]) || null;
+
+  // The logical width the app is laid out at inside the iframe. Height is generous
+  // so every pane is fully rendered before we crop/scale it.
+  var APPW = 1060, APPH = 900;
+
+  var f = document.getElementById('f'), clip = document.getElementById('clip');
+  f.style.width = APPW + 'px';
+  f.style.height = APPH + 'px';
+
+  f.addEventListener('load', function(){
+    var w = f.contentWindow;
+    try { if (tpl) w.initPrintWindow({ templates:[tpl] }); } catch(e){}
+    try { w.setTheme('light'); } catch(e){}
+    // Let the label/table re-render, then frame.
+    requestAnimationFrame(function(){ requestAnimationFrame(frame); });
+    if (anim) startAnim(w);
+  });
+
+  // Slowly step through the records so the previewed label updates — the real app
+  // demonstrating "your data flows into the label." Paused while off-screen.
+  function startAnim(w){
+    var visible = true;
+    if ('IntersectionObserver' in window && window.frameElement) {
+      new IntersectionObserver(function(es){ visible = es[0].isIntersecting; }, {threshold:0.05})
+        .observe(window.frameElement);
+    }
+    setInterval(function(){
+      if (!visible || document.hidden) return;
+      try { w.eval('if(typeof P!=="undefined"&&P.records&&P.records.length){P.previewIdx=(P.previewIdx+1)%P.records.length;R();}'); } catch(e){}
+    }, 2600);
+  }
+
+  var tries = 0;
+  function frame(){
+    var w = f.contentWindow, d = w && w.document;
+    if (!d) return;
+    if (view === 'full') { fitFull(); return; }
+    // Crop to a single element and size the outer frame to its exact aspect, so
+    // nothing but that element shows (no sibling caption/supply bleeding in).
+    var sel = view === 'label' ? '#preview-label-wrap' : '#recPane';
+    var t = d.querySelector(sel) || (view === 'table' && d.getElementById('recScroll'));
+    var r = t && t.getBoundingClientRect();
+    if (!r || r.width < 4 || r.height < 4) { if (tries++ < 30) return void setTimeout(frame, 120); fitFull(); return; }
+    var cw = clip.clientWidth;
+    var s  = cw / r.width;
+    var fh = Math.round(r.height * s);
+    clip.style.height = fh + 'px';
+    if (window.frameElement) window.frameElement.style.height = fh + 'px';
+    f.style.transform = 'scale(' + s + ') translate(' + (-r.left) + 'px,' + (-r.top) + 'px)';
+  }
+
+  function fitFull(){
+    var s = clip.clientWidth / APPW;
+    f.style.transform = 'scale(' + s + ')';
+    // Collapse the clip to the scaled app height so there's no dead space.
+    clip.style.height = (APPH * s) + 'px';
+    if (window.frameElement) window.frameElement.style.height = (APPH * s) + 'px';
+  }
+
+  var rt;
+  addEventListener('resize', function(){ clearTimeout(rt); rt = setTimeout(frame, 150); });
+})();
+</script>
+</body>
+</html>
