@@ -105,8 +105,33 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          prerelease: true
+          name: VectorLabel ${{ github.ref_name }} (open alpha)
+          generate_release_notes: true
+          body: |
+            **VectorLabel** — a macOS suite for designing and printing wire / cable / asset
+            labels on Brady and Brother thermal printers, with a Vectorworks ConnectCAD
+            integration.
+
+            ### Install
+            1. Download **`VectorLabel-Installer-<version>.pkg`** below and open it.
+            2. Follow the installer — it installs the four apps into `/Applications/VectorLabel/`.
+            3. Launch **VectorLabel Engine** to get the menu-bar icon.
+
+            The apps and installer are Developer ID-signed and notarized by Apple.
+
+            ### Highlights
+            - Design labels by hand (Custom Designer) or build reusable, data-bound templates
+              (Template Designer) — with **tabs** to work on several labels at once.
+            - Pull data straight from **Vectorworks ConnectCAD**, or bind your own CSV / Excel.
+            - Text, barcodes, QR, DataMatrix, images and shapes; auto-scale text that never truncates.
+
+            ### Open alpha — please note
+            This is an early build. The **Brady M611** is hardware-validated; the **Brady M610
+            cut** behavior and the **Brother P-touch** drivers are not yet hardware-confirmed.
+            See the [User Guide](https://ryancoopster.github.io/VectorLabel/guide.html) and
+            [FAQ](https://ryancoopster.github.io/VectorLabel/faq.html).
           files: |
             dist/VectorLabel-Installer-*.pkg
             dist/VectorLabel-${{ github.ref_name }}.zip
             dist/VectorLabel-${{ github.ref_name }}.dmg
-          generate_release_notes: true
