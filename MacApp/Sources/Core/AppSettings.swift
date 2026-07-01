@@ -195,13 +195,50 @@ public final class AppSettings: ObservableObject {
 
     // MARK: – App behaviour
 
+    /// The suite is four separate processes, each with its OWN `UserDefaults.standard`, so
+    /// the appearance choice must be relayed process-to-process. These carry the new value
+    /// ("dark"/"light"/"system") in the notification's `object`; `…Request` asks the source
+    /// of truth (the Engine) to re-broadcast the current value (for apps opened later).
+    public static let appearanceChangedNotification = Notification.Name("com.sai.vectorlabel.appearanceChanged")
+    public static let appearanceRequestNotification = Notification.Name("com.sai.vectorlabel.appearanceRequest")
+    /// True while applying an appearance received from another app, so we don't re-broadcast.
+    private var applyingRemoteAppearance = false
+
     /// UI appearance: "dark" (default) or "light". Applies to the menu, the
     /// Preferences window, and both web UIs (print + designer) simultaneously.
     @Published public var appearance: String {
         didSet {
             UserDefaults.standard.set(appearance, forKey: "appearance")
             applyNativeAppearance()
+            // Relay the choice to the other three apps so the whole suite switches together.
+            if !applyingRemoteAppearance && appearance != oldValue {
+                DistributedNotificationCenter.default().postNotificationName(
+                    Self.appearanceChangedNotification, object: appearance,
+                    userInfo: nil, deliverImmediately: true)
+            }
         }
+    }
+
+    /// Re-broadcast the current appearance to the rest of the suite (Engine → front-ends).
+    public func broadcastAppearance() {
+        DistributedNotificationCenter.default().postNotificationName(
+            Self.appearanceChangedNotification, object: appearance, userInfo: nil, deliverImmediately: true)
+    }
+
+    /// Ask the source of truth (the Engine) to re-broadcast the current appearance — called
+    /// on launch by a front-end so an app opened AFTER an appearance change still syncs.
+    public func requestAppearanceSync() {
+        DistributedNotificationCenter.default().postNotificationName(
+            Self.appearanceRequestNotification, object: nil, userInfo: nil, deliverImmediately: true)
+    }
+
+    /// Apply an appearance value received from another app (does not re-broadcast).
+    private func applyRemoteAppearance(_ value: String) {
+        guard value != appearance else { return }
+        applyingRemoteAppearance = true
+        appearance = value                 // didSet persists + applies native appearance
+        applyingRemoteAppearance = false
+        systemAppearanceTick &+= 1         // nudge web views / identity-keyed views to re-theme
     }
     /// Bumped when the OS appearance changes while in "system" mode, so views that
     /// key their identity on it rebuild with the new effective colours.
@@ -339,6 +376,14 @@ public final class AppSettings: ObservableObject {
             guard let self = self, self.appearance == "system" else { return }
             self.systemAppearanceTick &+= 1
             self.applyNativeAppearance()
+        }
+
+        // Another app changed the appearance — apply it here too (the value is in `object`).
+        DistributedNotificationCenter.default().addObserver(
+            forName: Self.appearanceChangedNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            guard let self = self, let v = note.object as? String else { return }
+            self.applyRemoteAppearance(v)
         }
     }
 

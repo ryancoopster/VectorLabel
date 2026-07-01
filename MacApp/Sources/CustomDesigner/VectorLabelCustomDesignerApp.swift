@@ -39,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             UserDefaults.standard.set("com.sai.vectorlabel.customdesigner", forKey: "CFBundleIdentifier")
         }
         AppSettings.shared.applyNativeAppearance()
+        AppSettings.shared.requestAppearanceSync()   // sync light/dark with the Engine on launch
         if let appIcon = CoreResources.appIcon() {
             NSApp.applicationIconImage = appIcon
         }

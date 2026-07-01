@@ -142,6 +142,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             else { FileManager.default.createFile(atPath: path, contents: data) }
         }
         AppSettings.shared.applyNativeAppearance()
+        // The Engine owns the appearance setting; answer front-ends' launch-time requests by
+        // re-broadcasting the current value, and broadcast once on launch so a front-end that
+        // just started us picks up the right light/dark mode.
+        DistributedNotificationCenter.default().addObserver(
+            forName: AppSettings.appearanceRequestNotification, object: nil, queue: .main
+        ) { _ in MainActor.assumeIsolated { AppSettings.shared.broadcastAppearance() } }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { AppSettings.shared.broadcastAppearance() }
         if let appIcon = CoreResources.appIcon() {
             NSApp.applicationIconImage = appIcon
         }

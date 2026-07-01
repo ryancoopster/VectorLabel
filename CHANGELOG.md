@@ -12,7 +12,11 @@ number (git commit count) + short SHA, shown in the menu-bar footer.
 
 ## [Unreleased]
 
-_Nothing yet — add new fixes and features here as they're made._
+### Fixed
+- The light / dark / auto **appearance choice now relays across the whole suite.** Changing it
+  from the Engine menu (or Preferences) immediately switches Auto Print and both designers too;
+  an app opened later syncs to the current setting on launch. (Each app has its own settings
+  store, so the choice is now broadcast process-to-process.)
 
 ## [1.1.0] — 2026-07-01
 
