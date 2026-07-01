@@ -422,6 +422,10 @@ let S={
   _dbLastClick:null,
   // _dbEditCell {i,c} / _dbEditVal: in-progress inline cell edit.
   _dbEditCell:null, _dbEditVal:undefined,
+  // ── Table (t:"tb") transient state — NOT serialized ─────────────────────────
+  // _tblSel: selected CELLS of the selected table {id,anchor:[r,c],cells:["r,c",…]}.
+  // _tblEdit: the cell being inline-edited {id,r,c} (static-mode cells only).
+  _tblSel:null, _tblEdit:null,
   // Start blank — the standalone designer opens the Open dialog on launch so the
   // user picks a template rather than landing on a default one.
   objs:[]
@@ -491,6 +495,22 @@ function normSel(){
   S.selIds=S.selIds.filter(id=>S.objs.some(o=>o.id===id));
   if(S.selId && !S.selIds.includes(S.selId)) S.selIds=[S.selId];
   if(!S.selId) S.selIds=[];
+  // Table cell selection/edit only survive while their table IS the (single)
+  // selection and the referenced cells still exist (rows/cols may have been
+  // deleted, or an undo shrank the grid).
+  if(S._tblSel){
+    const t=gobj(S._tblSel.id);
+    if(!t||t.t!=="tb"||S.selId!==S._tblSel.id||(S.selIds||[]).length>1) S._tblSel=null;
+    else{
+      S._tblSel.cells=(S._tblSel.cells||[]).filter(k=>{const p=k.split(',');return +p[0]<t.rows.length&&+p[1]<t.cols.length;});
+      if(!S._tblSel.cells.length)S._tblSel=null;
+      else if(S._tblSel.anchor[0]>=t.rows.length||S._tblSel.anchor[1]>=t.cols.length)S._tblSel.anchor=S._tblSel.cells[0].split(',').map(Number);
+    }
+  }
+  if(S._tblEdit){
+    const t=gobj(S._tblEdit.id);
+    if(!t||t.t!=="tb"||S.selId!==S._tblEdit.id||S._tblEdit.r>=t.rows.length||S._tblEdit.c>=t.cols.length) S._tblEdit=null;
+  }
 }
 
 // ── Continuous-supply label length ──────────────────────────────────────────────
@@ -664,11 +684,20 @@ function uobjAll(patch){ snapshot(); (S.selIds||[]).forEach(id=>uobj(id,patch));
 // GLOBAL (so the inline onclick resolves) and shared by BOTH the single-object and
 // multi-object params panels. Reads/writes the current selection via selObjs/uobjAll.
 function fontCurrent(){
+  // Table CELL selection takes priority — the picker then reads/writes the cells.
+  const cs=tblSelCells();
+  if(cs.length){
+    const cf0=cs[0].font||'Arial';
+    for(const cl of cs){ if((cl.font||'Arial')!==cf0) return {multi:true}; }
+    return {multi:false,v:cf0};
+  }
   const s=selObjs(); if(!s.length) return {multi:false,v:'Arial'};
   const f0=s[0].font||'Arial';
   for(const o of s){ if((o.font||'Arial')!==f0) return {multi:true}; }
   return {multi:false,v:f0};
 }
+// Route a font pick to the right target: selected table cells, else selected objects.
+function applyFontSel(f){ if(tblSelCells().length)tblPatchCells({font:f}); else uobjAll({font:f}); }
 function fontFieldHTML(){
   const s=fontCurrent();
   const cur=s.multi?'Multiple':(s.v||'Arial');
@@ -716,8 +745,8 @@ function openFontPicker(e){
   }
   draw('');
   searchEl.addEventListener('input',()=>draw(searchEl.value));
-  searchEl.addEventListener('keydown',ev=>{ if(ev.key==='Enter'){ const f=listEl.querySelector('.vl-font-opt'); if(f){ uobjAll({font:f.dataset.f}); closeFontPicker(); } } });
-  listEl.addEventListener('mousedown',ev=>{ const d=ev.target.closest('.vl-font-opt'); if(d){ ev.preventDefault(); uobjAll({font:d.dataset.f}); closeFontPicker(); } });
+  searchEl.addEventListener('keydown',ev=>{ if(ev.key==='Enter'){ const f=listEl.querySelector('.vl-font-opt'); if(f){ applyFontSel(f.dataset.f); closeFontPicker(); } } });
+  listEl.addEventListener('mousedown',ev=>{ const d=ev.target.closest('.vl-font-opt'); if(d){ ev.preventDefault(); applyFontSel(d.dataset.f); closeFontPicker(); } });
   const selEl=listEl.querySelector('[data-sel]'); if(selEl)selEl.scrollIntoView({block:'center'});
   setTimeout(()=>{ searchEl.focus(); document.addEventListener('mousedown',_fontPickOutside,true); document.addEventListener('keydown',_fontPickKey,true); },0);
 }
@@ -1255,6 +1284,55 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
       }
       return `<div data-obj="${o.id}" ${drag} ${dropAttr} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;cursor:${readOnly?"default":"move"};${rotCss}${ss}">${inner}${rotH}${rb}</div>`;
     }
+    if(o.t==="tb"){
+      const cols=o.cols||[o.w||1], rows=o.rows||[o.h||0.25];
+      const lw=Math.max(1,o.lw||1);
+      // Cumulative px offsets: cumX[i] = right edge of column i (cumY = bottom of row i).
+      const cumX=[]; let axx=0; for(const cv of cols){ axx+=cv*sc; cumX.push(axx); }
+      const cumY=[]; let ayy=0; for(const rv of rows){ ayy+=rv*sc; cumY.push(ayy); }
+      const selCells=(S._tblSel&&S._tblSel.id===o.id)?(S._tblSel.cells||[]):[];
+      // Grid: outer border + inner lines as thin divs (lw raw px — the rc convention).
+      let inner=`<div style="position:absolute;left:0;top:0;width:${w}px;height:${h}px;border:${lw}px solid #000;box-sizing:border-box;pointer-events:none"></div>`;
+      for(let i=0;i<cols.length-1;i++) inner+=`<div style="position:absolute;left:${(cumX[i]-lw/2).toFixed(1)}px;top:0;width:${lw}px;height:${h}px;background:#000;pointer-events:none"></div>`;
+      for(let i=0;i<rows.length-1;i++) inner+=`<div style="position:absolute;left:0;top:${(cumY[i]-lw/2).toFixed(1)}px;width:${w}px;height:${lw}px;background:#000;pointer-events:none"></div>`;
+      // Cells — the EXACT tx text recipe (textValue/autoFitPx/data-autofit/clip) in each cell rect.
+      for(let ri=0;ri<rows.length;ri++)for(let ci=0;ci<cols.length;ci++){
+        const cl=(o.cells&&o.cells[ri]&&o.cells[ri][ci])||{};
+        const cx0=ci?cumX[ci-1]:0, cy0=ri?cumY[ri-1]:0, cw=cols[ci]*sc, chh=rows[ri]*sc;
+        const {v,e}=textValue(cl,rec);
+        const va=cl.valign==="top"?"flex-start":cl.valign==="bottom"?"flex-end":"center";
+        let fz=Math.max(7,(cl.fs||14)*(sc/100));
+        if(cl.autoScale&&!cl.wrapText) fz=autoFitPx(v,cl,fz,cw,4);
+        const scaleX=(cl.stretch||100)/100;
+        const dispVal=e?`⚠ ${esc(e.substring(0,40))}`:esc(v);
+        const autoFit=!!(cl.autoScale&&!cl.wrapText);
+        const autoFitAttrs=autoFit?`data-autofit="1" data-sx="${scaleX}"`:"";
+        const ovf=(cl.wrapText||cl.autoScale)?"clip":"ellipsis";
+        const editing=!readOnly&&S._tblEdit&&S._tblEdit.id===o.id&&S._tblEdit.r===ri&&S._tblEdit.c===ci&&txMode(cl)==="static";
+        const editAttrs=editing?`contenteditable="true" onmousedown="event.stopPropagation()" oninput="setTblCellText('${o.id}',${ri},${ci},this.innerText)" onblur="endTblCellEdit()" onkeydown="if(event.key==='Escape'){event.stopPropagation();this.blur()}"`:"";
+        const pe=editing?"pointer-events:auto;outline:none;cursor:text;":"pointer-events:none;";
+        inner+=`<div style="position:absolute;left:${cx0}px;top:${cy0}px;width:${cw}px;height:${chh}px;display:flex;align-items:${va};padding:0 2px;box-sizing:border-box;overflow:hidden">
+          <div data-tbltxt="${o.id}:${ri},${ci}" ${autoFitAttrs} ${editAttrs} style="width:100%;font-family:'${cl.font||"Arial"}',Arial,sans-serif;font-size:${fz}px;font-weight:${cl.bold?700:400};font-style:${cl.italic?"italic":"normal"};text-decoration:${cl.underline?"underline":"none"};color:${e?"var(--red)":"#000"};white-space:${cl.wrapText?"normal":"nowrap"};word-break:${cl.wrapText?"break-word":"normal"};overflow:hidden;text-overflow:${ovf};line-height:1.15;letter-spacing:${cl.tracking?`${cl.tracking}px`:"normal"};text-align:${cl.al||"left"};transform:scaleX(${scaleX});transform-origin:left center;${pe}">${dispVal}</div>
+        </div>`;
+      }
+      // Selected table: per-cell hit targets (cell select / context menu / column-header
+      // drop), selected-cell highlight outlines, and 6px line-drag strips over each
+      // INNER row/col boundary (col-resize / row-resize cursors).
+      if(single&&!readOnly){
+        for(let ri=0;ri<rows.length;ri++)for(let ci=0;ci<cols.length;ci++){
+          if(S._tblEdit&&S._tblEdit.id===o.id&&S._tblEdit.r===ri&&S._tblEdit.c===ci)continue;   // keep the caret clickable
+          const cx0=ci?cumX[ci-1]:0, cy0=ri?cumY[ri-1]:0;
+          const on=selCells.includes(ri+','+ci);
+          const dropAttr=`ondragenter="onColTextEnter(event,this)" ondragover="event.preventDefault();if(event.dataTransfer)event.dataTransfer.dropEffect='copy'" ondragleave="onColTextLeave(this)" ondrop="onColTextLeave(this);onColDropToCell(event,'${o.id}',${ri},${ci})"`;
+          inner+=`<div onmousedown="tblCellDown(event,'${o.id}',${ri},${ci})" oncontextmenu="tblCtxMenu(event,'${o.id}',${ri},${ci})" ${dropAttr} style="position:absolute;left:${cx0}px;top:${cy0}px;width:${cols[ci]*sc}px;height:${rows[ri]*sc}px;z-index:3;${on?"outline:2px solid var(--accent);outline-offset:-2px;background:rgba(108,142,245,0.14);":""}"></div>`;
+        }
+        for(let i=1;i<cols.length;i++) inner+=`<div onmousedown="startTblLineDrag(event,'${o.id}','col',${i})" title="Drag to resize columns" style="position:absolute;left:${(cumX[i-1]-3).toFixed(1)}px;top:0;width:6px;height:${h}px;cursor:col-resize;z-index:4"></div>`;
+        for(let i=1;i<rows.length;i++) inner+=`<div onmousedown="startTblLineDrag(event,'${o.id}','row',${i})" title="Drag to resize rows" style="position:absolute;left:0;top:${(cumY[i-1]-3).toFixed(1)}px;width:${w}px;height:6px;cursor:row-resize;z-index:4"></div>`;
+      }
+      // lockSize hides the corner handles (the panel W/H inputs are read-only too).
+      const rb=single&&!readOnly&&!o.lockSize?resizeHandles(o.id):"";
+      return `<div data-obj="${o.id}" ${drag} style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;cursor:${readOnly?"default":"move"};${rotCss}${ss}">${inner}${rotH}${rb}</div>`;
+    }
     return"";
   }).join("");
 
@@ -1463,6 +1541,11 @@ function buildProps(){
     return `<div style="margin-bottom:6px"><label class="lbl">${lbl}</label><input type="number" class="inp" step="${step}" value="${(+val||0).toFixed(3)}" onchange="uobj('${o.id}',{${key}:parseFloat(this.value)});R()" ${extra||""}></div>`;
   }
 
+  if(o.t==="tb"){
+    // Cell selection → the cell formatting panel; otherwise the table panel.
+    const cellSel=S._tblSel&&S._tblSel.id===o.id&&(S._tblSel.cells||[]).length;
+    return cellSel?buildTblCellProps(o):buildTblProps(o);
+  }
   if(o.t==="tx"){
     const alBtns=["left","center","right","justify"].map(a=>`<button class="fmt-btn${o.al===a?" on":""}" onclick="uobj('${o.id}',{al:'${a}'});R()" title="${a}">${a==="left"?"⬅":a==="center"?"☰":a==="right"?"➡":"⬌"}</button>`).join("");
     const vaBtns=["top","middle","bottom"].map(a=>`<button class="fmt-btn${(o.valign||"middle")===a?" on":""}" onclick="uobj('${o.id}',{valign:'${a}'});R()" title="${a}">${a==="top"?"⬆":a==="middle"?"↕":"⬇"}</button>`).join("");
@@ -1823,6 +1906,9 @@ function R(){
           <button class="tbtn" style="flex:1;width:auto" onclick="symPicker()"><span style="font-size:14px;font-weight:700">△</span>Symbol</button>
           <button class="tbtn" style="flex:1;width:auto" onclick="addObj('bc')" title="Barcode / QR / Data Matrix"><span style="font-size:13px;font-weight:700">▣</span>Barcode</button>
         </div>
+        <div style="display:flex;gap:5px">
+          <button class="tbtn" style="flex:1;width:auto" onclick="openTableInsert()" title="Table — a grid of text cells"><span style="font-size:14px;font-weight:700">⊞</span>Table</button>
+        </div>
         <input type="file" id="imgFilePicker" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml" style="display:none" onchange="onImagePicked(event)">
         <div style="height:1px;background:var(--bd2);margin:6px 0"></div>
         <span style="color:var(--text3);font-size:9px;text-transform:uppercase;letter-spacing:1px">Objects (${S.objs.length})</span>
@@ -1830,7 +1916,7 @@ function R(){
           ${S.objs.length===0?`<div style="color:var(--text3);font-size:10px;padding:6px 4px">No objects yet</div>`
             :S.objs.map(o=>{
               const sel=(S.selIds||[]).includes(o.id);
-              const icon=o.t==='tx'?'T':o.t==='ln'?'╌':o.t==='ar'?'→':o.t==='ci'?'◯':o.t==='ov'?'⬭':o.t==='im'?'▦':o.t==='sy'?'△':o.t==='bc'?'▣':'▭';
+              const icon=o.t==='tx'?'T':o.t==='ln'?'╌':o.t==='ar'?'→':o.t==='ci'?'◯':o.t==='ov'?'⬭':o.t==='im'?'▦':o.t==='sy'?'△':o.t==='bc'?'▣':o.t==='tb'?'⊞':'▭';
               const lbl=objListLabel(o);
               return`<div onclick="selectObj('${o.id}',event)" title="${lbl.replace(/"/g,'&quot;')}"
                 style="display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;cursor:pointer;font-size:11px;white-space:nowrap;overflow:hidden;flex-shrink:0;
@@ -1906,6 +1992,15 @@ function R(){
   // Focus the inline-editing text box (and place the caret at the end).
   if(S.editingId){
     const te=document.querySelector('[data-txt="'+S.editingId+'"]');
+    if(te){
+      te.focus();
+      const r=document.createRange(); r.selectNodeContents(te); r.collapse(false);
+      const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    }
+  }
+  // Same for an inline-editing table CELL (caret at the end).
+  if(S._tblEdit){
+    const te=document.querySelector('[data-tbltxt="'+S._tblEdit.id+':'+S._tblEdit.r+','+S._tblEdit.c+'"]');
     if(te){
       te.focus();
       const r=document.createRange(); r.selectNodeContents(te); r.collapse(false);
@@ -2200,7 +2295,7 @@ function renderModal(){
 }
 
 // ── Actions ───────────────────────────────────────────────────────────────────
-function deselect(){S.selId=null;S.selIds=[];S.showFields=false;S._ef=undefined;S.editingId=null;S._selAnchor=null;R();}
+function deselect(){S.selId=null;S.selIds=[];S.showFields=false;S._ef=undefined;S.editingId=null;S._selAnchor=null;S._tblSel=null;S._tblEdit=null;R();}
 
 // Marquee (rubber-band) selection: mousedown on empty canvas, drag a box, and every
 // object whose bounding box the box touches is selected. A plain click (no drag) just
@@ -2369,7 +2464,11 @@ function fxRefresh(){
     const bits=ctxCols.map(k=>rec[k]?k+': '+rec[k]:'').filter(Boolean); ctx.textContent=bits.join('  ·  ');
   }
 }
-function fxApply(){ const id=_fxState.id; snapshot(); uobj(id,{mode:'formula',f:_fxState.f}); S._ef=undefined; closeFormulaModal(); R(); }
+function fxApply(){
+  // Cell-formula variant (openTblCellFormulaEditor): apply to the selected cells.
+  if(_fxState.tblCells){ const st=_fxState; closeFormulaModal(); tblPatchCellsAt(st.id,st.tblCells,{mode:'formula',f:st.f}); return; }
+  const id=_fxState.id; snapshot(); uobj(id,{mode:'formula',f:_fxState.f}); S._ef=undefined; closeFormulaModal(); R();
+}
 function renderFormulaModal(){
   let m=document.getElementById('fx-modal');
   if(!m){ m=document.createElement('div'); m.id='fx-modal'; m.className='modal-overlay'; m.onclick=e=>{if(e.target===m)closeFormulaModal();}; document.body.appendChild(m); }
@@ -2618,7 +2717,14 @@ function startResize(e,id,corner){
     nw=Math.max(0.05,nw); nh=Math.max(0.02,nh);
     if(square){ const s=Math.max(nw,nh); nw=s; nh=s; if(isLeft)nx=right-s; if(isTop)ny=bottom-s; }
     else if(lockAR){ nh=+(nw*ratio).toFixed(4); if(isTop)ny=bottom-nh; }
-    uobj(id,{x:Math.max(-BLEED_IN,nx),y:Math.max(-BLEED_IN,ny),w:nw,h:nh});
+    if(o.t==="tb"){
+      // Tables: route the new size through tblApplySize so cols/rows redistribute
+      // proportionally (equally when locked-uniform) and w/h stay == the sums.
+      uobj(id,{x:Math.max(-BLEED_IN,nx),y:Math.max(-BLEED_IN,ny)});
+      tblApplySize(id,nw,nh);
+    }else{
+      uobj(id,{x:Math.max(-BLEED_IN,nx),y:Math.max(-BLEED_IN,ny),w:nw,h:nh});
+    }
     scheduleCanvas();
   }
   function mu(){window.removeEventListener("mousemove",mv);window.removeEventListener("mouseup",mu);}
@@ -2679,6 +2785,7 @@ function objListLabel(o){
     const f=(o.f||'').replace(/^=/,'').trim();
     return f && f!=='""' ? f : 'Text';
   }
+  if(o.t==='tb') return 'Table '+((o.rows||[]).length||1)+'×'+((o.cols||[]).length||1);
   return o.t==='ln'?'Line':o.t==='ar'?'Arrow':o.t==='ci'?'Circle':o.t==='ov'?'Oval':o.t==='im'?'Image':o.t==='sy'?((SYMBOLS[o.sym]||{}).label||'Symbol'):'Rectangle';
 }
 
@@ -2888,6 +2995,640 @@ function addSymbol(key,editId){
   img.src='data:image/svg+xml;base64,'+btoa(symFullSVG(key));
 }
 
+// ── Table objects (t:"tb") ────────────────────────────────────────────────────
+// A grid of text cells. Geometry lives in cols[]/rows[] (inches; w==sum(cols),
+// h==sum(rows) always); each cell carries the tx text fields only (no x/y/w/h/id).
+// All mutations follow the undo contract: snapshot() → recompute a clone →
+// uobj() → R(). Transient cell selection/edit state lives in S._tblSel/S._tblEdit.
+const TBL_MIN=0.05;   // minimum column width / row height (inches)
+
+// The tx text defaults addObj uses, minus geometry (empty text — cells start blank).
+function tblDefaultCell(){
+  return {mode:"static",text:"",al:"left",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Arial",wrapText:false,tracking:0,stretch:100};
+}
+// The cell objects currently selected in a table (empty when no cell selection).
+function tblSelCells(){
+  if(!S._tblSel)return[];
+  const o=gobj(S._tblSel.id); if(!o||o.t!=="tb")return[];
+  return (S._tblSel.cells||[]).map(function(k){const p=k.split(',');return (o.cells[+p[0]]||[])[+p[1]];}).filter(Boolean);
+}
+
+// ── Insert modal (Rows × Columns) ───────────────────────────────────────────
+function openTableInsert(){
+  let m=document.getElementById('tbl-ins-modal');
+  if(!m){ m=document.createElement('div'); m.id='tbl-ins-modal'; m.className='modal-overlay'; m.onclick=e=>{if(e.target===m)closeTableInsert();}; document.body.appendChild(m); }
+  m.innerHTML=`<div class="modal" style="min-width:300px">
+    <div class="modal-title">Insert table</div>
+    <div style="display:flex;gap:10px">
+      <div style="flex:1"><label class="lbl">Rows</label><input id="tbl-ins-rows" type="number" class="inp" min="1" max="20" value="3"></div>
+      <div style="flex:1"><label class="lbl">Columns</label><input id="tbl-ins-cols" type="number" class="inp" min="1" max="20" value="3"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeTableInsert()">Cancel</button>
+      <button class="btn" onclick="confirmTableInsert()" style="background:var(--accent2);border-color:var(--accent2);color:#fff;font-weight:600">Add</button>
+    </div>
+  </div>`;
+  // Self-handled Enter/Escape (imperative overlay — not S.modal, so the global
+  // capture Escape at the modal handler ignores it).
+  m.querySelectorAll('input').forEach(inp=>{ inp.onkeydown=e=>{ if(e.key==='Enter')confirmTableInsert(); if(e.key==='Escape'){ e.stopPropagation(); closeTableInsert(); } }; });
+  document.addEventListener('keydown',_tblInsKey,true);
+  const fi=m.querySelector('#tbl-ins-rows'); if(fi){ fi.focus(); fi.select(); }
+}
+function _tblInsKey(e){ if(e.key==='Escape'&&document.getElementById('tbl-ins-modal')){ e.preventDefault(); e.stopPropagation(); closeTableInsert(); } }
+function closeTableInsert(){ const m=document.getElementById('tbl-ins-modal'); if(m)m.remove(); document.removeEventListener('keydown',_tblInsKey,true); }
+function confirmTableInsert(){
+  const r=Math.max(1,Math.min(20,parseInt((document.getElementById('tbl-ins-rows')||{}).value)||3));
+  const c=Math.max(1,Math.min(20,parseInt((document.getElementById('tbl-ins-cols')||{}).value)||3));
+  closeTableInsert();
+  addTable(r,c);
+}
+function addTable(nr,nc){
+  snapshot();
+  nr=Math.max(1,Math.min(20,nr||3)); nc=Math.max(1,Math.min(20,nc||3));
+  const id=mid();
+  // Default footprint ≈60% of the printable area, uniform cells (min 0.05in each).
+  const w=Math.max(TBL_MIN*nc,+(S.spec.pw*0.6).toFixed(3));
+  const h=Math.max(TBL_MIN*nr,+(S.spec.ph*0.6).toFixed(3));
+  const cw=+(w/nc).toFixed(4), rh=+(h/nr).toFixed(4);
+  const cols=[],rows=[]; for(let i=0;i<nc;i++)cols.push(cw); for(let i=0;i<nr;i++)rows.push(rh);
+  const cells=[]; for(let r=0;r<nr;r++){ const row=[]; for(let c=0;c<nc;c++)row.push(tblDefaultCell()); cells.push(row); }
+  S.objs.push({id,x:.05,y:.05,t:"tb",
+    w:+cols.reduce((a,b)=>a+b,0).toFixed(4),h:+rows.reduce((a,b)=>a+b,0).toFixed(4),
+    cols:cols,rows:rows,lockCols:false,lockRows:false,lockSize:false,lw:1,cells:cells});
+  setSel(id); S._ef=undefined; S._tblSel=null; S._tblEdit=null; R();
+}
+
+// ── Geometry helpers ───────────────────────────────────────────────────────────
+// Scale a cols/rows array to a new total (inches) proportionally, clamping each
+// entry at TBL_MIN (a few passes converge the clamp overshoot).
+function tblFit(arr,total){
+  total=Math.max(total,TBL_MIN*arr.length);
+  let out=arr.map(v=>Math.max(TBL_MIN,v));
+  for(let pass=0;pass<4;pass++){
+    const sum=out.reduce((a,b)=>a+b,0);
+    if(Math.abs(sum-total)<1e-6)break;
+    const flex=out.reduce((a,v)=>a+(v>TBL_MIN+1e-9?v:0),0);
+    if(!flex){ out=out.map(()=>total/arr.length); break; }
+    const k=(total-(sum-flex))/flex;
+    out=out.map(v=>v>TBL_MIN+1e-9?Math.max(TBL_MIN,v*k):v);
+  }
+  return out;
+}
+// Enforce the invariants on a (cloned) table: ≥1 col/row each ≥TBL_MIN, uniform
+// when lockCols/lockRows (sum preserved), cells reshaped rows×cols preserving
+// content, and w/h == the sums.
+function tblNorm(t){
+  if(!Array.isArray(t.cols)||!t.cols.length)t.cols=[Math.max(TBL_MIN,+t.w||1)];
+  if(!Array.isArray(t.rows)||!t.rows.length)t.rows=[Math.max(TBL_MIN,+t.h||0.25)];
+  t.cols=t.cols.map(v=>Math.max(TBL_MIN,+v||TBL_MIN));
+  t.rows=t.rows.map(v=>Math.max(TBL_MIN,+v||TBL_MIN));
+  if(t.lockCols){ const u=t.cols.reduce((a,b)=>a+b,0)/t.cols.length; t.cols=t.cols.map(()=>u); }
+  if(t.lockRows){ const u=t.rows.reduce((a,b)=>a+b,0)/t.rows.length; t.rows=t.rows.map(()=>u); }
+  t.cols=t.cols.map(v=>+v.toFixed(4)); t.rows=t.rows.map(v=>+v.toFixed(4));
+  const cells=[];
+  for(let r=0;r<t.rows.length;r++){
+    const src=(t.cells&&t.cells[r])||[], row=[];
+    for(let c=0;c<t.cols.length;c++)row.push(src[c]||tblDefaultCell());
+    cells.push(row);
+  }
+  t.cells=cells;
+  t.w=+t.cols.reduce((a,b)=>a+b,0).toFixed(4);
+  t.h=+t.rows.reduce((a,b)=>a+b,0).toFixed(4);
+  return t;
+}
+function tblCommit(id,t){ uobj(id,{cols:t.cols,rows:t.rows,cells:t.cells,w:t.w,h:t.h,lockCols:!!t.lockCols,lockRows:!!t.lockRows,lockSize:!!t.lockSize}); }
+// Keep the cell selection meaningful across row/col inserts/deletes (indices
+// shift). fn(r,c) → [r,c] remapped, or null to drop the cell from the selection.
+function tblSelRemap(id,fn){
+  if(!S._tblSel||S._tblSel.id!==id)return;
+  const cells=[];
+  S._tblSel.cells.forEach(function(k){
+    const p=k.split(','), m=fn(+p[0],+p[1]);
+    if(m)cells.push(m[0]+','+m[1]);
+  });
+  if(!cells.length){ S._tblSel=null; return; }
+  const a=fn(S._tblSel.anchor[0],S._tblSel.anchor[1]);
+  S._tblSel={id:id,anchor:a||cells[0].split(',').map(Number),cells:cells};
+}
+
+// ── Whole-table sizing ─────────────────────────────────────────────────────────
+// Set the overall width/height (null = leave one alone). Redistributes across
+// cols/rows proportionally — equally when locked-uniform. No snapshot()/R():
+// startResize calls this mid-gesture; tblResizeTable wraps it for the panel.
+function tblApplySize(id,nw,nh){
+  const o=gobj(id); if(!o||o.t!=="tb")return;
+  const p={};
+  if(nw!=null&&isFinite(nw)){
+    nw=Math.max(TBL_MIN*o.cols.length,nw);
+    const cols=o.lockCols?o.cols.map(()=>nw/o.cols.length):tblFit(o.cols,nw);
+    p.cols=cols.map(v=>+v.toFixed(4));
+    p.w=+p.cols.reduce((a,b)=>a+b,0).toFixed(4);
+  }
+  if(nh!=null&&isFinite(nh)){
+    nh=Math.max(TBL_MIN*o.rows.length,nh);
+    const rows=o.lockRows?o.rows.map(()=>nh/o.rows.length):tblFit(o.rows,nh);
+    p.rows=rows.map(v=>+v.toFixed(4));
+    p.h=+p.rows.reduce((a,b)=>a+b,0).toFixed(4);
+  }
+  if(p.cols||p.rows)uobj(id,p);
+}
+function tblResizeTable(id,nw,nh){
+  const o=gobj(id); if(!o||o.t!=="tb")return;
+  if(!(nw>0)&&!(nh>0))return;   // NaN / empty input → no-op (no stray undo entry)
+  if(o.lockSize){ showToast("Table size is locked"); R(); return; }
+  snapshot(); tblApplySize(id,nw,nh); R();
+}
+
+// ── Row/column mutations ───────────────────────────────────────────────────────
+function tblAddRow(id,at){
+  const o=gobj(id); if(!o||o.t!=="tb")return;
+  snapshot();
+  const t=JSON.parse(JSON.stringify(o));
+  const oldH=t.rows.reduce((a,b)=>a+b,0);
+  at=Math.max(0,Math.min(at==null?t.rows.length:at,t.rows.length));
+  const ref=t.rows[Math.max(0,Math.min(at>0?at-1:0,t.rows.length-1))]||0.25;
+  t.rows.splice(at,0,Math.max(TBL_MIN,ref));
+  t.cells.splice(at,0,t.cols.map(function(){return tblDefaultCell();}));
+  if(t.lockSize)t.rows=tblFit(t.rows,oldH);   // fixed height → the rows share it
+  tblNorm(t); tblCommit(id,t);
+  tblSelRemap(id,function(r,c){return [r>=at?r+1:r,c];});
+  R();
+}
+function tblAddCol(id,at){
+  const o=gobj(id); if(!o||o.t!=="tb")return;
+  snapshot();
+  const t=JSON.parse(JSON.stringify(o));
+  const oldW=t.cols.reduce((a,b)=>a+b,0);
+  at=Math.max(0,Math.min(at==null?t.cols.length:at,t.cols.length));
+  const ref=t.cols[Math.max(0,Math.min(at>0?at-1:0,t.cols.length-1))]||0.4;
+  t.cols.splice(at,0,Math.max(TBL_MIN,ref));
+  t.cells.forEach(function(row){ row.splice(at,0,tblDefaultCell()); });
+  if(t.lockSize)t.cols=tblFit(t.cols,oldW);
+  tblNorm(t); tblCommit(id,t);
+  tblSelRemap(id,function(r,c){return [r,c>=at?c+1:c];});
+  R();
+}
+function tblDeleteRows(id,idxs){
+  const o=gobj(id); if(!o||o.t!=="tb")return;
+  idxs=Array.from(new Set((idxs||[]).filter(i=>i>=0&&i<o.rows.length)));
+  if(!idxs.length)return;
+  if(idxs.length>=o.rows.length){ showToast("A table needs at least one row"); return; }
+  snapshot();
+  const t=JSON.parse(JSON.stringify(o));
+  const oldH=t.rows.reduce((a,b)=>a+b,0);
+  idxs.slice().sort((a,b)=>b-a).forEach(function(i){ t.rows.splice(i,1); t.cells.splice(i,1); });
+  if(t.lockSize)t.rows=tblFit(t.rows,oldH);
+  tblNorm(t); tblCommit(id,t);
+  tblSelRemap(id,function(r,c){ if(idxs.includes(r))return null; return [r-idxs.filter(i=>i<r).length,c]; });
+  R();
+}
+function tblDeleteCols(id,idxs){
+  const o=gobj(id); if(!o||o.t!=="tb")return;
+  idxs=Array.from(new Set((idxs||[]).filter(i=>i>=0&&i<o.cols.length)));
+  if(!idxs.length)return;
+  if(idxs.length>=o.cols.length){ showToast("A table needs at least one column"); return; }
+  snapshot();
+  const t=JSON.parse(JSON.stringify(o));
+  const oldW=t.cols.reduce((a,b)=>a+b,0);
+  idxs.slice().sort((a,b)=>b-a).forEach(function(i){ t.cols.splice(i,1); t.cells.forEach(function(row){ row.splice(i,1); }); });
+  if(t.lockSize)t.cols=tblFit(t.cols,oldW);
+  tblNorm(t); tblCommit(id,t);
+  tblSelRemap(id,function(r,c){ if(idxs.includes(c))return null; return [r,c-idxs.filter(i=>i<c).length]; });
+  R();
+}
+// Set the given col widths / row heights (inches), honouring the locks:
+// lockCols/lockRows → the value becomes the uniform size for ALL cols/rows;
+// lockSize → the others rescale so the table's total is preserved.
+function tblSetSizes(id,axis,idxs,v){
+  const o=gobj(id); if(!o||o.t!=="tb"||!(v>0)||!(idxs||[]).length)return;
+  const locked=axis==='col'?o.lockCols:o.lockRows;
+  if(locked&&o.lockSize){ showToast(axis==='col'?"Columns are locked equal and the table size is locked":"Rows are locked equal and the table size is locked"); R(); return; }
+  v=Math.max(TBL_MIN,v);
+  snapshot();
+  const t=JSON.parse(JSON.stringify(o));
+  const ta=axis==='col'?t.cols:t.rows;
+  idxs=idxs.filter(i=>i>=0&&i<ta.length);
+  if(locked){ for(let i=0;i<ta.length;i++)ta[i]=v; }
+  else if(t.lockSize){
+    const total=ta.reduce((a,b)=>a+b,0);
+    const k=idxs.length, restMin=(ta.length-k)*TBL_MIN;
+    v=Math.max(TBL_MIN,Math.min(v,(total-restMin)/k));   // leave the others their minimum
+    idxs.forEach(i=>{ ta[i]=v; });
+    const others=[]; for(let i=0;i<ta.length;i++)if(!idxs.includes(i))others.push(i);
+    const osum=others.reduce((a,i)=>a+ta[i],0)||1;
+    const target=total-v*k;
+    others.forEach(i=>{ ta[i]=Math.max(TBL_MIN,ta[i]*target/osum); });
+  }
+  else{ idxs.forEach(i=>{ ta[i]=v; }); }
+  tblNorm(t); tblCommit(id,t); R();
+}
+function tblSetColWidth(id,index,v){ tblSetSizes(id,'col',[index],v); }
+function tblSetRowHeight(id,index,v){ tblSetSizes(id,'row',[index],v); }
+// Panel variants: apply to the columns/rows covered by the cell selection.
+function tblSetColWidthSel(id,v){ if(S._tblSel&&S._tblSel.id===id)tblSetSizes(id,'col',[...new Set(S._tblSel.cells.map(k=>+k.split(',')[1]))],v); }
+function tblSetRowHeightSel(id,v){ if(S._tblSel&&S._tblSel.id===id)tblSetSizes(id,'row',[...new Set(S._tblSel.cells.map(k=>+k.split(',')[0]))],v); }
+// Uniform size for a locked-equal axis (the reveal inputs under the checkboxes).
+function tblSetUniform(id,axis,inches){
+  const o=gobj(id); if(!o||o.t!=="tb"||!(inches>0))return;
+  if(o.lockSize){ showToast("Table size is locked — unlock it to change the uniform size"); R(); return; }
+  snapshot();
+  const t=JSON.parse(JSON.stringify(o));
+  const v=Math.max(TBL_MIN,inches);
+  if(axis==='col')t.cols=t.cols.map(()=>v); else t.rows=t.rows.map(()=>v);
+  tblNorm(t); tblCommit(id,t); R();
+}
+function tblSetLock(id,key,on){
+  const o=gobj(id); if(!o||o.t!=="tb")return;
+  snapshot();
+  const t=JSON.parse(JSON.stringify(o)); t[key]=!!on;
+  tblNorm(t);   // equalizes cols/rows (sum preserved) when a lock switches on
+  tblCommit(id,t); R();
+}
+function tblSetLW(id,v){ const o=gobj(id); if(!o||o.t!=="tb")return; snapshot(); uobj(id,{lw:Math.max(1,Math.min(10,parseInt(v)||1))}); R(); }
+
+// ── Inner grid-line drag (col-resize / row-resize strips) ──────────────────────
+// index = the boundary between col/row index-1 and index (1..n-1).
+function startTblLineDrag(e,id,axis,index){
+  e.stopPropagation(); e.preventDefault();
+  const o=gobj(id); if(!o||o.t!=="tb")return;
+  const lockedUni=(axis==='col')?o.lockCols:o.lockRows;
+  // Equal sizes + a fixed table size leaves nothing for a line drag to change.
+  if(lockedUni&&o.lockSize){ showToast(axis==='col'?"Columns are locked equal and the table size is locked":"Rows are locked equal and the table size is locked"); return; }
+  snapshot();   // one undo step for the whole gesture
+  const sizes0=(axis==='col'?o.cols:o.rows).slice();
+  const lockSize=!!o.lockSize;
+  const sx=e.clientX, sy=e.clientY;
+  function mv(ev){
+    const d=((axis==='col'?ev.clientX-sx:ev.clientY-sy))/(SC*S.zoom);
+    let sizes=sizes0.slice();
+    if(lockedUni){
+      // Uniform: the boundary sits at index×u — dragging it rescales EVERY col/row.
+      const u=Math.max(TBL_MIN,sizes0[0]+d/index);
+      sizes=sizes0.map(function(){return u;});
+    }else if(lockSize){
+      // Boundary moves WITHIN the table: leading grows, trailing shrinks (sum kept).
+      const nd=Math.max(TBL_MIN-sizes0[index-1],Math.min(d,sizes0[index]-TBL_MIN));
+      sizes[index-1]=sizes0[index-1]+nd;
+      sizes[index]=sizes0[index]-nd;
+    }else{
+      // The leading col/row resizes; the table grows/shrinks with it.
+      sizes[index-1]=Math.max(TBL_MIN,sizes0[index-1]+d);
+    }
+    sizes=sizes.map(function(v){return +v.toFixed(4);});
+    const sum=+sizes.reduce(function(a,b){return a+b;},0).toFixed(4);
+    uobj(id,axis==='col'?{cols:sizes,w:sum}:{rows:sizes,h:sum});
+    renderCanvasOnly();
+  }
+  function mu(){ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',mu); R(); }
+  document.addEventListener('mousemove',mv); document.addEventListener('mouseup',mu);
+}
+
+// ── Cell selection / inline editing ────────────────────────────────────────────
+// Cell mousedown on the SELECTED table: plain = select the cell (a second click
+// within 350ms = inline edit for static cells, like tx), ⇧ = rectangular range
+// from the anchor, ⌘/Ctrl = toggle. stopPropagation so the table doesn't drag.
+let _tblClickKey=null,_tblClickT=0;
+function tblCellDown(e,id,r,c){
+  e.stopPropagation();
+  if(e.button===2)return;   // right-click → tblCtxMenu handles selection
+  const o=gobj(id); if(!o||o.t!=="tb")return;
+  if(S._tblEdit&&!(S._tblEdit.id===id&&S._tblEdit.r===r&&S._tblEdit.c===c))S._tblEdit=null;
+  const key=r+','+c;
+  if(e.shiftKey&&S._tblSel&&S._tblSel.id===id){
+    const ar=S._tblSel.anchor[0], ac=S._tblSel.anchor[1];
+    const cells=[];
+    for(let rr=Math.min(ar,r);rr<=Math.max(ar,r);rr++)
+      for(let cc=Math.min(ac,c);cc<=Math.max(ac,c);cc++)cells.push(rr+','+cc);
+    S._tblSel={id:id,anchor:[ar,ac],cells:cells};
+  }else if((e.metaKey||e.ctrlKey)&&S._tblSel&&S._tblSel.id===id){
+    const cells=S._tblSel.cells.slice(), i=cells.indexOf(key);
+    if(i>=0)cells.splice(i,1); else cells.push(key);
+    S._tblSel=cells.length?{id:id,anchor:[r,c],cells:cells}:null;
+  }else{
+    const now=Date.now();
+    if(_tblClickKey===id+':'+key&&(now-_tblClickT)<DBLCLICK_MS){
+      _tblClickKey=null;_tblClickT=0;
+      const cl=(o.cells[r]||[])[c];
+      // Static cells edit inline; field/formula cells edit via the props panel
+      // (already open through the cell selection).
+      if(cl&&txMode(cl)==="static"){ startTblCellEdit(id,r,c); return; }
+    }else{ _tblClickKey=id+':'+key; _tblClickT=now; }
+    S._tblSel={id:id,anchor:[r,c],cells:[key]};
+  }
+  setSel(id); S.editingId=null; S._ef=undefined;
+  R();
+}
+// Inline cell editing — mirrors startTextEdit/setStaticText for tx objects.
+function startTblCellEdit(id,r,c){
+  const o=gobj(id); if(!o||o.t!=="tb")return;
+  const cl=(o.cells[r]||[])[c]; if(!cl||txMode(cl)!=="static")return;
+  snapshot();
+  setSel(id);
+  S._tblSel={id:id,anchor:[r,c],cells:[r+','+c]};
+  S._tblEdit={id:id,r:r,c:c};
+  S.editingId=null; S._ef=undefined;
+  R();
+}
+function endTblCellEdit(){ S._tblEdit=null; R(); }
+// Live update while typing in a cell — no R() (would steal focus); undo point
+// was set by startTblCellEdit.
+function setTblCellText(id,r,c,val){
+  const o=gobj(id); if(!o||!o.cells||!o.cells[r]||!o.cells[r][c])return;
+  o.cells[r][c].text=val;
+  markDirty();
+}
+// Drop a record-column header onto a CELL of the selected table → that cell
+// becomes field-mode bound to the column (mirrors onColDropToText).
+function onColDropToCell(e,id,r,c){
+  e.preventDefault(); e.stopPropagation();
+  const key=dragColName(e);
+  if(typeof colClearDrag==="function")colClearDrag();
+  if(!key)return;
+  const o=gobj(id); if(!o||o.t!=="tb"||!o.cells[r]||!o.cells[r][c])return;
+  snapshot();
+  const t=JSON.parse(JSON.stringify(o));
+  Object.assign(t.cells[r][c],{mode:"field",field:key});
+  uobj(id,{cells:t.cells});
+  setSel(id); S._tblSel={id:id,anchor:[r,c],cells:[r+','+c]}; S._ef=undefined; R();
+}
+
+// ── Cell content edits (selection-wide) ────────────────────────────────────────
+// Apply `patch` (object merge, or a mutator fn) to the given cells of a table.
+function tblPatchCellsAt(id,keys,patch){
+  const o=gobj(id); if(!o||o.t!=="tb"||!(keys||[]).length)return;
+  snapshot();
+  const t=JSON.parse(JSON.stringify(o));
+  keys.forEach(function(k){
+    const p=k.split(','), cl=(t.cells[+p[0]]||[])[+p[1]];
+    if(!cl)return;
+    if(typeof patch==='function')patch(cl); else Object.assign(cl,patch);
+  });
+  uobj(id,{cells:t.cells}); R();
+}
+function tblPatchCells(patch){ if(S._tblSel)tblPatchCellsAt(S._tblSel.id,S._tblSel.cells,patch); }
+// Switch the selected cells' source mode, seeding defaults like setTextMode.
+function setTblCellsMode(id,m){
+  if(!S._tblSel||S._tblSel.id!==id)return;
+  tblPatchCellsAt(id,S._tblSel.cells,function(cl){
+    cl.mode=m;
+    if(m==="formula"&&(cl.f===undefined||cl.f===""))cl.f='=""';
+    if(m==="static"&&cl.text===undefined)cl.text="";
+  });
+}
+// Live static-text typing from the panel textarea — updates the model + mirrors
+// into the canvas without a full R() (undo point set on focus, like tx).
+function setTblCellsStatic(id,val){
+  const o=gobj(id); if(!o||o.t!=="tb"||!S._tblSel||S._tblSel.id!==id)return;
+  S._tblSel.cells.forEach(function(k){
+    const p=k.split(','), cl=(o.cells[+p[0]]||[])[+p[1]]; if(!cl)return;
+    cl.text=val;
+    const t=document.querySelector('[data-tbltxt="'+id+':'+p[0]+','+p[1]+'"]');
+    if(t&&t!==document.activeElement)t.textContent=val;
+  });
+  markDirty();
+}
+// Delete/Backspace with cells selected: clear their CONTENT (per mode), never
+// the table itself.
+function tblClearCells(){
+  if(!S._tblSel||!(S._tblSel.cells||[]).length)return;
+  tblPatchCellsAt(S._tblSel.id,S._tblSel.cells,function(cl){
+    const m=txMode(cl);
+    if(m==="field")cl.field="";
+    else if(m==="formula")cl.f='=""';
+    else cl.text="";
+  });
+}
+// Formula editor for table CELLS — reuses the fx modal; fxApply routes tblCells
+// back through tblPatchCellsAt.
+function openTblCellFormulaEditor(id){
+  const o=gobj(id); if(!o||o.t!=="tb"||!S._tblSel||S._tblSel.id!==id||!(S._tblSel.cells||[]).length)return;
+  const a=S._tblSel.anchor, cl=(o.cells[a[0]]||[])[a[1]]||{};
+  _fxState={id:id, tblCells:S._tblSel.cells.slice(), f:(cl.f||'=""'), recIdx:Math.max(0,Math.min(S.recIdx,fxRecords().length-1))};
+  renderFormulaModal();
+}
+
+// ── Cell clipboard (window._vlCellClip) ────────────────────────────────────────
+// ⌘C copies the selection's rectangular bounding block; ⌘V pastes it anchored at
+// the current selection's anchor (same or another table), clipped to its bounds.
+function tblCopyCells(){
+  const ts=S._tblSel; if(!ts||!(ts.cells||[]).length)return;
+  const o=gobj(ts.id); if(!o||o.t!=="tb")return;
+  const rr=ts.cells.map(k=>+k.split(',')[0]), cc=ts.cells.map(k=>+k.split(',')[1]);
+  const r0=Math.min(...rr),r1=Math.max(...rr),c0=Math.min(...cc),c1=Math.max(...cc);
+  const block=[];
+  for(let r=r0;r<=r1;r++){
+    const row=[];
+    for(let c=c0;c<=c1;c++)row.push(JSON.parse(JSON.stringify((o.cells[r]||[])[c]||tblDefaultCell())));
+    block.push(row);
+  }
+  window._vlCellClip={rows:block.length,cols:block[0].length,cells:block};
+  // Best-effort TSV to the system clipboard so the block pastes into a spreadsheet.
+  try{
+    const rec=(window._editorRecords||RX)[S.recIdx];
+    navigator.clipboard.writeText(block.map(row=>row.map(cl=>textValue(cl,rec).v).join('\t')).join('\n'));
+  }catch(_){}
+  const n=block.length*block[0].length;
+  showToast('Copied '+n+' cell'+(n>1?'s':''));
+}
+function tblPasteCells(){
+  const clip=window._vlCellClip, ts=S._tblSel;
+  if(!clip||!ts)return;
+  const o=gobj(ts.id); if(!o||o.t!=="tb")return;
+  snapshot();
+  const t=JSON.parse(JSON.stringify(o));
+  const ar=ts.anchor[0], ac=ts.anchor[1];
+  const pasted=[];
+  for(let r=0;r<clip.rows;r++)for(let c=0;c<clip.cols;c++){
+    const tr=ar+r, tc=ac+c;
+    if(tr>=t.rows.length||tc>=t.cols.length)continue;   // clips at the target bounds
+    t.cells[tr][tc]=JSON.parse(JSON.stringify(clip.cells[r][c]));
+    pasted.push(tr+','+tc);
+  }
+  uobj(ts.id,{cells:t.cells});
+  if(pasted.length)S._tblSel={id:ts.id,anchor:[ar,ac],cells:pasted};
+  R();
+}
+
+// ── Cell context menu (right-click a cell of the selected table) ───────────────
+function tblCloseMenu(){ const m=document.getElementById('tbl-ctx'); if(m)m.remove(); document.removeEventListener('mousedown',_tblMenuOutside,true); document.removeEventListener('keydown',_tblMenuEsc,true); }
+function _tblMenuOutside(e){ const m=document.getElementById('tbl-ctx'); if(m&&!m.contains(e.target))tblCloseMenu(); }
+function _tblMenuEsc(e){ if(e.key==='Escape'){ e.stopPropagation(); tblCloseMenu(); } }
+function tblCtxMenu(e,id,r,c){
+  e.preventDefault(); e.stopPropagation();
+  tblCloseMenu();
+  const o=gobj(id); if(!o||o.t!=="tb")return;
+  // Right-click selects the cell unless it's already part of the selection.
+  const key=r+','+c;
+  if(!(S._tblSel&&S._tblSel.id===id&&S._tblSel.cells.includes(key))){
+    S._tblSel={id:id,anchor:[r,c],cells:[key]};
+    setSel(id); S._ef=undefined; S.editingId=null; S._tblEdit=null; R();
+  }
+  const menu=document.createElement('div'); menu.id='tbl-ctx';
+  menu.style.cssText='position:fixed;z-index:2550;background:var(--surface);border:1px solid var(--bd3);border-radius:7px;box-shadow:0 8px 28px rgba(0,0,0,0.45);padding:4px;min-width:172px;font-size:12px;color:var(--text);user-select:none';
+  function item(label,fn,disabled){
+    const b=document.createElement('div'); b.textContent=label;
+    b.style.cssText='padding:6px 12px;border-radius:4px;white-space:nowrap;'+(disabled?'opacity:.4;cursor:default':'cursor:pointer');
+    if(!disabled){
+      b.onmouseenter=function(){b.style.background='var(--bd2)';};
+      b.onmouseleave=function(){b.style.background='';};
+      b.onclick=function(){ tblCloseMenu(); fn(); };
+    }
+    b.onmousedown=function(ev){ev.preventDefault();ev.stopPropagation();};
+    menu.appendChild(b);
+  }
+  function sep(){ const s=document.createElement('div'); s.style.cssText='height:1px;background:var(--bd2);margin:4px 6px'; menu.appendChild(s); }
+  item('Add row above',function(){ tblAddRow(id,r); });
+  item('Add row below',function(){ tblAddRow(id,r+1); });
+  item('Add column left',function(){ tblAddCol(id,c); });
+  item('Add column right',function(){ tblAddCol(id,c+1); });
+  sep();
+  item('Delete row',function(){ tblDeleteRows(id,[r]); },o.rows.length<=1);
+  item('Delete column',function(){ tblDeleteCols(id,[c]); },o.cols.length<=1);
+  sep();
+  item('Set row height…',function(){
+    vlPrompt('Row height (inches)'+(o.lockRows?' — rows are locked equal':''),String(+(+o.rows[r]).toFixed(3)),function(v){
+      if(v==null)return; const n=parseFloat(v);
+      if(!(n>0)){ showToast('Enter a height in inches'); return; }
+      tblSetRowHeight(id,r,n);
+    });
+  });
+  item('Set column width…',function(){
+    vlPrompt('Column width (inches)'+(o.lockCols?' — columns are locked equal':''),String(+(+o.cols[c]).toFixed(3)),function(v){
+      if(v==null)return; const n=parseFloat(v);
+      if(!(n>0)){ showToast('Enter a width in inches'); return; }
+      tblSetColWidth(id,c,n);
+    });
+  });
+  sep();
+  item('Copy cells',function(){ tblCopyCells(); });
+  item('Paste cells',function(){ tblPasteCells(); },!window._vlCellClip);
+  document.body.appendChild(menu);
+  const mr=menu.getBoundingClientRect(); let px=e.clientX,py=e.clientY;
+  if(px+mr.width>window.innerWidth)px=Math.max(4,window.innerWidth-mr.width-6);
+  if(py+mr.height>window.innerHeight)py=Math.max(4,window.innerHeight-mr.height-6);
+  menu.style.left=px+'px'; menu.style.top=py+'px';
+  setTimeout(function(){ document.addEventListener('mousedown',_tblMenuOutside,true); document.addEventListener('keydown',_tblMenuEsc,true); },0);
+}
+
+// ── Properties panels ──────────────────────────────────────────────────────────
+// Table selected, no cell selection: locks, grid line width, overall size (via
+// tblResizeTable so cols/rows redistribute) and quick row/column inserts.
+function buildTblProps(o){
+  return `<div style="display:flex;flex-direction:column;gap:0">
+    ${posButtons(o)}
+    <div class="sec">Table — ${o.rows.length}×${o.cols.length}</div>
+    <div style="color:var(--text3);font-size:10px;line-height:1.5;margin-bottom:8px">Click a cell to select it (⇧ range · ⌘ toggle); double-click a cell to type. Drag the inner grid lines to resize rows and columns.</div>
+    <div style="margin-bottom:6px"><label class="lbl">Grid line width (px)</label><input type="number" class="inp" value="${o.lw||1}" min="1" max="10" onchange="tblSetLW('${o.id}',this.value)"></div>
+    <div style="margin-bottom:8px">
+      <label class="lbl" style="display:flex;align-items:center;gap:6px;cursor:pointer" title="Freeze the overall table size — inner line drags then trade space between neighbouring rows/columns instead of growing the table">
+        <input type="checkbox" ${o.lockSize?"checked":""} onchange="tblSetLock('${o.id}','lockSize',this.checked)"> Lock table size
+      </label>
+    </div>
+    <div style="margin-bottom:8px">
+      <label class="lbl" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" ${o.lockCols?"checked":""} onchange="tblSetLock('${o.id}','lockCols',this.checked)"> Equal columns
+      </label>
+    </div>
+    ${o.lockCols?`<div style="margin-bottom:8px"><label class="lbl">Column width (in)</label><input type="number" class="inp" step="0.01" value="${(+o.cols[0]||0).toFixed(3)}" ${o.lockSize?"disabled":""} onchange="tblSetUniform('${o.id}','col',parseFloat(this.value))"></div>`:""}
+    <div style="margin-bottom:8px">
+      <label class="lbl" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" ${o.lockRows?"checked":""} onchange="tblSetLock('${o.id}','lockRows',this.checked)"> Equal rows
+      </label>
+    </div>
+    ${o.lockRows?`<div style="margin-bottom:8px"><label class="lbl">Row height (in)</label><input type="number" class="inp" step="0.01" value="${(+o.rows[0]||0).toFixed(3)}" ${o.lockSize?"disabled":""} onchange="tblSetUniform('${o.id}','row',parseFloat(this.value))"></div>`:""}
+    <div style="display:flex;gap:3px;margin-bottom:8px">
+      <button class="fmt-btn" style="flex:1" onclick="tblAddRow('${o.id}',${o.rows.length})">+ Row</button>
+      <button class="fmt-btn" style="flex:1" onclick="tblAddCol('${o.id}',${o.cols.length})">+ Column</button>
+    </div>
+    <hr class="divider">
+    <div class="sec">Position & size</div>
+    ${posSizeBlock(o,false)}
+    <div style="display:flex;gap:8px">
+      <div style="flex:1"><label class="lbl">Width</label><input type="number" class="inp" step="0.01" value="${(+o.w||0).toFixed(3)}" ${o.lockSize?"disabled":""} onchange="tblResizeTable('${o.id}',parseFloat(this.value),null)"></div>
+      <div style="flex:1"><label class="lbl">Height</label><input type="number" class="inp" step="0.01" value="${(+o.h||0).toFixed(3)}" ${o.lockSize?"disabled":""} onchange="tblResizeTable('${o.id}',null,parseFloat(this.value))"></div>
+    </div>
+  </div>`;
+}
+// Cell(s) selected: the full tx-style formatting panel applied to every selected
+// cell ('mixed' handling mirrors buildMultiProps), plus row/col sizing and
+// add/delete row/column actions scoped to the selection.
+function buildTblCellProps(o){
+  const keys=S._tblSel.cells;
+  const cells=keys.map(function(k){const p=k.split(',');return (o.cells[+p[0]]||[])[+p[1]];}).filter(Boolean);
+  if(!cells.length)return buildTblProps(o);
+  const rr=[...new Set(keys.map(k=>+k.split(',')[0]))].sort((a,b)=>a-b);
+  const cc=[...new Set(keys.map(k=>+k.split(',')[1]))].sort((a,b)=>a-b);
+  // Shared value across the selected cells: {multi:true} when they differ.
+  function sh(key,def){ let v=(cells[0][key]!=null?cells[0][key]:def); for(const cl of cells){ const cv=(cl[key]!=null?cl[key]:def); if(cv!==v)return{multi:true}; } return{multi:false,v:v}; }
+  function num(lbl,key,step,def,parse){ const s=sh(key,def); const pf=parse==='int'?'parseInt':'parseFloat'; return `<div style="margin-bottom:8px"><label class="lbl">${lbl}</label><input type="number" class="inp" step="${step}" ${s.multi?'value="" placeholder="Multiple"':'value="'+s.v+'"'} onchange="tblPatchCells({${key}:${pf}(this.value)})"></div>`; }
+  function tog(key,lbl,inner){ const s=sh(key,false); const on=!s.multi&&s.v===true; return `<button class="fmt-btn${on?' on':''}" title="${lbl}${s.multi?' (mixed)':''}"${s.multi?' style="opacity:.6"':''} onclick="tblPatchCells({${key}:${on?'false':'true'}})">${inner}</button>`; }
+  function btnset(key,def,opts){ const s=sh(key,def); return opts.map(([v,l,ti])=>`<button class="fmt-btn${!s.multi&&s.v===v?' on':''}" title="${ti||l}" onclick="tblPatchCells({${key}:'${v}'})">${l}</button>`).join(''); }
+  function check(key,lbl,def){ const s=sh(key,def); return `<div style="margin-bottom:8px"><label class="lbl" style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" ${(!s.multi&&s.v===true)?'checked':''} onchange="tblPatchCells({${key}:this.checked})"> ${lbl}${s.multi?' <span style=\"color:var(--text3)\">(mixed)</span>':''}</label></div>`; }
+  const modes=[...new Set(cells.map(txMode))];
+  const tmode=modes.length===1?modes[0]:null;
+  const modeBtns=[["static","Static"],["field","Field"],["formula","Formula"]].map(([m,lbl])=>
+    `<button class="fmt-btn${tmode===m?" on":""}" style="flex:1" onclick="setTblCellsMode('${o.id}','${m}')">${lbl}</button>`).join("");
+  const shT=sh('text',''), shField=sh('field',''), shF=sh('f','');
+  const srcEditor =
+    tmode==null
+      ? `<div style="color:var(--text2);font-size:11px;line-height:1.5">Mixed sources — pick a mode above to set every selected cell.</div>`
+    : tmode==="static"
+      ? `<textarea class="inp" rows="2" style="resize:vertical;font-family:inherit" placeholder="${shT.multi?'Multiple values':'Type cell text…'}" onfocus="snapshot()" oninput="setTblCellsStatic('${o.id}',this.value)" onblur="R()">${shT.multi?'':esc(shT.v||'')}</textarea>
+         <div style="color:var(--text3);font-size:10px;margin-top:5px;line-height:1.4">…or double-click the cell on the canvas to type directly.</div>`
+    : tmode==="field"
+      ? `<select class="inp" onchange="tblPatchCells({field:this.value})">
+           <option value="">${shField.multi?'— multiple —':'— choose column —'}</option>
+           ${fieldDefs().map(f=>`<option value="${escAttr(f.c)}"${(!shField.multi&&shField.v===f.c)?" selected":""}>${esc(f.f)}</option>`).join("")}
+         </select>
+         <div style="color:var(--text3);font-size:10px;margin-top:5px;line-height:1.4">…or drag a column header from the ${isCustomMode()?'Database pane':'Records panel'} onto the cell.</div>`
+      : `<input class="inp" value="${shF.multi?'':escAttr(shF.v||'')}" style="font-family:monospace;font-size:12px" onchange="tblPatchCells({mode:'formula',f:this.value})" placeholder='${shF.multi?"Multiple":"=IF(Number&lt;&gt;&quot;&quot;,Number,&quot;&quot;)"}'>
+         <div style="display:flex;gap:5px;margin-top:5px">
+           <button class="btn" onclick="openTblCellFormulaEditor('${o.id}')" style="font-size:11px" title="Open the formula editor with a live preview">Editor ⤢</button>
+         </div>`;
+  const alOpts=[["left","⬅"],["center","☰"],["right","➡"],["justify","⬌"]];
+  const vaOpts=[["top","⬆"],["middle","↕"],["bottom","⬇"]];
+  // Column width / row height over the columns/rows the selection covers.
+  const cwVals=cc.map(i=>+o.cols[i]), rhVals=rr.map(i=>+o.rows[i]);
+  const cwMixed=cwVals.some(v=>Math.abs(v-cwVals[0])>1e-6);
+  const rhMixed=rhVals.some(v=>Math.abs(v-rhVals[0])>1e-6);
+  return `<div style="display:flex;flex-direction:column;gap:0">
+    <div class="sec">${keys.length===1?`Cell R${rr[0]+1}·C${cc[0]+1}`:`${keys.length} cells`} — table ${o.rows.length}×${o.cols.length}</div>
+    <div style="color:var(--text3);font-size:10px;line-height:1.5;margin-bottom:8px">⇧-click extends · ⌘-click toggles · Esc reselects the table.</div>
+    <div class="sec">Cell source</div>
+    <div style="display:flex;gap:3px;margin-bottom:8px">${modeBtns}</div>
+    <div style="margin-bottom:8px">${srcEditor}</div>
+    <hr class="divider">
+    <div class="sec">Text formatting</div>
+    ${fontFieldHTML()}
+    ${num('Size (pt)','fs',1,14,'int')}
+    <div style="margin-bottom:8px"><label class="lbl">Style</label><div style="display:flex;gap:3px">${tog('bold','Bold','<b>B</b>')}${tog('italic','Italic','<i>I</i>')}${tog('underline','Underline','<u>U</u>')}</div></div>
+    <div style="margin-bottom:8px"><label class="lbl">Horizontal align</label><div style="display:flex;gap:3px">${btnset('al','left',alOpts)}</div></div>
+    <div style="margin-bottom:8px"><label class="lbl">Vertical align</label><div style="display:flex;gap:3px">${btnset('valign','middle',vaOpts)}</div></div>
+    ${check('wrapText','Wrap text',false)}
+    ${check('autoScale','Auto-scale to fit (max size)',false)}
+    ${num('Tracking (px)','tracking',0.5,0,'float')}
+    ${num('Width stretch (%)','stretch',1,100,'float')}
+    <hr class="divider">
+    <div class="sec">Rows & columns</div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <div style="flex:1"><label class="lbl">Column width</label><input type="number" class="inp" step="0.01" ${cwMixed?'value="" placeholder="Multiple"':'value="'+cwVals[0].toFixed(3)+'"'} onchange="tblSetColWidthSel('${o.id}',parseFloat(this.value))"></div>
+      <div style="flex:1"><label class="lbl">Row height</label><input type="number" class="inp" step="0.01" ${rhMixed?'value="" placeholder="Multiple"':'value="'+rhVals[0].toFixed(3)+'"'} onchange="tblSetRowHeightSel('${o.id}',parseFloat(this.value))"></div>
+    </div>
+    <div style="display:flex;gap:3px;margin-bottom:6px">
+      <button class="fmt-btn" style="flex:1" onclick="tblAddRow('${o.id}',${rr[0]})">+ Row above</button>
+      <button class="fmt-btn" style="flex:1" onclick="tblAddRow('${o.id}',${rr[rr.length-1]+1})">+ Row below</button>
+    </div>
+    <div style="display:flex;gap:3px;margin-bottom:6px">
+      <button class="fmt-btn" style="flex:1" onclick="tblAddCol('${o.id}',${cc[0]})">+ Col left</button>
+      <button class="fmt-btn" style="flex:1" onclick="tblAddCol('${o.id}',${cc[cc.length-1]+1})">+ Col right</button>
+    </div>
+    <div style="display:flex;gap:3px;margin-bottom:8px">
+      <button class="fmt-btn" style="flex:1;color:var(--red)" ${rr.length>=o.rows.length?"disabled":""} onclick="tblDeleteRows('${o.id}',[${rr.join(',')}])">Delete row${rr.length>1?'s':''}</button>
+      <button class="fmt-btn" style="flex:1;color:var(--red)" ${cc.length>=o.cols.length?"disabled":""} onclick="tblDeleteCols('${o.id}',[${cc.join(',')}])">Delete col${cc.length>1?'s':''}</button>
+    </div>
+  </div>`;
+}
+
 // ── Keyboard shortcuts ────────────────────────────────────────────────────────
 document.addEventListener("keydown",function(e){
   // Ignore if focus is inside an input, textarea, or select
@@ -2911,8 +3652,14 @@ document.addEventListener("keydown",function(e){
     return;
   }
 
-  // Delete / Backspace — delete selected object, only when NOT in an input
-  if((e.key==="Delete"||e.key==="Backspace")&&!inInput&&S.selId){
+  // Delete / Backspace — with table CELLS selected clear their content; else
+  // delete the selected object. Never while inline-editing a cell.
+  if((e.key==="Delete"||e.key==="Backspace")&&!inInput&&!S._tblEdit&&S._tblSel&&(S._tblSel.cells||[]).length){
+    e.preventDefault();
+    tblClearCells();
+    return;
+  }
+  if((e.key==="Delete"||e.key==="Backspace")&&!inInput&&!S._tblEdit&&S.selId){
     e.preventDefault();
     delObj();
     return;
@@ -2922,6 +3669,10 @@ document.addEventListener("keydown",function(e){
   if((e.metaKey||e.ctrlKey)&&!inInput){
     const k=e.key.toLowerCase();
     if(k==="d"&&S.selId){ e.preventDefault(); duplicateObj(); return; }
+    // Cell clipboard first: with table cells selected, ⌘C/⌘V copy/paste the CELL
+    // block (window._vlCellClip); the object clipboard still handles whole tables.
+    if(k==="c"&&!S._tblEdit&&S._tblSel&&(S._tblSel.cells||[]).length){ e.preventDefault(); tblCopyCells(); return; }
+    if(k==="v"&&!S._tblEdit&&S._tblSel&&window._vlCellClip){ e.preventDefault(); tblPasteCells(); return; }
     if(k==="c"&&S.selId){ e.preventDefault(); copyObj(); return; }
     if(k==="v"&&_objClipboard){ e.preventDefault(); pasteObj(); return; }
   }
@@ -2938,8 +3689,12 @@ document.addEventListener("keydown",function(e){
     return;
   }
 
-  // Escape — deselect (but not when a modal is open; that Escape just closes the modal)
+  // Escape — step back out of a table first (cell edit → cell selection → table
+  // selection), then deselect (but not when a modal is open; that Escape just
+  // closes the modal).
   if(e.key==="Escape"&&!inInput&&!S.modal){
+    if(S._tblEdit){ S._tblEdit=null; R(); return; }
+    if(S._tblSel){ S._tblSel=null; R(); return; }
     deselect();
   }
 });
@@ -3565,6 +4320,52 @@ function sanitizeObjs(objs){
     ['x','y','w','h','fs','lw','rot','tracking','stretch','lh'].forEach(function(k){
       if(c[k]!=null){ const n=Number(c[k]); if(isFinite(n)) c[k]=n; else delete c[k]; }
     });
+    // Table: validate the grid arrays + the nested cells. Each cell is rebuilt on
+    // a whitelist (unknown keys dropped), its font/enums/numerics/booleans scrubbed
+    // exactly like a top-level object, and the shape padded/trimmed to rows×cols.
+    // w/h are renormalized to the sums (the tb invariant).
+    if(c.t==='tb'){
+      const MIN=0.05;
+      const dim=a=>Array.isArray(a)?a.map(Number).filter(n=>isFinite(n)&&n>0).map(n=>Math.max(MIN,n)):[];
+      let cols=dim(c.cols), rows=dim(c.rows);
+      if(!cols.length)cols=[Math.max(MIN,+c.w||1)];
+      if(!rows.length)rows=[Math.max(MIN,+c.h||0.25)];
+      if(cols.length>60)cols=cols.slice(0,60);   // hard cap (UI allows 20; margin for hand-edited files)
+      if(rows.length>60)rows=rows.slice(0,60);
+      c.lockCols=c.lockCols===true; c.lockRows=c.lockRows===true; c.lockSize=c.lockSize===true;
+      if(c.lockCols){ const u=cols.reduce((a,b)=>a+b,0)/cols.length; cols=cols.map(()=>u); }
+      if(c.lockRows){ const u=rows.reduce((a,b)=>a+b,0)/rows.length; rows=rows.map(()=>u); }
+      c.lw=Math.max(1,Math.min(10,(+c.lw||1)));
+      const MODES=['static','field','formula'];
+      const cells=[];
+      for(let r=0;r<rows.length;r++){
+        const srcRow=(Array.isArray(c.cells)&&Array.isArray(c.cells[r]))?c.cells[r]:[];
+        const row=[];
+        for(let ci=0;ci<cols.length;ci++){
+          const s=(srcRow[ci]&&typeof srcRow[ci]==='object')?srcRow[ci]:{};
+          const cl={};
+          if(s.mode!=null&&MODES.indexOf(String(s.mode))>=0)cl.mode=String(s.mode);
+          if(s.text!=null)cl.text=String(s.text);
+          if(s.field!=null)cl.field=String(s.field);
+          if(s.f!=null)cl.f=String(s.f);
+          cl.font=(typeof s.font==='string')?s.font.replace(/[^A-Za-z0-9 \-]/g,''):'';
+          if(!cl.font.trim())cl.font='Arial';
+          cl.al=ALIGN.indexOf(s.al)>=0?s.al:'left';
+          cl.valign=VALIGN.indexOf(s.valign)>=0?s.valign:'middle';
+          ['fs','tracking','stretch'].forEach(function(k){ if(s[k]!=null){ const n=Number(s[k]); if(isFinite(n))cl[k]=n; } });
+          ['bold','italic','underline','wrapText','autoScale'].forEach(function(k){ if(s[k]!=null)cl[k]=s[k]===true; });
+          // A cell with no source at all becomes an empty static cell (so txMode
+          // doesn't infer "formula" for padded cells).
+          if(cl.mode==null&&cl.text==null&&cl.field==null&&cl.f==null){ cl.mode='static'; cl.text=''; }
+          row.push(cl);
+        }
+        cells.push(row);
+      }
+      c.cols=cols.map(v=>+v.toFixed(4)); c.rows=rows.map(v=>+v.toFixed(4));
+      c.cells=cells;
+      c.w=+c.cols.reduce((a,b)=>a+b,0).toFixed(4);
+      c.h=+c.rows.reduce((a,b)=>a+b,0).toFixed(4);
+    }
     return c;
   });
 }

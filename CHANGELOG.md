@@ -12,6 +12,17 @@ number (git commit count) + short SHA, shown in the menu-bar footer.
 
 ## [Unreleased]
 
+### Added
+- **Table object** in both designers: insert a grid of rows × columns, where every cell
+  behaves like its own text box — static text, a data **field** (drag a column header
+  onto a cell to bind it), or a **formula**, with full per-cell formatting incl.
+  auto-scale. Select cells (shift = range, ⌘ = toggle), format or size many at once,
+  copy/paste cells within or between tables, drag row/column lines to resize (with
+  "Lock table size" on, drags redistribute inside the table), lock rows/columns to equal
+  sizes, and right-click a cell to add/delete rows/columns or type an exact row height /
+  column width. Tables render identically in the designers, the print preview, and the
+  printed output.
+
 ### Changed
 - **Installer:** on macOS older than 14 (Sonoma) the installer now **warns** that the apps
   may not run correctly and lets you continue, instead of hard-blocking. (The apps target

@@ -57,6 +57,37 @@ public struct TemplateObject: Codable, Identifiable, Hashable {
     // Designer-only editing aid: which point (tl/tc/tr/ml/mc/mr/bl/bc/br) the
     // X/Y refer to and which stays fixed when resizing. Ignored by the renderer.
     var anchor: String?
+
+    // Table (t == "tb"). Column widths / row heights in inches (w == sum(cols),
+    // h == sum(rows)); `cells` is row-major, rows.length × cols.length. All
+    // optional so every existing .vltmp/.vlcus keeps decoding unchanged.
+    var cols: [Double]?
+    var rows: [Double]?
+    var lockCols: Bool?     // all columns forced equal (w / cols.count)
+    var lockRows: Bool?     // all rows forced equal (h / rows.count)
+    var lockSize: Bool?     // overall w/h locked: inner line drags redistribute
+    var cells: [[TableCell]]?
+}
+
+/// One cell of a table object — exactly the tx-object text fields (no geometry:
+/// the cell's box comes from the table's cols/rows grid). All optional so older
+/// files and sparse cells decode; defaults mirror a new tx object at render time.
+public struct TableCell: Codable, Hashable {
+    var mode: String?       // "static" | "field" | "formula" (nil → inferred)
+    var text: String?       // static-mode literal text
+    var field: String?      // field-mode column key, e.g. "Connector"
+    var f: String?          // formula, e.g. "=IF(Number<>\"\",Number,\"\")"
+    var font: String?
+    var fs: Double?         // font size in points (relative to SC=185 canvas)
+    var bold: Bool?
+    var italic: Bool?
+    var underline: Bool?
+    var al: String?         // "left" | "center" | "right" | "justify"
+    var valign: String?     // "top" | "middle" | "bottom"
+    var wrapText: Bool?
+    var tracking: Double?
+    var stretch: Double?    // horizontal scale %, default 100
+    var autoScale: Bool?    // shrink text to fit the cell width; `fs` is the max size
 }
 
 /// A saved VectorLabel template, matching .vlt.json exactly.

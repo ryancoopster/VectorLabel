@@ -192,6 +192,7 @@ public enum LabelRenderer {
             }
             switch obj.t {
             case "tx": drawText(obj, record: record, in: ctx, dpi: dpi)
+            case "tb": drawTable(obj, record: record, in: ctx, dpi: dpi)
             case "ln": drawLine(obj, in: ctx, dpi: dpi)
             case "rc": drawRect(obj, in: ctx, dpi: dpi)
             case "ci", "ov": drawEllipse(obj, in: ctx, dpi: dpi)
@@ -232,34 +233,118 @@ public enum LabelRenderer {
     /// physical size, every pixel measurement scales by `dpi / 185`.
     private static let designerDPI = 185.0
 
-    private static func drawText(_ obj: TemplateObject, record: WireRecord, in ctx: CGContext, dpi: Int) {
-        // Resolve the displayed string from the text mode. Legacy objects have
-        // only `f`, so a nil mode with a formula → formula.
-        let mode = obj.mode ?? (obj.field != nil ? "field"
-                                : (obj.text != nil && (obj.f?.isEmpty ?? true) ? "static" : "formula"))
-        let text: String
+    /// Resolve a text/cell displayed string from its mode. Legacy objects have
+    /// only `f`, so a nil mode with a formula → formula. A formula that fails to
+    /// parse/evaluate returns "" (FormulaEngine's error policy), so callers that
+    /// skip empty strings draw nothing on error.
+    private static func resolveText(mode: String?, text: String?, field: String?, f: String?,
+                                    record: WireRecord) -> String {
+        let mode = mode ?? (field != nil ? "field"
+                            : (text != nil && (f?.isEmpty ?? true) ? "static" : "formula"))
         switch mode {
-        case "static": text = obj.text ?? ""
-        case "field":  text = obj.field.flatMap { record.fields[$0] } ?? ""
-        default:       text = FormulaEngine.evaluate(obj.f ?? "", fields: record.fields)
+        case "static": return text ?? ""
+        case "field":  return field.flatMap { record.fields[$0] } ?? ""
+        default:       return FormulaEngine.evaluate(f ?? "", fields: record.fields)
         }
+    }
+
+    private static func drawText(_ obj: TemplateObject, record: WireRecord, in ctx: CGContext, dpi: Int) {
+        let text = resolveText(mode: obj.mode, text: obj.text, field: obj.field, f: obj.f, record: record)
         guard !text.isEmpty else { return }
+        // A tx object and a table cell carry the same text-style fields, so the
+        // shared drawTextBox takes them as a TableCell (only the style fields matter
+        // here — mode/text/field/f are already resolved into `text`).
+        let style = TableCell(font: obj.font, fs: obj.fs, bold: obj.bold, italic: obj.italic,
+                              underline: obj.underline, al: obj.al, valign: obj.valign,
+                              wrapText: obj.wrapText, tracking: obj.tracking,
+                              stretch: obj.stretch, autoScale: obj.autoScale)
+        drawTextBox(text, style: style, in: rect(for: obj, dpi: dpi), ctx: ctx, dpi: dpi)
+    }
 
-        let r = rect(for: obj, dpi: dpi)
+    /// Table ("tb") — a grid of text cells. Strokes the outer border + inner grid
+    /// lines at the cumulative column/row offsets (same stroke treatment as ln/rc:
+    /// designer px scaled to print DPI, floor 1px), then renders each cell exactly
+    /// like a tx object whose box is the cell rect inset by the designer's 1px
+    /// horizontal padding. Empty cells (and formula errors, which resolve to "")
+    /// draw nothing — the grid is still drawn.
+    private static func drawTable(_ obj: TemplateObject, record: WireRecord, in ctx: CGContext, dpi: Int) {
+        guard let cols = obj.cols, !cols.isEmpty,
+              let rows = obj.rows, !rows.isEmpty else { return }
+        let s  = Double(dpi)
+        let x0 = obj.x * s
+        let y0 = obj.y * s
+        let tw = cols.reduce(0, +) * s   // w == sum(cols) by invariant; trust the arrays
+        let th = rows.reduce(0, +) * s
+        guard tw > 0, th > 0, tw.isFinite, th.isFinite else { return }
+        let lw = max(1.0, (obj.lw ?? 1.0) * s / designerDPI)
 
+        ctx.setStrokeColor(gray: 0.0, alpha: 1.0)
+        ctx.setLineWidth(CGFloat(lw))
+        ctx.stroke(CGRect(x: x0, y: y0, width: tw, height: th))
+        // Inner vertical lines at cumulative column offsets (the last edge is the border).
+        var gx = x0
+        for c in 0 ..< (cols.count - 1) {
+            gx += cols[c] * s
+            ctx.move(to: CGPoint(x: gx, y: y0))
+            ctx.addLine(to: CGPoint(x: gx, y: y0 + th))
+            ctx.strokePath()
+        }
+        var gy = y0
+        for r in 0 ..< (rows.count - 1) {
+            gy += rows[r] * s
+            ctx.move(to: CGPoint(x: x0, y: gy))
+            ctx.addLine(to: CGPoint(x: x0 + tw, y: gy))
+            ctx.strokePath()
+        }
+
+        guard let cells = obj.cells else { return }
+        // The designer gives each cell's text a 1px horizontal padding; scale it.
+        let pad = 1.0 * s / designerDPI
+        var rowY = y0
+        for r in 0 ..< rows.count {
+            let rowH = rows[r] * s
+            if r < cells.count {
+                let rowCells = cells[r]
+                var colX = x0
+                for c in 0 ..< cols.count {
+                    let colW = cols[c] * s
+                    if c < rowCells.count {
+                        let cell = rowCells[c]
+                        let text = resolveText(mode: cell.mode, text: cell.text,
+                                               field: cell.field, f: cell.f, record: record)
+                        if !text.isEmpty {
+                            let box = CGRect(x: colX, y: rowY, width: colW, height: rowH)
+                                .insetBy(dx: CGFloat(pad), dy: 0)
+                            if box.width > 0 {
+                                drawTextBox(text, style: cell, in: box, ctx: ctx, dpi: dpi)
+                            }
+                        }
+                    }
+                    colX += colW
+                }
+            }
+            rowY += rowH
+        }
+    }
+
+    /// The shared text pipeline: draws `text` with `style`'s formatting into `r`.
+    /// Used by both tx objects and table cells (whose style fields are identical),
+    /// so the two render byte-identically.
+    private static func drawTextBox(_ text: String, style: TableCell, in r: CGRect,
+                                    ctx: CGContext, dpi: Int) {
         // Font: the family DISPLAY name — the designer offers its curated list PLUS every
         // installed system family — resolved to a concrete face in makeFont below.
-        let family = obj.font ?? "Arial"
+        let family = style.font ?? "Arial"
 
         // The HTML designer renders text at:  fz = max(7, obj.fs * 185/100) px
         // (185 px per inch). Reproduce that exact physical size at print DPI by
         // computing the designer pixel size, then scaling by dpi/185.
-        let designerPx = max(7.0, (obj.fs ?? 14.0) * designerDPI / 100.0)
+        let designerPx = max(7.0, (style.fs ?? 14.0) * designerDPI / 100.0)
         var fontSize   = designerPx * (Double(dpi) / designerDPI)
 
         var symbolic: CTFontSymbolicTraits = []
-        if obj.bold   == true { symbolic.insert(.traitBold) }
-        if obj.italic == true { symbolic.insert(.traitItalic) }
+        if style.bold   == true { symbolic.insert(.traitBold) }
+        if style.italic == true { symbolic.insert(.traitItalic) }
 
         func makeFont(_ size: Double) -> NSFont {
             // Resolve the family DISPLAY name (e.g. "Helvetica Neue", which a PostScript
@@ -280,7 +365,7 @@ public enum LabelRenderer {
                 resolved = named as CTFont
             } else {
                 NSLog("VectorLabel: font family \"%@\" not installed; substituting the system font.", family)
-                resolved = NSFont.systemFont(ofSize: sz, weight: obj.bold == true ? .bold : .regular) as CTFont
+                resolved = NSFont.systemFont(ofSize: sz, weight: style.bold == true ? .bold : .regular) as CTFont
             }
 
             guard !symbolic.isEmpty else { return resolved as NSFont }
@@ -292,12 +377,12 @@ public enum LabelRenderer {
             return resolved as NSFont
         }
 
-        let stretchFactor = (obj.stretch ?? 100.0) / 100.0
-        let kern: CGFloat? = (obj.tracking.map { $0 != 0 ? CGFloat($0) * CGFloat(Double(dpi) / designerDPI) : nil } ?? nil)
+        let stretchFactor = (style.stretch ?? 100.0) / 100.0
+        let kern: CGFloat? = (style.tracking.map { $0 != 0 ? CGFloat($0) * CGFloat(Double(dpi) / designerDPI) : nil } ?? nil)
 
         // Auto-scale: `fs` is the maximum; shrink the font so the single line fits
         // the box width (never grows it). Only for non-wrapped text.
-        if obj.autoScale == true && obj.wrapText != true {
+        if style.autoScale == true && style.wrapText != true {
             var mattrs: [NSAttributedString.Key: Any] = [.font: makeFont(fontSize)]
             if let kern = kern { mattrs[.kern] = kern }
             let mstr = NSAttributedString(string: text, attributes: mattrs)
@@ -315,23 +400,23 @@ public enum LabelRenderer {
         let ctFont = CTFontCreateWithName(nsFont.fontName as CFString, CGFloat(fontSize), nil)
 
         let paraStyle = NSMutableParagraphStyle()
-        switch obj.al ?? "left" {
+        switch style.al ?? "left" {
         case "center":  paraStyle.alignment = .center
         case "right":   paraStyle.alignment = .right
         case "justify": paraStyle.alignment = .justified
         default:        paraStyle.alignment = .left
         }
-        if obj.wrapText != true { paraStyle.lineBreakMode = .byClipping }
+        if style.wrapText != true { paraStyle.lineBreakMode = .byClipping }
 
         var attrs: [NSAttributedString.Key: Any] = [
             .font: ctFont,
             .paragraphStyle: paraStyle,
             .foregroundColor: CGColor(gray: 0.0, alpha: 1.0)
         ]
-        if obj.underline == true {
+        if style.underline == true {
             attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue
         }
-        if let tracking = obj.tracking, tracking != 0 {
+        if let tracking = style.tracking, tracking != 0 {
             // Designer letter-spacing is in screen px; scale to print px.
             attrs[.kern] = CGFloat(tracking) * CGFloat(Double(dpi) / designerDPI)
         }
@@ -349,7 +434,7 @@ public enum LabelRenderer {
         )
 
         var drawRect = r
-        switch obj.valign ?? "middle" {
+        switch style.valign ?? "middle" {
         case "top":
             drawRect.origin.y = r.minY
         case "bottom":
@@ -364,7 +449,7 @@ public enum LabelRenderer {
         // (the cause of "scrambled"/mirrored printed text). Counter the flip
         // around this text block's vertical center so glyphs stay upright while
         // keeping the top-left positioning.
-        let stretch = (obj.stretch ?? 100.0) / 100.0
+        let stretch = (style.stretch ?? 100.0) / 100.0
         ctx.saveGState()
         ctx.translateBy(x: 0, y: drawRect.midY * 2)
         ctx.scaleBy(x: 1, y: -1)

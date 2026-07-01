@@ -619,6 +619,107 @@ final class FoundationTests: XCTestCase {
         XCTAssertEqual(loaded.objs.count, 1)
         XCTAssertEqual(loaded.id, "abc")
     }
+
+    // MARK: – Table object ("tb") template coding
+
+    /// A fully-populated table object (2×2, every cell field set, all locks on)
+    /// must survive JSON encode→decode with every new field intact — both .vltmp
+    /// and .vlcus ride on this VLTemplate coding.
+    func testTableObjectRoundTrip() throws {
+        let cellA = TableCell(mode: "static", text: "Hdr", field: "Number", f: "=Cable",
+                              font: "Helvetica Neue", fs: 12, bold: true, italic: true,
+                              underline: true, al: "center", valign: "top", wrapText: true,
+                              tracking: 0.5, stretch: 110, autoScale: true)
+        let cellB = TableCell(mode: "field", field: "Cable", fs: 9, al: "right", valign: "bottom")
+        let cellC = TableCell(mode: "formula", f: #"=IF(Number<>"",Number,"")"#, stretch: 80)
+        let cellD = TableCell()                              // empty cell stays empty
+        let tb = TemplateObject(id: "o1", t: "tb", x: 0.1, y: 0.1, w: 0.9, h: 0.55, lw: 2,
+                                cols: [0.45, 0.45], rows: [0.3, 0.25],
+                                lockCols: true, lockRows: true, lockSize: true,
+                                cells: [[cellA, cellB], [cellC, cellD]])
+        let tpl = VLTemplate(id: "t1", version: 1, name: "Table", specN: "BM-32-427", objs: [tb])
+
+        let data = try JSONEncoder().encode(tpl)
+        let back = try JSONDecoder().decode(VLTemplate.self, from: data)
+        XCTAssertEqual(back, tpl)                            // whole-template deep equality
+        let o = try XCTUnwrap(back.objs.first)
+        XCTAssertEqual(o.t, "tb")
+        XCTAssertEqual(o.cols, [0.45, 0.45])
+        XCTAssertEqual(o.rows, [0.3, 0.25])
+        XCTAssertEqual(o.lockCols, true)
+        XCTAssertEqual(o.lockRows, true)
+        XCTAssertEqual(o.lockSize, true)
+        XCTAssertEqual(o.lw, 2)
+        XCTAssertEqual(o.cells?.count, 2)
+        XCTAssertEqual(o.cells?[0].count, 2)
+        XCTAssertEqual(o.cells?[0][0], cellA)                // every cell field round-trips
+        XCTAssertEqual(o.cells?[0][1], cellB)
+        XCTAssertEqual(o.cells?[1][0], cellC)
+        XCTAssertEqual(o.cells?[1][1], cellD)
+    }
+
+    /// Pin the wire format: the JSON the HTML designers write (JS-style key names)
+    /// must decode directly, so the Swift and JS sides never drift apart.
+    func testTableObjectDecodesJSKeyNames() throws {
+        let json = """
+        {"id":"t9","version":1,"name":"tbl","specN":"BM-32-427","objs":[
+          {"id":"o1","t":"tb","x":0.1,"y":0.1,"w":0.9,"h":0.55,"lw":2,
+           "cols":[0.45,0.45],"rows":[0.3,0.25],
+           "lockCols":true,"lockRows":false,"lockSize":true,
+           "cells":[
+             [{"mode":"static","text":"A","font":"Arial","fs":10,"bold":true,"italic":false,
+               "underline":true,"al":"center","valign":"middle","wrapText":false,
+               "tracking":0.5,"stretch":110,"autoScale":true},
+              {"mode":"field","field":"Number"}],
+             [{"mode":"formula","f":"=Cable"},{}]
+           ]}
+        ]}
+        """
+        let tpl = try JSONDecoder().decode(VLTemplate.self, from: Data(json.utf8))
+        let o = try XCTUnwrap(tpl.objs.first)
+        XCTAssertEqual(o.t, "tb")
+        XCTAssertEqual(o.cols, [0.45, 0.45])
+        XCTAssertEqual(o.rows, [0.3, 0.25])
+        XCTAssertEqual(o.lockCols, true)
+        XCTAssertEqual(o.lockRows, false)
+        XCTAssertEqual(o.lockSize, true)
+        let c00 = try XCTUnwrap(o.cells?[0][0])
+        XCTAssertEqual(c00.mode, "static")
+        XCTAssertEqual(c00.text, "A")
+        XCTAssertEqual(c00.font, "Arial")
+        XCTAssertEqual(c00.fs, 10)
+        XCTAssertEqual(c00.bold, true)
+        XCTAssertEqual(c00.italic, false)
+        XCTAssertEqual(c00.underline, true)
+        XCTAssertEqual(c00.al, "center")
+        XCTAssertEqual(c00.valign, "middle")
+        XCTAssertEqual(c00.wrapText, false)
+        XCTAssertEqual(c00.tracking, 0.5)
+        XCTAssertEqual(c00.stretch, 110)
+        XCTAssertEqual(c00.autoScale, true)
+        XCTAssertEqual(o.cells?[0][1].field, "Number")
+        XCTAssertEqual(o.cells?[1][0].f, "=Cable")
+        XCTAssertEqual(o.cells?[1][1], TableCell())          // {} → all-nil cell
+    }
+
+    /// A template saved BEFORE tables existed (none of the new keys) must still
+    /// decode, with every table field nil — the additions are strictly optional.
+    func testTemplateWithoutTableKeysStillDecodes() throws {
+        let legacy = """
+        {"id":"old1","version":1,"name":"Legacy","specN":"BM-32-427","objs":[
+          {"id":"o1","t":"tx","x":0.1,"y":0.1,"w":0.5,"h":0.2,"mode":"static","text":"hi"}
+        ]}
+        """
+        let tpl = try JSONDecoder().decode(VLTemplate.self, from: Data(legacy.utf8))
+        let o = try XCTUnwrap(tpl.objs.first)
+        XCTAssertEqual(o.text, "hi")
+        XCTAssertNil(o.cols)
+        XCTAssertNil(o.rows)
+        XCTAssertNil(o.lockCols)
+        XCTAssertNil(o.lockRows)
+        XCTAssertNil(o.lockSize)
+        XCTAssertNil(o.cells)
+    }
 }
 
 // MARK: – Group 1: cross-process recents + reprint + progress/cancel IPC

@@ -369,6 +369,51 @@ function renderLabel(tpl,rec,scale=1){
       svg+=`</svg>`;
       return`<div style="position:absolute;left:${x}px;top:${y-vh}px;width:${aw}px;height:${2*vh}px;${rc}">${svg}</div>`;
     }
+    if(o.t==="tb"){
+      // Table: outer border + inner grid lines (rc/ln stroke treatment, lw raw px),
+      // each non-empty cell rendered with the exact tx recipe above, geometry from
+      // the cumulative col/row offsets. sanitizeObjs guarantees the shape; guard anyway.
+      const cols=Array.isArray(o.cols)?o.cols:[], rows=Array.isArray(o.rows)?o.rows:[];
+      if(!cols.length||!rows.length)return"";
+      const bw=Math.max(1,o.lw||1);
+      let grid="",off=0;
+      for(let ci=0;ci<cols.length-1;ci++){ off+=cols[ci]*sc; grid+=`<div style="position:absolute;left:${off-bw/2}px;top:0;width:${bw}px;height:${h}px;background:#000"></div>`; }
+      off=0;
+      for(let ri=0;ri<rows.length-1;ri++){ off+=rows[ri]*sc; grid+=`<div style="position:absolute;left:0;top:${off-bw/2}px;width:${w}px;height:${bw}px;background:#000"></div>`; }
+      let cells="",cy=0;
+      for(let ri=0;ri<rows.length;ri++){
+        const rh=rows[ri]*sc; let cx=0;
+        for(let ci=0;ci<cols.length;ci++){
+          const cw=cols[ci]*sc;
+          const cell=(o.cells&&o.cells[ri]&&o.cells[ri][ci])||null;
+          if(cell){
+            const {v,e}=textValue(cell,rec);
+            if(v!==""||e){
+              let fz=Math.max(5,(cell.fs||14)*(sc/100));
+              const autoFit=!!(cell.autoScale&&!cell.wrapText&&!e);
+              if(autoFit) fz=autoFitPx(v,cell,fz,cw,2);
+              const jc=cell.al==="center"?"center":cell.al==="right"?"flex-end":"flex-start";
+              const va=cell.valign==="top"?"flex-start":cell.valign==="bottom"?"flex-end":"center";
+              const fw=cell.bold?700:400;
+              const fs=cell.italic?"italic":"normal";
+              const td=cell.underline?"underline":"none";
+              const ws=cell.wrapText?"normal":"nowrap";
+              const sx=(cell.stretch||100)/100;
+              const col=e?"var(--red)":"#000";
+              const txt=(e?`⚠`:v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+              const autoFitAttrs=autoFit?`data-autofit="1" data-sx="${sx}"`:"";
+              const ovf=(cell.wrapText||cell.autoScale)?"clip":"ellipsis";
+              cells+=`<div style="position:absolute;left:${cx}px;top:${cy}px;width:${cw}px;height:${rh}px;overflow:hidden;display:flex;align-items:${va};padding:0 1px;box-sizing:border-box">
+                <div ${autoFitAttrs} style="width:100%;font-family:'${cell.font||"Arial"}',Arial,sans-serif;font-size:${fz}px;font-weight:${fw};font-style:${fs};text-decoration:${td};color:${col};white-space:${ws};overflow:hidden;text-overflow:${ovf};line-height:1.15;text-align:${cell.al||"left"};transform:scaleX(${sx});transform-origin:left center">${txt}</div>
+              </div>`;
+            }
+          }
+          cx+=cw;
+        }
+        cy+=rh;
+      }
+      return`<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border:${bw}px solid #000;background:transparent;${rc}">${grid}${cells}</div>`;
+    }
     return"";
   }).join("");
   return`<div style="width:${pw}px;height:${ph}px;background:#fff;border:1.5px solid var(--bd4);border-radius:2px;position:relative;overflow:hidden;flex-shrink:0">${objs}</div>`;
@@ -2794,8 +2839,28 @@ function sanitizeObjs(objs){
     c.id='t'+Math.random().toString(36).slice(2,8);
     if(typeof c.font==='string') c.font=c.font.replace(/[^A-Za-z0-9 \-]/g,'');
     if(c.src!=null && !/^data:image\//i.test(String(c.src))) c.src='';
+    if(c.t==='tb'){
+      // Tables: coerce cols/rows to arrays of positive numbers (capped so a crafted
+      // file can't explode the DOM), reshape cells to rows×cols, and scrub each cell
+      // like a top-level object (font whitelist; cells never carry a src). Drop the
+      // whole object if the grid is structurally hopeless.
+      const num=function(v){ const n=Number(v); return (isFinite(n)&&n>0)?n:0; };
+      c.cols=(Array.isArray(c.cols)?c.cols:[]).slice(0,100).map(num).filter(function(n){return n>0;});
+      c.rows=(Array.isArray(c.rows)?c.rows:[]).slice(0,100).map(num).filter(function(n){return n>0;});
+      if(!c.cols.length||!c.rows.length) return null;
+      const raw=Array.isArray(c.cells)?c.cells:[];
+      c.cells=c.rows.map(function(_,r){
+        const row=Array.isArray(raw[r])?raw[r]:[];
+        return c.cols.map(function(_,cl){
+          const cell=Object.assign({},(row[cl]&&typeof row[cl]==='object')?row[cl]:{});
+          if(typeof cell.font==='string') cell.font=cell.font.replace(/[^A-Za-z0-9 \-]/g,'');
+          delete cell.src;
+          return cell;
+        });
+      });
+    }
     return c;
-  });
+  }).filter(function(c){return c!=null;});
 }
 
 // Called by Swift after the user saves/cancels in the designer: refresh the
