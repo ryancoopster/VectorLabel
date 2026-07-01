@@ -208,12 +208,6 @@ public final class DesignerWindowController: NSObject {
         }
     }
 
-    /// Apply a pending Custom Designer reopen only if the page has finished loading;
-    /// otherwise leave it pending so `didFinish` applies it once ready.
-    private func applyPendingOpenCustomDocIfReady() {
-        if webViewReady { applyPendingOpenCustomDoc() }
-    }
-
     private func present(editTemplateIndex: Int?) {
         pendingEditTemplateIndex = editTemplateIndex
         designerForPrintEdit = (editTemplateIndex != nil)
@@ -669,23 +663,17 @@ public final class DesignerWindowController: NSObject {
         )
     }
 
-    /// Push the shared record-column config (order/hidden/widths) into the designer.
+    /// Push the shared record-column config (order/hidden/widths) into EVERY tab (this is
+    /// shared AppSettings state, and it's driven by live observers — background tabs must
+    /// stay current, not just the active one).
     private func injectColumnConfig() {
-        guard let wv = webView else { return }
-        wv.evaluateJavaScript(
-            "if(typeof applyColumnConfig==='function')applyColumnConfig(\(AppSettings.shared.columnConfigJSON()));",
-            completionHandler: nil
-        )
+        evalAll("if(typeof applyColumnConfig==='function')applyColumnConfig(\(AppSettings.shared.columnConfigJSON()));")
     }
 
-    /// Push the shared filter/sort presets into the designer (same store as the
-    /// Print window), so presets saved in either window appear in both.
+    /// Push the shared filter/sort presets into every tab (same store as the Print window),
+    /// so presets saved in either window appear in all open tabs.
     private func injectFilterSortPresets() {
-        guard let wv = webView else { return }
-        wv.evaluateJavaScript(
-            "if(typeof applyFilterSortPresets==='function')applyFilterSortPresets(\(AppSettings.shared.filterSortPresetsJSON));",
-            completionHandler: nil
-        )
+        evalAll("if(typeof applyFilterSortPresets==='function')applyFilterSortPresets(\(AppSettings.shared.filterSortPresetsJSON));")
     }
 
     /// Show a Finder open panel so the user can load a template from any folder,
@@ -876,10 +864,17 @@ public final class DesignerWindowController: NSObject {
         // Activate first (the designer window is a .nonactivatingPanel) so this modeless
         // open panel can become key — otherwise it appears but can't be clicked.
         NSApp.activate(ignoringOtherApps: true)
+        // Bind to the tab that opened the browser, not whatever is active when the modeless
+        // panel completes (the user can switch tabs meanwhile). No tab is closed here, so the
+        // accessor swap + defer restore is clean.
+        let targetTab = activeTab
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             MainActor.assumeIsolated {
                 guard let self = self else { return }
+                let prevActive = self.activeID
+                if let t = targetTab, self.tabs.contains(where: { $0.id == t.id }) { self.activeID = t.id }
+                defer { if let p = prevActive, self.tabs.contains(where: { $0.id == p }) { self.activeID = p } }
                 if self.mode == .custom {
                     AppSettings.shared.lastDataSourceFolderPath = url.deletingLastPathComponent().path
                     self.loadAndBindDataSource(from: url, headerRow: headerRow)
@@ -983,11 +978,16 @@ public final class DesignerWindowController: NSObject {
             panel.message = "“\(srcPath.lastPathComponent)” was moved or deleted. Choose the file again."
             panel.level = .modalPanel
             NSApp.activate(ignoringOtherApps: true)   // .nonactivatingPanel → make the open panel clickable
+            let targetTab = activeTab   // re-bind the tab that asked to refresh, not the active one
             panel.begin { [weak self] response in
                 guard response == .OK, let url = panel.url else { return }
                 MainActor.assumeIsolated {
+                    guard let self = self else { return }
+                    let prevActive = self.activeID
+                    if let t = targetTab, self.tabs.contains(where: { $0.id == t.id }) { self.activeID = t.id }
+                    defer { if let p = prevActive, self.tabs.contains(where: { $0.id == p }) { self.activeID = p } }
                     AppSettings.shared.lastDataSourceFolderPath = url.deletingLastPathComponent().path
-                    self?.loadAndBindDataSource(from: url, headerRow: ds.headerRow)
+                    self.loadAndBindDataSource(from: url, headerRow: ds.headerRow)
                 }
             }
         }
@@ -1090,16 +1090,14 @@ public final class DesignerWindowController: NSObject {
     /// Push the current printer list into the designer (custom mode). No-ops until
     /// the page defines updateDesignerPrinters.
     private func injectPrinters() {
-        webView?.evaluateJavaScript(
-            "if(typeof updateDesignerPrinters==='function')updateDesignerPrinters(\(printersJSONString()));",
-            completionHandler: nil)
+        // Broadcast to every tab — printer state is global + observer-driven, so a
+        // backgrounded tab must not go stale (it never re-injects on activate).
+        evalAll("if(typeof updateDesignerPrinters==='function')updateDesignerPrinters(\(printersJSONString()));")
     }
 
-    /// Push the detected cassettes into the designer (custom mode).
+    /// Push the detected cassettes into every designer tab (custom mode).
     private func injectCassettes() {
-        webView?.evaluateJavaScript(
-            "if(typeof updateDesignerCassettes==='function')updateDesignerCassettes(\(cassettesJSONString()));",
-            completionHandler: nil)
+        evalAll("if(typeof updateDesignerCassettes==='function')updateDesignerCassettes(\(cassettesJSONString()));")
     }
 
     /// Installed font FAMILIES (display names) as a JSON array, for the designer's font
@@ -1115,9 +1113,8 @@ public final class DesignerWindowController: NSObject {
     /// Push the latest supply catalog (the Engine's edits) into the designer.
     private func reinjectCatalog() {
         let json = SupplyCatalogStore.webCatalogJSON(forModel: "")
-        webView?.evaluateJavaScript(
-            "window.__VL_CATALOG__=\(json); if(typeof applyCatalog==='function')applyCatalog(window.__VL_CATALOG__);",
-            completionHandler: nil)
+        // Broadcast — the 2s poll must keep every tab's catalog current, not just the active.
+        evalAll("window.__VL_CATALOG__=\(json); if(typeof applyCatalog==='function')applyCatalog(window.__VL_CATALOG__);")
     }
 
     /// The Engine's in-flight (printing/queued) jobs as the array the designer's
@@ -1132,9 +1129,9 @@ public final class DesignerWindowController: NSObject {
     /// Push the active-job list into the designer so the print header can show live
     /// progress + Cancel after the supply selector (no-ops until the page defines it).
     private func injectActiveJobs() {
-        webView?.evaluateJavaScript(
-            "if(typeof updateDesignerJobStatus==='function')updateDesignerJobStatus(\(activeJobsJSONString()));",
-            completionHandler: nil)
+        // Broadcast the full active-job list to every tab; each tab's header matches its
+        // own job by id, so a print started in a background tab keeps updating live.
+        evalAll("if(typeof updateDesignerJobStatus==='function')updateDesignerJobStatus(\(activeJobsJSONString()));")
     }
 
     /// Render the designer's current canvas to a Brady VGL job and submit it to the
@@ -1399,6 +1396,10 @@ public final class DesignerWindowController: NSObject {
 
         let doc = customLabelDocument(from: template, copies: copies, cutMode: cutMode)
 
+        // The tab that owns this save — captured now, because the modeless save panel below
+        // lets the user switch tabs before it completes (don't rename/mark-clean the wrong tab).
+        let savedTab = activeTab
+
         let panel = NSSavePanel()
         if let type = UTType(filenameExtension: CustomLabelStore.fileExtension) {
             panel.allowedContentTypes = [type]
@@ -1412,6 +1413,10 @@ public final class DesignerWindowController: NSObject {
             MainActor.assumeIsolated {
                 guard let self = self else { return }
                 guard response == .OK, let url = panel.url else { self.cancelPendingSave(); return }
+                // Point the active-tab accessors at the tab that owned the save (the user may
+                // have switched tabs while the panel was open), then restore the view.
+                let prevActive = self.activeID
+                if let t = savedTab, self.tabs.contains(where: { $0.id == t.id }) { self.activeID = t.id }
                 do {
                     try CustomLabelStore.save(doc, to: url)
                     // The tab now carries the saved file name (the header no longer shows it).
@@ -1419,7 +1424,7 @@ public final class DesignerWindowController: NSObject {
                     self.webView?.evaluateJavaScript(
                         "if(typeof showToast==='function')showToast('Saved: '+\(CustomLabelStore.stem(url).jsonQuoted));",
                         completionHandler: nil)
-                    self.finishSave()
+                    self.finishSave()   // clears dirty + runs any close-after-save on the saved tab
                 } catch {
                     self.cancelPendingSave()
                     let alert = NSAlert()
@@ -1427,6 +1432,11 @@ public final class DesignerWindowController: NSObject {
                     alert.messageText = "Couldn’t save the custom label"
                     alert.informativeText = "\(error.localizedDescription)"
                     alert.runModal()
+                }
+                // Restore the user's current view — unless a save-then-close removed the saved tab.
+                if let p = prevActive, self.tabs.contains(where: { $0.id == p }),
+                   let st = savedTab, self.tabs.contains(where: { $0.id == st.id }) {
+                    self.activeID = p
                 }
             }
         }
@@ -1620,6 +1630,22 @@ extension DesignerWindowController: WKNavigationDelegate {
     /// working designer (the document-start scripts re-inject the theme + catalog).
     public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         NSLog("[DesignerWindowController] web content process terminated — reloading")
+        webView.reload()
+    }
+
+    /// A tab's page loads HIDDEN and only becomes visible in didFinish. If the load fails
+    /// before didFinish, the tab would be stranded hidden with its pending doc unapplied —
+    /// so un-strand it: reveal it (via activateOnLoad) and reload once.
+    public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        recoverFailedLoad(webView, error)
+    }
+    public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        recoverFailedLoad(webView, error)
+    }
+    private func recoverFailedLoad(_ webView: WKWebView, _ error: Error) {
+        guard let tab = tabs.first(where: { $0.webView === webView }) else { return }
+        NSLog("[DesignerWindowController] tab load failed (\(error.localizedDescription)) — recovering")
+        if tab.activateOnLoad { tab.activateOnLoad = false; activateTab(tab.id) }  // don't leave it hidden
         webView.reload()
     }
 

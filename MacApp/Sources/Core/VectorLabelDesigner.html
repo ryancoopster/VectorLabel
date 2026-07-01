@@ -363,7 +363,7 @@ function fitAutoScaleText(root){
     const reads=els.map(el=>{
       const sx=parseFloat(el.getAttribute('data-sx'))||1;
       const avail=el.clientWidth;                 // inner content width (box − padding)
-      const actual=el.scrollWidth*(sx>1?sx:1);    // stretch>100 widens the drawn line
+      const actual=el.scrollWidth*sx;             // scaleX widens (>1) or narrows (<1) the drawn line
       const cur=parseFloat(el.style.fontSize)||0;
       return {el,avail,actual,cur};
     });

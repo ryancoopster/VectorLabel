@@ -53,6 +53,11 @@ final class BrowserTabBar: NSView {
         scrollView.contentView.drawsBackground = false
         scrollView.documentView = stack
         scrollView.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        // Keep the ‹ › enabled-state fresh after a two-finger/trackpad scroll (not just on layout).
+        scrollView.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(clipBoundsChanged),
+                                               name: NSView.boundsDidChangeNotification,
+                                               object: scrollView.contentView)
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: scrollView.contentView.topAnchor),
             stack.bottomAnchor.constraint(equalTo: scrollView.contentView.bottomAnchor),
@@ -94,6 +99,7 @@ final class BrowserTabBar: NSView {
         ])
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) not used") }
+    deinit { NotificationCenter.default.removeObserver(self) }
 
     private func configureArrow(_ b: NSButton, symbol: String, fallback: String, action: Selector) {
         b.bezelStyle = .inline
@@ -114,14 +120,19 @@ final class BrowserTabBar: NSView {
 
     override var isFlipped: Bool { true }
 
-    override func updateLayer() {
-        // A subtle bar background, adapting to appearance.
-        layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
-    }
+    // Paint in draw(_:) (which always runs for a wantsLayer view that overrides it) — a bare
+    // updateLayer() never fired because wantsUpdateLayer defaults to false. Re-resolving the
+    // colors here also adapts them to a light/dark switch.
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
+        NSColor.windowBackgroundColor.setFill()
+        bounds.fill()
         NSColor.separatorColor.setFill()
         NSRect(x: 0, y: bounds.height - 1, width: bounds.width, height: 1).fill()
+    }
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true   // re-resolve the bar colors on a light/dark switch
     }
 
     override func layout() {
@@ -136,8 +147,10 @@ final class BrowserTabBar: NSView {
         needsDisplay = true
         // Layout hasn't run yet — evaluate overflow + reveal the active chip next tick.
         DispatchQueue.main.async { [weak self] in
-            self?.updateArrows()
-            self?.scrollActiveIntoView()
+            guard let self = self else { return }
+            self.scrollTo(self.scrollX, animated: false)   // re-clamp: closing tabs can shrink the strip below the current offset
+            self.updateArrows()
+            self.scrollActiveIntoView()
         }
     }
 
@@ -176,6 +189,7 @@ final class BrowserTabBar: NSView {
 
     @objc private func pageLeft()  { scrollTo(scrollX - max(120, clipWidth * 0.8), animated: true) }
     @objc private func pageRight() { scrollTo(scrollX + max(120, clipWidth * 0.8), animated: true) }
+    @objc private func clipBoundsChanged() { updateArrows() }
 
     /// Keep the active chip visible (e.g. after switching to an off-screen tab).
     private func scrollActiveIntoView() {

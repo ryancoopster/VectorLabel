@@ -289,8 +289,14 @@ public final class PrintWindowController: NSObject {
     /// After a print or cancel: if several tabs are open, just close this one and leave
     /// the window; otherwise close the whole window exactly as before (return to the
     /// prior app, and after a print open the menu popover).
-    private func dismissTabOrWindow(afterPrint: Bool) {
-        if tabs.count > 1 { if let id = activeID { closeTab(id) }; return }
+    private func dismissTabOrWindow(afterPrint: Bool, tabID: String? = nil) {
+        // Several tabs open: close the SPECIFIC tab this action belongs to (for an async
+        // print that's the tab that printed, not whatever happens to be active now).
+        if tabs.count > 1 {
+            let target = tabID ?? activeID
+            if let id = target, tabs.contains(where: { $0.id == id }) { closeTab(id) }
+            return
+        }
         if afterPrint {
             let started = onPrintStarted
             let prior = previousApp; previousApp = nil
@@ -610,7 +616,7 @@ extension PrintWindowController: WKScriptMessageHandler {
 
         switch action {
         case "print":
-            handlePrintAction(body["payload"])
+            handlePrintAction(body["payload"], tabID: msgTab?.id ?? activeID)
 
         case "saveTemplate":
             saveTemplate(from: body["payload"])
@@ -764,7 +770,7 @@ extension PrintWindowController: WKScriptMessageHandler {
         }
     }
 
-    private func handlePrintAction(_ payloadAny: Any?) {
+    private func handlePrintAction(_ payloadAny: Any?, tabID: String?) {
         guard let payload = payloadAny as? [String: Any],
               let printerID    = payload["printerID"]    as? String,
               let title        = payload["title"]        as? String,
@@ -923,10 +929,11 @@ extension PrintWindowController: WKScriptMessageHandler {
                     if let w = self.window { alert.beginSheetModal(for: w) } else { alert.runModal() }
                     return
                 }
-                // The print has started. With several tabs open, just close this one and
-                // leave the window; with a single tab, close the window, return to the
-                // prior app, and pop the menu so the user can watch the queue.
-                self.dismissTabOrWindow(afterPrint: true)
+                // The print has started. With several tabs open, close the tab that PRINTED
+                // (resolved when print was pressed — the render is async, so the user may have
+                // switched tabs); with a single tab, close the window, return to the prior app,
+                // and pop the menu so the user can watch the queue.
+                self.dismissTabOrWindow(afterPrint: true, tabID: tabID)
             }
         }
     }
@@ -970,5 +977,11 @@ extension PrintWindowController: NSWindowDelegate {
         for t in tabs { t.webView.configuration.userContentController.removeScriptMessageHandler(forName: "vectorlabel") }
         tabs.removeAll(); activeID = nil
         window = nil; tabBar = nil; contentArea = nil
+        // Return focus to the app that was frontmost when the window appeared — EVERY close
+        // path funnels through here, including the title-bar ✕ (AutoPrint is a headless
+        // accessory, so otherwise the user is dropped to the Finder). The afterPrint / close()
+        // paths nil previousApp before triggering the close, so this is a no-op for them.
+        let prior = previousApp; previousApp = nil
+        prior?.activate()
     }
 }
