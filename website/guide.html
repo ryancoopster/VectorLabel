@@ -1160,15 +1160,29 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
 </footer>
 <script>
 (function(){
-  // scroll-spy: highlight the TOC link for the section in view
+  // scroll-spy: highlight the TOC link for the section in view, and keep that link
+  // visible by scrolling the (sticky, scrollable) sidebar in sync with the body.
+  var toc=document.querySelector('.toc');
   var links=[].slice.call(document.querySelectorAll('.toc a.sub'));
   var map={}; links.forEach(function(l){var id=l.getAttribute('href').slice(1);var t=document.getElementById(id);if(t)map[id]=l;});
   var ids=Object.keys(map);
+  var current=null;
   function onScroll(){
     var best=null,bestTop=-Infinity;
     ids.forEach(function(id){var r=document.getElementById(id).getBoundingClientRect();if(r.top<140&&r.top>bestTop){bestTop=r.top;best=id;}});
+    if(!best) best=ids[0];                    // above the first section → highlight the first
+    if(best===current) return;                // only react when the active section changes
+    current=best;
     links.forEach(function(l){l.classList.remove('active');});
-    if(best&&map[best])map[best].classList.add('active');
+    var a=map[best]; if(!a) return;
+    a.classList.add('active');
+    // Scroll the sidebar so the active link stays in view (no-op when it isn't scrollable,
+    // e.g. the stacked mobile layout).
+    if(toc && toc.scrollHeight>toc.clientHeight+4){
+      var ar=a.getBoundingClientRect(), tr=toc.getBoundingClientRect(), pad=16;
+      if(ar.top<tr.top+pad)            toc.scrollTop += (ar.top-tr.top)-pad;
+      else if(ar.bottom>tr.bottom-pad) toc.scrollTop += (ar.bottom-tr.bottom)+pad;
+    }
   }
   document.addEventListener('scroll',onScroll,{passive:true}); onScroll();
 })();
