@@ -202,7 +202,10 @@ final class BrowserTabBar: NSView {
         chip.translatesAutoresizingMaskIntoConstraints = false
         chip.heightAnchor.constraint(equalToConstant: 25).isActive = true
 
-        let title = NSButton(title: (item.dirty ? "• " : "") + item.title,
+        // Show the whole file name, but cap at 50 characters (then ellipsize) so one very
+        // long name can't create a monster chip. The chip sizes to this text below.
+        let name = item.title.count > 50 ? String(item.title.prefix(50)) + "…" : item.title
+        let title = NSButton(title: (item.dirty ? "• " : "") + name,
                              target: self, action: #selector(chipClicked(_:)))
         title.bezelStyle = .inline
         title.isBordered = false
@@ -238,7 +241,8 @@ final class BrowserTabBar: NSView {
             h.topAnchor.constraint(equalTo: chip.topAnchor),
             h.bottomAnchor.constraint(equalTo: chip.bottomAnchor),
         ])
-        chip.widthAnchor.constraint(lessThanOrEqualToConstant: 220).isActive = true
+        // No fixed max width — the chip grows to fit the (≤50-char) name so text never spills
+        // over the ✕. The strip scrolls (with ‹ › arrows) when the chips overrun the bar.
         return chip
     }
 
