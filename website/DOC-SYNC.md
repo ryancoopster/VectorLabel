@@ -52,7 +52,6 @@ directly (keep the existing component classes from `support.css`).
 
 ## Known doc gaps / things to confirm against hardware
 
-These were flagged as unverified during the docs research — re-check before claiming them
-as fully working: Brady **M610 cut** behavior, **all Brother P-touch** drivers (no hardware
-confirmation yet), the **M611 USB PID** (README marks it "assumed"). Keep the docs honest
-about alpha status until verified.
+Re-check before claiming these as fully working — they are not hardware-confirmed yet:
+Brady **M610 cut** behavior and **all Brother P-touch** drivers. (The Brady **M611** IS
+hardware-validated.) Keep the docs honest about alpha status until verified.

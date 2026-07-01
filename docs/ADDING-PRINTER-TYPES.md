@@ -16,8 +16,10 @@ them; the architecture has several non-obvious seams, and the code comments cont
 the ground truth.
 
 VectorLabel is a Swift Package (`Package.swift` at the repo root, sources under
-`MacApp/Sources/`). It is a four-app menu-bar suite. Today it supports **Brady
-M610 / M611** thermal printers over USB via **libusb**.
+`MacApp/Sources/`). It is a four-app macOS suite plus a Vectorworks plug-in. It
+supports **Brady M610/M611** and **Brother P-touch** thermal printers over USB (via
+**libusb**) and the network; printers are pluggable driver modules registered at
+launch through `PrinterModuleRegistry`.
 
 > Throughout, paths are repo-relative unless noted. Build/test from the repo root
 > (`swift build`, `swift test`) — there is no separate `MacApp/` package; `MacApp`
@@ -398,17 +400,17 @@ swift test           # runs MacApp/Tests (target VectorLabelTests, Core-only)
 
 ## 5. Opening the pull request
 
-Keep this short. When the change builds, `swift test` passes, and (if you have
-hardware) a calibration/test print succeeds:
+When the change builds, the tests pass, and (if you have hardware) a calibration /
+test print succeeds, open a pull request. You don't need a terminal — the whole flow
+(fork, branch, commit, PR) is done through the **Claude app + GitHub connector**:
 
-1. Make sure you are on a feature branch, not `main`.
-2. Commit your changes with a clear message describing the new printer type.
-3. Push and open a PR against `origin` (`github.com/ryancoopster/VectorLabel`).
+→ **[`docs/CONTRIBUTING-VIA-CLAUDE-CODE.md`](./CONTRIBUTING-VIA-CLAUDE-CODE.md)** — the
+click-by-click, no-terminal walkthrough.
 
-For the exact GitHub + Claude-Code mechanics (branch naming, commit/PR conventions,
-how to drive the PR from Claude Code), follow the companion guide:
-
-→ **[`docs/CONTRIBUTING-VIA-CLAUDE-CODE.md`](./CONTRIBUTING-VIA-CLAUDE-CODE.md)**
+In your PR description, explicitly call out: the new model string and whether its USB
+PID is hardware-confirmed; whether you reused `BradyVGL` or wrote a new encoder; that
+the supply group's `printerModels` match the detected model; and the cut/feed flag
+status (leave these off unless hardware-verified).
 
 In the PR description, call out explicitly:
 
