@@ -135,9 +135,10 @@ public final class PrinterManager: ObservableObject {
         scanTimer?.invalidate()
         let interval = TimeInterval(min(600, max(1, AppSettings.shared.refreshIntervalSec)))
         scanTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            guard let self else { return }
             Task { @MainActor in
-                self?.performScan()
-                self?.pollTelemetry()
+                self.performScan()
+                self.pollTelemetry()
             }
         }
     }
@@ -189,12 +190,15 @@ public final class PrinterManager: ObservableObject {
         networkScanMessage = "Scanning the local network…"
         Task.detached {
             // Find raw-print hosts, then classify each off-main (blocking 9102 probe).
+            // Build the list immutably (a `let`) so it isn't captured as a mutable var by
+            // the MainActor closure below — older Swift rejects that.
             let rawHosts = NetworkDiscovery.scanSubnet(port: 9100)
-            var toAdd: [(host: String, model: String)] = []
-            for host in rawHosts where !NetworkPrinterStore.contains(host: host) {
-                let isM611 = NetworkDiscovery.tcpReachable(host: host, port: 9102, timeoutMs: 600)
-                toAdd.append((host, isM611 ? "M611" : "PT-E550W"))
-            }
+            let toAdd: [(host: String, model: String)] = rawHosts
+                .filter { !NetworkPrinterStore.contains(host: $0) }
+                .map { host in
+                    let isM611 = NetworkDiscovery.tcpReachable(host: host, port: 9102, timeoutMs: 600)
+                    return (host, isM611 ? "M611" : "PT-E550W")
+                }
             await MainActor.run {
                 for e in toAdd {
                     NetworkPrinterStore.add(name: "\(e.model) (\(e.host))", host: e.host, model: e.model)
