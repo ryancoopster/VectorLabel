@@ -29,6 +29,21 @@ window.VL_DEMO = {
         {id:"o25",h:0.2,underline:false,tracking:0,f:'=IF(Device_Name<>"","@ "&Device_Name&IF(Socket_Name<>""," : "&Socket_Name,""),"")',stretch:100,mode:"formula",autoScale:true,bold:false,x:0,al:"center",valign:"middle",fs:10,wrapText:true,anchor:"mc",italic:false,t:"tx",font:"Arial Narrow",y:0.275,w:1.5}
       ]
     },
+    // QR asset label — a QR code bound to the Number field + text, on the 1.5×1.5
+    // printable of Brady M6-33-427. Showcases the real barcode renderer (bwip-js).
+    "asset_qr": {
+      version: 1,
+      name: "Asset QR V1",
+      id: "A55E7A11-0000-4A11-B0DE-000000000001",
+      specN: "M6-33-427",
+      objs: [
+        {id:"q1",t:"bc",bcType:"qrcode",eclevel:"M",mode:"field",field:"Number",x:0.12,y:0.5,w:0.62,h:0.62},
+        {id:"q2",mode:"formula",t:"tx",al:"left",valign:"middle",bold:true,italic:false,underline:false,wrapText:false,autoScale:true,stretch:100,tracking:0,fs:13,font:"Arial Narrow",x:0.8,y:0.52,w:0.66,h:0.24,f:'=IF(Number<>"",Number&IF(Cable<>""," - "&Cable,""),IF(Cable<>"",Cable,""))'},
+        {id:"q3",mode:"field",t:"tx",al:"left",valign:"middle",bold:false,italic:false,underline:false,wrapText:false,stretch:100,tracking:0,fs:9,font:"Arial",x:0.8,y:0.77,w:0.66,h:0.14,field:"Connector"},
+        {id:"q4",t:"ln",x:0.8,y:0.95,w:0.66,h:0,lw:1},
+        {id:"q5",mode:"formula",t:"tx",al:"left",valign:"middle",bold:false,italic:false,underline:false,wrapText:true,autoScale:true,stretch:100,tracking:0,fs:9,font:"Arial Narrow",x:0.8,y:0.99,w:0.66,h:0.18,f:'=IF(Device_Name<>"",Device_Name,"")'}
+      ]
+    },
     // 1.5" × 4" self-laminating wrap (Brady M6-33-427; printable 1.5×1.5, rotates 90°)
     "1_5x4": {
       version: 1,
