@@ -363,6 +363,24 @@ VectorworksPlugin/export_all.py</code></pre>
 <p>Custom Designer makes ONE-OFF labels and can also print them itself. Its file-toolbar buttons are "Open…" and "Save Label…" (a new blank design is the <strong>+</strong> on the tab bar), and new documents start named "Untitled Custom Design". It has an extra print header (printer picker, Copies, Cut, Feed to clear, Print) and a bottom "Database" pane. You can bind a CSV or Excel (.xlsx) file as print data and the Custom Designer will print one label per row; with no data bound it just prints the single label you designed. Saved files are .vlcus and embed both the design and a copy of the bound data so a Reprint reopens the exact label.</p>
 
 
+<div class="appshot">
+  <div class="bar"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><b>VectorLabel — Custom Designer</b></div>
+  <div class="tabs"><span class="on">Rack&nbsp;Wraps</span><span>• Patch&nbsp;IDs</span><span>Panel&nbsp;Asset</span><span class="add">+</span></div>
+  <div class="toolbar"><span class="abtn">Supply ▾ Brady M6-33-427</span><span class="abtn">⟳ 90°</span><span class="abtn">＋ Add ▾</span><span style="flex:1"></span><span class="abtn">Open…</span><span class="abtn p">Save Label…</span></div>
+  <div class="body">
+    <div class="acanvas">
+      <div class="alabel">
+        <div class="row"><span>XLR-M</span><span>FOH-A1</span></div>
+        <div class="id">127&nbsp;-&nbsp;C-1042</div>
+        <div class="sep"></div>
+        <div class="dev">@ AMP&nbsp;3 : OUT&nbsp;L</div>
+      </div>
+      <span class="hh" style="left:16%;top:29%"></span><span class="hh" style="right:16%;top:29%"></span>
+      <span class="hh" style="left:16%;bottom:29%"></span><span class="hh" style="right:16%;bottom:29%"></span>
+    </div>
+  </div>
+</div>
+<p class="shot-cap">The designer canvas — a true-to-size label with objects you drag, rotate and bind to data; tabs let you keep several open.</p>
 <div class="callout tip"><span class="lab">Tips</span><p>If you just want to print a handful of labels right now, use the Custom Designer. If you are building a layout to be reused across many print jobs from your wire data, use the Template Designer.</p><p>Both designers can also open Brady (.BWT) and Brother P-touch (.lbx) templates and convert them — see the Importing section.</p></div>
 <div class="callout warn"><span class="lab">Heads up</span><p>The two windows share the same underlying HTML canvas, so the editing controls are the same. The differences are the toolbar buttons, the default document name, and the Custom Designer's print header + Database pane.</p></div>
 </section>
@@ -672,6 +690,23 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
 <section class="doc-sec" id="print-window-overview">
 <h2>What the Print window is and how it opens</h2>
 <p>The Print window is titled "VectorLabel — Print" and floats above your other windows so it stays in front when it pops up while you are working in another app. It is <strong>tabbed</strong> — each export appears as its own tab and the window jumps to the most recent one (see <a href="#tabs">Working in tabs</a>). Within a tab there are five main areas: a top bar (Load CSV, Cancel), a Template bar, a Labels list (your records) with a live preview on the right, and a Print bar across the bottom (label selection, printer, cut, and the Print button). The current export's name is shown on its tab.</p>
+<div class="appshot">
+  <div class="bar"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><b>VectorLabel — Print</b></div>
+  <div class="tabs"><span class="on">Cable&nbsp;Schedule</span><span>Patch&nbsp;Panel</span><span>Case&nbsp;Labels</span></div>
+  <div class="toolbar"><span class="abtn">Template ▾ 1_5x4 V1</span><span class="abtn">Brady M611 ▾</span><span style="flex:1"></span><span>3 of 3 selected</span><span class="abtn p">⌘⏎ Print</span></div>
+  <div class="body" style="display:flex;gap:14px">
+    <table class="atable" style="flex:1">
+      <thead><tr><th class="k">✓</th><th>Number</th><th>Cable</th><th>Connector</th><th>Device</th><th>Rack</th></tr></thead>
+      <tbody>
+        <tr class="sel"><td class="k">✓</td><td class="hl">127</td><td class="hl">C-1042</td><td>XLR-M</td><td>AMP&nbsp;3</td><td>FOH-A1</td></tr>
+        <tr><td class="k">✓</td><td>128</td><td>C-1043</td><td>XLR-F</td><td>DSP&nbsp;1</td><td>FOH-A1</td></tr>
+        <tr><td class="k">✓</td><td>129</td><td>C-1044</td><td>TRS</td><td>WALL&nbsp;12</td><td>STAGE-L</td></tr>
+      </tbody>
+    </table>
+    <div style="flex:0 0 150px"><div class="acanvas" style="height:110px"><div class="alabel" style="width:82%"><div class="row" style="font-size:9px"><span>XLR-M</span><span>FOH-A1</span></div><div class="id" style="font-size:15px;margin:5px 0">127&nbsp;-&nbsp;C-1042</div><div class="sep"></div><div class="dev" style="font-size:10px">@ AMP&nbsp;3 : OUT&nbsp;L</div></div></div></div>
+  </div>
+</div>
+<p class="shot-cap">The Print window — one row per label, a live preview of the selected row, and the printer / cut / Print controls along the bottom.</p>
 <p>It opens by itself when VectorLabel sees a new CSV export drop into the watch folder (this auto-open can be turned off in Preferences ▸ Export ▸ "Auto-open print window when export is detected"). It also opens when you press Reprint on a past job in the menu bar. When the window closes after a print, focus returns to whatever app you exported from.</p>
 <p>The file each export came from is shown on its tab. "Load CSV…" lets you load a different export into a tab, and "✕ Cancel" closes it (the whole window when it is the last tab). If you configured a job and then cancel, that configuration is still recorded in Recent Prints as a cancelled job so you can reopen and finish it later.</p>
 

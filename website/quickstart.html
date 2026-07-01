@@ -39,7 +39,7 @@
     <div class="breadcrumb"><a href="support.html">Support</a><span class="sep">/</span><span>Quick start</span></div>
     <div class="eyebrow">Quick start</div>
     <h1>Print your first labels in about 10 minutes</h1>
-    <p class="sub">Install the apps once, then pick your path: pull cable data straight from <strong>Vectorworks ConnectCAD</strong>, or <strong>design a label from scratch</strong>. Both finish at the same print window.</p>
+    <p class="sub">Install the apps once, then pick your path: <strong>design a label from scratch</strong>, or pull cable data straight from <strong>Vectorworks ConnectCAD</strong>. Both finish at the same print window.</p>
   </div>
 </section>
 
@@ -57,22 +57,60 @@
     <div class="callout note"><span class="lab">macOS Gatekeeper</span><p>Official releases are signed and notarized and open normally. If macOS ever says an app is from an “unidentified developer”, <strong>right-click the app → Open</strong> the first time to approve it. Requires <strong>macOS 14 (Sonoma) or later</strong>; VectorLabel is Mac-only.</p></div>
 
     <h3 id="connect-printer">Connect your printer</h3>
+    <p>Plug your printer in by USB and it should appear <strong>automatically</strong> — it shows up with a green status dot in the Engine menu and under <strong>Preferences ▸ Printers</strong>, ready to print. If it doesn’t appear, or you’re adding a <strong>network</strong> printer, open Preferences and add it by hand:</p>
     <ol class="steps">
       <li>Click the menu-bar icon → <strong>Preferences…</strong> → <strong>Printers</strong>.</li>
-      <li><strong>USB:</strong> click <strong>Scan USB</strong> if your printer isn’t already listed. <strong>Network:</strong> type the host/IP, choose the model, and click <strong>Add</strong>.</li>
+      <li><strong>USB:</strong> click <strong>Scan USB</strong> to re-detect. <strong>Network:</strong> type the host / IP, choose the model, and click <strong>Add</strong>.</li>
       <li>If macOS asks to allow Documents access or notifications, allow them.</li>
     </ol>
+    <div class="appshot">
+      <div class="bar"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><b>VectorLabel — Preferences</b></div>
+      <div class="tabs"><span>Export</span><span>Printing</span><span>Templates</span><span>Recent</span><span class="on">Printers</span><span>Advanced</span></div>
+      <div class="toolbar"><b style="color:var(--ink-soft);font-weight:600">1 printer connected</b><span style="flex:1"></span><span class="abtn">＋ Add network printer</span><span class="abtn p">Scan USB</span></div>
+      <div class="body">
+        <div class="prow"><span class="dot ok"></span><span class="pn">Brady M611</span><span style="color:var(--muted)">— USB</span><span class="ps">Ready · 300 DPI · cassette detected</span></div>
+        <div class="prow"><span class="dot off"></span><span class="pn">Brother PT-E550W</span><span style="color:var(--muted)">— Network</span><span class="ps">Offline</span></div>
+      </div>
+    </div>
+    <p class="shot-cap">Preferences ▸ Printers — a connected printer shows a green dot; click a row for its per-printer cut / calibration settings.</p>
     <div class="callout tip"><span class="lab">Tip</span><p>Most-mature path today is a <strong>Brady M611</strong> (USB or network) or <strong>M610</strong> (USB). Brother P-touch drivers are included but not yet hardware-confirmed in alpha — see the <a href="faq.html#faq-troubleshooting-alpha">FAQ</a>.</p></div>
 
-    <h2 id="path-a">2 · Path A — print from Vectorworks</h2>
-    <p>If your cable schedule lives in a Vectorworks ConnectCAD drawing, VectorLabel can label every wire with no re-typing. You install two small plug-in commands once, then export whenever you need labels.</p>
-
-    <h3 id="install-plugins">Install the two plug-ins (one time)</h3>
+    <h2 id="path-b">2 · Design a label yourself</h2>
+    <p>No CAD required. Use the <strong>Custom Designer</strong> for one-off labels (with an optional database mode for batches), or the <strong>Template Designer</strong> for reusable, data-bound templates.</p>
     <ol class="steps">
-      <li>In Vectorworks: <strong>Tools → Plug-ins → Plug-in Manager</strong>.</li>
-      <li>Click <strong>New Command</strong>, set <strong>Language: Python</strong>, and name it exactly <em>Export Selected Circuits to VectorLabel</em>. Paste in the full contents of <code>export_selected.py</code>.</li>
-      <li>Click <strong>New Command</strong> again and create <em>Export All Circuits to VectorLabel</em> from <code>export_all.py</code>.</li>
-      <li><strong>Tools → Workspaces → Edit Current Workspace</strong>, drag both commands into a menu, and save.</li>
+      <li>Open a designer from the Engine menu (<strong>Open Custom Designer</strong> / <strong>Open Template Designer</strong>).</li>
+      <li>Click <strong>Supply</strong> in the top bar and pick your label stock. The canvas resizes to it. For continuous tape, set a <strong>Length</strong> or click <strong>⤢ Fit</strong>.</li>
+      <li>Add objects from the left <strong>Add</strong> sidebar — <strong>Text</strong>, <strong>Barcode</strong>, <strong>Image</strong>, <strong>Symbol</strong>, lines and shapes — and edit each in the right-hand properties panel.</li>
+      <li>For data-driven labels, set a text or barcode object’s source to a <strong>field</strong> or a <strong>formula</strong> (see <a href="guide.html#three-binding-modes">data binding</a>).</li>
+      <li>Save your work, then print from the print window — choose printer, confirm the supply shows a green ✓, and go.</li>
+    </ol>
+    <div class="appshot">
+      <div class="bar"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><b>VectorLabel — Custom Designer</b></div>
+      <div class="tabs"><span class="on">Rack&nbsp;Wraps</span><span>Patch&nbsp;IDs</span><span class="add">+</span></div>
+      <div class="body">
+        <div class="acanvas">
+          <div class="alabel">
+            <div class="row"><span>XLR-M</span><span>FOH-A1</span></div>
+            <div class="id">127&nbsp;-&nbsp;C-1042</div>
+            <div class="sep"></div>
+            <div class="dev">@ AMP&nbsp;3 : OUT&nbsp;L</div>
+          </div>
+          <span class="hh" style="left:15%;top:28%"></span><span class="hh" style="right:15%;top:28%"></span>
+          <span class="hh" style="left:15%;bottom:28%"></span><span class="hh" style="right:15%;bottom:28%"></span>
+        </div>
+      </div>
+    </div>
+    <p class="shot-cap">The Custom Designer — drag text, barcodes and shapes onto a true-to-size canvas, and bind them to your data.</p>
+    <div class="callout note"><span class="lab">Handy keys</span><p><kbd>⌘D</kbd> duplicate · <kbd>⌘C</kbd>/<kbd>⌘V</kbd> copy &amp; paste · <kbd>Delete</kbd> remove the selected object.</p></div>
+
+    <h2 id="path-a">3 · Print from Vectorworks</h2>
+    <p>If your cable schedule lives in a Vectorworks ConnectCAD drawing, VectorLabel can label every wire with no re-typing. The installer sets up the two ConnectCAD export commands for you.</p>
+
+    <h3 id="install-plugins">Add the export commands to Vectorworks (one time)</h3>
+    <ol class="steps">
+      <li>During install, tick the optional <strong>“Vectorworks ConnectCAD plug-ins”</strong> choice — the installer copies the two ready-made commands straight into your Vectorworks Plug-ins folder. No pasting scripts.</li>
+      <li>In Vectorworks: <strong>Tools → Workspaces → Edit Current Workspace</strong>, drag <em>Export Selected Circuits to VectorLabel</em> and <em>Export All Circuits to VectorLabel</em> into a menu, and save.</li>
+      <li>Prefer to add them by hand? Paste <code>export_selected.py</code> / <code>export_all.py</code> into two new Python commands in the Plug-in Manager instead.</li>
     </ol>
 
     <h3 id="export-print">Export &amp; print</h3>
@@ -83,18 +121,22 @@
       <li>Switch to your Mac: the <strong>print window opens automatically</strong>, one row per cable end.</li>
       <li>Pick a template and printer, review/filter the rows, and <strong>Print</strong>.</li>
     </ol>
+    <div class="appshot">
+      <div class="bar"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><b>VectorLabel — Print</b></div>
+      <div class="tabs"><span class="on">Cable&nbsp;Schedule</span><span>Patch&nbsp;Panel</span></div>
+      <div class="body">
+        <table class="atable">
+          <thead><tr><th class="k">✓</th><th>Number</th><th>Cable</th><th>Connector</th><th>Device</th><th>Rack</th></tr></thead>
+          <tbody>
+            <tr class="sel"><td class="k">✓</td><td class="hl">127</td><td class="hl">C-1042</td><td>XLR-M</td><td>AMP&nbsp;3</td><td>FOH-A1</td></tr>
+            <tr><td class="k">✓</td><td>128</td><td>C-1043</td><td>XLR-F</td><td>DSP&nbsp;1</td><td>FOH-A1</td></tr>
+            <tr><td class="k">✓</td><td>129</td><td>C-1044</td><td>TRS</td><td>WALL&nbsp;12</td><td>STAGE-L</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <p class="shot-cap">The Print window opens automatically on export — one row per label; pick a template and printer, then Print.</p>
     <div class="callout tip"><span class="lab">Tip</span><p>Changed the drawing? Just run the export again — a fresh export is created and the print window reopens with the new data.</p></div>
-
-    <h2 id="path-b">3 · Path B — design a label yourself</h2>
-    <p>No CAD required. Use the <strong>Custom Designer</strong> for one-off labels (with an optional database mode for batches), or the <strong>Template Designer</strong> for reusable, data-bound templates.</p>
-    <ol class="steps">
-      <li>Open a designer from the Engine menu (<strong>Open Custom Designer</strong> / <strong>Open Template Designer</strong>).</li>
-      <li>Click <strong>Supply</strong> in the top bar and pick your label stock. The canvas resizes to it. For continuous tape, set a <strong>Length</strong> or click <strong>⤢ Fit</strong>.</li>
-      <li>Add objects from the left <strong>Add</strong> sidebar — <strong>Text</strong>, <strong>Barcode</strong>, <strong>Image</strong>, <strong>Symbol</strong>, lines and shapes — and edit each in the right-hand properties panel.</li>
-      <li>For data-driven labels, set a text or barcode object’s source to a <strong>field</strong> or a <strong>formula</strong> (see <a href="guide.html#three-binding-modes">data binding</a>).</li>
-      <li>Save your work, then print from the print window — choose printer, confirm the supply shows a green ✓, and go.</li>
-    </ol>
-    <div class="callout note"><span class="lab">Handy keys</span><p><kbd>⌘D</kbd> duplicate · <kbd>⌘C</kbd>/<kbd>⌘V</kbd> copy &amp; paste · <kbd>Delete</kbd> remove the selected object.</p></div>
 
     <h2 id="next">You’re set — what next?</h2>
     <p>That’s the whole loop: get data in, lay out a label, print. When you want the depth:</p>
