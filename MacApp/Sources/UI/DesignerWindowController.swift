@@ -125,6 +125,9 @@ public final class DesignerWindowController: NSObject {
         /// Set when the tab finished loading while it wasn't the visible tab (its canvas
         /// had 0 width, so it couldn't self-center). `activateTab` centers it when shown.
         var needsCenter = false
+        /// The tab loads its page while hidden; when true, `didFinish` switches to it once
+        /// it's painted (so a new "+" tab never flashes a blank white web view).
+        var activateOnLoad = false
         var title: String
         init(webView: WKWebView, title: String) { self.webView = webView; self.title = title }
     }
@@ -185,7 +188,7 @@ public final class DesignerWindowController: NSObject {
         // clobber. A fresh tab applies its pending template on didFinish. The tab title is
         // the file name (preferred) — hosts pass it in; falls back to the template's name.
         let tab: DesignerTab?
-        if window == nil { present(editTemplateIndex: nil); tab = activeTab } else { tab = addTab() }
+        if window == nil { present(editTemplateIndex: nil); tab = tabs.last } else { tab = addTab() }
         tab?.pendingOpenTemplate = template
         if let t = tab, let title = displayName ?? (template.name.isEmpty ? nil : template.name) {
             t.title = title; refreshTabBar()
@@ -198,7 +201,7 @@ public final class DesignerWindowController: NSObject {
     public func openCustomDocument(_ doc: CustomLabelDocument, displayName: String? = nil) {
         guard mode == .custom else { return }
         let tab: DesignerTab?
-        if window == nil { present(editTemplateIndex: nil); tab = activeTab } else { tab = addTab() }
+        if window == nil { present(editTemplateIndex: nil); tab = tabs.last } else { tab = addTab() }
         tab?.pendingOpenCustomDoc = doc
         if let t = tab, let title = displayName ?? (doc.name.isEmpty ? nil : doc.name) {
             t.title = title; refreshTabBar()
@@ -277,6 +280,9 @@ public final class DesignerWindowController: NSObject {
         }
         let tab = DesignerTab(webView: wv,
                               title: title ?? (mode == .custom ? "Untitled Custom Design" : "Untitled Template"))
+        // Load the page while HIDDEN, keeping the current tab on screen, so the new tab
+        // never flashes a blank white web view — didFinish switches to it once it's painted.
+        wv.isHidden = true
         tabs.append(tab)
         if let area = contentArea {
             wv.translatesAutoresizingMaskIntoConstraints = false
@@ -287,7 +293,11 @@ public final class DesignerWindowController: NSObject {
                 wv.topAnchor.constraint(equalTo: area.topAnchor),
                 wv.bottomAnchor.constraint(equalTo: area.bottomAnchor)])
         }
-        activateTab(tab.id)
+        // Only the newest tab auto-switches when it finishes loading (opening several files
+        // at once leaves the earlier ones loading quietly in the background).
+        for t in tabs { t.activateOnLoad = false }
+        tab.activateOnLoad = true
+        refreshTabBar()   // show the new chip right away (it becomes active once painted)
         return tab
     }
 
@@ -372,6 +382,9 @@ public final class DesignerWindowController: NSObject {
             return
         }
         let area = NSView(); area.translatesAutoresizingMaskIntoConstraints = false
+        // Themed backing so the first tab's brief pre-paint moment isn't a white flash.
+        area.wantsLayer = true
+        area.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
         self.contentArea = area
         let container = NSView()
         if designerForPrintEdit {
@@ -1620,9 +1633,9 @@ extension DesignerWindowController: WKNavigationDelegate {
         // Point the active-tab accessors (webView/dataSource/pending*) at THIS tab for the
         // injection below WITHOUT changing which tab is visible — so a background load
         // (e.g. opening several files at once) never steals focus from the active tab.
+        // Restored (and possibly switched to) at the end of this method.
         let _prevActive = activeID
         activeID = tab.id
-        defer { activeID = _prevActive }
         // Re-assert the installed font families after load, in case the document-start
         // injection raced the page's own script (the font picker reads window.__VL_FONTS__
         // live, so this guarantees the full system list is present).
@@ -1674,6 +1687,14 @@ extension DesignerWindowController: WKNavigationDelegate {
             // Template Designer standalone mode: ensure the New/Open/Save toolbar
             // (not the print-edit Return buttons) and open the template picker.
             webView.evaluateJavaScript("window._printEdit=false; if(typeof openTemplate==='function')openTemplate();", completionHandler: nil)
+        }
+        // Restore the visible tab (the injection above pointed the accessors at this tab).
+        activeID = _prevActive
+        // A freshly added "+"/opened tab loaded hidden — switch to it now that it's painted
+        // (this is what prevents the blank-white flash).
+        if tab.activateOnLoad {
+            tab.activateOnLoad = false
+            activateTab(tab.id)
         }
     }
 }
