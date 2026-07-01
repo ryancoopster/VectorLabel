@@ -352,22 +352,29 @@ function autoFitPx(text,o,basePx,boxW,pad){
 // overshoot degrades to a hairline clip, never "…".
 function fitAutoScaleText(root){
   if(!root) return;
-  const els=[...root.querySelectorAll('[data-autofit]')];
+  // Skip the node being inline-edited (resizing it would fight the caret/focus); a
+  // style-only fontSize change is otherwise safe (no textContent/focus change).
+  const els=[...root.querySelectorAll('[data-autofit]')].filter(el=>el!==document.activeElement);
   if(!els.length) return;
-  const reads=els.map(el=>{
-    const sx=parseFloat(el.getAttribute('data-sx'))||1;
-    const avail=el.clientWidth;                 // inner content width (box − padding)
-    const actual=el.scrollWidth*(sx>1?sx:1);    // stretch>100 widens the drawn line
-    const cur=parseFloat(el.style.fontSize)||0;
-    return {el,avail,actual,cur};
-  });
-  for(const r of reads){
-    // Don't resize the node being inline-edited (would fight caret/focus); a
-    // style-only fontSize change is otherwise safe (no textContent/focus change).
-    if(r.el===document.activeElement) continue;
-    if(r.cur>0 && r.actual>r.avail+0.5 && r.actual>0){
-      r.el.style.fontSize=Math.max(3,r.cur*(r.avail/r.actual)*0.99)+'px';
+  // A few read→write passes. One proportional shrink can leave a hairline overshoot when
+  // letter-spacing adds a constant (non-font-scaling) term to the line width; re-measuring
+  // converges it. Batches reads before writes each pass, and stops as soon as all fit.
+  for(let pass=0; pass<3; pass++){
+    const reads=els.map(el=>{
+      const sx=parseFloat(el.getAttribute('data-sx'))||1;
+      const avail=el.clientWidth;                 // inner content width (box − padding)
+      const actual=el.scrollWidth*(sx>1?sx:1);    // stretch>100 widens the drawn line
+      const cur=parseFloat(el.style.fontSize)||0;
+      return {el,avail,actual,cur};
+    });
+    let changed=false;
+    for(const r of reads){
+      if(r.cur>3 && r.actual>r.avail+0.5 && r.actual>0){
+        r.el.style.fontSize=Math.max(3,r.cur*(r.avail/r.actual)*0.99)+'px';
+        changed=true;
+      }
     }
+    if(!changed) break;
   }
 }
 

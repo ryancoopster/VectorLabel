@@ -284,7 +284,37 @@ function autoFitPx(text,o,basePx,boxW,pad){
   w*=((o.stretch||100)/100);
   const avail=boxW-(pad||0);
   if(w<=avail||w<=0) return basePx;
-  return Math.max(3,basePx*(avail/w));
+  // Cheap first guess only; fitAutoScaleText() corrects against real DOM layout.
+  return Math.max(3,basePx*(avail/w)*0.96);
+}
+
+// Post-render GUARANTEE that auto-scale text fits: measure the real laid-out box
+// (scrollWidth vs clientWidth) and shrink font-size until the whole string shows.
+// Immune to canvas.measureText error. Reads first, then writes → one reflow.
+// Auto-scale text renders with text-overflow:clip (never ellipsis).
+function fitAutoScaleText(root){
+  if(!root) return;
+  const els=[...root.querySelectorAll('[data-autofit]')].filter(el=>el!==document.activeElement);
+  if(!els.length) return;
+  // A few read→write passes so a constant letter-spacing term can't leave a hairline
+  // overshoot; stops as soon as everything fits. (Mirrors the Designer.)
+  for(let pass=0; pass<3; pass++){
+    const reads=els.map(el=>{
+      const sx=parseFloat(el.getAttribute('data-sx'))||1;
+      const avail=el.clientWidth;
+      const actual=el.scrollWidth*(sx>1?sx:1);
+      const cur=parseFloat(el.style.fontSize)||0;
+      return {el,avail,actual,cur};
+    });
+    let changed=false;
+    for(const r of reads){
+      if(r.cur>3 && r.actual>r.avail+0.5 && r.actual>0){
+        r.el.style.fontSize=Math.max(3,r.cur*(r.avail/r.actual)*0.99)+'px';
+        changed=true;
+      }
+    }
+    if(!changed) break;
+  }
 }
 
 function renderLabel(tpl,rec,scale=1){
@@ -300,7 +330,8 @@ function renderLabel(tpl,rec,scale=1){
     if(o.t==="tx"){
       const {v,e}=textValue(o,rec);
       let fz=Math.max(5,(o.fs||14)*(sc/100));
-      if(o.autoScale&&!o.wrapText&&!e) fz=autoFitPx(v,o,fz,(o.w||1)*sc,2);
+      const autoFit=!!(o.autoScale&&!o.wrapText&&!e);
+      if(autoFit) fz=autoFitPx(v,o,fz,(o.w||1)*sc,2);
       const jc=o.al==="center"?"center":o.al==="right"?"flex-end":"flex-start";
       const va=o.valign==="top"?"flex-start":o.valign==="bottom"?"flex-end":"center";
       const fw=o.bold?700:400;
@@ -310,8 +341,12 @@ function renderLabel(tpl,rec,scale=1){
       const sx=(o.stretch||100)/100;
       const col=e?"var(--red)":"#000";
       const txt=(e?`⚠`:v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+      // Auto-scale text is corrected post-render by fitAutoScaleText(); tag it and
+      // use text-overflow:clip (never ellipsis) so it can never show "…".
+      const autoFitAttrs=autoFit?`data-autofit="1" data-sx="${sx}"`:"";
+      const ovf=(o.wrapText||o.autoScale)?"clip":"ellipsis";
       return `<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${Math.max(h,8)}px;${rc}overflow:hidden;display:flex;align-items:${va};padding:0 1px;box-sizing:border-box">
-        <div style="width:100%;font-family:'${o.font||"Arial"}',Arial,sans-serif;font-size:${fz}px;font-weight:${fw};font-style:${fs};text-decoration:${td};color:${col};white-space:${ws};overflow:hidden;text-overflow:ellipsis;line-height:1.15;text-align:${o.al||"left"};transform:scaleX(${sx});transform-origin:left center">${txt}</div>
+        <div ${autoFitAttrs} style="width:100%;font-family:'${o.font||"Arial"}',Arial,sans-serif;font-size:${fz}px;font-weight:${fw};font-style:${fs};text-decoration:${td};color:${col};white-space:${ws};overflow:hidden;text-overflow:${ovf};line-height:1.15;text-align:${o.al||"left"};transform:scaleX(${sx});transform-origin:left center">${txt}</div>
       </div>`;
     }
     if(o.t==="ln")return`<div style="position:absolute;left:${x}px;top:${y}px;width:${(o.w||1)*sc}px;height:${Math.max(1,o.lw||1)}px;background:#000;${rc}"></div>`;
@@ -2721,6 +2756,10 @@ function R(){
   if(window._fe&&window._fe.on&&window._fe.active){ const _fe=document.getElementById('fe-editor');
     if(_fe&&document.activeElement!==_fe){ _fe.focus(); const _n=_fe.value.length; try{_fe.setSelectionRange(_n,_n);}catch(_){} } }
   fitPreviewLabel();
+  // Shrink any auto-scale text (main preview, expanded-modal tiles, list-row
+  // thumbnails) to fit its real laid-out box so nothing ever clips to "…".
+  // Batched reads-then-writes = one reflow regardless of element count.
+  fitAutoScaleText(document.getElementById("app"));
   if(!window._recWheelBound){
     document.getElementById("app").addEventListener("wheel", onRecWheel, {passive:false});
     window._recWheelBound=true;
