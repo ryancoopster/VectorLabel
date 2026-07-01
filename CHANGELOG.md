@@ -12,6 +12,11 @@ number (git commit count) + short SHA, shown in the menu-bar footer.
 
 ## [Unreleased]
 
+### Changed
+- **Installer:** on macOS older than 14 (Sonoma) the installer now **warns** that the apps
+  may not run correctly and lets you continue, instead of hard-blocking. (The apps target
+  macOS 14 on Apple Silicon.)
+
 ## [1.1.0] — 2026-07-01
 
 First public release (open alpha).
