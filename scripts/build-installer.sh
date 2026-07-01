@@ -98,9 +98,21 @@ cat > "$DISTXML" <<XML
     <license file="LICENSE.txt" mime-type="text/plain"/>
     <conclusion file="conclusion.html" mime-type="text/html"/>
     <options customize="allow" require-scripts="false" hostArchitectures="arm64,x86_64"/>
-    <volume-check>
-        <allowed-os-versions><os-version min="13.0"/></allowed-os-versions>
-    </volume-check>
+    <!-- macOS 14 (Sonoma) is the app deployment target (Package.swift .macOS(.v14)). Rather
+         than hard-block older systems, WARN and let the user continue at their own risk. -->
+    <installation-check script="vlCheckOS()"/>
+    <script><![CDATA[
+function vlCheckOS() {
+    var v = system.version.ProductVersion;   // e.g. "14.5" or "13.6.1"
+    if (system.compareVersions(v, '14.0') < 0) {
+        my.result.type = 'Warn';
+        my.result.title = 'macOS 14 or later recommended';
+        my.result.message = 'VectorLabel is built for macOS 14 (Sonoma) or later. This Mac is running macOS ' + v + '. You can continue, but the apps may fail to launch or some features may not work correctly.';
+        return false;
+    }
+    return true;
+}
+    ]]></script>
     <choices-outline>
         <line choice="apps"/>
         <line choice="templates"/>

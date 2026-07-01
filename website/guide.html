@@ -163,7 +163,7 @@ reprint/, reprint-custom/, cancelled/</code></pre>
 
 <section class="doc-sec" id="system-requirements">
 <h2>System requirements</h2>
-<p>VectorLabel requires macOS 14 (Sonoma) or later — this is set as the minimum platform in Package.swift (.macOS(.v14)).</p>
+<p>VectorLabel requires macOS 14 (Sonoma) or later, on an Apple Silicon Mac (the released apps are arm64-only) — this is set as the minimum platform in Package.swift (.macOS(.v14)). The installer doesn't hard-block older systems: it warns that the apps may not run correctly and lets you continue at your own risk.</p>
 <p>For end users, no extra software is required: the libusb USB library is bundled inside the Engine app (in Contents/Frameworks) and signed, so it runs on Macs that do not have Homebrew installed. The app uses the Hardened Runtime and is NOT sandboxed, because it needs raw USB access and access to your ~/Documents folder.</p>
 <p>For USB printing (Brady M610, and the Brother P-touch models over USB) you connect the printer by USB cable. The Brady M611 can also be added as a network printer over TCP. For network printers you add them by host/IP in Preferences.</p>
 <p>For developers building from source, you additionally need Xcode, and you must install libusb and pkg-config via Homebrew first (brew install libusb pkg-config). On Apple Silicon the build expects libusb at /opt/homebrew; on Intel Macs you edit the module map to /usr/local.</p>

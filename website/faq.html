@@ -57,9 +57,9 @@
   <summary>Why are there four apps instead of one?</summary>
   <div class="faq-body"><p>The four apps split responsibilities so only one privileged piece talks to the printer. VectorLabel Engine is the menu-bar hub that owns the USB printer and prints; Auto Print watches your export folder and shows the print window; Template Designer and Custom Designer create labels. They coordinate through a shared queue/status folder, and the designers/Auto Print auto-start the Engine when needed.</p></div>
 </details>
-<details class="faq" data-text="what version of macos do i need? macos 14 (sonoma) or newer. no extra software is required for end users — the usb library (libusb) is bundled inside the app.">
+<details class="faq" data-text="what version of macos do i need? macos 14 (sonoma) or newer, on an apple silicon mac (the apps are arm64-only). the installer lets you continue on an older macos but warns it may not work. no extra software is required for end users — the usb library (libusb) is bundled inside the app.">
   <summary>What version of macOS do I need?</summary>
-  <div class="faq-body"><p>macOS 14 (Sonoma) or newer. No extra software is required for end users — the USB library (libusb) is bundled inside the app.</p></div>
+  <div class="faq-body"><p>macOS 14 (Sonoma) or newer, on an <strong>Apple&nbsp;Silicon</strong> Mac (the apps are arm64-only). The installer still lets you continue on an older macOS but warns it may not work correctly. No extra software is required for end users — the USB library (libusb) is bundled inside the app.</p></div>
 </details>
 <details class="faq" data-text="how do i install it? download the latest signed release from the project's github releases page and run the guided .pkg installer, which installs all four apps. then launch vectorlabel engine to get the menu-bar icon.">
   <summary>How do I install it?</summary>
