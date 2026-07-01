@@ -632,6 +632,11 @@ Literals: "quoted text"   123 (numbers)</code></pre>
 <p>1-D / linear codes: Code 128 (code128), GS1-128 (gs1-128), Code 39 (code39), Code 93 (code93), EAN-13 (ean13), EAN-8 (ean8), UPC-A (upca), UPC-E (upce), Interleaved 2 of 5 (interleaved2of5), Codabar (codabar).</p>
 <p>All symbologies are produced by the same vendored bwip-js engine in both the on-screen preview and the print path, so the preview matches the printed code.</p>
 <pre><code>QR Code, Data Matrix, Aztec Code, Micro QR, PDF417, Code 128, GS1-128, Code 39, Code 93, EAN-13, EAN-8, UPC-A, UPC-E, Interleaved 2 of 5, Codabar</code></pre>
+<div class="appshot">
+  <div class="bar"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><b>VectorLabel — Print</b></div>
+  <iframe class="embed-frame" src="embeds/print.html?tpl=asset_qr&view=full&anim=1" title="VectorLabel Print window with a QR label" loading="lazy" scrolling="no"></iframe>
+</div>
+<p class="shot-cap">A live example running the real app: this QR is bound to the record’s <strong>Number</strong> field and re-encodes for every row — the same bwip-js engine that renders it here prints it.</p>
 <ol class="steps">
   <li>Add a barcode object.</li>
   <li>Pick the symbology from the Symbology drop-down.</li>
