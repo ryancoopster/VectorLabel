@@ -49,6 +49,38 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
           rm -f $RUNNER_TEMP/cert.p12
 
+      # Fail in SECONDS if the signing identities are misconfigured, instead of
+      # discovering it after the ~1h app notarization. A .pkg installer MUST be
+      # signed with a "Developer ID Installer" cert (distinct from the "Developer ID
+      # Application" cert used for the apps) or Apple rejects it as Invalid — which is
+      # exactly what happened when the Installer cert / identity was missing.
+      - name: Verify signing identities (fail fast)
+        env:
+          DEVELOPER_ID_INSTALLER_IDENTITY: ${{ secrets.DEVELOPER_ID_INSTALLER_IDENTITY }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN=$RUNNER_TEMP/signing.keychain-db
+          echo "Identities in the signing keychain:"
+          security find-identity -v -p basic "$KEYCHAIN" || true
+          fail=0
+          if ! security find-identity -v -p basic "$KEYCHAIN" | grep -q "Developer ID Application"; then
+            echo "::error::No 'Developer ID Application' certificate in the signing keychain (the apps can't be Developer ID signed). Check the DEVELOPER_ID_CERT_P12_BASE64 secret."
+            fail=1
+          fi
+          if ! security find-identity -v -p basic "$KEYCHAIN" | grep -q "Developer ID Installer"; then
+            echo "::error::No 'Developer ID Installer' certificate in the signing keychain. The installer .pkg must be signed with a 'Developer ID Installer' cert (separate from the Application cert) or Apple returns 'Invalid'. Export a .p12 that contains BOTH certs and update DEVELOPER_ID_CERT_P12_BASE64."
+            fail=1
+          fi
+          if [ -z "${DEVELOPER_ID_INSTALLER_IDENTITY:-}" ]; then
+            echo "::error::Secret DEVELOPER_ID_INSTALLER_IDENTITY is empty. Set it to e.g. 'Developer ID Installer: Ryan Oliver Cooper (TEAMID)' so build-installer.sh signs the .pkg."
+            fail=1
+          fi
+          if [ "$fail" = "1" ]; then
+            echo "Aborting now (before notarization) so this fails fast, not after ~1.5 hours."
+            exit 1
+          fi
+          echo "✓ Developer ID Application + Installer identities present, and the installer identity secret is set."
+
       - name: Build, package & sign suite
         env:
           SIGN_IDENTITY: ${{ secrets.DEVELOPER_ID_IDENTITY }}
