@@ -12,12 +12,6 @@ number (git commit count) + short SHA, shown in the menu-bar footer.
 
 ## [Unreleased]
 
-### Fixed
-- The light / dark / auto **appearance choice now relays across the whole suite.** Changing it
-  from the Engine menu (or Preferences) immediately switches Auto Print and both designers too;
-  an app opened later syncs to the current setting on launch. (Each app has its own settings
-  store, so the choice is now broadcast process-to-process.)
-
 ## [1.1.0] — 2026-07-01
 
 First public release (open alpha).
@@ -45,6 +39,11 @@ First public release (open alpha).
 ### Changed
 - **Auto-scale text never truncates** — with auto-scale on, the font shrinks until the
   whole value fits; it no longer clips to a "…".
+
+### Fixed
+- The light / dark / auto **appearance choice relays across the whole suite.** Changing it
+  from the Engine menu (or Preferences) immediately switches Auto Print and both designers
+  too; an app opened later syncs to the current setting on launch.
 
 ### Known limitations (open alpha)
 - The Brady **M611** is hardware-validated. The Brady **M610 cut** behavior and the
