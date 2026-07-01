@@ -31,3 +31,18 @@ Quick checklist after a behavior change:
    if affected).
 3. Bump the "Docs synced to commit …" line in the page footers.
 4. Push — GitHub Pages redeploys automatically.
+
+## 📝 CHANGELOG.md is the central log of what changed between versions
+
+**Every fix and feature must be recorded in [`CHANGELOG.md`](CHANGELOG.md).** It is the
+single source of truth for "what changed between versions" — do not scatter that
+information across commit messages alone.
+
+- **As you make a change**, add a short user-facing bullet under the **`## [Unreleased]`**
+  heading (grouped as `Added` / `Changed` / `Fixed`). Keep it plain-English and honest
+  about alpha status.
+- **When a version is released** (a `vX.Y.Z` tag), move the `[Unreleased]` entries under a
+  new dated `## [X.Y.Z]` heading and start a fresh empty `[Unreleased]`.
+- **The website reads this file.** `website/downloads.html` lists every release version and
+  the changes between each, sourced from these entries — so keeping the changelog current
+  keeps the public Downloads page current. Update `downloads.html` when you cut a release.

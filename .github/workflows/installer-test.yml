@@ -3,7 +3,7 @@ name: Installer (signed test artifact)
 # Manually-run build that signs + NOTARIZES the installer .pkg and uploads it as an
 # Actions artifact — NO public release. Use this to test the signed installer before
 # publishing a release (release.yml, triggered by a version tag). Uses the SAME repo
-# Secrets as release.yml (see docs/SIGNING.md). Run it from the Actions tab
+# Secrets as release.yml (listed in that workflow's header). Run it from the Actions tab
 # ("Run workflow") or:  gh workflow run installer-test.yml
 #
 # Note: on a PUBLIC repo, Actions artifacts can be downloaded by anyone with the run

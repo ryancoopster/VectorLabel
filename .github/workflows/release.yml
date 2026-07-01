@@ -3,7 +3,7 @@ name: Release (signed & notarized)
 # Builds a Developer ID-signed, notarized, stapled VectorLabel.app and attaches a
 # zip + DMG to a GitHub Release. Triggered by pushing a version tag, e.g. `v1.1.0`.
 #
-# Requires repo Secrets (Settings → Secrets and variables → Actions). See docs/SIGNING.md:
+# Requires these repo Secrets (Settings → Secrets and variables → Actions):
 #   DEVELOPER_ID_CERT_P12_BASE64   base64 of a .p12 holding BOTH your "Developer ID
 #                                  Application" AND "Developer ID Installer" certs
 #   DEVELOPER_ID_CERT_PASSWORD     password used when exporting that .p12

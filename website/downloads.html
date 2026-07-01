@@ -1,0 +1,117 @@
+<!doctype html>
+<!-- VectorLabel downloads — hand-authored from CHANGELOG.md. Add a new .release block when you cut a version. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<title>VectorLabel Downloads</title>
+<meta name="description" content="Download VectorLabel for macOS — every release and the changes made in each version.">
+<link rel="stylesheet" href="support.css">
+<style>
+  .rel{border:1px solid var(--line,#e6e8ee);border-radius:14px;padding:26px 28px;margin:0 0 22px;background:#fff}
+  .rel-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+  .rel-head h2{margin:0;font-size:22px;letter-spacing:-.01em}
+  .rel-date{color:#5d6070;font-size:14px}
+  .rel-badge{font-size:11.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+    padding:3px 10px;border-radius:999px;background:#eef1ff;color:#3550b0}
+  .rel-actions{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0 20px}
+  .rel h3{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#5d6070;margin:18px 0 8px}
+  .rel ul{margin:0 0 6px;padding-left:20px;line-height:1.6}
+  .rel ul li{margin:3px 0}
+  .rel .note{font-size:13.5px;color:#5d6070;margin-top:14px}
+</style>
+</head>
+<body>
+<div class="alphabar">
+  <span class="pill">Alpha</span>
+  <b>VectorLabel is in open alpha</b> — releases are pre-releases; expect rough edges.
+  <a href="https://github.com/ryancoopster/VectorLabel/issues">Report a problem →</a>
+</div>
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a href="index.html" class="brand"><svg class="mark" viewBox="0 0 32 32" fill="none"><rect x="1.5" y="1.5" width="29" height="29" rx="8" fill="#0e1116"/><path d="M9 10l5 12 5-12" stroke="#2f57ff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="20" y="9" width="3" height="14" rx="1.2" fill="#fff"/></svg> VectorLabel</a>
+    <nav class="nav-links" id="vl-nav">
+      <a href="support.html">Support</a>
+      <a href="quickstart.html">Quick start</a>
+      <a href="guide.html">User guide</a>
+      <a href="faq.html">FAQ</a>
+      <a href="downloads.html" class="active">Downloads</a>
+    </nav>
+    <div class="nav-cta">
+      <a href="https://github.com/ryancoopster/VectorLabel/releases" class="btn btn-primary">Download</a>
+      <button class="menu-btn" aria-label="Menu" aria-controls="vl-nav" aria-expanded="false">
+        <svg width="24" height="24" viewBox="0 0 24 24" stroke="#0e1116" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<section class="doc-hero">
+  <div class="wrap">
+    <div class="eyebrow">Downloads</div>
+    <h1>Get VectorLabel for macOS</h1>
+    <p class="sub">Every release, and what changed in each. Download the signed, notarized installer, open it, and follow the wizard — it installs all four apps into <code>/Applications/VectorLabel/</code>. Then launch <strong>VectorLabel Engine</strong> for the menu-bar icon.</p>
+  </div>
+</section>
+
+<div class="wrap" style="max-width:860px">
+  <div style="padding:40px 0 20px">
+
+    <!-- ===================== 1.1.0 ===================== -->
+    <div class="rel" id="v1.1.0">
+      <div class="rel-head">
+        <h2>1.1.0</h2>
+        <span class="rel-badge">Pre-release · open alpha</span>
+        <span class="rel-date">July 1, 2026</span>
+      </div>
+      <p style="margin:.3em 0 0;color:#2c2d36">First public release — the full four-app suite (Engine, Auto&nbsp;Print, Template&nbsp;Designer, Custom&nbsp;Designer).</p>
+      <div class="rel-actions">
+        <a class="btn btn-primary" href="https://github.com/ryancoopster/VectorLabel/releases/tag/v1.1.0">Download installer (.pkg)</a>
+        <a class="btn" href="https://github.com/ryancoopster/VectorLabel/releases/tag/v1.1.0">Release notes on GitHub</a>
+      </div>
+      <h3>Added</h3>
+      <ul>
+        <li>Design + print wire / cable / asset / panel / patch labels on a true-to-size canvas — text, barcodes, QR, DataMatrix, images, symbols and shapes.</li>
+        <li>Vectorworks ConnectCAD integration — export circuits and the print window opens with your records loaded.</li>
+        <li>Bind a CSV or Excel file (one label per row); spreadsheet-style formulas that match in preview and print.</li>
+        <li><strong>Tabs</strong> across the print window and both designers — work on several labels at once.</li>
+        <li>Open Brady <code>.BWT</code> and Brother P-touch <code>.lbx</code> templates (auto-converted).</li>
+        <li>Brady M610 &amp; M611 and Brother P-touch over USB &amp; network, with live status and cassette auto-detection on the M611.</li>
+        <li>Editable supply catalog and per-printer settings (cut, orientation, calibration, feed-to-clear).</li>
+      </ul>
+      <h3>Changed</h3>
+      <ul>
+        <li>Auto-scale text never truncates — it shrinks the font until the whole value fits, instead of clipping to a “…”.</li>
+      </ul>
+      <p class="note"><strong>Open alpha:</strong> the Brady <strong>M611</strong> is hardware-validated; the Brady <strong>M610 cut</strong> behavior and the <strong>Brother P-touch</strong> drivers are built but not yet hardware-confirmed.</p>
+    </div>
+
+    <div class="callout note" style="margin-top:8px">
+      <span class="lab">Looking for the full history?</span>
+      <p style="margin:0">This page is generated from <a href="https://github.com/ryancoopster/VectorLabel/blob/main/CHANGELOG.md">CHANGELOG.md</a>, the project's central record of what changed between versions. Each release above links to its GitHub Release, where the signed installer, a <code>.zip</code> and a <code>.dmg</code> are attached.</p>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  <div class="wrap foot">
+    <a href="index.html" class="brand"><svg class="mark" viewBox="0 0 32 32" fill="none"><rect x="1.5" y="1.5" width="29" height="29" rx="8" fill="#0e1116"/><path d="M9 10l5 12 5-12" stroke="#2f57ff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="20" y="9" width="3" height="14" rx="1.2" fill="#fff"/></svg> VectorLabel</a>
+    <div class="foot-links">
+      <a href="support.html">Support</a>
+      <a href="guide.html">User guide</a>
+      <a href="downloads.html">Downloads</a>
+      <a href="https://github.com/ryancoopster/VectorLabel">GitHub</a>
+    </div>
+    <div class="copy">VectorLabel · Open alpha · Brady and Brother are trademarks of their respective owners.</div>
+  </div>
+</footer>
+<script>
+(function(){
+  var mb=document.querySelector('.menu-btn'), nav=document.getElementById('vl-nav');
+  if(mb&&nav)mb.addEventListener('click',function(){var o=nav.classList.toggle('open');mb.setAttribute('aria-expanded',o);});
+})();
+</script>
+</body>
+</html>

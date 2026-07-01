@@ -23,6 +23,7 @@
       <a href="quickstart.html">Quick start</a>
       <a href="guide.html" class="active">User guide</a>
       <a href="faq.html">FAQ</a>
+      <a href="downloads.html">Downloads</a>
     </nav>
     <div class="nav-cta">
       <a href="https://github.com/ryancoopster/VectorLabel/releases" class="btn btn-primary">Download</a>
@@ -164,7 +165,7 @@ reprint/, reprint-custom/, cancelled/</code></pre>
 <section class="doc-sec" id="system-requirements">
 <h2>System requirements</h2>
 <p>VectorLabel requires macOS 14 (Sonoma) or later — this is set as the minimum platform in Package.swift (.macOS(.v14)).</p>
-<p>For end users, no extra software is required: the libusb USB library is bundled inside the Engine app (in Contents/Frameworks) and signed, so it runs on Macs that do not have Homebrew installed (docs/SIGNING.md). The app uses the Hardened Runtime and is NOT sandboxed, because it needs raw USB access and access to your ~/Documents folder.</p>
+<p>For end users, no extra software is required: the libusb USB library is bundled inside the Engine app (in Contents/Frameworks) and signed, so it runs on Macs that do not have Homebrew installed. The app uses the Hardened Runtime and is NOT sandboxed, because it needs raw USB access and access to your ~/Documents folder.</p>
 <p>For USB printing (Brady M610, and the Brother P-touch models over USB) you connect the printer by USB cable. The Brady M611 can also be added as a network printer over TCP. For network printers you add them by host/IP in Preferences.</p>
 <p>For developers building from source, you additionally need Xcode, and you must install libusb and pkg-config via Homebrew first (brew install libusb pkg-config). On Apple Silicon the build expects libusb at /opt/homebrew; on Intel Macs you edit the module map to /usr/local.</p>
 <pre><code>brew install libusb pkg-config   # developers only, before building in Xcode</code></pre>
@@ -175,7 +176,7 @@ reprint/, reprint-custom/, cancelled/</code></pre>
 
 <section class="doc-sec" id="install-launch">
 <h2>Installing and launching</h2>
-<p>For end users, official builds are distributed from the project's GitHub Releases page. Pushing a version tag runs a release workflow that signs (Developer ID), notarizes, staples, and attaches a guided .pkg installer plus a .zip and a .dmg to the Release (docs/SIGNING.md). The recommended path is the guided .pkg installer, which walks you through welcome / license / readme / conclusion panes and installs all four apps.</p>
+<p>For end users, official builds are distributed from the project's GitHub Releases page. Pushing a version tag runs a release workflow that signs (Developer ID), notarizes, staples, and attaches a guided .pkg installer plus a .zip and a .dmg to the Release. The recommended path is the guided .pkg installer, which walks you through welcome / license / readme / conclusion panes and installs all four apps.</p>
 <p>After installation, launch VectorLabel Engine first — it places the menu-bar icon and brings the rest of the suite to life as needed. Auto Print also runs in the background. The two designers open on demand from the Engine menu or by double-clicking a template/custom-label document.</p>
 <p>The local install/build path (for developers or testers) is scripts/package-suite.sh to build the four .app bundles into dist/VectorLabel/, then scripts/install.sh to copy them into /Applications/VectorLabel/ and relaunch the always-on apps. A plain unsigned package runs on your own machine after a right-click → Open but is not distributable.</p>
 <p>In Xcode, developers open Package.swift, select the VectorLabel scheme with destination My Mac, and build (⌘B). Info.plist and entitlements must be set manually in the Xcode target because Swift Package Manager can't bundle them.</p>
