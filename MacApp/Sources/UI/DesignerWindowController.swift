@@ -1866,12 +1866,16 @@ extension DesignerWindowController: WKScriptMessageHandler {
             }
 
         case "setDirty":
-            // The web designer mirrors its unsaved-changes state here. Route to the sending
-            // tab (a background tab can post this during load) so the right chip updates.
-            let d = (body["payload"] as? [String: Any])?["dirty"] as? Bool ?? false
-            (msgTab ?? activeTab)?.isDirty = d
-            if d { afterSave = .none }          // a new edit cancels a pending close
-            refreshTabBar()                     // reflect the unsaved dot on the tab chip
+            // The web designer mirrors its unsaved-changes state + document name here. Route
+            // to the sending tab (a background tab can post during load) so the right chip
+            // updates. The name keeps the tab title in sync with picker/New loads that set
+            // S.tplName purely in JS.
+            let p = body["payload"] as? [String: Any]
+            let tab = msgTab ?? activeTab
+            tab?.isDirty = p?["dirty"] as? Bool ?? false
+            if let nm = p?["name"] as? String, !nm.isEmpty { tab?.title = nm }
+            if tab?.isDirty == true { afterSave = .none }   // a new edit cancels a pending close
+            refreshTabBar()                                 // reflect the dot + title on the chip
 
         case "jsError":
             // Uncaught error inside the WKWebView — log prominently for diagnosis.
