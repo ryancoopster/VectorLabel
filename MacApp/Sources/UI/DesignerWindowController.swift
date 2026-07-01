@@ -61,6 +61,9 @@ public final class DesignerWindowController: NSObject {
     private var pendingOpenCustomDoc: CustomLabelDocument? {
         get { activeTab?.pendingOpenCustomDoc } set { activeTab?.pendingOpenCustomDoc = newValue }
     }
+    private var pendingInjectJS: String? {
+        get { activeTab?.pendingInjectJS } set { activeTab?.pendingInjectJS = newValue }
+    }
 
     /// Invoked when the print-edit round-trip ends — either the user saved and
     /// returned, or closed the designer. `saved` is whether a save happened on
@@ -121,6 +124,9 @@ public final class DesignerWindowController: NSObject {
         var isDirty = false
         var pendingOpenTemplate: VLTemplate?
         var pendingOpenCustomDoc: CustomLabelDocument?
+        /// One-shot JS applied once the page loads — used to open an in-app import (.BWT/.lbx)
+        /// into a fresh tab via the page's initImportedDocument().
+        var pendingInjectJS: String?
         var webViewReady = false
         /// Set when the tab finished loading while it wasn't the visible tab (its canvas
         /// had 0 width, so it couldn't self-center). `activateTab` centers it when shown.
@@ -187,12 +193,8 @@ public final class DesignerWindowController: NSObject {
         // Each open lands in its own tab (full live state), so there's never a canvas to
         // clobber. A fresh tab applies its pending template on didFinish. The tab title is
         // the file name (preferred) — hosts pass it in; falls back to the template's name.
-        let tab: DesignerTab?
-        if window == nil { present(editTemplateIndex: nil); tab = tabs.last } else { tab = addTab() }
-        tab?.pendingOpenTemplate = template
-        if let t = tab, let title = displayName ?? (template.name.isEmpty ? nil : template.name) {
-            t.title = title; refreshTabBar()
-        }
+        newDocTab(title: displayName ?? (template.name.isEmpty ? nil : template.name))?
+            .pendingOpenTemplate = template
     }
 
     /// Open the designer and load `doc`'s canvas + embedded data in a new tab (custom
@@ -200,12 +202,18 @@ public final class DesignerWindowController: NSObject {
     /// The tab title is the file name (preferred); falls back to the doc's name.
     public func openCustomDocument(_ doc: CustomLabelDocument, displayName: String? = nil) {
         guard mode == .custom else { return }
+        newDocTab(title: displayName ?? (doc.name.isEmpty ? nil : doc.name))?
+            .pendingOpenCustomDoc = doc
+    }
+
+    /// The tab a new document / in-app open / import loads into: cold → build the window +
+    /// first tab; warm → a new tab. The tab loads its page hidden and switches in once painted.
+    @discardableResult
+    private func newDocTab(title: String?) -> DesignerTab? {
         let tab: DesignerTab?
         if window == nil { present(editTemplateIndex: nil); tab = tabs.last } else { tab = addTab() }
-        tab?.pendingOpenCustomDoc = doc
-        if let t = tab, let title = displayName ?? (doc.name.isEmpty ? nil : doc.name) {
-            t.title = title; refreshTabBar()
-        }
+        if let t = tab, let title, !title.isEmpty { t.title = title; refreshTabBar() }
+        return tab
     }
 
     private func present(editTemplateIndex: Int?) {
@@ -700,11 +708,17 @@ public final class DesignerWindowController: NSObject {
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             MainActor.assumeIsolated {
-                // Route by file type: ".BWT"/".lbx" are converted; anything else opens as
-                // a VectorLabel template.
+                guard let self = self else { return }
+                // Route by file type: ".BWT"/".lbx" are converted; anything else opens as a
+                // VectorLabel template — each into its own new tab (like a Finder open), so the
+                // active canvas is never clobbered and there's no stale-active-tab race.
                 let ext = url.pathExtension.lowercased()
-                if ext == "bwt" || ext == "lbx" { self?.performImport(from: url) }
-                else { self?.injectBrowsedTemplate(from: url) }
+                if ext == "bwt" || ext == "lbx" { self.performImport(from: url) }
+                else if let tpl = TemplateStore.loadTemplate(from: url) {
+                    self.openTemplate(tpl, displayName: url.deletingPathExtension().lastPathComponent)
+                } else {
+                    self.presentImportError(url, reason: "This file isn’t a valid VectorLabel template.")
+                }
             }
         }
     }
@@ -733,7 +747,7 @@ public final class DesignerWindowController: NSObject {
                 if ext == "bwt" || ext == "lbx" {
                     self?.performImport(from: url)
                 } else if let doc = CustomLabelStore.load(from: url) {
-                    self?.openCustomDocument(doc)
+                    self?.openCustomDocument(doc, displayName: url.deletingPathExtension().lastPathComponent)
                 } else {
                     self?.presentImportError(url, reason: "This file couldn't be opened. Choose a .vlcus, .BWT or .lbx file.")
                 }
@@ -757,24 +771,20 @@ public final class DesignerWindowController: NSObject {
                 : "This doesn't look like a supported Brady text template — no readable label fields were found. Barcode-only or image-only templates aren't supported yet.")
             return
         }
-        // Importing replaces the canvas — don't silently clobber unsaved work.
-        if isDirty {
-            let alert = NSAlert()
-            alert.alertStyle = .warning
-            alert.messageText = "Replace the current label?"
-            alert.informativeText = "Importing “\(url.lastPathComponent)” replaces what’s on the canvas. Your unsaved changes will be lost."
-            alert.addButton(withTitle: "Replace")
-            alert.addButton(withTitle: "Cancel")
-            guard alert.runModal() == .alertFirstButtonReturn else { return }
+        // Open the import in its OWN tab (consistent with Finder-open and Open… of a .vlcus),
+        // so nothing on the current canvas is clobbered — no replace prompt needed.
+        let sourceName = url.deletingPathExtension().lastPathComponent
+        guard let js = importedDocumentJS(imp, sourceName: sourceName) else {
+            presentImportError(url, reason: "The imported label couldn’t be prepared.")
+            return
         }
-        injectImported(imp, sourceName: url.deletingPathExtension().lastPathComponent)
+        newDocTab(title: sourceName)?.pendingInjectJS = js
     }
 
-    /// Build the JS doc the page's `initImportedDocument` expects and inject it.
-    private func injectImported(_ imp: ImportedDesign, sourceName: String) {
-        guard let wv = webView else { return }
+    /// Build the JS doc the page's `initImportedDocument` expects (applied into a fresh tab).
+    private func importedDocumentJS(_ imp: ImportedDesign, sourceName: String) -> String? {
         guard let objData = try? JSONSerialization.data(withJSONObject: imp.objects),
-              let objJSON = String(data: objData, encoding: .utf8) else { return }
+              let objJSON = String(data: objData, encoding: .utf8) else { return nil }
         // Resolve the catalog supply. Brady die-cut imports carry a real part number that
         // resolves directly. Brother imports have none — match the P-touch tape group by
         // tape width so the correct tape is auto-selected (and switch the picker to it).
@@ -803,7 +813,7 @@ public final class DesignerWindowController: NSObject {
         supplyGeometry:\(geomJSON),canvasRot:\(imp.canvasRotation),\
         labelLengthInches:\(imp.labelLengthInches),autoLength:\(imp.autoLength),warnings:\(warnJSON)});
         """
-        wv.evaluateJavaScript(js, completionHandler: nil)
+        return js
     }
 
     /// Find the Brother P-touch tape whose printable width best matches an imported label,
@@ -1021,19 +1031,6 @@ public final class DesignerWindowController: NSObject {
             completionHandler: nil)
     }
 
-    private func injectBrowsedTemplate(from url: URL) {
-        guard let wv = webView,
-              let data = try? Data(contentsOf: url),
-              let obj = try? JSONSerialization.jsonObject(with: data),
-              let dict = obj as? [String: Any], dict["objs"] != nil,
-              let reData = try? JSONSerialization.data(withJSONObject: dict),
-              let json = String(data: reData, encoding: .utf8)
-        else { return }
-        wv.evaluateJavaScript(
-            "if(typeof addBrowsedTemplate==='function')addBrowsedTemplate(\(json));",
-            completionHandler: nil
-        )
-    }
 
     // MARK: – Custom-mode print backend (Phase 2)
 
@@ -1433,10 +1430,13 @@ public final class DesignerWindowController: NSObject {
                     alert.informativeText = "\(error.localizedDescription)"
                     alert.runModal()
                 }
-                // Restore the user's current view — unless a save-then-close removed the saved tab.
-                if let p = prevActive, self.tabs.contains(where: { $0.id == p }),
-                   let st = savedTab, self.tabs.contains(where: { $0.id == st.id }) {
-                    self.activeID = p
+                // Put the user back on the tab they were viewing.
+                if let p = prevActive, self.tabs.contains(where: { $0.id == p }) {
+                    if savedTab != nil, self.tabs.contains(where: { $0.id == savedTab!.id }) {
+                        self.activeID = p                       // nothing closed → view never moved; just restore the pointer
+                    } else if self.activeID != p {
+                        self.activateTab(p)                     // a save-then-close moved the visible tab; re-show theirs
+                    }
                 }
             }
         }
@@ -1703,6 +1703,10 @@ extension DesignerWindowController: WKNavigationDelegate {
         } else if pendingOpenTemplate != nil {
             // Finder opened a ".vltmp" (template mode): load it into the canvas.
             applyPendingOpenTemplate()
+        } else if let js = pendingInjectJS, !js.isEmpty {
+            // In-app "Open…" import (.BWT/.lbx) landing in this fresh tab.
+            pendingInjectJS = nil
+            webView.evaluateJavaScript("window._printEdit=false; \(js)", completionHandler: nil)
         } else if mode == .custom {
             // Custom Designer standalone launch: open a BLANK custom design — never
             // the template Open picker, and with no bound data. The page's
