@@ -14,6 +14,25 @@ import VectorLabelCore
 ///   "print"   payload: { printerID, title, templateName, vglJobs: [[UInt8]] }
 ///   "close"   payload: null
 ///   "ready"   payload: null   (JS has finished loading, send initial state)
+/// One open export/reprint in the print window — its own WKWebView + data, so each tab
+/// keeps full live state (selection, filter, inline edits) independently of the others.
+@MainActor
+final class PrintTab {
+    let id = UUID().uuidString
+    let webView: WKWebView
+    var records: [WireRecord]
+    var sourceFileURL: URL?
+    var csvWritebackURL: URL?
+    var reprinting: RecentPrint?
+    var writebackWork: DispatchWorkItem?
+    var title: String
+    init(webView: WKWebView, records: [WireRecord], sourceFileURL: URL?,
+         csvWritebackURL: URL?, reprinting: RecentPrint?, title: String) {
+        self.webView = webView; self.records = records; self.sourceFileURL = sourceFileURL
+        self.csvWritebackURL = csvWritebackURL; self.reprinting = reprinting; self.title = title
+    }
+}
+
 @MainActor
 public final class PrintWindowController: NSObject {
 
@@ -30,15 +49,31 @@ public final class PrintWindowController: NSObject {
     private var lastStatus: PrinterStatusFile?
 
     private var window: NSWindow?
-    private var webView: WKWebView?
+    private var tabBar: BrowserTabBar?
+    private var contentArea: NSView?
 
-    // Data to pass into the print window
-    private var records: [WireRecord] = []
-    private var sourceFileURL: URL?
-    // The CSV on disk that `records` came from — used to persist inline edits.
-    // Tracked separately from sourceFileURL (which is cleared on reprint).
-    private var csvWritebackURL: URL?
-    private var reprinting: RecentPrint?
+    /// One open export/reprint per tab, each with its own WKWebView (full live state).
+    private var tabs: [PrintTab] = []
+    private var activeID: String?
+    private var activeTab: PrintTab? { tabs.first { $0.id == activeID } }
+
+    // Back-compat accessors so the rest of the controller keeps operating on the ACTIVE
+    // tab (the print/preview UI the user sees). Message handlers that can fire from a
+    // background tab resolve the tab by message.webView instead.
+    private var webView: WKWebView? { activeTab?.webView }
+    private var records: [WireRecord] {
+        get { activeTab?.records ?? [] }
+        set { activeTab?.records = newValue }
+    }
+    private var sourceFileURL: URL? {
+        get { activeTab?.sourceFileURL } set { activeTab?.sourceFileURL = newValue }
+    }
+    private var csvWritebackURL: URL? {
+        get { activeTab?.csvWritebackURL } set { activeTab?.csvWritebackURL = newValue }
+    }
+    private var reprinting: RecentPrint? {
+        get { activeTab?.reprinting } set { activeTab?.reprinting = newValue }
+    }
     /// True while a template is being edited in the in-process designer (the print
     /// window is hidden). Guards a mid-edit export/reprint from re-showing it over
     /// the editor; cleared on return.
@@ -95,14 +130,21 @@ public final class PrintWindowController: NSObject {
 
     public func showForNewExport(fileURL: URL, records: [WireRecord]) {
         guard !isEditing else { return }   // don't interrupt an open template edit
-        flushWriteback()                   // persist any pending inline edit first
         capturePreviousApp()
-        self.records = records
-        self.sourceFileURL = fileURL
-        self.csvWritebackURL = fileURL
-        self.reprinting = nil
         openWindowIfNeeded()
-        sendInitialState()
+        // New exports surface on the newest tab. If this export already has a tab open,
+        // refresh it in place; otherwise open a new tab for it.
+        if let existing = tabs.first(where: { $0.sourceFileURL == fileURL }) {
+            flushWriteback(existing)
+            existing.records = records
+            existing.reprinting = nil
+            existing.title = fileURL.lastPathComponent
+            activateTab(existing.id)
+            sendInitialState(for: existing)
+        } else {
+            addTab(records: records, sourceFileURL: fileURL, csvWritebackURL: fileURL,
+                   reprinting: nil, title: fileURL.lastPathComponent)
+        }
     }
 
     /// Remember the frontmost app (unless it's us) so we can return to it once
@@ -118,10 +160,10 @@ public final class PrintWindowController: NSObject {
     public func showForReprint(_ recent: RecentPrint) {
         // Don't yank the window out from under an open template edit.
         guard !isEditing else { return }
-        // Debounce duplicate Reprint taps: if we're already showing this record,
-        // just refocus instead of rebuilding the window.
-        if window != nil, reprinting?.id == recent.id {
-            NSApp.activate(ignoringOtherApps: true); window?.makeKeyAndOrderFront(nil); return
+        // Debounce duplicate Reprint taps: if a tab is already showing this record,
+        // just focus it instead of opening another.
+        if let existing = tabs.first(where: { $0.reprinting?.id == recent.id }) {
+            activateTab(existing.id); return
         }
         capturePreviousApp()
         // Load the source CSV first; exports are pruned (recent prints are not), so
@@ -153,34 +195,109 @@ public final class PrintWindowController: NSObject {
             }
             return
         }
-        flushWriteback()   // persist any pending inline edit before swapping records
-        self.reprinting = recent
-        // Clear any stale export URL so the recorded source filename comes from
-        // the reprint record, not a previously-opened export.
-        self.sourceFileURL = nil
-        self.records = csv
-        self.csvWritebackURL = url   // allow inline edits to persist on reprint too
         openWindowIfNeeded()
-        sendInitialState()
+        // Reprints open in their own tab (source URL nil so the recorded filename comes
+        // from the reprint record; csvWritebackURL set so inline edits still persist).
+        addTab(records: csv, sourceFileURL: nil, csvWritebackURL: url, reprinting: recent,
+               title: recent.sourceFileName.isEmpty ? recent.title : recent.sourceFileName)
     }
 
+    /// Close the ENTIRE print window (every tab) and return focus to the prior app.
+    /// AutoPrint is a headless accessory app, so without the restore a ✕/cancel would
+    /// dump the user to the Finder instead of back to their app.
     public func close() {
-        flushWriteback()   // persist any debounced inline edit before tearing down
+        flushAllWriteback()
         catalogPollTimer?.invalidate(); catalogPollTimer = nil   // stop the 2s disk poll
         columnObservers.removeAll()
         templatesObserver = nil
-        webView?.configuration.userContentController.removeScriptMessageHandler(forName: "vectorlabel")
+        for t in tabs { t.webView.configuration.userContentController.removeScriptMessageHandler(forName: "vectorlabel") }
+        tabs.removeAll(); activeID = nil
         window?.close()
-        window = nil
-        webView = nil
-        // Return focus to the app the user exported from (Vectorworks etc.) and clear the
-        // reference. AutoPrint is a headless accessory app, so without this a ✕ Cancel /
-        // window-close would dump the user to the Finder instead of back to their app.
-        // (The print-started path nils previousApp before calling close(), so it stays a
-        // single activate; cancel/close now get the same restore.)
+        window = nil; tabBar = nil; contentArea = nil
         let prior = previousApp
         previousApp = nil
         prior?.activate()
+    }
+
+    // MARK: – Tabs
+
+    /// A fresh WKWebView for a new tab: own message handler + HTML load. Observers that
+    /// broadcast to every tab (printers/cassettes/templates/theme) are set up once in
+    /// `openWindowIfNeeded`.
+    private func makeWebView() -> WKWebView {
+        let config = WKWebViewConfiguration()
+        let cc = WKUserContentController()
+        cc.add(self, name: "vectorlabel")
+        let theme = AppSettings.shared.isLight ? "light" : ""
+        cc.addUserScript(WKUserScript(source: "document.documentElement.dataset.theme='\(theme)';",
+                                      injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        cc.addUserScript(WKUserScript(source: "window.__VL_BUILD__='\(BuildInfo.build)'; window.__VL_CATALOG__=\(SupplyCatalogStore.webCatalogJSON(forModel: ""));",
+                                      injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        config.userContentController = cc
+        config.preferences.setValue(ProcessInfo.processInfo.environment["VL_DEV_HTML"] != nil, forKey: "developerExtrasEnabled")
+        let wv = WKWebView(frame: .zero, configuration: config)
+        wv.navigationDelegate = self
+        if let htmlURL = Self.findHTMLFile("VectorLabelPrint") ?? CoreResources.url("VectorLabelPrint", "html") {
+            wv.loadFileURL(htmlURL, allowingReadAccessTo: htmlURL.deletingLastPathComponent())
+        }
+        return wv
+    }
+
+    private func addTab(records: [WireRecord], sourceFileURL: URL?, csvWritebackURL: URL?,
+                        reprinting: RecentPrint?, title: String) {
+        let wv = makeWebView()
+        let tab = PrintTab(webView: wv, records: records, sourceFileURL: sourceFileURL,
+                           csvWritebackURL: csvWritebackURL, reprinting: reprinting, title: title)
+        tabs.append(tab)
+        if let area = contentArea {
+            wv.translatesAutoresizingMaskIntoConstraints = false
+            area.addSubview(wv)
+            NSLayoutConstraint.activate([
+                wv.leadingAnchor.constraint(equalTo: area.leadingAnchor),
+                wv.trailingAnchor.constraint(equalTo: area.trailingAnchor),
+                wv.topAnchor.constraint(equalTo: area.topAnchor),
+                wv.bottomAnchor.constraint(equalTo: area.bottomAnchor)])
+        }
+        activateTab(tab.id)   // sendInitialState fires from didFinish once the HTML loads
+    }
+
+    private func activateTab(_ id: String) {
+        guard tabs.contains(where: { $0.id == id }) else { return }
+        activeID = id
+        for t in tabs { t.webView.isHidden = (t.id != id) }
+        refreshTabBar()
+        NSApp.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
+    }
+
+    private func refreshTabBar() {
+        tabBar?.setItems(tabs.map { .init(id: $0.id, title: $0.title) }, active: activeID)
+    }
+
+    /// Remove one tab (flushing its edits). Closing the last tab closes the window.
+    private func closeTab(_ id: String) {
+        guard let idx = tabs.firstIndex(where: { $0.id == id }) else { return }
+        let tab = tabs[idx]
+        flushWriteback(tab)
+        tab.webView.configuration.userContentController.removeScriptMessageHandler(forName: "vectorlabel")
+        tab.webView.removeFromSuperview()
+        tabs.remove(at: idx)
+        if tabs.isEmpty { close(); return }
+        activateTab(tabs[min(idx, tabs.count - 1)].id)
+    }
+
+    /// After a print or cancel: if several tabs are open, just close this one and leave
+    /// the window; otherwise close the whole window exactly as before (return to the
+    /// prior app, and after a print open the menu popover).
+    private func dismissTabOrWindow(afterPrint: Bool) {
+        if tabs.count > 1 { if let id = activeID { closeTab(id) }; return }
+        if afterPrint {
+            let started = onPrintStarted
+            let prior = previousApp; previousApp = nil
+            close(); prior?.activate(); started?()
+        } else {
+            close()
+        }
     }
 
     // MARK: – Window setup
@@ -195,55 +312,21 @@ public final class PrintWindowController: NSObject {
             return
         }
 
-        let config = WKWebViewConfiguration()
-        let contentController = WKUserContentController()
-        contentController.add(self, name: "vectorlabel")
-        // Set the theme before first paint so reopening after a theme change
-        // doesn't flash the old colors.
-        let theme = AppSettings.shared.isLight ? "light" : ""
-        contentController.addUserScript(WKUserScript(
-            source: "document.documentElement.dataset.theme='\(theme)';",
-            injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        // Inject the editable supply catalog before the page's BL table is built.
-        contentController.addUserScript(WKUserScript(
-            source: "window.__VL_BUILD__='\(BuildInfo.build)'; window.__VL_CATALOG__=\(SupplyCatalogStore.webCatalogJSON(forModel: ""));",
-            injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        config.userContentController = contentController
-        // Web Inspector only in dev (VL_DEV_HTML set) — not in shipped builds.
-        config.preferences.setValue(ProcessInfo.processInfo.environment["VL_DEV_HTML"] != nil,
-                                    forKey: "developerExtrasEnabled")
-
-        let wv = WKWebView(frame: .zero, configuration: config)
-        wv.navigationDelegate = self
-        self.webView = wv
-
-        // Live printer-list + cassette changes now arrive via the PrintBackend's
-        // onStatusChange (wired in wireBackend()), which translates the Engine's
-        // PrinterStatusFile into the same JSON the page already consumes. A window
-        // opened before the first status still gets state from the seeded value.
-
+        // ── Observers (set up ONCE; each broadcasts to every open tab). ──
         // Refresh templates whenever the store changes (any save anywhere).
         templatesObserver = TemplateStore.shared.$templates.dropFirst()
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.pushTemplates() }
-
-        // Push the EFFECTIVE light/dark theme live on any appearance change,
-        // including the OS flipping while in "system" mode.
+        // Push the EFFECTIVE light/dark theme live on any appearance change.
         AppSettings.shared.$appearance.dropFirst().receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.evalJS("if(typeof setTheme==='function')setTheme('\(AppSettings.shared.effectiveTheme)')") }
+            .sink { [weak self] _ in self?.evalAll("if(typeof setTheme==='function')setTheme('\(AppSettings.shared.effectiveTheme)')") }
             .store(in: &columnObservers)
         AppSettings.shared.$systemAppearanceTick.dropFirst().receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.evalJS("if(typeof setTheme==='function')setTheme('\(AppSettings.shared.effectiveTheme)')") }
+            .sink { [weak self] _ in self?.evalAll("if(typeof setTheme==='function')setTheme('\(AppSettings.shared.effectiveTheme)')") }
             .store(in: &columnObservers)
-
-        // Live-sync the supply catalog. In the Engine process the editor lives
-        // in-process, so observing the store catches edits immediately.
+        // Live-sync the supply catalog (Engine: in-process observe; AutoPrint: disk poll).
         SupplyCatalogStore.shared.$catalog.dropFirst().receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.reinjectCatalog() }.store(in: &columnObservers)
-        // In AutoPrint (a separate process with no editor) the observation above never
-        // fires, so poll the on-disk catalog like the designers do. The Engine must
-        // NOT poll — its in-process snapshot is authoritative, and a poll could read
-        // the file mid-write and revert a fresh edit; it relies on the observation.
         if Bundle.main.bundleIdentifier?.contains("autoprint") == true {
             catalogPollTimer?.invalidate()
             catalogPollTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
@@ -252,7 +335,6 @@ public final class PrintWindowController: NSObject {
                 }
             }
         }
-
         // Keep the column config in sync with the designer / persisted setting.
         AppSettings.shared.$recordColumnOrder.dropFirst().receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.pushColumnConfig() }.store(in: &columnObservers)
@@ -261,14 +343,24 @@ public final class PrintWindowController: NSObject {
         AppSettings.shared.$recordColumnWidths.dropFirst().receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.pushColumnConfig() }.store(in: &columnObservers)
 
-        // Prefer live repo file during development so git pull is reflected immediately
-        let htmlURL = Self.findHTMLFile("VectorLabelPrint")
-            ?? CoreResources.url("VectorLabelPrint", "html")
-        guard let htmlURL = htmlURL else { return }
-        // Grant access to the parent directory so WKWebView can read the file.
-        // For repo files, grant access up to MacApp/ so any relative resources work.
-        let accessURL = htmlURL.deletingLastPathComponent()
-        wv.loadFileURL(htmlURL, allowingReadAccessTo: accessURL)
+        // ── Window chrome: a tab bar over a content area that hosts the active tab's web view. ──
+        let bar = BrowserTabBar(showsAdd: false)
+        bar.onSelect = { [weak self] id in self?.activateTab(id) }
+        bar.onClose  = { [weak self] id in self?.closeTab(id) }
+        self.tabBar = bar
+        let area = NSView(); area.translatesAutoresizingMaskIntoConstraints = false
+        self.contentArea = area
+        let container = NSView()
+        bar.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(bar); container.addSubview(area)
+        NSLayoutConstraint.activate([
+            bar.topAnchor.constraint(equalTo: container.topAnchor),
+            bar.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            bar.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            area.topAnchor.constraint(equalTo: bar.bottomAnchor),
+            area.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            area.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            area.bottomAnchor.constraint(equalTo: container.bottomAnchor)])
 
         let win = NSPanel(
             contentRect: NSRect(x: 0, y: 0, width: 1100, height: 720),
@@ -276,10 +368,9 @@ public final class PrintWindowController: NSObject {
             backing: .buffered, defer: false
         )
         win.title = "VectorLabel — Print"
-        win.contentView = wv
-        // Auto-launches when an export is detected while the user is in another
-        // app (e.g. Vectorworks). Float above normal windows and don't hide on
-        // deactivate so it stays in the front layer instead of appearing behind.
+        win.contentView = container
+        // Auto-launches when an export is detected while the user is in another app
+        // (e.g. Vectorworks). Float above normal windows and don't hide on deactivate.
         win.level = .floating
         win.hidesOnDeactivate = false
         win.isReleasedWhenClosed = false
@@ -316,7 +407,7 @@ public final class PrintWindowController: NSObject {
     private func pushTemplates() {
         guard let data = try? JSONEncoder().encode(TemplateStore.shared.templates),
               let json = String(data: data, encoding: .utf8) else { return }
-        evalJS("if(typeof refreshTemplates==='function')refreshTemplates(\(json));")
+        evalAll("if(typeof refreshTemplates==='function')refreshTemplates(\(json));")
     }
 
     // MARK: – Template persistence
@@ -351,7 +442,7 @@ public final class PrintWindowController: NSObject {
     /// Pushes the current printer list to the web view without resetting the
     /// user's record selection. No-ops when the page isn't loaded yet.
     private func pushPrinters() {
-        evalJS("if(typeof updatePrinters==='function')updatePrinters(\(printersJSONString()));")
+        evalAll("if(typeof updatePrinters==='function')updatePrinters(\(printersJSONString()));")
     }
 
     /// Detected cassette info keyed by printer id, as a JSON object string.
@@ -370,19 +461,19 @@ public final class PrintWindowController: NSObject {
 
     /// Push the current detected cassettes into the web view.
     private func pushCassettes() {
-        evalJS("if(typeof updateCassettes==='function')updateCassettes(\(cassettesJSONString()));")
+        evalAll("if(typeof updateCassettes==='function')updateCassettes(\(cassettesJSONString()));")
     }
 
     /// Push the shared column config (order/hidden/widths) into the web view.
     private func pushColumnConfig() {
-        evalJS("if(typeof applyColumnConfig==='function')applyColumnConfig(\(AppSettings.shared.columnConfigJSON()));")
+        evalAll("if(typeof applyColumnConfig==='function')applyColumnConfig(\(AppSettings.shared.columnConfigJSON()));")
     }
 
-    private func sendInitialState() {
-        guard let wv = webView else { return }
+    private func sendInitialState(for tab: PrintTab) {
+        let wv = tab.webView
 
         let encoder = JSONEncoder()
-        guard let recordsData  = try? encoder.encode(records),
+        guard let recordsData  = try? encoder.encode(tab.records),
               let recordsJSON  = String(data: recordsData, encoding: .utf8),
               let templatesData = try? encoder.encode(TemplateStore.shared.templates),
               let templatesJSON = String(data: templatesData, encoding: .utf8)
@@ -390,13 +481,13 @@ public final class PrintWindowController: NSObject {
 
         let printerJSON = printersJSONString()
 
-        let sourceFile = sourceFileURL?.lastPathComponent
-            ?? reprinting?.sourceFileName
+        let sourceFile = tab.sourceFileURL?.lastPathComponent
+            ?? tab.reprinting?.sourceFileName
             ?? "export.csv"
 
         // Build reprint settings if applicable
         var reprintJSON = "null"
-        if let r = reprinting,
+        if let r = tab.reprinting,
            let data = try? encoder.encode(r),
            let s = String(data: data, encoding: .utf8) { reprintJSON = s }
 
@@ -438,31 +529,33 @@ public final class PrintWindowController: NSObject {
         return nil
     }
 
-    private var writebackWork: DispatchWorkItem?
-
-    /// Debounced persistence of inline edits to the source CSV — coalesces rapid
-    /// edits into one write ~0.6 s after the last change instead of rewriting the
-    /// whole file on every keystroke-commit. Call `flushWriteback()` on close.
-    private func scheduleWriteback() {
-        writebackWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in self?.writeRecordsBackToCSV() }
-        writebackWork = work
+    /// Debounced persistence of one tab's inline edits to its source CSV — coalesces
+    /// rapid edits into one write ~0.6 s after the last change. Per-tab so each export
+    /// persists to its own file.
+    private func scheduleWriteback(for tab: PrintTab) {
+        tab.writebackWork?.cancel()
+        let work = DispatchWorkItem { [weak self, weak tab] in
+            guard let tab = tab else { return }
+            self?.writeRecordsBackToCSV(tab)
+        }
+        tab.writebackWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: work)
     }
 
-    /// Write any pending edit immediately (e.g. before the window closes).
-    private func flushWriteback() {
-        guard writebackWork != nil else { return }
-        writebackWork?.cancel(); writebackWork = nil
-        writeRecordsBackToCSV()
+    /// Write a tab's pending edit immediately (e.g. before it closes).
+    private func flushWriteback(_ tab: PrintTab) {
+        guard tab.writebackWork != nil else { return }
+        tab.writebackWork?.cancel(); tab.writebackWork = nil
+        writeRecordsBackToCSV(tab)
     }
+    private func flushAllWriteback() { for t in tabs { flushWriteback(t) } }
 
-    /// Persist `records` back to the source CSV, preserving its column order. The
-    /// records snapshot is taken on the main actor; the header read + serialize +
-    /// write run off the main thread so a large export doesn't block the UI.
-    private func writeRecordsBackToCSV() {
-        guard let url = csvWritebackURL else { return }
-        let snapshot = records   // value-type copy, safe to use off the main actor
+    /// Persist a tab's `records` back to its source CSV, preserving column order. The
+    /// snapshot is taken on the main actor; the header read + serialize + write run off
+    /// the main thread so a large export doesn't block the UI.
+    private func writeRecordsBackToCSV(_ tab: PrintTab) {
+        guard let url = tab.csvWritebackURL else { return }
+        let snapshot = tab.records   // value-type copy, safe to use off the main actor
         DispatchQueue.global(qos: .utility).async {
             // The column order MUST come from the existing header — never synthesize
             // one (a sorted-union fallback would reorder/drop columns). Abort if it
@@ -494,7 +587,7 @@ public final class PrintWindowController: NSObject {
 
 extension PrintWindowController: WKNavigationDelegate {
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        sendInitialState()
+        if let tab = tabs.first(where: { $0.webView === webView }) { sendInitialState(for: tab) }
     }
     /// Recover from a WebKit content-process crash instead of leaving a blank window.
     public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
@@ -511,6 +604,9 @@ extension PrintWindowController: WKScriptMessageHandler {
         guard let body = message.body as? [String: Any],
               let action = body["action"] as? String
         else { return }
+        // The tab whose web view sent this — a debounced record sync can fire just after
+        // the user switches tabs, so edits route to the sender, not necessarily the active tab.
+        let msgTab = tabs.first { $0.webView === message.webView }
 
         switch action {
         case "print":
@@ -529,31 +625,33 @@ extension PrintWindowController: WKScriptMessageHandler {
             // Live in-place edit of a record field from the print window. Updates
             // the in-memory record (so the rendered/printed output reflects it) AND
             // persists it back to the source CSV via writeRecordsBackToCSV().
-            if let p = body["payload"] as? [String: Any],
+            if let tab = msgTab,
+               let p = body["payload"] as? [String: Any],
                let index = p["index"] as? Int,
                let field = p["field"] as? String,
                let value = p["value"] as? String,
-               index >= 0, index < records.count {
-                var f = records[index].fields
+               index >= 0, index < tab.records.count {
+                var f = tab.records[index].fields
                 f[field] = value
-                records[index] = WireRecord(side: f["_Side"] ?? records[index].side,
-                                            wireID: f["Number"] ?? records[index].wireID,
-                                            fields: f)
-                scheduleWriteback()
+                tab.records[index] = WireRecord(side: f["_Side"] ?? tab.records[index].side,
+                                                wireID: f["Number"] ?? tab.records[index].wireID,
+                                                fields: f)
+                scheduleWriteback(for: tab)
             }
 
         case "syncRecords":
             // Bulk structural change (add row / paste / ripple / drag-fill): replace the
             // in-memory records from the full snapshot and persist to the source CSV. The
             // Print Window never adds columns — the column set is the source export's.
-            if let p = body["payload"] as? [String: Any],
+            if let tab = msgTab,
+               let p = body["payload"] as? [String: Any],
                let rowDicts = p["records"] as? [[String: Any]] {
-                records = rowDicts.map { row in
+                tab.records = rowDicts.map { row in
                     var f: [String: String] = [:]
                     for (k, v) in row { f[k] = v as? String ?? String(describing: v) }
                     return WireRecord(side: f["_Side"] ?? "", wireID: f["Number"] ?? "", fields: f)
                 }
-                scheduleWriteback()
+                scheduleWriteback(for: tab)
             }
 
         case "clipboardWrite":
@@ -615,10 +713,10 @@ extension PrintWindowController: WKScriptMessageHandler {
                let recordIndices = payload["recordIndices"] as? [Int], !recordIndices.isEmpty {
                 recordCancelledPrint(payload: payload, recordIndices: recordIndices)
             }
-            close()
+            dismissTabOrWindow(afterPrint: false)
 
         case "ready":
-            sendInitialState()
+            if let msgTab { sendInitialState(for: msgTab) }
 
         case "setFeedToClear":
             // Persist the feed-to-clear tick box PER PRINTER (key from the payload) so each
@@ -825,16 +923,10 @@ extension PrintWindowController: WKScriptMessageHandler {
                     if let w = self.window { alert.beginSheetModal(for: w) } else { alert.runModal() }
                     return
                 }
-                // The print has started: close the window, return to the prior app,
-                // and pop the menu so the user can watch the queue. Live job outcome
-                // (complete / cancelled / failed) is now tracked by the Engine's menu
-                // bar, not this window.
-                let started = self.onPrintStarted
-                let prior = self.previousApp
-                self.previousApp = nil
-                self.close()
-                prior?.activate()
-                started?()
+                // The print has started. With several tabs open, just close this one and
+                // leave the window; with a single tab, close the window, return to the
+                // prior app, and pop the menu so the user can watch the queue.
+                self.dismissTabOrWindow(afterPrint: true)
             }
         }
     }
@@ -842,24 +934,41 @@ extension PrintWindowController: WKScriptMessageHandler {
     private func evalJS(_ js: String) {
         webView?.evaluateJavaScript(js, completionHandler: nil)
     }
+    /// Run JS in EVERY open tab — for status / theme / catalog broadcasts that all tabs show.
+    private func evalAll(_ js: String) {
+        for t in tabs { t.webView.evaluateJavaScript(js, completionHandler: nil) }
+    }
 
     /// Push the latest supply catalog into the print web UI (live editor sync).
     private func reinjectCatalog() {
         let json = SupplyCatalogStore.webCatalogJSON(forModel: "")
-        evalJS("window.__VL_CATALOG__=\(json); if(typeof applyCatalog==='function')applyCatalog(window.__VL_CATALOG__);")
+        evalAll("window.__VL_CATALOG__=\(json); if(typeof applyCatalog==='function')applyCatalog(window.__VL_CATALOG__);")
     }
 }
 
 // MARK: – NSWindowDelegate
 
 extension PrintWindowController: NSWindowDelegate {
+    /// The window's ✕ closes ALL tabs. Confirm first when more than one is open.
+    public func windowShouldClose(_ sender: NSWindow) -> Bool {
+        if tabs.count > 1 {
+            let alert = NSAlert()
+            alert.messageText = "Close all \(tabs.count) tabs?"
+            alert.informativeText = "This closes every open export in the print window."
+            alert.addButton(withTitle: "Close All")
+            alert.addButton(withTitle: "Cancel")
+            if alert.runModal() != .alertFirstButtonReturn { return false }
+        }
+        return true   // windowWillClose does the teardown
+    }
+
     public func windowWillClose(_ notification: Notification) {
-        flushWriteback()   // persist any debounced inline edit
+        flushAllWriteback()   // persist any debounced inline edits
         catalogPollTimer?.invalidate(); catalogPollTimer = nil   // stop the 2s disk poll
         columnObservers.removeAll()
         templatesObserver = nil
-        webView?.configuration.userContentController.removeScriptMessageHandler(forName: "vectorlabel")
-        webView = nil
-        window = nil
+        for t in tabs { t.webView.configuration.userContentController.removeScriptMessageHandler(forName: "vectorlabel") }
+        tabs.removeAll(); activeID = nil
+        window = nil; tabBar = nil; contentArea = nil
     }
 }
