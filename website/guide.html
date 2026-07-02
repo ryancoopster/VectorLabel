@@ -232,7 +232,7 @@ scripts/install.sh         # install into /Applications/VectorLabel/ and relaunc
   <li>For USB: click 'Scan USB' if the printer isn't already listed. For network: type the host/IP, pick the model, click 'Add'.</li>
   <li>If macOS prompts to allow Documents access or notifications, allow them.</li>
 </ol>
-<div class="callout tip"><span class="lab">Tips</span><p>Brady USB ids: M610 is VID 0x0E2E / PID 0x010B (confirmed). The M611 USB PID is noted in the README as 0x010C and 'assumed' — if your M611 isn't detected over USB, check Preferences → Printers and consider adding it as a network printer instead.</p><p>If the menu-bar icon ever disappears (macOS can drop it after long uptime or sleep), simply re-launching the Engine nudges the live one to re-show the icon and opens Preferences as a reliable on-screen entry point.</p></div>
+<div class="callout tip"><span class="lab">Tips</span><p>Brady USB ids: M610 is VID 0x0E2E / PID 0x010B (confirmed). The M611 is detected as its composite USB device (VID 0x0E2E / PID 0x13), hardware-confirmed on a real unit — if an M611 still isn't found over USB, suspect the cable or port, or add it as a network printer instead.</p><p>If the menu-bar icon ever disappears (macOS can drop it after long uptime or sleep), simply re-launching the Engine nudges the live one to re-show the icon and opens Preferences as a reliable on-screen entry point.</p></div>
 <div class="callout warn"><span class="lab">Heads up</span><p>The Brother USB transport detaches the macOS AppleUSBPrinter kext and does not reattach it; after using a Brother printer with VectorLabel you may need to unplug/replug for the system print driver to take it back.</p><p>'Could not open printer (permissions?)' almost always means the device is busy (claimed by another app or a second Engine), not a macOS privacy setting.</p></div>
 </section>
 
@@ -965,7 +965,7 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
 
 <section class="doc-sec" id="printer-not-detected-usb">
 <h2>My Brady printer isn't detected over USB</h2>
-<p>The Engine finds USB printers by scanning for them. The Brady M610 is identified by a confirmed USB ID; the M611's USB ID is *assumed* in the code and not hardware-confirmed, so a real M611 can occasionally fail to be recognized.</p>
+<p>The Engine finds USB printers by scanning for them. Both the Brady M610 and M611 are identified by hardware-confirmed USB IDs (the M611's was validated on a real unit), so a printer that isn't found usually points to power, cabling, or another app holding the device — not an ID mismatch.</p>
 <p>Detection also requires that the Engine actually be running and able to claim the USB device. The app talks to printers at the raw-USB level (it is intentionally not sandboxed so it can do this), so a power, cable, or 'another app grabbed the printer' problem will stop detection cold.</p>
 
 <ol class="steps">
@@ -973,10 +973,10 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
   <li>Open Preferences and go to the Printers tab. The top row reads 'No printers detected' or 'N printer(s) connected'.</li>
   <li>Use the Scan menu → Scan USB to force a re-scan.</li>
   <li>Power-cycle the printer and reseat the USB cable; try a different cable/port (some cables are charge-only).</li>
-  <li>If an M611 still won't appear, it's the unconfirmed-USB-ID issue noted in the README — check Preferences → Printers and consider adding it over the network instead (see the network section).</li>
+  <li>If an M611 still won't appear over USB, you can also add it over the network instead (see the network section).</li>
 </ol>
 <div class="callout tip"><span class="lab">Tips</span><p>Each connected printer shows a colored status dot in the Printers tab: green = ready, yellow = busy, dim = offline.</p><p>The status refresh interval (and thus how quickly a newly plugged printer appears) is set in Preferences → Printers → Status Refresh.</p></div>
-<div class="callout warn"><span class="lab">Heads up</span><p>Scanning is paused while a job is printing, and the app deliberately avoids scanning during an active job — finish or cancel the job before expecting a freshly plugged printer to show up.</p><p>The M611 USB ID is UNVERIFIED in the source; do not assume USB detection of an M611 is reliable yet (alpha).</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>Scanning is paused while a job is printing, and the app deliberately avoids scanning during an active job — finish or cancel the job before expecting a freshly plugged printer to show up.</p><p>M611 USB detection is hardware-confirmed — if an M611 isn't found, the cause is almost always the cable, power, or another app holding the device.</p></div>
 </section>
 
 <section class="doc-sec" id="add-network-printer">
@@ -1145,7 +1145,7 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
 
 <section class="doc-sec" id="supported-printers-alpha-honesty">
 <h2>Which printers actually work today (alpha honesty)</h2>
-<p>The app's primary target is Brady M610/M611 wrap-around wire labels over USB. The M610's USB ID is confirmed; the M611's USB ID is assumed and the M611's cut/orientation behavior is more validated than the M610's, but M610 cut bytes specifically remain unverified.</p>
+<p>The app's primary target is Brady M610/M611 wrap-around wire labels over USB. Both models' USB IDs are hardware-confirmed, and the M611's cut/orientation behavior is more validated than the M610's — M610 cut bytes specifically remain unverified.</p>
 <p>Brother P-touch support (PT-E550W, PT-P750W classic dialect; PT-E560BT D460BT dialect) is implemented, passes offline 'golden vector' tests, and is partially hardware-verified — individual functions have been confirmed on real printers, but no Brother model has been verified end-to-end yet. Orientation, cut behavior, USB claim, and media auto-detect are not yet all confirmed on every model. Verify on your own unit before a production run.</p>
 
 <ol class="steps">
@@ -1185,7 +1185,7 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
   <li>Manual fallback: file it on the project's GitHub Issues, including the build number + commit hash from the menu-bar footer.</li>
 </ol>
 <div class="callout tip"><span class="lab">Tip</span><p>If sending fails (you're offline, or the build has reporting unconfigured), the popup offers "Copy Report" instead — it puts the full report on the clipboard so you can email it or paste it into a GitHub issue.</p></div>
-<div class="callout warn"><span class="lab">Heads up</span><p>Because this is alpha, some areas (M610 cutting, the Brother models, M611 USB ID) are only partially verified or still unverified — mention if your issue is in one of those areas so it's triaged correctly.</p><p>A report carries your contact info and the app's recent log so the developer can diagnose and follow up — don't put anything in the description you wouldn't email.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>Because this is alpha, some areas (M610 cutting, the Brother models) are only partially verified or still unverified — mention if your issue is in one of those areas so it's triaged correctly.</p><p>A report carries your contact info and the app's recent log so the developer can diagnose and follow up — don't put anything in the description you wouldn't email.</p></div>
 </section>
       <div class="pager">
         <a href="quickstart.html">← Quick start</a>
@@ -1204,7 +1204,7 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
       <a href="faq.html">FAQ</a>
       <a href="https://github.com/ryancoopster/VectorLabel">GitHub</a>
     </div>
-    <div class="copy">VectorLabel · Open alpha · Docs synced to commit 1e6f57f · 2026-07-02 · Brady and Brother are trademarks of their respective owners.</div>
+    <div class="copy">VectorLabel · Open alpha · Docs synced to commit 99999f9 · 2026-07-02 · Brady and Brother are trademarks of their respective owners.</div>
   </div>
 </footer>
 <script>
