@@ -15,6 +15,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg2);color:var(--text);fo
 input,select,button,textarea{font-family:system-ui,sans-serif;font-size:12px}
 .inp{background:var(--surface3);border:1px solid var(--bd4);color:var(--text);border-radius:4px;padding:4px 8px;outline:none;width:100%}
 .inp:focus{border-color:var(--accent)}
+/* Numeric panel inputs: the default WebKit stepper is tiny and hard to hit — make it
+   a real click target (always visible, full input height). */
+input[type=number].inp{padding-right:2px}
+input[type=number].inp::-webkit-inner-spin-button{width:18px;height:26px;opacity:1;cursor:pointer}
 .btn{background:var(--surface3);border:1px solid var(--bd4);color:var(--text2);border-radius:4px;padding:4px 9px;cursor:pointer;font-size:11px;white-space:nowrap}
 .btn:hover{background:var(--surface4)}
 .btn.on{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -3015,10 +3019,10 @@ const TBL_MIN=0.05;   // minimum column width / row height (inches)
 function tblDefaultCell(){
   return {mode:"static",text:"",al:"left",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Arial",wrapText:false,tracking:0,stretch:100};
 }
-// Resolve which [row,col] of table `o` a mouse event is over (event target must be
-// the table's object div). Object-relative px → inches → walk the cumulative sums.
-function tblCellAt(o,e){
-  const el=e.currentTarget||e.target, rect=el.getBoundingClientRect();
+// Resolve which [row,col] of table `o` a mouse event is over. `el` is the table's
+// rendered object div ([data-obj]). Object-relative px → inches → cumulative sums.
+function tblCellAtEl(o,el,e){
+  const rect=el.getBoundingClientRect();
   const z=SC*S.zoom;
   const xi=(e.clientX-rect.left)/z, yi=(e.clientY-rect.top)/z;
   let c=o.cols.length-1, acc=0;
@@ -3027,6 +3031,42 @@ function tblCellAt(o,e){
   for(let i=0;i<o.rows.length;i++){ acc+=o.rows[i]; if(yi<acc){r=i;break;} }
   return [r,c];
 }
+function tblCellAt(o,e){ return tblCellAtEl(o,e.currentTarget||e.target,e); }
+// Native double-click → edit the cell under the cursor, regardless of the table's
+// selection state or cell mode. The mousedown timers remain as the fast path, but a
+// full R() re-render runs BETWEEN the two clicks (selecting the table/cell), which
+// replaces the DOM and can defeat per-element click timing — the browser-composed
+// dblclick event is immune to that (it fires on the second click's target).
+document.addEventListener('dblclick',function(ev){
+  const host=document.getElementById('canvas-host');
+  if(!host||!ev.target||!host.contains(ev.target))return;
+  const el=ev.target.closest?ev.target.closest('[data-obj]'):null; if(!el)return;
+  const id=el.getAttribute('data-obj'); const o=gobj(id); if(!o||o.t!=="tb")return;
+  if(!Array.isArray(o.cols)||!Array.isArray(o.rows))return;
+  const rc=tblCellAtEl(o,el,ev), r=rc[0], c=rc[1];
+  if(S._tblEdit&&S._tblEdit.id===id&&S._tblEdit.r===r&&S._tblEdit.c===c)return;  // already editing → let word-select work
+  const cl=(o.cells[r]||[])[c]; if(!cl)return;
+  ev.preventDefault(); ev.stopPropagation();
+  const m=txMode(cl);
+  if(m==="static"){ startTblCellEdit(id,r,c); return; }
+  // Field / formula cells: select the cell and open its natural editor.
+  setSel(id); S._tblSel={id:id,anchor:[r,c],cells:[r+','+c]}; S._tblEdit=null; S._ef=undefined; R();
+  if(m==="formula"){ openTblCellFormulaEditor(id); }
+  else { const s=document.getElementById('tbl-cell-field'); if(s)s.focus(); }
+},true);
+// Arrow ↑/↓ in a numeric panel input steps the value AND commits it like clicking the
+// stepper buttons. Native arrow-stepping only fires 'change' on blur, so we dispatch it
+// ourselves — debounced, because the commit re-renders the panel (dropping focus), and
+// rapid stepping should stay in the input until the user pauses.
+let _numArrowT=null;
+document.addEventListener('keydown',function(ev){
+  if(ev.key!=='ArrowUp'&&ev.key!=='ArrowDown')return;
+  const el=document.activeElement;
+  if(!el||el.tagName!=='INPUT'||el.type!=='number')return;
+  if(!el.closest('#props-pane'))return;
+  clearTimeout(_numArrowT);
+  _numArrowT=setTimeout(function(){ el.dispatchEvent(new Event('change')); },400);
+});
 // Does this cell currently hold a value? (static text, a bound field, or a
 // non-trivial formula — the seeded '=""' doesn't count.)
 function tblCellHasValue(cl){
@@ -3654,7 +3694,7 @@ function buildTblCellProps(o){
       ? `<textarea class="inp" rows="2" style="resize:vertical;font-family:inherit" placeholder="${shT.multi?'Multiple values':'Type cell text…'}" onfocus="snapshot()" oninput="setTblCellsStatic('${o.id}',this.value)" onblur="R()">${shT.multi?'':esc(shT.v||'')}</textarea>
          <div style="color:var(--text3);font-size:10px;margin-top:5px;line-height:1.4">…or double-click the cell on the canvas to type directly.</div>`
     : tmode==="field"
-      ? `<select class="inp" onchange="tblPatchCells({field:this.value})">
+      ? `<select id="tbl-cell-field" class="inp" onchange="tblPatchCells({field:this.value})">
            <option value="">${shField.multi?'— multiple —':'— choose column —'}</option>
            ${fieldDefs().map(f=>`<option value="${escAttr(f.c)}"${(!shField.multi&&shField.v===f.c)?" selected":""}>${esc(f.f)}</option>`).join("")}
          </select>

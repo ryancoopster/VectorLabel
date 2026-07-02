@@ -29,6 +29,14 @@ number (git commit count) + short SHA, shown in the menu-bar footer.
 - **Installer:** on macOS older than 14 (Sonoma) the installer now **warns** that the apps
   may not run correctly and lets you continue, instead of hard-blocking. (The apps target
   macOS 14 on Apple Silicon.)
+- **Designers:** the stepper (▲/▼) buttons on numeric inputs in the object settings panel
+  are bigger and easier to hit, and pressing ↑/↓ with a numeric input focused now steps
+  and applies the value just like clicking the buttons.
+
+### Fixed
+- **Tables:** double-clicking a cell now reliably starts editing regardless of how the
+  table was selected — and works for every cell type: static cells edit inline, formula
+  cells open the formula editor, field cells jump to the column picker.
 
 ## [1.1.0] — 2026-07-01
 
