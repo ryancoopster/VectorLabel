@@ -8,6 +8,8 @@
 <title>VectorLabel FAQ</title>
 <meta name="description" content="Answers to common VectorLabel questions and fixes for common problems — installing, the Vectorworks export, designing, data and formulas, barcodes, printing, printers, supplies and connectivity.">
 <link rel="stylesheet" href="support.css">
+<script>window.VL_SEARCH={mode:'faq',input:'#faqq'};</script>
+<script defer src="support-search.js"></script>
 </head>
 <body>
 <div class="alphabar">
@@ -61,9 +63,9 @@
   <summary>What version of macOS do I need?</summary>
   <div class="faq-body"><p>macOS 14 (Sonoma) or newer, on an <strong>Apple&nbsp;Silicon</strong> Mac (the apps are arm64-only). The installer still lets you continue on an older macOS but warns it may not work correctly. No extra software is required for end users — the USB library (libusb) is bundled inside the app.</p></div>
 </details>
-<details class="faq" data-text="how do i install it? download the latest signed release from the project's github releases page and run the guided .pkg installer, which installs all four apps. then launch vectorlabel engine to get the menu-bar icon.">
+<details class="faq" data-text="how do i install it? download the latest signed release from the downloads page and run the guided .pkg installer, which installs all four apps. then launch vectorlabel engine to get the menu-bar icon.">
   <summary>How do I install it?</summary>
-  <div class="faq-body"><p>Download the latest signed release from the project's GitHub Releases page and run the guided .pkg installer, which installs all four apps. Then launch VectorLabel Engine to get the menu-bar icon.</p></div>
+  <div class="faq-body"><p>Download the latest signed release from the <a href="downloads.html">Downloads page</a> and run the guided .pkg installer, which installs all four apps. Then launch VectorLabel Engine to get the menu-bar icon.</p></div>
 </details>
 <details class="faq" data-text="how do updates work? the engine checks github for new vectorlabel releases. on first launch it asks how often to check — on every launch, every n days (the pre-selected default, every 7 days), or manually only — and you can change that any time in preferences → updates. when a newer version is found, a popup offers 'update now' (downloads the installer to ~/downloads and opens it), 'remind me tomorrow', and 'don't update' (skips that version only; a newer release prompts again). preferences → updates also has a 'check for updates now' button and shows a version-available summary with its own update now button, and the menu bar has a 'check for updates…' row.">
   <summary>How do updates work?</summary>
@@ -231,9 +233,9 @@
   <summary>What's the difference between "One at a time" and "Full job"?</summary>
   <div class="faq-body"><p>One at a time sends each label as its own job, so you get per-label progress and can cancel mid-run (in-flight labels finish, the rest are dropped). Full job sends everything at once — it's fastest, but on the M611 it can't be cancelled once started and only shows a generic "Printing" indicator. Both run at full speed. Set this per printer in Preferences ▸ Printers ▸ Per-Printer Settings.</p></div>
 </details>
-<details class="faq" data-text="when does the printer cut the labels? the cut dropdown sets it: every label, end of job, or none. if you leave it alone, continuous tape defaults to cutting after every label and die-cut stock cuts once at the end of the job. the m610/m611 cutters are full-cut only. note that none on brother printers is not yet hardware-verified.">
+<details class="faq" data-text="when does the printer cut the labels? the cut dropdown sets it: every label, end of job, or none. if you leave it alone, continuous tape defaults to cutting after every label and die-cut stock cuts once at the end of the job. the m610/m611 cutters are full-cut only. note that the brother drivers are only partially hardware-verified, and 'none' on brother is one of the paths not yet confirmed — test it on your unit first.">
   <summary>When does the printer cut the labels?</summary>
-  <div class="faq-body"><p>The Cut dropdown sets it: Every Label, End of Job, or None. If you leave it alone, continuous tape defaults to cutting after every label and die-cut stock cuts once at the end of the job. The M610/M611 cutters are full-cut only. Note that "None" on Brother printers is not yet hardware-verified.</p></div>
+  <div class="faq-body"><p>The Cut dropdown sets it: Every Label, End of Job, or None. If you leave it alone, continuous tape defaults to cutting after every label and die-cut stock cuts once at the end of the job. The M610/M611 cutters are full-cut only. Note that the Brother drivers are only partially hardware-verified, and "None" on Brother is one of the paths not yet confirmed — test it on your unit first.</p></div>
 </details>
 <details class="faq" data-text="can i reprint an old job? yes. press reprint on the job in the menu bar's recent prints list; the print window reopens with the same file, selection, range, and filter/sort. if the original export file has been pruned, you can choose reprint without editing to re-send the original rendered labels.">
   <summary>Can I reprint an old job?</summary>
@@ -251,13 +253,13 @@
   <summary>The print window shows a red ⚠ next to the supply. What does it mean?</summary>
   <div class="faq-body"><p>It means the cassette/tape physically loaded doesn't match the supply your template was built for, so the label may print misaligned or cropped. A green ✓ means they match. Load the matching supply (or choose a template/supply that matches what's loaded) and click Re-detect. Note network printers can't auto-detect the loaded supply.</p></div>
 </details>
-<details class="faq" data-text="when does the label get cut, and can i change it? by default continuous tape is cut after every label and die-cut stock is cut once at the end of the job. override it per job with the 'cut' dropdown in the print window. there's also a feed/lead-label option to clear or advance the supply before printing. caution: m610 cut bytes and brother 'never cut' are not hardware-verified yet — test cutting on a small batch first.">
+<details class="faq" data-text="when does the label get cut, and can i change it? by default continuous tape is cut after every label and die-cut stock is cut once at the end of the job. override it per job with the 'cut' dropdown in the print window. there's also a feed/lead-label option to clear or advance the supply before printing. caution: m610 cut bytes are still not hardware-verified, and the brother drivers are only partially hardware-verified ('never cut' hasn't been confirmed) — test cutting on a small batch first.">
   <summary>When does the label get cut, and can I change it?</summary>
-  <div class="faq-body"><p>By default continuous tape is cut after every label and die-cut stock is cut once at the end of the job. Override it per job with the 'Cut' dropdown in the print window. There's also a feed/lead-label option to clear or advance the supply before printing. Caution: M610 cut bytes and Brother 'never cut' are not hardware-verified yet — test cutting on a small batch first.</p></div>
+  <div class="faq-body"><p>By default continuous tape is cut after every label and die-cut stock is cut once at the end of the job. Override it per job with the 'Cut' dropdown in the print window. There's also a feed/lead-label option to clear or advance the supply before printing. Caution: M610 cut bytes are still not hardware-verified, and the Brother drivers are only partially hardware-verified ('never cut' hasn't been confirmed) — test cutting on a small batch first.</p></div>
 </details>
-<details class="faq" data-text="is cutting reliable? not fully, in alpha. on the brady m610 the exact cut byte sequences are unverified on hardware, and on the brother classic models suppressing the cut ('never') is unverified — the job terminator may still feed and cut. the m611 is more validated. test on your specific unit before a production run.">
+<details class="faq" data-text="is cutting reliable? not fully, in alpha. on the brady m610 the exact cut byte sequences are unverified on hardware, and on the brother classic models (whose drivers are only partially hardware-verified) suppressing the cut ('never') is a path not yet confirmed — the job terminator may still feed and cut. the m611 is more validated. test on your specific unit before a production run.">
   <summary>Is cutting reliable?</summary>
-  <div class="faq-body"><p>Not fully, in alpha. On the Brady M610 the exact cut byte sequences are unverified on hardware, and on the Brother classic models suppressing the cut ('never') is unverified — the job terminator may still feed and cut. The M611 is more validated. Test on your specific unit before a production run.</p></div>
+  <div class="faq-body"><p>Not fully, in alpha. On the Brady M610 the exact cut byte sequences are unverified on hardware, and on the Brother classic models (whose drivers are only partially hardware-verified) suppressing the cut ('never') is a path not yet confirmed — the job terminator may still feed and cut. The M611 is more validated. Test on your specific unit before a production run.</p></div>
 </details>
 
 <h2 class="faq-cat" id="faq-printers-connection">Printers &amp; connection</h2>
@@ -273,9 +275,9 @@
   <summary>My labels print slightly off-center. How do I fix the alignment?</summary>
   <div class="faq-body"><p>Use per-printer calibration in Preferences ▸ Printers. Click "Print calibration grid", compare it to the label edges, then enter Horizontal and Vertical offsets in pixels and reprint until it's square. Offsets are saved per printer serial and applied to every job. Use Reset to zero them.</p></div>
 </details>
-<details class="faq" data-text="which printers are actually tested on real hardware? this is an open alpha. the brady m611 is the most thoroughly hardware-validated. the brady m610 works but some details (like cut bytes) are not fully verified. all three brother p-touch drivers (pt-e550w, pt-p750w, pt-e560bt) are tested offline only and are not yet confirmed on real hardware — verify orientation, cutting, and media detection before relying on them.">
+<details class="faq" data-text="which printers are actually tested on real hardware? this is an open alpha. the brady m611 is the most thoroughly hardware-validated. the brady m610 works but some details (like cut bytes) are not fully verified. all three brother p-touch drivers (pt-e550w, pt-p750w, pt-e560bt) are partially hardware-verified — individual functions have been confirmed on real printers, but not every function or end-to-end path yet — so verify orientation, cutting, and media detection on your own unit before relying on them.">
   <summary>Which printers are actually tested on real hardware?</summary>
-  <div class="faq-body"><p>This is an open alpha. The Brady M611 is the most thoroughly hardware-validated. The Brady M610 works but some details (like cut bytes) are not fully verified. All three Brother P-touch drivers (PT-E550W, PT-P750W, PT-E560BT) are tested offline only and are not yet confirmed on real hardware — verify orientation, cutting, and media detection before relying on them.</p></div>
+  <div class="faq-body"><p>This is an open alpha. The Brady M611 is the most thoroughly hardware-validated. The Brady M610 works but some details (like cut bytes) are not fully verified. All three Brother P-touch drivers (PT-E550W, PT-P750W, PT-E560BT) are partially hardware-verified — individual functions have been confirmed on real printers, but not every function or end-to-end path yet — so verify orientation, cutting, and media detection on your own unit before relying on them.</p></div>
 </details>
 <details class="faq" data-text="my brady printer isn't detected over usb. make sure the engine is running, then open preferences → printers and use scan → scan usb. power-cycle the printer, reseat the cable, and try a different cable/port (some are charge-only). note the m610's usb id is confirmed but the m611's is only assumed in the code, so an m611 may sometimes fail usb detection — if so, try adding it over the network instead.">
   <summary>My Brady printer isn't detected over USB.</summary>
@@ -311,9 +313,9 @@
   <summary>How do I add a label size or part number that isn't listed?</summary>
   <div class="faq-body"><p>Preferences → Printers → Edit Supplies…. Pick the right printer group and add/edit a supply: category, size, part number, roll length/quantity, 90° rotation, and an optional buy link. Your additions are preserved across app updates. (The supply catalog is fully user-editable — no code needed.)</p></div>
 </details>
-<details class="faq" data-text="my brother tze part number looks wrong in the catalog. some seeded brother tze part numbers (especially the 3.5 mm one) are best-effort placeholders that haven't been hardware-confirmed. correct them in preferences → printers → edit supplies…. brother support overall is alpha and not hardware-verified.">
+<details class="faq" data-text="my brother tze part number looks wrong in the catalog. some seeded brother tze part numbers (especially the 3.5 mm one) are best-effort placeholders that haven't been hardware-confirmed. correct them in preferences → printers → edit supplies…. brother support overall is alpha and only partially hardware-verified.">
   <summary>My Brother TZe part number looks wrong in the catalog.</summary>
-  <div class="faq-body"><p>Some seeded Brother TZe part numbers (especially the 3.5 mm one) are best-effort placeholders that haven't been hardware-confirmed. Correct them in Preferences → Printers → Edit Supplies…. Brother support overall is alpha and not hardware-verified.</p></div>
+  <div class="faq-body"><p>Some seeded Brother TZe part numbers (especially the 3.5 mm one) are best-effort placeholders that haven't been hardware-confirmed. Correct them in Preferences → Printers → Edit Supplies…. Brother support overall is alpha and only partially hardware-verified.</p></div>
 </details>
 
 <h2 class="faq-cat" id="faq-files-settings">Files &amp; settings</h2>
@@ -355,9 +357,9 @@
   <summary>My printer is detected but won't print and says 'permissions?'. What's wrong?</summary>
   <div class="faq-body"><p>That message ('Could not open printer (permissions?)') almost always means another process is holding the device — for example the macOS system print driver or a second copy of the Engine. Quit any legacy VectorLabel.app and make sure only one Engine is running.</p></div>
 </details>
-<details class="faq" data-text="is every printer fully working? no — this is open alpha. the brady m611 is hardware-validated. the brady m610's cut behavior is noted as still unverified. all three brother p-touch drivers are implemented and tested only against recorded sample data, not yet on real hardware.">
+<details class="faq" data-text="is every printer fully working? no — this is open alpha. the brady m611 is hardware-validated. the brady m610's cut behavior is noted as still unverified. all three brother p-touch drivers are implemented and partially hardware-verified — individual functions have been confirmed on real printers, but not every function or end-to-end path yet.">
   <summary>Is every printer fully working?</summary>
-  <div class="faq-body"><p>No — this is open alpha. The Brady M611 is hardware-validated. The Brady M610's cut behavior is noted as still unverified. All three Brother P-touch drivers are implemented and tested only against recorded sample data, not yet on real hardware.</p></div>
+  <div class="faq-body"><p>No — this is open alpha. The Brady M611 is hardware-validated. The Brady M610's cut behavior is noted as still unverified. All three Brother P-touch drivers are implemented and partially hardware-verified — individual functions have been confirmed on real printers, but not every function or end-to-end path yet.</p></div>
 </details>
 <details class="faq" data-text="the menu-bar icon disappeared. how do i get it back? just launch vectorlabel engine again. a second launch detects the live engine, nudges it to re-show its icon, and opens preferences as a reliable on-screen entry point.">
   <summary>The menu-bar icon disappeared. How do I get it back?</summary>
@@ -367,26 +369,19 @@
   <summary>The print window didn't open after I exported. Why?</summary>
   <div class="faq-body"><p>Most often: VectorLabel AutoPrint wasn't running when you exported (it only reacts to new files created while it's live, and it does not scan old files at launch), or the 'Auto-open print window when export is detected' preference is turned off. Also confirm your selection/layer actually contained ConnectCAD circuits. The detection has a short delay, so wait a moment.</p></div>
 </details>
-<details class="faq" data-text="which printers are actually supported and tested today? brady m610/m611 are the main target over usb (m611 also network). the m610 usb id is confirmed; the m611 usb id is assumed. brother pt-e550w, pt-p750w, and pt-e560bt are implemented and pass offline tests but are not hardware-verified — orientation, cutting, usb claim, and media detect are all still pending real hardware. see docs/ptouch-driver-status.md for the live per-model status.">
+<details class="faq" data-text="which printers are actually supported and tested today? brady m610/m611 are the main target over usb (m611 also network). the m610 usb id is confirmed; the m611 usb id is assumed. brother pt-e550w, pt-p750w, and pt-e560bt are implemented, pass offline tests, and are partially hardware-verified — individual functions have been confirmed on real printers, but orientation, cutting, usb claim, and media detect are not yet all confirmed on every model. see docs/ptouch-driver-status.md for the live per-model status.">
   <summary>Which printers are actually supported and tested today?</summary>
-  <div class="faq-body"><p>Brady M610/M611 are the main target over USB (M611 also network). The M610 USB ID is confirmed; the M611 USB ID is assumed. Brother PT-E550W, PT-P750W, and PT-E560BT are implemented and pass offline tests but are NOT hardware-verified — orientation, cutting, USB claim, and media detect are all still pending real hardware. See docs/PTOUCH-DRIVER-STATUS.md for the live per-model status.</p></div>
+  <div class="faq-body"><p>Brady M610/M611 are the main target over USB (M611 also network). The M610 USB ID is confirmed; the M611 USB ID is assumed. Brother PT-E550W, PT-P750W, and PT-E560BT are implemented, pass offline tests, and are PARTIALLY hardware-verified — individual functions have been confirmed on real printers, but orientation, cutting, USB claim, and media detect are not yet all confirmed on every model. See docs/PTOUCH-DRIVER-STATUS.md for the live per-model status.</p></div>
 </details>
-<details class="faq" data-text="my brother pt-e560bt printed one label then froze. that's the classic one-job-hang failure mode. it happens if the wrong (classic) dialect is sent to the e560bt, which speaks a different dialect — it then hangs until power-cycled. the app routes by usb product id to avoid this, but it's the known canary for a routing bug. power-cycle the printer; if it recurs, report it with your build number. note all brother models are hardware-unverified.">
+<details class="faq" data-text="my brother pt-e560bt printed one label then froze. that's the classic one-job-hang failure mode. it happens if the wrong (classic) dialect is sent to the e560bt, which speaks a different dialect — it then hangs until power-cycled. the app routes by usb product id to avoid this, but it's the known canary for a routing bug. power-cycle the printer; if it recurs, report it with your build number. note the brother drivers are only partially hardware-verified.">
   <summary>My Brother PT-E560BT printed one label then froze.</summary>
-  <div class="faq-body"><p>That's the classic one-job-hang failure mode. It happens if the wrong (classic) dialect is sent to the E560BT, which speaks a different dialect — it then hangs until power-cycled. The app routes by USB product ID to avoid this, but it's the known canary for a routing bug. Power-cycle the printer; if it recurs, report it with your build number. Note all Brother models are hardware-unverified.</p></div>
+  <div class="faq-body"><p>That's the classic one-job-hang failure mode. It happens if the wrong (classic) dialect is sent to the E560BT, which speaks a different dialect — it then hangs until power-cycled. The app routes by USB product ID to avoid this, but it's the known canary for a routing bug. Power-cycle the printer; if it recurs, report it with your build number. Note the Brother drivers are only partially hardware-verified.</p></div>
 </details>
-<details class="faq" data-text="how do i report a bug? note the build number and short commit hash shown in the menu-bar footer, your printer model and connection type (usb or network ip), the loaded supply part number, and the exact text of any alert you saw. file it on the project's github issues. if it's about m610 cutting, any brother model, or m611 usb detection, mention that — those are known-unverified alpha areas.">
+<details class="faq" data-text="how do i report a bug? note the build number and short commit hash shown in the menu-bar footer, your printer model and connection type (usb or network ip), the loaded supply part number, and the exact text of any alert you saw. file it on the project's github issues. if it's about m610 cutting, any brother model, or m611 usb detection, mention that — those are the least-verified alpha areas.">
   <summary>How do I report a bug?</summary>
-  <div class="faq-body"><p>Note the build number and short commit hash shown in the menu-bar footer, your printer model and connection type (USB or network IP), the loaded supply part number, and the exact text of any alert you saw. File it on the project's GitHub Issues. If it's about M610 cutting, any Brother model, or M611 USB detection, mention that — those are known-unverified alpha areas.</p></div>
+  <div class="faq-body"><p>Note the build number and short commit hash shown in the menu-bar footer, your printer model and connection type (USB or network IP), the loaded supply part number, and the exact text of any alert you saw. File it on the project's GitHub Issues. If it's about M610 cutting, any Brother model, or M611 USB detection, mention that — those are the least-verified alpha areas.</p></div>
 </details>
     </div>
-
-    <!-- A live look at the real app -->
-    <div class="appshot" style="margin-top:8px">
-      <div class="bar"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><b>VectorLabel — Print</b></div>
-      <iframe class="embed-frame" src="embeds/print.html?tpl=asset_qr&view=full&anim=1" title="VectorLabel Print window" loading="lazy" scrolling="no"></iframe>
-    </div>
-    <p class="shot-cap">Still curious? This is the real VectorLabel Print window — the same app the answers above describe, running live.</p>
   </div>
 </div>
 <footer>
@@ -399,23 +394,9 @@
       <a href="faq.html">FAQ</a>
       <a href="https://github.com/ryancoopster/VectorLabel">GitHub</a>
     </div>
-    <div class="copy">VectorLabel · Open alpha · Docs synced to commit bbeea90 · 2026-07-02 · Brady and Brother are trademarks of their respective owners.</div>
+    <div class="copy">VectorLabel · Open alpha · Docs synced to commit 76f48a5 · 2026-07-02 · Brady and Brother are trademarks of their respective owners.</div>
   </div>
 </footer>
-<script>
-(function(){
-  var q=document.getElementById('faqq'), list=document.getElementById('faqList'), empty=document.getElementById('faqEmpty');
-  var items=[].slice.call(list.querySelectorAll('details.faq'));
-  var cats=[].slice.call(list.querySelectorAll('.faq-cat'));
-  function run(){
-    var words=q.value.trim().toLowerCase().split(/\s+/).filter(Boolean); var any=false;
-    items.forEach(function(d){var hay=d.getAttribute('data-text');var hit=!words.length||words.every(function(w){return hay.indexOf(w)>=0;});d.style.display=hit?'':'none';if(hit)any=true;d.open=words.length>0&&hit;});
-    cats.forEach(function(c){var n=c.nextElementSibling,show=false;while(n&&n.classList.contains('faq')){if(n.style.display!=='none'){show=true;break;}n=n.nextElementSibling;}c.style.display=show?'':'none';});
-    empty.style.display=any?'none':'block';
-  }
-  q.addEventListener('input',run);
-})();
-</script>
 <script>
 (function(){
   var mb=document.querySelector('.menu-btn'), nav=document.getElementById('vl-nav');

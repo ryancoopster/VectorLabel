@@ -8,6 +8,8 @@
 <title>VectorLabel User Guide</title>
 <meta name="description" content="The complete in-depth guide to VectorLabel — installation, the Vectorworks integration, designing labels, data and formulas, barcodes, printing, printers, supplies and calibration.">
 <link rel="stylesheet" href="support.css">
+<script>window.VL_SEARCH={mode:'guide',input:'#guideq'};</script>
+<script defer src="support-search.js"></script>
 </head>
 <body>
 <div class="alphabar">
@@ -42,6 +44,10 @@
   </div>
 </section>
 <div class="wrap">
+  <div class="faq-search doc-search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3" stroke-linecap="round"/></svg>
+    <input type="search" id="guideq" placeholder="Search the guide…" aria-label="Search the guide" autocomplete="off">
+  </div>
   <div class="layout">
     <aside class="toc" aria-label="Contents">
       <p class="toc-title">Contents</p>
@@ -122,7 +128,7 @@
 <li><a href="#text-too-big-or-cut-off" class="sub">Text is too big, too small, or cut off</a></li>
 <li><a href="#template-wrong-size" class="sub">A template opens at the wrong size</a></li>
 <li><a href="#find-supply-edit-supplies" class="sub">I can't find my label supply or part number</a></li>
-<li><a href="#cut-and-feed-options" class="sub">Cutting and feed options (and what's not verified)</a></li>
+<li><a href="#cut-and-feed-options" class="sub">Cutting and feed options (and what's still being verified)</a></li>
 <li><a href="#where-are-my-files" class="sub">Where are my files (templates, exports, history)?</a></li>
 <li><a href="#supported-printers-alpha-honesty" class="sub">Which printers actually work today (alpha honesty)</a></li>
 <li><a href="#windows-and-requirements" class="sub">Does it run on Windows? Requirements</a></li>
@@ -135,11 +141,11 @@
 <h2>What VectorLabel is</h2>
 <p>VectorLabel is a macOS menu-bar app suite for printing wrap-around wire and cable labels. Its original and primary job is to take a list of circuits exported from Vectorworks ConnectCAD and print one label per wire on a Brady M610 or M611 label printer, but it also supports designing your own label templates and printing from your own data files (CSV/XLSX).</p>
 <p>The app stays out of your way: by default it runs only in the menu bar (no Dock icon), watches a folder for new exports, and shows a print window automatically when one appears. You pick a template, choose which records to print, pick the printer, and print.</p>
-<p>Because this is open alpha software, expect rough edges. Some printers are fully working on real hardware, while others are written and tested only against recorded sample data and have not yet been confirmed on a physical unit. See the gotchas for what is and isn't verified.</p>
+<p>Because this is open alpha software, expect rough edges. Some printers are fully validated on real hardware, while others are only partially hardware-verified — individual functions have been confirmed on real printers, but not every function or end-to-end path yet. See the gotchas for what is and isn't verified.</p>
 
 
 <div class="callout tip"><span class="lab">Tips</span><p>The menu-bar icon is your main entry point — click it to open the dropdown with printers, recent prints, and the Open Designer / Preferences / Quit actions.</p><p>If you only have a Brady M611 or M610, the core printing path is the most mature part of the app.</p></div>
-<div class="callout warn"><span class="lab">Heads up</span><p>Hardware verification is uneven in alpha. Per the project's own status notes: the Brady M611 is hardware-validated; the Brady M610's cut behavior is noted as still unverified; and all three Brother P-touch drivers (PT-E550W, PT-P750W, PT-E560BT) are implemented and tested only against golden sample data, NOT yet confirmed on real hardware (docs/PTOUCH-DRIVER-STATUS.md).</p><p>The README's headline still describes the app narrowly as printing 'Brady M610/M611 wrap-around wire labels from Vectorworks ConnectCAD exports'; the suite has since grown to four apps and additional printers/designers.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>Hardware verification is uneven in alpha. Per the project's own status notes: the Brady M611 is hardware-validated; the Brady M610's cut behavior is noted as still unverified; and all three Brother P-touch drivers (PT-E550W, PT-P750W, PT-E560BT) are implemented and partially hardware-verified — individual functions confirmed on real printers, but not yet every function end-to-end (docs/PTOUCH-DRIVER-STATUS.md).</p><p>The README's headline still describes the app narrowly as printing 'Brady M610/M611 wrap-around wire labels from Vectorworks ConnectCAD exports'; the suite has since grown to four apps and additional printers/designers.</p></div>
 </section>
 
 <section class="doc-sec" id="four-apps">
@@ -776,7 +782,7 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
   <li>Optionally tick "Feed to clear" to advance a blank lead label first (Brady printers only; remembered per printer).</li>
 </ol>
 <div class="callout tip"><span class="lab">Tip</span><p>Both the M610 and M611 cutters are full-cut only; a "half-cut" mode degrades to a single full cut at end of job.</p></div>
-<div class="callout warn"><span class="lab">Heads up</span><p>Cut suppression ("None"/never) on the Brother classic dialect is hardware-UNVERIFIED — the terminator may still feed and cut. Treat "None" on Brother as untested.</p><p>The M610's cut byte behavior overall is noted as not fully hardware-verified in the project's own memory.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>The Brother drivers are only partially hardware-verified, and cut suppression ("None"/never) on the Brother classic dialect is one of the paths not yet confirmed — the terminator may still feed and cut. Treat "None" on Brother as untested.</p><p>The M610's cut byte behavior overall is noted as not fully hardware-verified in the project's own memory.</p></div>
 </section>
 
 <section class="doc-sec" id="send-modes">
@@ -835,13 +841,13 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
   <li>Confirm the printer appears with a green Ready dot.</li>
 </ol>
 <div class="callout tip"><span class="lab">Tip</span><p>Each printer's USB vendor/product IDs and which connection methods (USB, Network, Bluetooth) are enabled are editable per model in "Per-Printer Settings…".</p></div>
-<div class="callout warn"><span class="lab">Heads up</span><p>All three Brother drivers are offline-tested only (golden vectors) and NONE are hardware-verified yet — orientation, cut behavior, media auto-detect, and the cut-suppression bit are all unverified (see docs/PTOUCH-DRIVER-STATUS.md). Test one model at a time.</p><p>Do not connect a PT-E560BT expecting the classic Brother dialect — it uses a different dialect; routing is by USB product ID to avoid a one-job hang.</p><p>A network Brother is print-only: it can't auto-detect the loaded tape, so the die-cut→continuous re-map won't trigger — use a continuous template or USB for that.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>All three Brother drivers pass offline (golden-vector) tests and are partially hardware-verified — individual functions have been confirmed on real printers, but orientation, cut behavior, media auto-detect, and the cut-suppression bit are not yet all confirmed on every model (see docs/PTOUCH-DRIVER-STATUS.md). Test one model at a time.</p><p>Do not connect a PT-E560BT expecting the classic Brother dialect — it uses a different dialect; routing is by USB product ID to avoid a one-job hang.</p><p>A network Brother is print-only: it can't auto-detect the loaded tape, so the die-cut→continuous re-map won't trigger — use a continuous template or USB for that.</p></div>
 </section>
 
 <section class="doc-sec" id="cassette-detection">
 <h2>Loaded media auto-detection</h2>
 <p>Brady printers read the loaded cassette automatically: the M610/M611 use Brady SmartCell, which reports the real part number, label width/height, printable area, die-cut vs continuous, and supply level. This drives the green ✓ / ⚠ mismatch indicator and the cut default.</p>
-<p>Brother printers read the loaded tape over USB using the ESC i S status command (tape width, errors). This is implemented but hardware-unverified.</p>
+<p>Brother printers read the loaded tape over USB using the ESC i S status command (tape width, errors). This is implemented but not yet individually confirmed on real hardware (the Brother drivers are only partially hardware-verified).</p>
 <p>You can force a re-read at any time: click the loaded part number or the "Detect supply" button in the Print window, or "Detect cassette" on the printer's row in Preferences.</p>
 
 <ol class="steps">
@@ -951,7 +957,7 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
   <li>Remove a wrongly-guessed or stale network printer with its Remove button.</li>
 </ol>
 <div class="callout tip"><span class="lab">Tip</span><p>For a Brother Wi-Fi model, add it by IP and pick PT-E550W as the model so it routes to the Brother driver.</p></div>
-<div class="callout warn"><span class="lab">Heads up</span><p>A network-added printer is print-only: it can't auto-read the loaded tape/cassette over the network. So the automatic die-cut→continuous remap won't trigger, and there's no live loaded-supply readout — use a continuous template, or connect over USB, when you need that.</p><p>The PT-E560BT is a Bluetooth unit with no Wi-Fi; it can't be added over the network — it prints over USB only.</p><p>Brother P-touch drivers are all alpha and NOT hardware-verified — see the Brother section.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>A network-added printer is print-only: it can't auto-read the loaded tape/cassette over the network. So the automatic die-cut→continuous remap won't trigger, and there's no live loaded-supply readout — use a continuous template, or connect over USB, when you need that.</p><p>The PT-E560BT is a Bluetooth unit with no Wi-Fi; it can't be added over the network — it prints over USB only.</p><p>Brother P-touch drivers are all alpha and only partially hardware-verified — see the Brother section.</p></div>
 </section>
 
 <section class="doc-sec" id="nothing-after-vectorworks-export">
@@ -1075,9 +1081,9 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
 </section>
 
 <section class="doc-sec" id="cut-and-feed-options">
-<h2>Cutting and feed options (and what's not verified)</h2>
+<h2>Cutting and feed options (and what's still being verified)</h2>
 <p>The print window lets you choose when the supply is cut for a job ('Cut' dropdown), and whether to feed a blank lead label first to clear/advance the supply. By default, continuous tape is cut after every label (so each printed length separates) and die-cut stock is cut once at the end of the job. You can override this per job.</p>
-<p>Be aware that on Brady M610, the exact cut byte sequences are not yet hardware-verified (alpha). On the Brother classic models, suppressing the cut entirely ('never') is also unverified — the job terminator may still feed and cut. Treat cut behavior as experimental until you've tested it on your unit.</p>
+<p>Be aware that on Brady M610, the exact cut byte sequences are not yet hardware-verified (alpha). On the Brother classic models — whose drivers are only partially hardware-verified — suppressing the cut entirely ('never') is a path not yet confirmed, so the job terminator may still feed and cut. Treat M610 and Brother cut behavior as experimental until you've tested it on your unit.</p>
 
 <ol class="steps">
   <li>In the print window, set the 'Cut' dropdown to the behavior you want (cut every label / cut at end / don't cut, depending on the supply).</li>
@@ -1085,7 +1091,7 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
   <li>Test on a small batch before committing a long run.</li>
 </ol>
 <div class="callout tip"><span class="lab">Tip</span><p>The cut default adapts to the loaded supply when the printer reports it (continuous vs die-cut).</p></div>
-<div class="callout warn"><span class="lab">Heads up</span><p>M610 cut bytes are UNVERIFIED on hardware — if cutting misbehaves on an M610, that's a known unverified area.</p><p>Brother 'never cut' is UNVERIFIED — the strip may still be cut even when you ask for no cut.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>M610 cut bytes are UNVERIFIED on hardware — if cutting misbehaves on an M610, that's a known unverified area.</p><p>Brother 'never cut' is not yet hardware-confirmed — the strip may still be cut even when you ask for no cut.</p></div>
 </section>
 
 <section class="doc-sec" id="where-are-my-files">
@@ -1106,13 +1112,13 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
 <section class="doc-sec" id="supported-printers-alpha-honesty">
 <h2>Which printers actually work today (alpha honesty)</h2>
 <p>The app's primary target is Brady M610/M611 wrap-around wire labels over USB. The M610's USB ID is confirmed; the M611's USB ID is assumed and the M611's cut/orientation behavior is more validated than the M610's, but M610 cut bytes specifically remain unverified.</p>
-<p>Brother P-touch support (PT-E550W, PT-P750W classic dialect; PT-E560BT D460BT dialect) is implemented and passes offline 'golden vector' tests, but NONE of the Brother models are hardware-verified yet. Orientation, cut behavior, USB claim, and media auto-detect on Brother are all still pending real-hardware testing. Use Brother at your own risk and verify on your unit.</p>
+<p>Brother P-touch support (PT-E550W, PT-P750W classic dialect; PT-E560BT D460BT dialect) is implemented, passes offline 'golden vector' tests, and is partially hardware-verified — individual functions have been confirmed on real printers, but no Brother model has been verified end-to-end yet. Orientation, cut behavior, USB claim, and media auto-detect are not yet all confirmed on every model. Verify on your own unit before a production run.</p>
 
 <ol class="steps">
   <li>Brady M610/M611: the main supported path (USB; M611 also network).</li>
-  <li>Brother PT-E550W / PT-P750W: implemented, network-capable, but hardware-UNVERIFIED.</li>
-  <li>Brother PT-E560BT: implemented (USB only — its Bluetooth isn't supported), hardware-UNVERIFIED.</li>
-  <li>If you test on real Brother hardware and something's mirrored or upside-down, that's an expected unverified area (orientation flips exist in code but aren't confirmed).</li>
+  <li>Brother PT-E550W / PT-P750W: implemented, network-capable, PARTIALLY hardware-verified (not yet end-to-end).</li>
+  <li>Brother PT-E560BT: implemented (USB only — its Bluetooth isn't supported), PARTIALLY hardware-verified (not yet end-to-end).</li>
+  <li>If you test on real Brother hardware and something's mirrored or upside-down, that's an expected not-yet-fully-verified area (orientation flips exist in code but aren't confirmed on every model).</li>
 </ol>
 <div class="callout tip"><span class="lab">Tip</span><p>The authoritative, up-to-date status is in docs/PTOUCH-DRIVER-STATUS.md — it tracks per-model what's verified vs implemented-only.</p></div>
 <div class="callout warn"><span class="lab">Heads up</span><p>Never feed a PT-E560BT (USB 04F9:2203) the classic Brother dialect — wrong routing makes it print one job then hang until power-cycled. The app routes by USB product ID to prevent this, but it's the known failure mode to watch for.</p><p>Adding more printer types is supported via docs/ADDING-PRINTER-TYPES.md, but new cut/feed bytes ship disabled until hardware-verified.</p></div>
@@ -1144,7 +1150,7 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
   <li>Report the issue on the project's GitHub repository (Issues), including the above.</li>
 </ol>
 <div class="callout tip"><span class="lab">Tip</span><p>For signing/notarization failures specifically, the notarization log can be fetched with xcrun notarytool log &lt;submission-id&gt; (developer scenario).</p></div>
-<div class="callout warn"><span class="lab">Heads up</span><p>Because this is alpha, some behaviors (M610 cutting, all Brother models, M611 USB ID) are known-unverified — mention if your issue is in one of those areas so it's triaged correctly.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>Because this is alpha, some areas (M610 cutting, the Brother models, M611 USB ID) are only partially verified or still unverified — mention if your issue is in one of those areas so it's triaged correctly.</p></div>
 </section>
       <div class="pager">
         <a href="quickstart.html">← Quick start</a>
@@ -1163,7 +1169,7 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
       <a href="faq.html">FAQ</a>
       <a href="https://github.com/ryancoopster/VectorLabel">GitHub</a>
     </div>
-    <div class="copy">VectorLabel · Open alpha · Docs synced to commit bbeea90 · 2026-07-02 · Brady and Brother are trademarks of their respective owners.</div>
+    <div class="copy">VectorLabel · Open alpha · Docs synced to commit 76f48a5 · 2026-07-02 · Brady and Brother are trademarks of their respective owners.</div>
   </div>
 </footer>
 <script>
