@@ -65,6 +65,10 @@
   <summary>How do I install it?</summary>
   <div class="faq-body"><p>Download the latest signed release from the project's GitHub Releases page and run the guided .pkg installer, which installs all four apps. Then launch VectorLabel Engine to get the menu-bar icon.</p></div>
 </details>
+<details class="faq" data-text="how do updates work? the engine checks github for new vectorlabel releases. on first launch it asks how often to check — on every launch, every n days, or manually only — and you can change that any time in preferences → updates. when a newer version is found, a popup offers 'update now' (downloads the installer to ~/downloads and opens it), 'remind me tomorrow', and 'don't update' (skips that version only; a newer release prompts again). preferences → updates also has a 'check for updates now' button and shows a version-available summary with its own update now button, and the menu bar has a 'check for updates…' row.">
+  <summary>How do updates work?</summary>
+  <div class="faq-body"><p>The Engine checks GitHub for new VectorLabel releases. On first launch it asks how often to check — on every launch, every N days, or manually only — and you can change that any time in Preferences → Updates. When a newer version is found, a popup offers 'Update Now' (downloads the installer to ~/Downloads and opens it), 'Remind Me Tomorrow', and 'Don't Update' (skips that version only; a newer release prompts again). Preferences → Updates also has a 'Check for Updates Now' button and shows a version-available summary with its own Update Now button, and the menu bar has a 'Check for Updates…' row.</p></div>
+</details>
 <details class="faq" data-text="why are there two separate vectorworks commands? vectorworks shows one menu item per command plug-in, so vectorlabel ships two: 'export selected circuits to vectorlabel' (exports only your current selection) and 'export all circuits to vectorlabel' (exports every connectcad circuit on the active design layer, ignoring the selection). install each by pasting its script (export_selected.py / export_all.py) into its own new command in the plug-in manager.">
   <summary>Why are there two separate Vectorworks commands?</summary>
   <div class="faq-body"><p>Vectorworks shows one menu item per command plug-in, so VectorLabel ships two: 'Export Selected Circuits to VectorLabel' (exports only your current selection) and 'Export All Circuits to VectorLabel' (exports every ConnectCAD circuit on the active design layer, ignoring the selection). Install each by pasting its script (export_selected.py / export_all.py) into its own New Command in the Plug-in Manager.</p></div>
@@ -337,6 +341,10 @@
   <summary>I tried to reprint an old job and got 'Source file not found'.</summary>
   <div class="faq-body"><p>The original CSV export was pruned or moved out of the Exports folder. You can still reprint the original labels as-printed, but you can't re-edit them because the source data is gone. If you need to edit, re-export from Vectorworks.</p></div>
 </details>
+<details class="faq" data-text="my file is 'online-only' in dropbox / icloud drive / onedrive — will it open? yes. if the cloud service keeps the file online-only, vectorlabel downloads it first: a small 'downloading…' popup with a cancel button appears, and when the download finishes the open continues on its own. this works everywhere a file can be chosen — data sources, templates, imports, images, and finder double-clicks. cancelling returns you to where you were.">
+  <summary>My file is 'online-only' in Dropbox / iCloud Drive / OneDrive — will it open?</summary>
+  <div class="faq-body"><p>Yes. If the cloud service keeps the file online-only, VectorLabel downloads it first: a small 'Downloading…' popup with a Cancel button appears, and when the download finishes the open continues on its own. This works everywhere a file can be chosen — data sources, templates, imports, images, and Finder double-clicks. Cancelling returns you to where you were.</p></div>
+</details>
 <details class="faq" data-text="can i move the watch folder or templates folder? yes — preferences → export changes the watch folder, and preferences → templates changes the templates folder. but if you move the watch folder, make sure the vectorworks scripts still write into it; by default they write to ~/documents/vectorlabel/exports/, so a mismatched watch folder means the engine won't see new exports.">
   <summary>Can I move the watch folder or templates folder?</summary>
   <div class="faq-body"><p>Yes — Preferences → Export changes the Watch Folder, and Preferences → Templates changes the templates folder. But if you move the watch folder, make sure the Vectorworks scripts still write into it; by default they write to ~/Documents/VectorLabel/Exports/, so a mismatched watch folder means the Engine won't see new exports.</p></div>
@@ -391,7 +399,7 @@
       <a href="faq.html">FAQ</a>
       <a href="https://github.com/ryancoopster/VectorLabel">GitHub</a>
     </div>
-    <div class="copy">VectorLabel · Open alpha · Docs synced to commit 5d3f649 · 2026-07-01 · Brady and Brother are trademarks of their respective owners.</div>
+    <div class="copy">VectorLabel · Open alpha · Docs synced to commit 9cc79ad · 2026-07-01 · Brady and Brother are trademarks of their respective owners.</div>
   </div>
 </footer>
 <script>

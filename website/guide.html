@@ -54,6 +54,7 @@
 <li><a href="#folder-layout" class="sub">On-disk layout: where your files and settings live</a></li>
 <li><a href="#first-run-usb" class="sub">First run and granting USB / printer access</a></li>
 <li><a href="#menu-bar-and-prefs" class="sub">The menu-bar Engine: status and Preferences</a></li>
+<li><a href="#software-updates" class="sub">Software updates</a></li>
 </ul></div>
 <div class="group"><a href="#ch-vectorworks">Vectorworks integration</a>
 <ul>
@@ -232,12 +233,17 @@ scripts/install.sh         # install into /Applications/VectorLabel/ and relaunc
 <h2>The menu-bar Engine: status and Preferences</h2>
 <p>Clicking the menu-bar icon opens a dropdown that shows your connected printers and their live status (with per-printer detail), any active print queue, and a Recent Prints list where each item offers a 'Reprint' action.</p>
 <p>The dropdown's action rows are: 'Open Template Designer' (⌘T), 'Open Custom Designer', 'Open Export Folder' (⌘E), 'Preferences…' (⌘,), and 'Quit VectorLabel' (⌘Q). A version/build string is shown in the footer.</p>
-<p>Preferences is a six-tab window: Export, Printing, Templates, Recent, Printers, and Advanced. Export covers the watch folder (with a Browse… button), auto-open behaviour, and how many exports to keep per project. Printing covers the default print range (All / Selected / Range) and Per-Printer Settings…. Templates sets the templates folder. Recent shows print history with a Clear History action. Printers lists connected printers (Scan USB), lets you add/remove network printers, set the status refresh interval, open Per-Printer Settings…, and Edit Supplies…. Advanced has the Appearance control (dark / light / system) and a Reset Defaults (factory reset) button.</p>
+<p>Preferences is a seven-tab window: Export, Printing, Templates, Recent, Printers, Advanced, and Updates. Export covers the watch folder (with a Browse… button), auto-open behaviour, and how many exports to keep per project. Printing covers the default print range (All / Selected / Range) and Per-Printer Settings…. Templates sets the templates folder. Recent shows print history with a Clear History action. Printers lists connected printers (Scan USB), lets you add/remove network printers, set the status refresh interval, open Per-Printer Settings…, and Edit Supplies…. Advanced has the Appearance control (dark / light / system) and a Reset Defaults (factory reset) button. Updates controls automatic update checking — covered in the next section.</p>
 <p>Label supplies (sizes, part numbers, quantities/roll lengths, 90° feed rotation, buy links — grouped per printer model) are editable in-app with no code via Engine → Preferences → Printers → Edit Supplies….</p>
 
 
 <div class="callout tip"><span class="lab">Tips</span><p>The status-refresh interval (how often the Engine re-reads battery/ribbon/labels/supply/errors) defaults to 5 seconds and pauses while a job is printing.</p><p>Appearance applies everywhere at once — the menu, Preferences, and both web-based UIs (print window and designer).</p></div>
 <div class="callout warn"><span class="lab">Heads up</span><p>The README mentions a 'Show in Dock' option and the setting exists in code (showInDock, default off = menu-bar-only), but I did not find a visible toggle for it in the Advanced tab portion of PreferencesView I read — its exact UI location is unconfirmed.</p><p>I did not read the per-printer cut/orientation and calibration controls in full, so exact wording of every Per-Printer Settings… field is not captured here.</p></div>
+</section>
+
+<section class="doc-sec" id="software-updates">
+<h2>Software updates</h2>
+<p>The Engine checks GitHub for new VectorLabel releases. On first launch it asks how often to check — on every launch, every N days, or manually only — and you can change that choice any time in Preferences → Updates. When a newer version is found, a popup shows the version and release notes with three choices: "Update Now" (downloads the installer to ~/Downloads and opens it), "Remind Me Tomorrow" (asks again in 24 hours), and "Don't Update" (skips that version only — a later release will prompt again). Preferences → Updates also has a "Check for Updates Now" button with the last-checked time, and when a version is available it shows a summary with its own Update Now button (even if you previously skipped or snoozed). The menu-bar dropdown has a "Check for Updates…" row as well.</p>
 </section>
 
 <h2 class="chapter" id="ch-vectorworks">Vectorworks integration</h2>
@@ -497,6 +503,7 @@ VectorworksPlugin/export_all.py</code></pre>
 <p>The Template Designer's Open file picker also accepts legacy ".json"/".vlt.json" templates, plus Brady ".BWT" and Brother P-touch ".lbx" files (auto-converted).</p>
 <p>Custom Designer: "Save Label…" saves a .vlcus document that embeds the design AND a copy of any bound data. "Open…" accepts .vlcus, plus Brady .BWT and Brother .lbx (auto-converted). "New" opens "New Custom Design" (name + label size + "Create").</p>
 <p>Both designers warn before replacing the canvas (importing, opening, or starting new) if you have unsaved changes, with Save / Don't Save / Cancel choices. Finder double-clicking a .vltmp opens it in the Template Designer; a .vlcus opens in the Custom Designer.</p>
+<p>Files kept "online-only" by Dropbox, iCloud Drive, or OneDrive are downloaded automatically before opening: a small "Downloading…" popup with a Cancel button appears, and once the file is local the open continues on its own. This applies everywhere a file can be chosen — data sources, templates, imports, images, and Finder double-clicks. Cancelling the download simply returns you to where you were.</p>
 <pre><code>~/Documents/VectorLabel/Templates/</code></pre>
 <ol class="steps">
   <li>Template Designer: click "Save" (or "Save as…"), enter a Template name, then save into ~/Documents/VectorLabel/Templates/.</li>
@@ -1156,7 +1163,7 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
       <a href="faq.html">FAQ</a>
       <a href="https://github.com/ryancoopster/VectorLabel">GitHub</a>
     </div>
-    <div class="copy">VectorLabel · Open alpha · Docs synced to commit 5d3f649 · 2026-07-01 · Brady and Brother are trademarks of their respective owners.</div>
+    <div class="copy">VectorLabel · Open alpha · Docs synced to commit 9cc79ad · 2026-07-01 · Brady and Brother are trademarks of their respective owners.</div>
   </div>
 </footer>
 <script>
