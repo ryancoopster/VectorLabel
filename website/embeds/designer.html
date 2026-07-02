@@ -44,7 +44,11 @@
     tpl.targetPrinterModel = printer;
   }
 
-  var APPW = 1060, APPH = 940;
+  // Logical width the app is laid out at inside the iframe. The real designer
+  // window is ~1200-1400px wide; 1280 keeps the v1.4.0 toolbar (⎙ Printer
+  // dropdown + file buttons) on a single row — at 1060 the Open/Save buttons
+  // wrapped into a bunched column and "Save as…" clipped.
+  var APPW = 1280, APPH = 940;
   var f = document.getElementById('f'), clip = document.getElementById('clip');
   f.style.width = APPW + 'px';
   f.style.height = APPH + 'px';
