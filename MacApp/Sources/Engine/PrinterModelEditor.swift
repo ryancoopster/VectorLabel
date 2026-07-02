@@ -60,7 +60,7 @@ struct PrinterModelEditorView: View {
                     Text("VID 0x").font(.system(size: 11)).foregroundStyle(.secondary)
                     TextField("0E2E", text: usbField(mid, u.id, \.vendorID)).frame(width: 64).font(.system(.body, design: .monospaced))
                     Text("PID 0x").font(.system(size: 11)).foregroundStyle(.secondary)
-                    TextField("010C", text: usbField(mid, u.id, \.productID)).frame(width: 64).font(.system(.body, design: .monospaced))
+                    TextField("0013", text: usbField(mid, u.id, \.productID)).frame(width: 64).font(.system(.body, design: .monospaced))
                     Spacer()
                     Button { removeUSB(mid, u.id) } label: { Image(systemName: "minus.circle") }.buttonStyle(.borderless)
                 }

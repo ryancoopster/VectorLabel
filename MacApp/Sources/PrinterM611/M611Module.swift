@@ -46,12 +46,13 @@ public final class M611Module: PrinterModule {
 
     public func enumerate() -> [PrinterDevice] {
         // Enumerate only over transports that are BOTH enabled by the user AND supported
-        // by this driver. The M611 currently supports network only, so `active` won't
-        // include .usb until capabilities.supportedTransports gains it. Each enabled
-        // network printer's control port (9102) is probed so an unreachable one reports
-        // .offline instead of a permanent .ready. Runs on the background scan task, so a
-        // short blocking connect is fine here.
-        let enabled = PrinterModelStore.enabledTransports(forName: capabilities.model, productIDs: ["010C"])
+        // by this driver (network + USB). Each enabled network printer's control port
+        // (9102) is probed so an unreachable one reports .offline instead of a permanent
+        // .ready. Runs on the background scan task, so a short blocking connect is fine
+        // here. PID fallback: real M611 id 0x0013 + the legacy 0x010C default, so a
+        // renamed entry in a not-yet-migrated registry still resolves.
+        let enabled = PrinterModelStore.enabledTransports(forName: capabilities.model,
+                                                          productIDs: ["0013", "010C"])
         let active = enabled.intersection(capabilities.supportedTransports)
         let net: [PrinterDevice] = active.contains(.network)
             ? NetworkPrinterStore.list().filter { $0.model == capabilities.model }.map { e -> PrinterDevice in

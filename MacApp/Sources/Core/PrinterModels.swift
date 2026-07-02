@@ -9,7 +9,7 @@ import Combine
 // SupplyGroup's `printerModels` are names from this list). Persisted as JSON in
 // Application Support (beta-aware).
 
-/// A USB vendor/product id pair, stored as 4-hex-digit strings (e.g. "0E2E"/"010C").
+/// A USB vendor/product id pair, stored as 4-hex-digit strings (e.g. "0E2E"/"0013").
 public struct PrinterUSBID: Codable, Hashable, Identifiable {
     public var id: UUID
     public var vendorID: String
@@ -24,7 +24,7 @@ public struct PrinterUSBID: Codable, Hashable, Identifiable {
         vendorID = ((try? c.decode(String.self, forKey: .vendorID)) ?? "").uppercased()
         productID = ((try? c.decode(String.self, forKey: .productID)) ?? "").uppercased()
     }
-    /// "0x0E2E:0x010C" form for display.
+    /// "0x0E2E:0x0013" form for display.
     public var display: String { "0x\(vendorID):0x\(productID)" }
 }
 
@@ -76,12 +76,12 @@ public struct PrinterModelList: Codable, Hashable {
     }
 
     /// Seed: the Brady wire-label printers and their USB IDs (VID 0x0E2E; M610 PID
-    /// 0x010B confirmed, M611 0x010C unverified — see BradyUSB). M610 defaults to
-    /// single-label printing (it reports a hardware label counter and historically
-    /// printed one label at a time); the M611 defaults to one full job.
+    /// 0x010B and M611 0x0013 both hardware-confirmed — see BradyUSB / M611USB). M610
+    /// defaults to single-label printing (it reports a hardware label counter and
+    /// historically printed one label at a time); the M611 defaults to one full job.
     public static func makeDefault() -> PrinterModelList {
-        PrinterModelList(version: 4, models: [
-            PrinterModel(name: "M611", usbIDs: [PrinterUSBID(vendorID: "0E2E", productID: "010C")],
+        PrinterModelList(version: 5, models: [
+            PrinterModel(name: "M611", usbIDs: [PrinterUSBID(vendorID: "0E2E", productID: "0013")],
                          singleLabelPrinting: false),
             PrinterModel(name: "M610", usbIDs: [PrinterUSBID(vendorID: "0E2E", productID: "010B")],
                          singleLabelPrinting: true),
@@ -101,9 +101,10 @@ public struct PrinterModelList: Codable, Hashable {
     /// existing install keeps M610's one-label-at-a-time behavior while the M611
     /// defaults to a single full job. v2→v3 adds the Brother PT-E550W entry; v3→v4 adds
     /// the PT-P750W (classic) + PT-E560BT (D460BT) entries to existing installs (fresh
-    /// installs get them from makeDefault). No-op for v4+.
+    /// installs get them from makeDefault). v4→v5 corrects the M611 USB product id from
+    /// the old 0x010C guess to the hardware-confirmed 0x0013. No-op for v5+.
     public func migrated() -> PrinterModelList {
-        guard version < 4 else { return self }
+        guard version < 5 else { return self }
         var l = self
         if version < 2 {
             for i in l.models.indices {
@@ -120,7 +121,24 @@ public struct PrinterModelList: Codable, Hashable {
         Self.ensureModel(&l, name: "PT-E550W", pid: "2060")
         Self.ensureModel(&l, name: "PT-P750W", pid: "2062")
         Self.ensureModel(&l, name: "PT-E560BT", pid: "2203")
-        l.version = 4
+        // v4→v5: earlier defaults seeded the M611 with the unverified PID 0x010C; the
+        // real M611 enumerates as composite-device PID 0x0013 (hardware-confirmed — see
+        // M611USB / BradyUSB). Rewrite the stale id in place (matched by PID, so a
+        // RENAMED M611 entry is still fixed) — unless the user already registered the
+        // real id on some entry themselves, in which case leave their setup alone.
+        let hasRealM611ID = l.models.contains { m in
+            m.usbIDs.contains { $0.vendorID == "0E2E" && $0.productID == "0013" }
+        }
+        if !hasRealM611ID {
+            for i in l.models.indices {
+                for j in l.models[i].usbIDs.indices
+                where l.models[i].usbIDs[j].vendorID == "0E2E"
+                    && l.models[i].usbIDs[j].productID == "010C" {
+                    l.models[i].usbIDs[j].productID = "0013"
+                }
+            }
+        }
+        l.version = 5
         return l
     }
 
@@ -158,7 +176,7 @@ public final class PrinterModelStore: ObservableObject {
             let upgraded = decoded.migrated()
             list = upgraded
             Self.setSnapshot(upgraded)
-            if decoded.version < 4 { save() }   // persist the v1→v2 / v2→v3 / v3→v4 upgrade once
+            if decoded.version < 5 { save() }   // persist the migration upgrade once
         } else {
             let def = PrinterModelList.makeDefault()
             list = def

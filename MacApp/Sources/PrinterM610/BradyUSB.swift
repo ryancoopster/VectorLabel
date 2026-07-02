@@ -13,17 +13,12 @@ import CLibUSB
 ///
 /// VID 0x0E2E is confirmed for all Brady USB devices.
 /// M610 PID 0x010B is confirmed on hardware.
-///
-/// M611 (Phase 6): the M611 USB product id is NOT yet hardware-confirmed. We list
-/// 0x010C as a best guess so a known M611 maps to "M611", but to avoid missing a
-/// real M611 whose PID differs, enumeration ALSO accepts ANY device on the Brady
-/// VID (0x0E2E) and labels an unrecognised PID generically (see `modelFor`). This
-/// is conservative: an unknown Brady device is still surfaced as a printer rather
+/// M611 PID 0x0013 is confirmed on hardware (2026-06-21; the M611 enumerates as a
+/// composite device — see M611USB). Early builds guessed 0x010C; that id stays in
+/// `knownModels` as a harmless legacy fallback. Enumeration ALSO accepts ANY device
+/// on the Brady VID (0x0E2E) and labels an unrecognised PID generically (see
+/// `modelFor`), so an unknown Brady device is still surfaced as a printer rather
 /// than silently skipped.
-/// TODO: confirm the M611 PID on real hardware (plug in an M611, read
-/// `lsusb`/`system_profiler SPUSBDataType`, note its idProduct), then either fix
-/// the 0x010C entry or add the real PID to `knownModels` and tighten enumeration
-/// back to the known list if the generic fallback proves too broad.
 public enum BradyUSB {
 
     static let vendorID: UInt16 = 0x0E2E

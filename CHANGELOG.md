@@ -12,6 +12,15 @@ number (git commit count) + short SHA, shown in the menu-bar footer.
 
 ## [Unreleased]
 
+### Fixed
+- **Correct M611 USB id in the printer registry.** The default printer-model list
+  recorded the Brady M611's USB product id as 0x010C (an early unverified guess);
+  the real, hardware-confirmed id is 0x0013. Fresh installs now seed the correct id,
+  and existing installs are migrated automatically (a hand-edited entry that already
+  has the real id is left alone). M611 USB detection itself was never affected — the
+  USB driver already matched the confirmed id — but the registry entry now agrees
+  with the hardware, so per-printer settings resolve by id even for a renamed entry.
+
 ## [1.4.1] — 2026-07-02
 
 ### Changed

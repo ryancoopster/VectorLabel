@@ -164,7 +164,7 @@ directly — see §5). Do the steps in this order; build after each major step.
 ### (a) Hardware driver + USB enumeration & status polling
 
 Read `EngineKit/BradyUSB.swift` end to end first — especially the header comment on
-the M611 PID being **UNVERIFIED** and the `deviceIsPrinter` fallback logic.
+the known PIDs and the `deviceIsPrinter` fallback logic.
 
 **If the new printer is on the Brady VID (`0x0E2E`):**
 
@@ -172,7 +172,7 @@ the M611 PID being **UNVERIFIED** and the `deviceIsPrinter` fallback logic.
    ```swift
    static let knownModels: [(pid: UInt16, model: String)] = [
        (0x010B, "M610"),
-       (0x010C, "M611"),   // UNVERIFIED PID
+       (0x0013, "M611"),   // hardware-confirmed composite-device PID
        (0x0XXX, "M7xx"),   // ← your new model + its confirmed PID
    ]
    ```
