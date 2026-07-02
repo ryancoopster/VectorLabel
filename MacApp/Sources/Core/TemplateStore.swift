@@ -88,6 +88,9 @@ public struct TableCell: Codable, Hashable {
     var tracking: Double?
     var stretch: Double?    // horizontal scale %, default 100
     var autoScale: Bool?    // shrink text to fit the cell width; `fs` is the max size
+    var sized: Bool?        // one-time first-value auto-size already applied (designer
+                            // bookkeeping; must round-trip so re-saving a template
+                            // never re-triggers the sizing)
 }
 
 /// A saved VectorLabel template, matching .vlt.json exactly.

@@ -20,8 +20,10 @@ number (git commit count) + short SHA, shown in the menu-bar footer.
   copy/paste cells within or between tables, drag row/column lines to resize (with
   "Lock table size" on, drags redistribute inside the table), lock rows/columns to equal
   sizes, and right-click a cell to add/delete rows/columns or type an exact row height /
-  column width. Tables render identically in the designers, the print preview, and the
-  printed output.
+  column width. Double-click any cell to type into it directly. The first value entered
+  into a cell (typed or bound) one-time auto-sizes its font to fit ~10 characters in the
+  cell — after that the size is never changed automatically. Tables render identically
+  in the designers, the print preview, and the printed output.
 
 ### Changed
 - **Installer:** on macOS older than 14 (Sonoma) the installer now **warns** that the apps

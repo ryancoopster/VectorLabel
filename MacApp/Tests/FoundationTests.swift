@@ -629,7 +629,7 @@ final class FoundationTests: XCTestCase {
         let cellA = TableCell(mode: "static", text: "Hdr", field: "Number", f: "=Cable",
                               font: "Helvetica Neue", fs: 12, bold: true, italic: true,
                               underline: true, al: "center", valign: "top", wrapText: true,
-                              tracking: 0.5, stretch: 110, autoScale: true)
+                              tracking: 0.5, stretch: 110, autoScale: true, sized: true)
         let cellB = TableCell(mode: "field", field: "Cable", fs: 9, al: "right", valign: "bottom")
         let cellC = TableCell(mode: "formula", f: #"=IF(Number<>"",Number,"")"#, stretch: 80)
         let cellD = TableCell()                              // empty cell stays empty

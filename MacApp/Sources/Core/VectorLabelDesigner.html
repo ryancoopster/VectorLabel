@@ -2617,6 +2617,15 @@ function startDrag(e,id){
     }
     _txEditClickId=id; _txEditClickT=now;
   }
+  // First click on an UNSELECTED table arms the same cell double-click timer that
+  // tblCellDown uses. Selecting the table renders the per-cell hit divs, so the
+  // second click of a double-click lands on the cell itself — tblCellDown sees the
+  // armed timer and goes straight into editing. Net effect: double-click a cell of
+  // any table (selected or not) to edit it directly.
+  if(o.t==="tb" && (S.selIds||[]).length<=1 && Array.isArray(o.cols) && Array.isArray(o.rows)){
+    const rc=tblCellAt(o,e);
+    _tblClickKey=id+':'+rc[0]+','+rc[1]; _tblClickT=Date.now();
+  }
   // Grabbing an object already part of a multi-selection drags the whole group;
   // grabbing anything else selects just it first.
   const inMulti=(S.selIds||[]).length>1 && S.selIds.includes(id);
@@ -3006,6 +3015,52 @@ const TBL_MIN=0.05;   // minimum column width / row height (inches)
 function tblDefaultCell(){
   return {mode:"static",text:"",al:"left",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Arial",wrapText:false,tracking:0,stretch:100};
 }
+// Resolve which [row,col] of table `o` a mouse event is over (event target must be
+// the table's object div). Object-relative px → inches → walk the cumulative sums.
+function tblCellAt(o,e){
+  const el=e.currentTarget||e.target, rect=el.getBoundingClientRect();
+  const z=SC*S.zoom;
+  const xi=(e.clientX-rect.left)/z, yi=(e.clientY-rect.top)/z;
+  let c=o.cols.length-1, acc=0;
+  for(let i=0;i<o.cols.length;i++){ acc+=o.cols[i]; if(xi<acc){c=i;break;} }
+  let r=o.rows.length-1; acc=0;
+  for(let i=0;i<o.rows.length;i++){ acc+=o.rows[i]; if(yi<acc){r=i;break;} }
+  return [r,c];
+}
+// Does this cell currently hold a value? (static text, a bound field, or a
+// non-trivial formula — the seeded '=""' doesn't count.)
+function tblCellHasValue(cl){
+  if(!cl)return false;
+  const m=txMode(cl);
+  if(m==="static")return (cl.text||"")!=="";
+  if(m==="field")return !!cl.field;
+  return (cl.f||"")!==""&&cl.f!=='=""';
+}
+// One-time first-value font sizing: the largest font size at which ~10 average
+// characters fit the cell's width (and one line fits its height). Applied ONCE,
+// the first time a value lands in a cell (typed or bound); cl.sized then pins it
+// forever — deleting the value and entering another must NOT re-size.
+const TBL_AUTOSIZE_CHARS=10;
+function tblAutoSizeFs(o,r,c){
+  const cl=(o.cells[r]||[])[c]||{};
+  const cw=Math.max(0.02,(o.cols[c]||0.1))*SC-4;   // px at zoom 1, minus cell padding
+  const ch=Math.max(0.02,(o.rows[r]||0.1))*SC-2;
+  const cv=document.createElement('canvas').getContext('2d');
+  cv.font=(cl.italic?"italic ":"")+(cl.bold?"700 ":"400 ")+"100px '"+(cl.font||"Arial")+"',Arial,sans-serif";
+  let w=cv.measureText("0".repeat(TBL_AUTOSIZE_CHARS)).width||600;
+  w*=(cl.stretch||100)/100;
+  let px=100*cw/w;                 // 10 chars fit the width…
+  px=Math.min(px,ch/1.15);         // …and one line fits the row height
+  return Math.max(4,Math.min(96,Math.round(px/(SC/100))));
+}
+// Apply the one-time auto-size to a cell that just gained its FIRST value.
+// `prevEmpty` is tblCellHasValue() measured BEFORE the mutation.
+function tblMaybeAutoSize(t,r,c,prevEmpty){
+  const cl=(t.cells[r]||[])[c];
+  if(!cl||cl.sized===true||!prevEmpty||!tblCellHasValue(cl))return;
+  cl.fs=tblAutoSizeFs(t,r,c);
+  cl.sized=true;
+}
 // The cell objects currently selected in a table (empty when no cell selection).
 function tblSelCells(){
   if(!S._tblSel)return[];
@@ -3288,6 +3343,11 @@ function startTblLineDrag(e,id,axis,index){
 // within 350ms = inline edit for static cells, like tx), ⇧ = rectangular range
 // from the anchor, ⌘/Ctrl = toggle. stopPropagation so the table doesn't drag.
 let _tblClickKey=null,_tblClickT=0;
+// Table cells use a longer double-click window than DBLCLICK_MS: a full R()
+// re-render runs BETWEEN the two clicks (click 1 selects the table/cell), so the
+// strict 350ms window can expire on slower machines before the second click is
+// even possible. 700ms matches the macOS default double-click feel.
+const TBL_DBLCLICK_MS=700;
 function tblCellDown(e,id,r,c){
   e.stopPropagation();
   if(e.button===2)return;   // right-click → tblCtxMenu handles selection
@@ -3306,7 +3366,7 @@ function tblCellDown(e,id,r,c){
     S._tblSel=cells.length?{id:id,anchor:[r,c],cells:cells}:null;
   }else{
     const now=Date.now();
-    if(_tblClickKey===id+':'+key&&(now-_tblClickT)<DBLCLICK_MS){
+    if(_tblClickKey===id+':'+key&&(now-_tblClickT)<TBL_DBLCLICK_MS){
       _tblClickKey=null;_tblClickT=0;
       const cl=(o.cells[r]||[])[c];
       // Static cells edit inline; field/formula cells edit via the props panel
@@ -3334,7 +3394,16 @@ function endTblCellEdit(){ S._tblEdit=null; R(); }
 // was set by startTblCellEdit.
 function setTblCellText(id,r,c,val){
   const o=gobj(id); if(!o||!o.cells||!o.cells[r]||!o.cells[r][c])return;
-  o.cells[r][c].text=val;
+  const cl=o.cells[r][c];
+  const prevEmpty=!tblCellHasValue(cl);
+  cl.text=val;
+  // One-time first-value font sizing, applied live so the size is visible while
+  // typing (same text node → caret survives the font-size change).
+  if(prevEmpty&&val!==""&&cl.sized!==true){
+    tblMaybeAutoSize(o,r,c,true);
+    const t=document.querySelector('[data-tbltxt="'+id+':'+r+','+c+'"]');
+    if(t)t.style.fontSize=Math.max(7,(cl.fs||14)*(SC/100))+'px';
+  }
   markDirty();
 }
 // Drop a record-column header onto a CELL of the selected table → that cell
@@ -3347,7 +3416,9 @@ function onColDropToCell(e,id,r,c){
   const o=gobj(id); if(!o||o.t!=="tb"||!o.cells[r]||!o.cells[r][c])return;
   snapshot();
   const t=JSON.parse(JSON.stringify(o));
+  const prevEmpty=!tblCellHasValue(t.cells[r][c]);
   Object.assign(t.cells[r][c],{mode:"field",field:key});
+  tblMaybeAutoSize(t,r,c,prevEmpty);   // one-time first-value font sizing
   uobj(id,{cells:t.cells});
   setSel(id); S._tblSel={id:id,anchor:[r,c],cells:[r+','+c]}; S._ef=undefined; R();
 }
@@ -3361,7 +3432,9 @@ function tblPatchCellsAt(id,keys,patch){
   keys.forEach(function(k){
     const p=k.split(','), cl=(t.cells[+p[0]]||[])[+p[1]];
     if(!cl)return;
+    const prevEmpty=!tblCellHasValue(cl);
     if(typeof patch==='function')patch(cl); else Object.assign(cl,patch);
+    tblMaybeAutoSize(t,+p[0],+p[1],prevEmpty);   // one-time first-value font sizing
   });
   uobj(id,{cells:t.cells}); R();
 }
@@ -3381,9 +3454,14 @@ function setTblCellsStatic(id,val){
   const o=gobj(id); if(!o||o.t!=="tb"||!S._tblSel||S._tblSel.id!==id)return;
   S._tblSel.cells.forEach(function(k){
     const p=k.split(','), cl=(o.cells[+p[0]]||[])[+p[1]]; if(!cl)return;
+    const prevEmpty=!tblCellHasValue(cl);
     cl.text=val;
+    tblMaybeAutoSize(o,+p[0],+p[1],prevEmpty);   // one-time first-value font sizing
     const t=document.querySelector('[data-tbltxt="'+id+':'+p[0]+','+p[1]+'"]');
-    if(t&&t!==document.activeElement)t.textContent=val;
+    if(t&&t!==document.activeElement){
+      t.textContent=val;
+      t.style.fontSize=Math.max(7,(cl.fs||14)*(SC/100))+'px';   // reflect sizing live
+    }
   });
   markDirty();
 }
@@ -4353,10 +4431,14 @@ function sanitizeObjs(objs){
           cl.al=ALIGN.indexOf(s.al)>=0?s.al:'left';
           cl.valign=VALIGN.indexOf(s.valign)>=0?s.valign:'middle';
           ['fs','tracking','stretch'].forEach(function(k){ if(s[k]!=null){ const n=Number(s[k]); if(isFinite(n))cl[k]=n; } });
-          ['bold','italic','underline','wrapText','autoScale'].forEach(function(k){ if(s[k]!=null)cl[k]=s[k]===true; });
+          ['bold','italic','underline','wrapText','autoScale','sized'].forEach(function(k){ if(s[k]!=null)cl[k]=s[k]===true; });
           // A cell with no source at all becomes an empty static cell (so txMode
           // doesn't infer "formula" for padded cells).
           if(cl.mode==null&&cl.text==null&&cl.field==null&&cl.f==null){ cl.mode='static'; cl.text=''; }
+          // Grandfather pre-auto-size tables: a cell that already holds a value keeps
+          // its font size forever (the one-time first-value sizing must never fire on
+          // content that predates the feature or was sized by hand).
+          if(cl.sized!==true&&tblCellHasValue(cl))cl.sized=true;
           row.push(cl);
         }
         cells.push(row);
