@@ -12,6 +12,8 @@ number (git commit count) + short SHA, shown in the menu-bar footer.
 
 ## [Unreleased]
 
+## [1.4.1] — 2026-07-02
+
 ### Changed
 - **No more duplicate tabs.** Opening a file that's already open now switches to its
   existing tab instead of opening a second copy — in the Template Designer (.vltmp,
