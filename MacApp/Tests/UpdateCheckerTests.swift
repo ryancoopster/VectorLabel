@@ -171,4 +171,84 @@ final class UpdateCheckerTests: XCTestCase {
         let plain = UpdateChecker.plainTextNotes(markdown)
         XCTAssertEqual(plain, "1.2.0\n• Bold fix in UpdateChecker\n• See the docs")
     }
+
+    // MARK: – Changelog between-versions span (against the REAL CHANGELOG.md)
+
+    /// The repo's actual CHANGELOG.md — the same file the release workflow cuts the
+    /// release body from and the prompt fetches per tag. Parsing the real thing keeps
+    /// the parser honest about the file's actual heading/footer conventions.
+    private static func realChangelog() throws -> String {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // MacApp/Tests/
+            .deletingLastPathComponent()   // MacApp/
+            .deletingLastPathComponent()   // repo root
+            .appendingPathComponent("CHANGELOG.md")
+        return try String(contentsOf: url, encoding: .utf8)
+    }
+
+    func testChangelogSectionsParseRealFile() throws {
+        let sections = UpdateChecker.changelogSections(inChangelogMarkdown: try Self.realChangelog())
+        // Newest-first, no "[Unreleased]", every released version present.
+        let versions = sections.map(\.version)
+        XCTAssertFalse(versions.contains("Unreleased"))
+        XCTAssertEqual(Array(versions.suffix(6)),
+                       ["1.4.1", "1.4.0", "1.3.1", "1.3.0", "1.2.0", "1.1.0"])
+        for section in sections {
+            XCTAssertNotNil(UpdateChecker.semverParts(section.version))
+            XCTAssertFalse(section.date.isEmpty, "\(section.version) heading lost its date")
+            XCTAssertFalse(section.body.isEmpty, "\(section.version) section came back empty")
+        }
+        // The link-reference footer must not leak into the last section's body.
+        let oldest = try XCTUnwrap(sections.last)
+        XCTAssertFalse(oldest.body.contains("]: https://github.com/ryancoopster/VectorLabel/"))
+    }
+
+    func testChangelogSpanBetweenInstalledAndOffered() throws {
+        let changelog = try Self.realChangelog()
+        // Installed 1.2.0, offered 1.4.1 → exactly 1.4.1 + 1.4.0 + 1.3.1 + 1.3.0,
+        // newest first — NOT 1.2.0 itself, and nothing older.
+        let span = try XCTUnwrap(UpdateChecker.composeNotesSpan(
+            changelogMarkdown: changelog, installed: "1.2.0", offered: "1.4.1"))
+        XCTAssertTrue(span.hasPrefix("What’s new since 1.2.0"))
+        let headings = ["## 1.4.1", "## 1.4.0", "## 1.3.1", "## 1.3.0"]
+        var lastIndex = span.startIndex
+        for heading in headings {   // presence AND newest-first order
+            let range = try XCTUnwrap(span.range(of: heading), "missing \(heading)")
+            XCTAssertTrue(range.lowerBound >= lastIndex, "\(heading) out of order")
+            lastIndex = range.lowerBound
+        }
+        XCTAssertFalse(span.contains("## 1.2.0"))
+        XCTAssertFalse(span.contains("## 1.1.0"))
+        // Body spot-checks: a 1.4.1 bullet is in, a 1.2.0 bullet is out.
+        XCTAssertTrue(span.contains("No more duplicate tabs"))
+        XCTAssertFalse(span.contains("Table object"))
+    }
+
+    func testChangelogSpanEqualVersionsIsEmpty() throws {
+        // Same installed and offered version → no span → caller falls back.
+        XCTAssertNil(UpdateChecker.composeNotesSpan(
+            changelogMarkdown: try Self.realChangelog(), installed: "1.4.1", offered: "1.4.1"))
+    }
+
+    func testChangelogSpanUnknownInstalledKeepsEverythingUpToOffered() throws {
+        // Malformed installed version → every section ≤ offered qualifies (isNewer
+        // treats a malformed `current` as older than anything) — and the header
+        // doesn't name the unparseable version.
+        let span = try XCTUnwrap(UpdateChecker.composeNotesSpan(
+            changelogMarkdown: try Self.realChangelog(), installed: "dev-build", offered: "1.3.1"))
+        XCTAssertTrue(span.hasPrefix("What’s new:"))
+        for heading in ["## 1.3.1", "## 1.3.0", "## 1.2.0", "## 1.1.0"] {
+            XCTAssertTrue(span.contains(heading), "missing \(heading)")
+        }
+        XCTAssertFalse(span.contains("## 1.4.0"))   // newer than offered → excluded
+        XCTAssertFalse(span.contains("## 1.4.1"))
+    }
+
+    func testChangelogSpanNoParseableSectionsIsNil() {
+        XCTAssertNil(UpdateChecker.composeNotesSpan(
+            changelogMarkdown: "# Changelog\n\n## [Unreleased]\n- pending\n",
+            installed: "1.2.0", offered: "1.4.1"))
+        XCTAssertNil(UpdateChecker.composeNotesSpan(
+            changelogMarkdown: "not a changelog at all", installed: "1.2.0", offered: "1.4.1"))
+    }
 }

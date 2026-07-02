@@ -12,6 +12,13 @@ number (git commit count) + short SHA, shown in the menu-bar footer.
 
 ## [Unreleased]
 
+### Changed
+- **Updates:** the update-available popup (and the Preferences ▸ Updates summary card)
+  now lists the changes between your installed version and the new one — every version
+  in between, straight from this changelog — instead of a general app summary. The
+  GitHub release page for each version likewise shows that version's changelog section
+  instead of boilerplate.
+
 ### Fixed
 - **Correct M611 USB id in the printer registry.** The default printer-model list
   recorded the Brady M611's USB product id as 0x010C (an early unverified guess);

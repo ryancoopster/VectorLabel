@@ -11,9 +11,20 @@ import VectorLabelUI
 struct AvailableUpdate: Codable, Equatable, Sendable {
     var version: String        // "1.2.0" (tag_name with the leading "v" stripped)
     var tagName: String        // "v1.2.0"
-    var notes: String          // release body (markdown; plain-textified for display)
+    var notes: String          // markdown shown in the prompt + Preferences card: the
+                               // composed "what's new since <installed>" changelog span
+                               // when the CHANGELOG fetch succeeded, else the release body
     var pkgURLString: String   // browser_download_url of the installer .pkg ("" if none)
     var htmlURLString: String  // the release's web page (fallback when no .pkg asset)
+}
+
+/// One "## [x.y.z] — date" section of CHANGELOG.md. `[Unreleased]` (and any
+/// bracketed heading whose version doesn't parse) is skipped; the link-reference
+/// footer lines ("[1.2.0]: https://…") are stripped from bodies.
+struct ChangelogSection: Equatable, Sendable {
+    var version: String   // "1.4.1"
+    var date: String      // "2026-07-02" ("" when the heading carries no date)
+    var body: String      // the markdown between this heading and the next "## [" heading
 }
 
 // MARK: – GitHub releases-list wire format
@@ -52,9 +63,9 @@ private struct GitHubRelease: Decodable {
 /// process); policy + state persist in AppSettings (the Engine's UserDefaults).
 ///
 /// All UI is app-modal NSAlert/NSPanel on the main actor. The pure decision logic
-/// (semver compare, prompt gating, asset matching, release picking, markdown
-/// plain-texting) is `nonisolated static` so UpdateCheckerTests exercises it
-/// without networking or UI.
+/// (semver compare, prompt gating, asset matching, release picking, changelog
+/// section parsing + between-versions span composing, markdown plain-texting) is
+/// `nonisolated static` so UpdateCheckerTests exercises it without networking or UI.
 @MainActor
 final class UpdateChecker: NSObject {
 
@@ -69,6 +80,12 @@ final class UpdateChecker: NSObject {
     /// turns an unchanged list into a 304 that does NOT count against GitHub's
     /// 60/hour unauthenticated rate limit.
     private static let etagDefaultsKey = "updateReleasesETag"
+    /// Raw CHANGELOG.md at the offered release's tag. The update prompt composes its
+    /// "what's new since <installed>" span from this — one small fetch per prompt,
+    /// and a tag's content never changes so any HTTP-cache replay is harmless.
+    nonisolated static func changelogURL(forTag tag: String) -> URL? {
+        URL(string: "https://raw.githubusercontent.com/ryancoopster/VectorLabel/\(tag)/CHANGELOG.md")
+    }
 
     /// One check in flight at a time (the first-run "launch" choice and
     /// maybeAutoCheck can both fire during the same launch — the second is a no-op).
@@ -164,6 +181,76 @@ final class UpdateChecker: NSObject {
         text = text.replacingOccurrences(of: "*", with: "")
         text = text.replacingOccurrences(of: "`", with: "")
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Split CHANGELOG.md into its versioned sections, in file (newest-first) order.
+    /// A section runs from a "## [x.y.z] — date" heading to the next "## [" heading.
+    /// "[Unreleased]" and any heading without a parseable semver are skipped, as are
+    /// the link-reference footer lines ("[1.2.0]: https://…") inside bodies.
+    nonisolated static func changelogSections(inChangelogMarkdown markdown: String) -> [ChangelogSection] {
+        var sections: [ChangelogSection] = []
+        var currentVersion: String?
+        var currentDate = ""
+        var currentBody: [String] = []
+        func flush() {
+            guard let version = currentVersion else { return }
+            let body = currentBody.joined(separator: "\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            sections.append(ChangelogSection(version: version, date: currentDate, body: body))
+        }
+        let text = markdown.replacingOccurrences(of: "\r\n", with: "\n")
+        for rawLine in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = String(rawLine)
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("## [") {
+                // Any bracketed "## [" heading ends the current section — even one we
+                // then skip (its body must not leak into the previous section).
+                flush()
+                currentVersion = nil
+                currentDate = ""
+                currentBody = []
+                guard let close = trimmed.firstIndex(of: "]") else { continue }
+                let version = String(trimmed[trimmed.index(trimmed.startIndex, offsetBy: 4)..<close])
+                guard semverParts(version) != nil else { continue }   // "[Unreleased]" etc.
+                currentVersion = version
+                // The date is whatever follows the "]", minus separator dashes:
+                // "## [1.4.1] — 2026-07-02" → "2026-07-02".
+                currentDate = String(trimmed[trimmed.index(after: close)...])
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "—–- \t"))
+            } else if currentVersion != nil {
+                if trimmed.range(of: #"^\[[^\]]+\]:\s*\S"#, options: .regularExpression) != nil {
+                    continue   // link-reference footer line
+                }
+                currentBody.append(line)
+            }
+        }
+        flush()
+        return sections
+    }
+
+    /// Compose the "what changed between the installed and the offered version" span
+    /// from a CHANGELOG.md: every section with installed < version ≤ offered, newest
+    /// first, each under a "## x.y.z — date" heading. nil when nothing qualifies
+    /// (fetch of a changelog that predates sections, same version, malformed file) —
+    /// the caller then falls back to the release body.
+    nonisolated static func composeNotesSpan(changelogMarkdown: String,
+                                             installed: String, offered: String) -> String? {
+        let span = changelogSections(inChangelogMarkdown: changelogMarkdown)
+            .filter { isNewer($0.version, than: installed) && !isNewer($0.version, than: offered) }
+            .sorted { isNewer($0.version, than: $1.version) }
+        guard !span.isEmpty else { return nil }
+        // An unparseable installed version keeps every section ≤ offered (isNewer
+        // treats a malformed `current` as older than anything) — don't name it.
+        let header = semverParts(installed) != nil
+            ? "What’s new since \(installed):" : "What’s new:"
+        var parts: [String] = [header]
+        for section in span {
+            let heading = section.date.isEmpty
+                ? "## \(section.version)"
+                : "## \(section.version) — \(section.date)"
+            parts.append(section.body.isEmpty ? heading : heading + "\n" + section.body)
+        }
+        return parts.joined(separator: "\n\n")
     }
 
     /// AvailableUpdate ⇄ the AppSettings.updateAvailableJSON cache string.
@@ -293,7 +380,61 @@ final class UpdateChecker: NSObject {
                                 skippedVersion: settings.updateSkippedVersion,
                                 remindAfter: settings.updateRemindAfterTimestamp,
                                 now: Date().timeIntervalSince1970) else { return }
-        presentUpdatePrompt(update)
+        fetchChangelogThenPresent(update)
+    }
+
+    /// One changelog fetch / pending prompt at a time (a manual check while an
+    /// automatic one is composing its notes must not stack two modals).
+    private var isPreparingPrompt = false
+
+    /// The prompt should show the changes BETWEEN the installed version and the
+    /// offered one — every version in between — not just the offered release's own
+    /// body. Fetch CHANGELOG.md at the offered tag and compose that span; on any
+    /// failure (offline, HTTP error, no parseable sections) fall back to the
+    /// release body already in `update.notes`.
+    private func fetchChangelogThenPresent(_ update: AvailableUpdate) {
+        guard !isPreparingPrompt else { return }
+        isPreparingPrompt = true
+        guard let url = Self.changelogURL(forTag: update.tagName) else {
+            isPreparingPrompt = false
+            presentUpdatePrompt(update)
+            return
+        }
+        var request = URLRequest(url: url)
+        // GitHub rejects requests without a User-Agent.
+        request.setValue("VectorLabel/\(BuildInfo.version)", forHTTPHeaderField: "User-Agent")
+        request.timeoutInterval = 15   // a slow fetch must not hold the prompt hostage
+        let installed = BuildInfo.version
+        let offered = update.version
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            // URLSession calls back on its own queue; compose the (Sendable) span
+            // here, then hop to the main actor. No mutable captures.
+            let composed: String?
+            if error == nil,
+               (response as? HTTPURLResponse)?.statusCode == 200,
+               let data, let markdown = String(data: data, encoding: .utf8) {
+                composed = Self.composeNotesSpan(changelogMarkdown: markdown,
+                                                 installed: installed, offered: offered)
+            } else {
+                composed = nil
+            }
+            Task { @MainActor in
+                UpdateChecker.shared.finishChangelogFetch(update, composedNotes: composed)
+            }
+        }
+        task.resume()
+    }
+
+    private func finishChangelogFetch(_ update: AvailableUpdate, composedNotes: String?) {
+        isPreparingPrompt = false
+        var resolved = update
+        if let composedNotes, !composedNotes.isEmpty {
+            resolved.notes = composedNotes
+            // Keep the Preferences ▸ Updates summary card showing the same span
+            // (it renders the cached update's notes).
+            AppSettings.shared.updateAvailableJSON = Self.encodeAvailableUpdate(resolved)
+        }
+        presentUpdatePrompt(resolved)
     }
 
     /// Activate the (.accessory) Engine so an app-modal alert surfaces in front —

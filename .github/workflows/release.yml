@@ -25,7 +25,7 @@ on:
   workflow_dispatch:
 
 # The "Create GitHub Release" step (softprops/action-gh-release) needs write access to
-# create the release + upload assets + generate notes. Without this the token is read-only
+# create the release + upload assets. Without this the token is read-only
 # and publishing fails with "403 Resource not accessible by integration".
 permissions:
   contents: write
@@ -173,35 +173,46 @@ jobs:
           hdiutil create -volname VectorLabel -srcfolder "dist/VectorLabel" \
             -ov -format UDZO dist/VectorLabel-${{ github.ref_name }}.dmg
 
+      # The release body is the tagged version's own CHANGELOG.md section — the in-app
+      # update popup and the Releases page then show what actually changed, not
+      # boilerplate. Fails loudly when the section is missing or empty: that means the
+      # changelog wasn't cut for this version (the [Unreleased] entries were never moved
+      # under a dated "## [X.Y.Z]" heading — do that, re-tag, and release again).
+      - name: Compose release notes from CHANGELOG.md
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          set -euo pipefail
+          v="$(tr -d '[:space:]' < VERSION)"
+          # Everything between "## [$v]" and the next "## [" heading, minus the
+          # link-reference footer lines ("[1.2.0]: https://…").
+          awk -v ver="$v" '
+            $0 ~ ("^## \\[" ver "\\]") { grab = 1; next }
+            grab && /^## \[/           { grab = 0 }
+            grab && /^\[[^]]*\]: /     { next }
+            grab                       { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/changelog-section.md"
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/changelog-section.md"; then
+            echo "::error::CHANGELOG.md has no (non-empty) '## [$v]' section. Cut the changelog for $v — move the [Unreleased] entries under a dated '## [$v]' heading — before releasing."
+            exit 1
+          fi
+          {
+            echo "**Install:** download **\`VectorLabel-Installer-$v.pkg\`** below and open it — or use **Check for Updates…** in the running app. The apps and installer are Developer ID-signed and notarized by Apple."
+            echo
+            echo "## What changed in $v"
+            cat "$RUNNER_TEMP/changelog-section.md"
+            echo
+            echo "---"
+            echo "**Open alpha:** the Brady **M611** is hardware-validated; the Brady **M610 cut** behavior and the **Brother P-touch** drivers are not yet hardware-confirmed. [User Guide](https://ryancoopster.github.io/VectorLabel/guide.html) · [FAQ](https://ryancoopster.github.io/VectorLabel/faq.html)"
+          } > "$RUNNER_TEMP/release-body.md"
+          echo "Release body:"
+          cat "$RUNNER_TEMP/release-body.md"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           prerelease: true
           name: VectorLabel ${{ github.ref_name }} (open alpha)
-          generate_release_notes: true
-          body: |
-            **VectorLabel** — a macOS suite for designing and printing wire / cable / asset
-            labels on Brady and Brother thermal printers, with a Vectorworks ConnectCAD
-            integration.
-
-            ### Install
-            1. Download **`VectorLabel-Installer-<version>.pkg`** below and open it.
-            2. Follow the installer — it installs the four apps into `/Applications/VectorLabel/`.
-            3. Launch **VectorLabel Engine** to get the menu-bar icon.
-
-            The apps and installer are Developer ID-signed and notarized by Apple.
-
-            ### Highlights
-            - Design labels by hand (Custom Designer) or build reusable, data-bound templates
-              (Template Designer) — with **tabs** to work on several labels at once.
-            - Pull data straight from **Vectorworks ConnectCAD**, or bind your own CSV / Excel.
-            - Text, barcodes, QR, DataMatrix, images and shapes; auto-scale text that never truncates.
-
-            ### Open alpha — please note
-            This is an early build. The **Brady M611** is hardware-validated; the **Brady M610
-            cut** behavior and the **Brother P-touch** drivers are not yet hardware-confirmed.
-            See the [User Guide](https://ryancoopster.github.io/VectorLabel/guide.html) and
-            [FAQ](https://ryancoopster.github.io/VectorLabel/faq.html).
+          body_path: ${{ runner.temp }}/release-body.md
           files: |
             dist/VectorLabel-Installer-*.pkg
             dist/VectorLabel-${{ github.ref_name }}.zip
