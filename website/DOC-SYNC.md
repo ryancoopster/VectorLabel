@@ -32,6 +32,8 @@ directly (keep the existing component classes from `support.css`).
 | Designers, canvas, objects, import | `MacApp/Sources/Core/VectorLabelDesigner.html`, `MacApp/Sources/UI/DesignerWindowController.swift`, `MacApp/Sources/Core/LabelTemplate.swift`, `MacApp/Sources/Core/BradyBWTImporter.swift`, `MacApp/Sources/Core/BrotherLBXImporter.swift` | `guide.html` → **Designing labels** (`#ch-designers`); `quickstart.html` §3 (Path B); FAQ "Designing labels" |
 | Data binding, formulas, barcodes | `MacApp/Sources/Core/FormulaEngine.swift`, `MacApp/Sources/Core/BarcodeRenderer.swift`, `MacApp/Sources/Core/LabelTemplate.swift` | `guide.html` → **Data, formulas & barcodes** (`#ch-databind`); FAQ "Data & formulas" / "Barcodes" |
 | Print window, printers, supplies, calibration | `MacApp/Sources/Core/VectorLabelPrint.html`, `MacApp/Sources/UI/PrintWindowController.swift`, `MacApp/Sources/PrinterM610/*`, `MacApp/Sources/PrinterM611/*`, `MacApp/Sources/PrinterBrother/*`, `MacApp/Sources/Core/SupplyCatalog*.swift`, `MacApp/Sources/Engine/*Editor.swift`, `docs/PTOUCH-DRIVER-STATUS.md` | `guide.html` → **Printing & printers** (`#ch-printing`); FAQ "Printing" / "Printers & connection" / "Supplies"; **also** the marketing **`index.html`** printers/features/specs sections |
+| Printable-area margins overlay & printer geometry | `MacApp/Sources/Core/PrinterGeometry.swift`, `vlPrintableMargins` in `Core/VectorLabelDesigner.html` + `Core/VectorLabelPrint.html`, `MacApp/Sources/Core/SupplyCatalog*.swift` | `guide.html` → **Designing labels** (`#printable-margins`) + the preview note in **Printing & printers** (`#preview`); FAQ "Designing labels" (hatched/shaded question) |
+| Problem reporting, crash reports, app logs | `MacApp/Sources/Core/ErrorReporting/*` (`ErrorReporter.swift`, `VLLog.swift`, `ReportContact.swift`), `MacApp/Sources/Engine/MenuBarView.swift` | `guide.html` → **Fixing common problems** (`#how-to-report-a-bug`) + **Getting started** (`#menu-bar-and-prefs`); FAQ "Troubleshooting & alpha" ("How do I report a bug?") |
 | Errors, limitations, alpha status | all of the above + `docs/*` | `guide.html` → **Fixing common problems** (`#ch-troubleshooting`); `faq.html` (esp. "Troubleshooting & alpha") |
 
 ## Files in `website/`
@@ -42,7 +44,7 @@ directly (keep the existing component classes from `support.css`).
 | `support.html` | Support hub (links the three docs) | Yes |
 | `quickstart.html` | Quick start guide | Yes |
 | `guide.html` | Full user guide (sidebar TOC, 6 chapters) | Yes |
-| `faq.html` | Searchable FAQ (75 Q&As, 10 groups) | Yes |
+| `faq.html` | Searchable FAQ (79 Q&As, 10 groups) | Yes |
 | `support.css` | Shared stylesheet for the four support pages | Yes |
 | `downloads.html` | Every release + its changelog (built from `CHANGELOG.md`) | Yes |
 | `embeds/` | Live app-HTML previews used by `index`/`quickstart`/`guide` | See below |

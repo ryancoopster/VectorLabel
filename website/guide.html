@@ -79,6 +79,7 @@
 <li><a href="#two-designers" class="sub">Template Designer vs Custom Designer</a></li>
 <li><a href="#choosing-supply" class="sub">Choosing a label supply (die-cut vs continuous)</a></li>
 <li><a href="#canvas-rotation" class="sub">Canvas behavior, zoom, and 90° rotation</a></li>
+<li><a href="#printable-margins" class="sub">Printable-area margins (the hatched overlay)</a></li>
 <li><a href="#adding-objects" class="sub">Adding objects (text, barcode, image, symbol, line, shapes, arrow)</a></li>
 <li><a href="#text-properties" class="sub">Text box properties and data binding</a></li>
 <li><a href="#barcode-properties" class="sub">Barcode and 2-D code properties</a></li>
@@ -132,7 +133,7 @@
 <li><a href="#where-are-my-files" class="sub">Where are my files (templates, exports, history)?</a></li>
 <li><a href="#supported-printers-alpha-honesty" class="sub">Which printers actually work today (alpha honesty)</a></li>
 <li><a href="#windows-and-requirements" class="sub">Does it run on Windows? Requirements</a></li>
-<li><a href="#how-to-report-a-bug" class="sub">How to report a bug</a></li>
+<li><a href="#how-to-report-a-bug" class="sub">Reporting problems (in-app and on GitHub)</a></li>
 </ul></div>
     </aside>
     <main class="article">
@@ -238,7 +239,7 @@ scripts/install.sh         # install into /Applications/VectorLabel/ and relaunc
 <section class="doc-sec" id="menu-bar-and-prefs">
 <h2>The menu-bar Engine: status and Preferences</h2>
 <p>Clicking the menu-bar icon opens a dropdown that shows your connected printers and their live status (with per-printer detail), any active print queue, and a Recent Prints list where each item offers a 'Reprint' action.</p>
-<p>The dropdown's action rows are: 'Open Template Designer' (⌘T), 'Open Custom Designer', 'Open Export Folder' (⌘E), 'Preferences…' (⌘,), and 'Quit VectorLabel' (⌘Q). A version/build string is shown in the footer.</p>
+<p>The dropdown's action rows are: 'Open Template Designer' (⌘T), 'Open Custom Designer', 'Open Export Folder' (⌘E), 'Preferences…' (⌘,), 'Check for Updates…', 'Report a Problem…' (sends a problem report to the developer — see <a href="#how-to-report-a-bug">Reporting problems</a>), and 'Quit VectorLabel' (⌘Q). A version/build string is shown in the footer.</p>
 <p>Preferences is a seven-tab window: Export, Printing, Templates, Recent, Printers, Advanced, and Updates. Export covers the watch folder (with a Browse… button), auto-open behaviour, and how many exports to keep per project. Printing covers the default print range (All / Selected / Range) and Per-Printer Settings…. Templates sets the templates folder. Recent shows print history with a Clear History action. Printers lists connected printers (Scan USB), lets you add/remove network printers, set the status refresh interval, open Per-Printer Settings…, and Edit Supplies…. Advanced has the Appearance control (dark / light / system) and a Reset Defaults (factory reset) button. Updates controls automatic update checking — covered in the next section.</p>
 <p>Label supplies (sizes, part numbers, quantities/roll lengths, 90° feed rotation, buy links — grouped per printer model) are editable in-app with no code via Engine → Preferences → Printers → Edit Supplies….</p>
 
@@ -423,6 +424,23 @@ VectorworksPlugin/export_all.py</code></pre>
 
 <div class="callout tip"><span class="lab">Tips</span><p>Arrow keys nudge the selected object; hold Shift for a finer nudge. When grid snapping is on, arrow keys move by one grid step.</p><p>The properties panel on the right is resizable — drag its left edge. Its numeric inputs have larger stepper buttons, and with an input focused the ↑/↓ arrow keys step and apply the value just like the buttons.</p></div>
 <div class="callout warn"><span class="lab">Heads up</span><p>Rotation is editor-only geometry for die-cut: the actual printed label keeps its physical size and the design is rotated onto it. Always confirm the printed result on the physical label in this alpha.</p></div>
+</section>
+
+<section class="doc-sec" id="printable-margins">
+<h2>Printable-area margins (the hatched overlay)</h2>
+<p>Thermal printers can't print all the way to the edge of the label — a narrow Brother tape only exposes a centered band of the print head, and a Brady die-cut label's printable area is smaller than the physical label. Both designers and the Print window's preview show this per printer: the canvas (the white area you design on) is still exactly the printable area, and the unprintable margins are drawn as hatched strips <em>outside</em> it, with a dashed outline marking the physical edge of the label or tape. Hovering a hatched strip names the printer it comes from ("Unprintable margin — &lt;model&gt;").</p>
+<p>Which printer's margins are shown depends on the window. The Custom Designer and the Print window follow the printer currently selected in their printer dropdown. The Template Designer has no live printer, so it gains a "⎙ Printer" dropdown next to the Supply button: pick the model you intend to print on, or "None" for no overlay. The choice is saved with the template, and it also becomes the default for new templates.</p>
+<p>Where the numbers come from: for Brother P-touch models, the across-tape band comes from the per-tape print-head table (each tape width exposes a fixed set of head pins — for example, 12&nbsp;mm tape prints a centered band of about 0.39"/9.9&nbsp;mm, while 24&nbsp;mm tape uses the full head). For Brady printers, the printable area comes from the supply catalog — die-cut: the printable size centered in the physical label; continuous: the printable band centered across the tape. When a connected printer reports its loaded cassette's printable area (M611 telemetry), that live reading overrides the static tables.</p>
+<p>A "▧ Margins" toggle sits in the designers' Snap toolbar next to the grid controls; it hides or shows the overlay and is remembered between sessions. The Print window's preview shows the margins automatically whenever they're known for the selected printer.</p>
+
+<ol class="steps">
+  <li>Template Designer: pick your target model in the "⎙ Printer" dropdown next to the Supply button ("None" = no overlay).</li>
+  <li>Custom Designer / Print window: just select the printer — the overlay follows it (and its loaded cassette, when reported).</li>
+  <li>Keep your content inside the white canvas; anything under the hatching is off the printable area.</li>
+  <li>Use the "▧ Margins" button next to the grid controls to hide or show the overlay.</li>
+</ol>
+<div class="callout tip"><span class="lab">Tips</span><p>The overlay is visual only — it never moves your objects or changes what is sent to the printer. The canvas has always been the printable area; the hatching just shows what surrounds it on the physical label.</p><p>The "⎙ Printer" dropdown lists the models from the printer registry, so it works with no printer connected at all.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>The static Brady margins are only as accurate as the supply catalog entry — if you've edited a supply's printable size, the overlay follows your edit. A live cassette readout (M611) is authoritative when present.</p><p>Brother P-touch support overall is alpha and only partially hardware-verified — treat the exact band placement as approximate until you've test-printed on your unit.</p></div>
 </section>
 
 <section class="doc-sec" id="adding-objects">
@@ -744,7 +762,7 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
 
 <section class="doc-sec" id="preview">
 <h2>Live preview, the required-supply check, and expanded preview</h2>
-<p>The right-hand preview shows the selected label rendered with real data, scaled to fill the sidebar (drag the sidebar's left edge to resize; the width is remembered). Arrows (‹ ›) step through visible labels, and ⊞ opens the expanded preview.</p>
+<p>The right-hand preview shows the selected label rendered with real data, scaled to fill the sidebar (drag the sidebar's left edge to resize; the width is remembered). Arrows (‹ ›) step through visible labels, and ⊞ opens the expanded preview. The preview also draws the selected printer's unprintable margins as hatched strips around the label, with a dashed outline at the physical label edge — a loaded cassette that reports its printable area (M611 telemetry) overrides the static tables. See <a href="#printable-margins">Printable-area margins</a> in the designers chapter.</p>
 <p>Under the preview, a "Required supply" panel shows the supply the template needs (displayed as "BM/M6-&lt;core&gt;" so the bulk box and the small roll are treated as the same), the Label size and Printable area, and "Buy" buttons for each part number. A green ✓ means the loaded cassette matches; "⚠ mismatch" means the loaded label size/part doesn't match and the print may be misaligned or cropped.</p>
 <p>The expanded preview (⊞ or the "Print preview" modal) shows every visible label in a grid. You can zoom (40%–300%, remembered), toggle "Show enabled only", and tick Print / Pair on each tile.</p>
 <p>"Inherit rack": when you sort by Rack with the inherit option on, a blank-Rack side of a pair borrows its partner's rack and shows it in parentheses, e.g. "(RIO RACK)", both in the preview and on the printed label.</p>
@@ -1139,18 +1157,19 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
 </section>
 
 <section class="doc-sec" id="how-to-report-a-bug">
-<h2>How to report a bug</h2>
-<p>When something misbehaves, the most useful thing you can include is the build identifier. The Engine shows its build number and short commit hash in the menu-bar footer — include that, plus your printer model and how it's connected (USB vs network).</p>
-<p>Describe what you did, what you expected, and what happened, and note whether you saw any of the app's alert dialogs (quote their text). For printing problems, note the supply/part number loaded and whether the print window showed the green ✓ or red ⚠ supply indicator.</p>
+<h2>Reporting problems (in-app and on GitHub)</h2>
+<p>The easiest way to report a problem is from inside the apps. Every error alert in all four apps has a "Report…" button next to OK — click it and a "Report a Problem" popup opens, pre-filled with the error, where you describe what you were doing and click "Send Report". To report something that didn't show an alert, use the Engine menu bar's "Report a Problem…" row (below "Check for Updates…") — there the description is required. And if an app crashed, the next launch offers to send a report for it, pre-filled with the crash details it captured.</p>
+<p>The first report asks for your name and email (phone optional) so the developer can follow up; they're stored on your Mac and attached to later reports automatically (the popup then shows "Reporting as &lt;name&gt; · &lt;email&gt;" with an Edit button). Reports are sent <strong>privately</strong> to the developer — they're filed in a private repository, not posted publicly. Along with your description, a report includes the app name, version and build, your macOS version and Mac model, the current printer status (including the loaded cassette), and the tail of the app's recent log — each app keeps a rolling log file in ~/Library/Logs/VectorLabel/.</p>
+<p>You can still file an issue manually on the project's GitHub repository (Issues) — useful for feature requests, or if you prefer everything in the open. When you do, include the build number and short commit hash shown in the menu-bar footer, your printer model and connection type (USB vs network), the loaded supply part number, and the exact text of any alert you saw.</p>
 
 <ol class="steps">
-  <li>Open the menu-bar dropdown and note the build number + commit hash in the footer.</li>
-  <li>Note printer model, connection type (USB or network IP), and the loaded supply part number.</li>
-  <li>Capture the exact text of any alert dialog you saw.</li>
-  <li>Report the issue on the project's GitHub repository (Issues), including the above.</li>
+  <li>On any error alert, click "Report…" — or use the menu bar's "Report a Problem…" any time.</li>
+  <li>Describe what you were doing. The first time, fill in your name and email (phone optional) — they're remembered.</li>
+  <li>Click "Send Report" — it goes privately to the developer with the diagnostic info above.</li>
+  <li>Manual fallback: file it on the project's GitHub Issues, including the build number + commit hash from the menu-bar footer.</li>
 </ol>
-<div class="callout tip"><span class="lab">Tip</span><p>For signing/notarization failures specifically, the notarization log can be fetched with xcrun notarytool log &lt;submission-id&gt; (developer scenario).</p></div>
-<div class="callout warn"><span class="lab">Heads up</span><p>Because this is alpha, some areas (M610 cutting, the Brother models, M611 USB ID) are only partially verified or still unverified — mention if your issue is in one of those areas so it's triaged correctly.</p></div>
+<div class="callout tip"><span class="lab">Tip</span><p>If sending fails (you're offline, or the build has reporting unconfigured), the popup offers "Copy Report" instead — it puts the full report on the clipboard so you can email it or paste it into a GitHub issue.</p></div>
+<div class="callout warn"><span class="lab">Heads up</span><p>Because this is alpha, some areas (M610 cutting, the Brother models, M611 USB ID) are only partially verified or still unverified — mention if your issue is in one of those areas so it's triaged correctly.</p><p>A report carries your contact info and the app's recent log so the developer can diagnose and follow up — don't put anything in the description you wouldn't email.</p></div>
 </section>
       <div class="pager">
         <a href="quickstart.html">← Quick start</a>
@@ -1169,7 +1188,7 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
       <a href="faq.html">FAQ</a>
       <a href="https://github.com/ryancoopster/VectorLabel">GitHub</a>
     </div>
-    <div class="copy">VectorLabel · Open alpha · Docs synced to commit 76f48a5 · 2026-07-02 · Brady and Brother are trademarks of their respective owners.</div>
+    <div class="copy">VectorLabel · Open alpha · Docs synced to commit 180577d · 2026-07-02 · Brady and Brother are trademarks of their respective owners.</div>
   </div>
 </footer>
 <script>
