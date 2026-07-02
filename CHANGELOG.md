@@ -12,6 +12,8 @@ number (git commit count) + short SHA, shown in the menu-bar footer.
 
 ## [Unreleased]
 
+## [1.3.1] — 2026-07-02
+
 ### Fixed
 - **All four apps:** the blank "… Settings" window (an empty settings scene macOS 26
   presents when an app launches or activates) is now closed the instant it appears —
