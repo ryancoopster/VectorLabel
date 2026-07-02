@@ -38,7 +38,7 @@ number (git commit count) + short SHA, shown in the menu-bar footer.
   printer attached — gains a **Printer dropdown** next to the Supply button to pick
   the target model, and the choice is saved with the template. A **Margins** toggle
   next to the grid control hides the overlay. P-touch margins come from the tape-width
-  head table (e.g. 12 mm tape prints a centered ~8.9 mm band); Brady margins come
+  head table (e.g. 12 mm tape prints a centered ~9.9 mm band); Brady margins come
   from the supply catalog and live cassette telemetry.
 
 ## [1.3.1] — 2026-07-02
