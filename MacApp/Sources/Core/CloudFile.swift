@@ -209,11 +209,15 @@ public enum CloudFile {
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.3) { [weak self] in
                 let stillPlaceholder = CloudFile.isPlaceholder(url)
                 let error = box.error
+                // Bind strongly BEFORE the Task: the CI's older Swift rejects
+                // `guard let self` on a weak capture inside concurrently-executing
+                // code (same class of error as the PrinterManager timer fix).
+                guard let session = self else { return }
                 Task { @MainActor in
-                    guard let self, !self.finished else { return }
-                    if !stillPlaceholder { self.startFile(index + 1) }
-                    else if let error { self.finish(.failed(error)) }
-                    else { self.poll(url, index: index, box: box) }
+                    guard !session.finished else { return }
+                    if !stillPlaceholder { session.startFile(index + 1) }
+                    else if let error { session.finish(.failed(error)) }
+                    else { session.poll(url, index: index, box: box) }
                 }
             }
         }
