@@ -296,10 +296,39 @@ final class UpdateChecker: NSObject {
         presentUpdatePrompt(update)
     }
 
+    /// Activate the (.accessory) Engine so an app-modal alert surfaces in front —
+    /// and clean up after SwiftUI: activating an app whose only scene is
+    /// `Settings { EmptyView() }` can make SwiftUI present that scene as an empty
+    /// "VectorLabel Engine Settings" window. The sweeps run immediately, on the
+    /// next main-queue drain, and again at +1s — the main queue keeps draining
+    /// during `runModal` (the modal panel mode is a run-loop common mode), so the
+    /// stray window is caught whenever SwiftUI presents it within ~1s of activation
+    /// (empirically it appears during activation itself).
+    private func surfaceForModal() {
+        NSApp.activate(ignoringOtherApps: true)
+        Self.closeStraySettingsWindows()
+        DispatchQueue.main.async { Self.closeStraySettingsWindows() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { Self.closeStraySettingsWindows() }
+    }
+
+    /// Close the empty SwiftUI Settings-scene window if it appeared. Matches ONLY
+    /// the SwiftUI-generated settings window (identifier prefix or exact title) —
+    /// never the Engine's real Preferences panel (an NSPanel titled
+    /// "VectorLabel Preferences") nor the "Software Update" download panel.
+    static func closeStraySettingsWindows() {
+        for window in NSApp.windows {
+            let ident = window.identifier?.rawValue ?? ""
+            if ident.hasPrefix("com_apple_SwiftUI_Settings") ||
+               window.title == "VectorLabel Engine Settings" {
+                window.close()
+            }
+        }
+    }
+
     private func presentUpdatePrompt(_ update: AvailableUpdate) {
         // The Engine runs as an .accessory app — without activating first the
         // app-modal alert opens BEHIND whatever app is frontmost.
-        NSApp.activate(ignoringOtherApps: true)
+        surfaceForModal()
         let alert = NSAlert()
         alert.messageText = "VectorLabel \(update.version) is available"
         alert.informativeText = "You have \(BuildInfo.version)."
@@ -418,7 +447,7 @@ final class UpdateChecker: NSObject {
         content.addSubview(cancel)
         panel.contentView = content
         panel.center()
-        NSApp.activate(ignoringOtherApps: true)
+        surfaceForModal()
         panel.makeKeyAndOrderFront(nil)
         downloadPanel = panel
     }
@@ -473,14 +502,14 @@ final class UpdateChecker: NSObject {
     func firstRunPromptIfNeeded(then completion: () -> Void) {
         let settings = AppSettings.shared
         guard settings.updatePolicy.isEmpty else { completion(); return }
-        NSApp.activate(ignoringOtherApps: true)   // .accessory app — surface the modal
+        surfaceForModal()   // .accessory app — surface the modal (and sweep the stray Settings window)
         let alert = NSAlert()
         alert.messageText = "How should VectorLabel check for updates?"
         alert.informativeText = "You can change this any time in Preferences ▸ Updates."
         alert.accessoryView = makeFirstRunAccessory()
         alert.addButton(withTitle: "Continue")
         _ = alert.runModal()
-        let selected = firstRunRadios.firstIndex { $0.state == .on } ?? 0
+        let selected = firstRunRadios.firstIndex { $0.state == .on } ?? 1   // default: interval
         let typedDays = firstRunDaysField?.integerValue ?? 7
         settings.updateIntervalDays = typedDays > 0 ? typedDays : 7
         settings.updatePolicy = ["launch", "interval", "manual"][selected]
@@ -495,10 +524,10 @@ final class UpdateChecker: NSObject {
         let launch = NSButton(radioButtonWithTitle: "On every launch",
                               target: self, action: #selector(firstRunRadioChanged(_:)))
         launch.frame = NSRect(x: 0, y: 62, width: 300, height: 20)
-        launch.state = .on
         let interval = NSButton(radioButtonWithTitle: "Every",
                                 target: self, action: #selector(firstRunRadioChanged(_:)))
         interval.frame = NSRect(x: 0, y: 34, width: 62, height: 20)
+        interval.state = .on   // default: check every 7 days
         let days = NSTextField(string: "7")
         days.frame = NSRect(x: 64, y: 32, width: 40, height: 22)
         days.alignment = .center
@@ -528,7 +557,7 @@ final class UpdateChecker: NSObject {
     // MARK: – Small alerts
 
     private func presentUpToDateAlert() {
-        NSApp.activate(ignoringOtherApps: true)
+        surfaceForModal()
         let alert = NSAlert()
         alert.messageText = "You’re up to date"
         alert.informativeText = "VectorLabel \(BuildInfo.version) is the newest version available."
@@ -537,7 +566,7 @@ final class UpdateChecker: NSObject {
     }
 
     private func presentErrorAlert(_ title: String, message: String) {
-        NSApp.activate(ignoringOtherApps: true)
+        surfaceForModal()
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = title

@@ -12,6 +12,16 @@ number (git commit count) + short SHA, shown in the menu-bar footer.
 
 ## [Unreleased]
 
+### Changed
+- **Updates:** the first-launch "How should VectorLabel check for updates?" prompt now
+  defaults to **Every 7 days** (was: on every launch). Every option can still be chosen,
+  and changed later in Preferences ▸ Updates.
+
+### Fixed
+- **Updates:** an empty "VectorLabel Engine Settings" window could appear when the update
+  prompts surfaced (the first-launch question, "update available", "you're up to date",
+  and update errors). It no longer does.
+
 ## [1.2.0] — 2026-07-01
 
 ### Added

@@ -174,8 +174,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // updatePolicy is still unset), THEN run the launch-time policy. Last in
         // launch so the modal prompt can't delay the queue consumer, watchers, or
         // status publisher coming up.
-        UpdateChecker.shared.firstRunPromptIfNeeded {
-            UpdateChecker.shared.maybeAutoCheck()
+        // Deferred one runloop turn: activating the (.accessory) app for the modal
+        // WHILE launch is still in flight is what made SwiftUI present the empty
+        // Settings-scene window ("VectorLabel Engine Settings").
+        DispatchQueue.main.async {
+            UpdateChecker.shared.firstRunPromptIfNeeded {
+                UpdateChecker.shared.maybeAutoCheck()
+            }
         }
     }
 
