@@ -13,6 +13,15 @@ number (git commit count) + short SHA, shown in the menu-bar footer.
 ## [Unreleased]
 
 ### Added
+- **Built-in error reporting.** When any of the four apps hits an error — a failed
+  print, a file that won't open or save, a download/update failure, or a crash on the
+  previous launch — the alert now offers **Report…**, which opens a popup where you can
+  describe what happened and send the report privately to the developer (filed as a
+  GitHub issue in a private repo). A **Report a Problem…** row in the Engine menu sends
+  a report any time. The first report asks for your name, email, and (optionally) phone
+  so the developer can follow up, then remembers them. Reports include app/version,
+  macOS and hardware info, current printer status, and the app's recent log (each app
+  now keeps a rolling log file under ~/Library/Logs/VectorLabel/).
 - **Printable-area margins on the canvas.** Both designers and the print window's
   preview now show the label's physical edges with the unprintable margins hatched,
   so you can see exactly where the selected printer can print. In the Custom Designer

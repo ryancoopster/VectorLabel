@@ -229,16 +229,15 @@ public enum CloudFile {
             finished = true
             if let host = hostWindow, panel.sheetParent === host { host.endSheet(panel) }
             panel.orderOut(nil)
-            // Surface a failure ONCE here (sheet-or-modal, presentImportError's shape),
+            // Surface a failure ONCE here (sheet-or-modal, with a "Report…" option),
             // so every call site keeps the one-line `guard case .ready` pattern.
             if case .failed(let error) = result {
-                let alert = NSAlert()
-                alert.alertStyle = .warning
-                alert.messageText = "Couldn’t download “\(pending[currentIndex].lastPathComponent)”"
-                alert.informativeText = "The cloud provider couldn’t deliver the file: \(error.localizedDescription)"
-                alert.addButton(withTitle: "OK")
-                if let host = hostWindow { alert.beginSheetModal(for: host, completionHandler: nil) }
-                else { alert.runModal() }
+                ErrorReporter.showErrorAlert(
+                    title: "Couldn’t download “\(pending[currentIndex].lastPathComponent)”",
+                    message: "The cloud provider couldn’t deliver the file: \(error.localizedDescription)",
+                    details: "\(error)",
+                    in: hostWindow,
+                    appName: ErrorReporter.currentAppName())
             }
             completion(result)
             CloudFile.sessions.removeAll { $0 === self }

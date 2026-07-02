@@ -449,6 +449,10 @@ public final class PrinterManager: ObservableObject {
             } catch {
                 print("[PrinterManager] Print failed: \(error)")
                 job.markFailed()
+                // Offer a problem report. reportAsync hops to the main actor —
+                // never blocks this print thread.
+                ErrorReporter.reportAsync(title: "Print failed: \(title)",
+                                          details: "\(error)", appName: "Engine")
             }
             finishOnMain()
         }

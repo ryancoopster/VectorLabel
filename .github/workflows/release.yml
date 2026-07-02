@@ -13,6 +13,11 @@ name: Release (signed & notarized)
 #   NOTARY_API_KEY_P8_BASE64       base64 of your App Store Connect API key (AuthKey_XXX.p8)
 #   NOTARY_API_KEY_ID              the key ID (e.g. ABC123DE45)
 #   NOTARY_API_ISSUER_ID           the issuer UUID from App Store Connect
+#   VL_REPORTS_TOKEN               problem-report delivery token: a fine-grained GitHub
+#                                  PAT with Issues: write on the private
+#                                  ryancoopster/VectorLabel-reports repo ONLY. Baked into
+#                                  each app as the VLReportingToken bundle resource so
+#                                  in-app "Report…" can file issues there.
 
 on:
   push:
@@ -109,6 +114,7 @@ jobs:
       - name: Build, package & sign suite
         env:
           SIGN_IDENTITY: ${{ secrets.DEVELOPER_ID_IDENTITY }}
+          VL_REPORTS_TOKEN: ${{ secrets.VL_REPORTS_TOKEN }}
         run: ./scripts/package-suite.sh   # → dist/VectorLabel/ (4 signed apps)
 
       - name: Notarize & staple

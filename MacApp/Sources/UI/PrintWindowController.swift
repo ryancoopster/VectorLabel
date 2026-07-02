@@ -186,11 +186,10 @@ public final class PrintWindowController: NSObject {
             alert.addButton(withTitle: "Cancel")
             if alert.runModal() == .alertFirstButtonReturn {
                 if !PrintQueue().resubmitDoneJob(id: recent.jobId) {
-                    let e = NSAlert()
-                    e.messageText = "Can’t reprint"
-                    e.informativeText = "The original print data for “\(recent.title)” is no longer available."
-                    e.alertStyle = .warning
-                    e.runModal()
+                    ErrorReporter.showErrorAlert(
+                        title: "Can’t reprint",
+                        message: "The original print data for “\(recent.title)” is no longer available.",
+                        details: nil, in: nil, appName: "Auto Print")
                 }
             }
             return
@@ -422,7 +421,12 @@ public final class PrintWindowController: NSObject {
     /// Persist a template edited in the print window's designer to
     /// ~/Documents/VectorLabel/Templates/. The JS payload is {id?, name, specN, objs}.
     private func saveTemplate(from payloadAny: Any?) {
-        TemplateStore.shared.save(fromPayload: payloadAny)
+        if !TemplateStore.shared.save(fromPayload: payloadAny) {
+            ErrorReporter.showErrorAlert(
+                title: "Couldn’t save the template",
+                message: "Your changes have not been applied. Check that the disk isn’t full and that VectorLabel can write to ~/Documents/VectorLabel/Templates/.",
+                details: nil, in: window, appName: "Auto Print")
+        }
     }
 
     // MARK: – JS bridge: push data into the web view
@@ -732,6 +736,15 @@ extension PrintWindowController: WKScriptMessageHandler {
             AppSettings.shared.setFeedToClear(forKey: (payload?["key"] as? String) ?? "",
                                               (payload?["value"] as? Bool) ?? false)
 
+        case "jsError":
+            // Uncaught error inside the WKWebView — log prominently and offer a report.
+            let p = body["payload"] as? [String: Any] ?? [:]
+            NSLog("[VL-JS-ERROR] \(p["msg"] ?? "") @ \(p["at"] ?? "") \(p["stack"] ?? "")")
+            ErrorReporter.presentReport(
+                title: "Print window script error",
+                details: "\(p["msg"] ?? "") @ \(p["at"] ?? "")\n\(p["stack"] ?? "")",
+                appName: "Auto Print")
+
         default:
             break
         }
@@ -922,12 +935,10 @@ extension PrintWindowController: WKScriptMessageHandler {
                     // Tell the user and keep the window open to retry. (F26)
                     NSLog("[PrintWindowController] submit failed: \(error)")
                     self.evalJS("if(typeof cancelPrint==='function')cancelPrint()")   // dismiss the stuck Printing… modal
-                    let alert = NSAlert()
-                    alert.alertStyle = .warning
-                    alert.messageText = "Couldn’t start the print"
-                    alert.informativeText = "The job could not be queued: \(error.localizedDescription)\n\nNothing was sent to the printer. Please try again."
-                    alert.addButton(withTitle: "OK")
-                    if let w = self.window { alert.beginSheetModal(for: w) } else { alert.runModal() }
+                    ErrorReporter.showErrorAlert(
+                        title: "Couldn’t start the print",
+                        message: "The job could not be queued: \(error.localizedDescription)\n\nNothing was sent to the printer. Please try again.",
+                        details: "\(error)", in: self.window, appName: "Auto Print")
                     return
                 }
                 // The print has started. With several tabs open, close the tab that PRINTED

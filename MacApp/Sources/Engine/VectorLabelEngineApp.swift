@@ -110,6 +110,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Tee NSLog/stderr into ~/Library/Logs/VectorLabel/Engine.log (attached to
+        // problem reports) and capture uncaught exceptions to a crash log + a
+        // pending-report marker — both installed before anything else can fail.
+        VLLog.install(appName: "Engine")
+        ErrorReporter.installCrashCapture(appName: "Engine")
         // A write to a printer socket the device closed (mid-print telemetry polling opens many
         // short-lived sockets) would otherwise raise SIGPIPE and kill the Engine. Ignore it so
         // the write surfaces as a normal EPIPE error instead. (Sockets also set SO_NOSIGPIPE.)
@@ -133,17 +138,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             return
         }
         didBecomeEngine = true
-        // Unsigned builds don't reliably leave a crash report, so capture uncaught
-        // Obj-C/AppKit exceptions (the common class for a Preferences/menu crash) to
-        // a log we can read after the fact.
-        NSSetUncaughtExceptionHandler { ex in
-            let text = "\(Date()) [VL-CRASH] \(ex.name.rawValue): \(ex.reason ?? "")\n"
-                     + ex.callStackSymbols.joined(separator: "\n") + "\n\n"
-            let path = (NSHomeDirectory() as NSString).appendingPathComponent("Library/Logs/VectorLabel-crash.log")
-            guard let data = text.data(using: .utf8) else { return }
-            if let h = FileHandle(forWritingAtPath: path) { h.seekToEndOfFile(); h.write(data); try? h.close() }
-            else { FileManager.default.createFile(atPath: path, contents: data) }
-        }
         AppSettings.shared.applyNativeAppearance()
         // The Engine owns the appearance setting; answer front-ends' launch-time requests by
         // re-broadcasting the current value, and broadcast once on launch so a front-end that
@@ -184,6 +178,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             UpdateChecker.shared.firstRunPromptIfNeeded {
                 UpdateChecker.shared.maybeAutoCheck()
             }
+            // If the Engine crashed last time, offer to send that report (the
+            // first-run prompt above is modal, so this runs after it closes).
+            ErrorReporter.offerPendingCrashReportIfAny(appName: "Engine")
         }
     }
 
@@ -390,6 +387,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     /// policy, and alerts on errors / "up to date" (unlike the silent auto checks).
     func checkForUpdates() {
         UpdateChecker.shared.checkNow(userInitiated: true)
+    }
+
+    /// Menu action: manual "Report a Problem…" popup. Activate first — the
+    /// Engine is an .accessory app, so the modal would otherwise open behind
+    /// whatever app is frontmost.
+    func reportProblem() {
+        NSApp.activate(ignoringOtherApps: true)
+        ErrorReporter.presentManualReport(appName: "Engine")
     }
 
     func openPreferences(selectTab: Int? = nil) {

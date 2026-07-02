@@ -222,6 +222,10 @@ struct MenuBarView: View {
                 appDelegate.checkForUpdates()
             }
 
+            MenuActionRow(icon: "exclamationmark.bubble", title: "Report a Problem…", shortcut: "") {
+                appDelegate.reportProblem()
+            }
+
             MenuActionRow(icon: "power", title: "Quit VectorLabel", shortcut: "⌘Q") {
                 NSApplication.shared.terminate(nil)
             }

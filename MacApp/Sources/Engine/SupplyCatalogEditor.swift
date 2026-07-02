@@ -43,6 +43,9 @@ final class SupplyCatalogEditorWindow {
     }
 
     func close() { window?.close() }
+
+    /// The live editor window, so error alerts can attach as sheets (nil when closed).
+    var hostWindow: NSWindow? { window }
 }
 
 // MARK: – Supply catalog editor (Engine ▸ Preferences ▸ Supplies)
@@ -681,7 +684,13 @@ struct SupplyCatalogEditorView: View {
         panel.nameFieldStringValue = "\(sanitizeFileName(suggestedName)).vlsupply"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do { try data.write(to: url) }
-        catch { showAlert("Export failed", "Couldn’t write the file: \(error.localizedDescription)") }
+        catch {
+            ErrorReporter.showErrorAlert(title: "Export failed",
+                                         message: "Couldn’t write the file: \(error.localizedDescription)",
+                                         details: "\(error)",
+                                         in: SupplyCatalogEditorWindow.shared.hostWindow,
+                                         appName: "Engine")
+        }
     }
     /// Open panel → (if the pick is an online-only cloud stub) download-wait → decode.
     /// Hands `completion` the decoded export, or nil after cancel / a shown error —

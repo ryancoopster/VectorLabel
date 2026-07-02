@@ -39,6 +39,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var editDesigner: DesignerWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Log capture + crash reporting first, so everything after is covered.
+        VLLog.install(appName: "Auto Print")
+        ErrorReporter.installCrashCapture(appName: "Auto Print")
         if Bundle.main.bundleIdentifier == nil || Bundle.main.bundleIdentifier!.isEmpty {
             UserDefaults.standard.set("com.sai.vectorlabel.autoprint", forKey: "CFBundleIdentifier")
         }
@@ -119,6 +122,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
         watcher.start()
         self.watcher = watcher
+
+        // If the app crashed last time, offer to report it now that launch is done.
+        ErrorReporter.offerPendingCrashReportIfAny(appName: "Auto Print")
     }
 
     func applicationWillTerminate(_ notification: Notification) {

@@ -34,6 +34,13 @@ public final class DesignerWindowController: NSObject {
 
     public let mode: DesignerMode
 
+    /// Error-report appName for whichever app hosts this shared controller: custom mode
+    /// only runs in the Custom Designer; template mode runs in the Template Designer AND
+    /// inside Auto Print's edit designer, so derive it from the host bundle id.
+    private var reportAppName: String {
+        mode == .custom ? "Custom Designer" : ErrorReporter.currentAppName()
+    }
+
     private var window: NSWindow?
     private var tabBar: BrowserTabBar?
     private var contentArea: NSView?
@@ -844,13 +851,9 @@ public final class DesignerWindowController: NSObject {
     }
 
     private func presentImportError(_ url: URL, reason: String) {
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = "Couldn't import “\(url.lastPathComponent)”"
-        alert.informativeText = reason
-        alert.addButton(withTitle: "OK")
-        if let win = window { alert.beginSheetModal(for: win, completionHandler: nil) }
-        else { alert.runModal() }
+        ErrorReporter.showErrorAlert(title: "Couldn't import “\(url.lastPathComponent)”",
+                                     message: reason, details: reason,
+                                     in: window, appName: reportAppName)
     }
 
     /// Finder panel (at the Exports folder) to pick a CSV/XLSX data source.
@@ -944,13 +947,12 @@ public final class DesignerWindowController: NSObject {
             }
         }
         guard let records, !records.isEmpty else {
-            let alert = NSAlert()
-            alert.alertStyle = .warning
-            alert.messageText = "Couldn’t read “\(url.lastPathComponent)”"
-            alert.informativeText = isXLSX
-                ? "The Excel file is empty or unreadable. Make sure it has at least one row of data on the first sheet."
-                : "The CSV file is empty or unreadable. Make sure it has a header row and at least one data row."
-            alert.runModal()
+            ErrorReporter.showErrorAlert(
+                title: "Couldn’t read “\(url.lastPathComponent)”",
+                message: isXLSX
+                    ? "The Excel file is empty or unreadable. Make sure it has at least one row of data on the first sheet."
+                    : "The CSV file is empty or unreadable. Make sure it has a header row and at least one data row.",
+                details: nil, in: window, appName: reportAppName)
             return false
         }
 
@@ -1305,12 +1307,10 @@ public final class DesignerWindowController: NSObject {
                     // Submit failed: the job was NOT queued, so do NOT tell the page a
                     // print started. Surface it and bail. (F26)
                     NSLog("[DesignerWindowController] printCustom submit failed: \(error)")
-                    let alert = NSAlert()
-                    alert.alertStyle = .warning
-                    alert.messageText = "Couldn’t start the print"
-                    alert.informativeText = "The job could not be queued: \(error.localizedDescription)\n\nNothing was sent to the printer. Please try again."
-                    alert.addButton(withTitle: "OK")
-                    if let w = self.window { alert.beginSheetModal(for: w) } else { alert.runModal() }
+                    ErrorReporter.showErrorAlert(
+                        title: "Couldn’t start the print",
+                        message: "The job could not be queued: \(error.localizedDescription)\n\nNothing was sent to the printer. Please try again.",
+                        details: "\(error)", in: self.window, appName: self.reportAppName)
                     return
                 }
                 // Hand the page its job id so it can match the Engine's published
@@ -1343,6 +1343,7 @@ public final class DesignerWindowController: NSObject {
         else { panel.allowedContentTypes = [.commaSeparatedText] }
         panel.level = .modalPanel
         NSApp.activate(ignoringOtherApps: true)
+        let appName = reportAppName   // bind BEFORE the closure (CI Swift strictness)
         panel.begin { [weak self] resp in
             guard resp == .OK, let url = panel.url else { return }
             MainActor.assumeIsolated {
@@ -1353,8 +1354,10 @@ public final class DesignerWindowController: NSObject {
                 if let data = data {
                     do { try data.write(to: url, options: .atomic) }
                     catch {
-                        let a = NSAlert(); a.messageText = "Export failed"
-                        a.informativeText = error.localizedDescription; a.runModal()
+                        ErrorReporter.showErrorAlert(title: "Export failed",
+                                                     message: error.localizedDescription,
+                                                     details: "\(error)", in: self?.window,
+                                                     appName: appName)
                     }
                 }
             }
@@ -1455,11 +1458,10 @@ public final class DesignerWindowController: NSObject {
                     self.finishSave()   // clears dirty + runs any close-after-save on the saved tab
                 } catch {
                     self.cancelPendingSave()
-                    let alert = NSAlert()
-                    alert.alertStyle = .warning
-                    alert.messageText = "Couldn’t save the custom label"
-                    alert.informativeText = "\(error.localizedDescription)"
-                    alert.runModal()
+                    ErrorReporter.showErrorAlert(title: "Couldn’t save the custom label",
+                                                 message: error.localizedDescription,
+                                                 details: "\(error)", in: self.window,
+                                                 appName: self.reportAppName)
                 }
                 // Put the user back on the tab they were viewing.
                 if let p = prevActive, self.tabs.contains(where: { $0.id == p }) {
@@ -1924,9 +1926,13 @@ extension DesignerWindowController: WKScriptMessageHandler {
             refreshTabBar()                                 // reflect the dot + title on the chip
 
         case "jsError":
-            // Uncaught error inside the WKWebView — log prominently for diagnosis.
+            // Uncaught error inside the WKWebView — log prominently and offer a report.
             let p = body["payload"] as? [String: Any] ?? [:]
             NSLog("[VL-JS-ERROR] \(p["msg"] ?? "") @ \(p["at"] ?? "") \(p["stack"] ?? "")")
+            ErrorReporter.presentReport(
+                title: "Designer script error",
+                details: "\(p["msg"] ?? "") @ \(p["at"] ?? "")\n\(p["stack"] ?? "")",
+                appName: reportAppName)
 
         case "saveCustomDocument":
             // Custom Designer only — write the current canvas + embedded data as a
@@ -1986,11 +1992,10 @@ extension DesignerWindowController: WKScriptMessageHandler {
             // layout.
             if let p = body["payload"] as? [String: Any], (p["save"] as? Bool) == true {
                 if !TemplateStore.shared.save(fromPayload: p["template"]) {
-                    let alert = NSAlert()
-                    alert.messageText = "Couldn’t save the template"
-                    alert.informativeText = "Your changes have not been applied. Check that the disk isn’t full and that VectorLabel can write to ~/Documents/VectorLabel/Templates/."
-                    alert.alertStyle = .warning
-                    alert.runModal()
+                    ErrorReporter.showErrorAlert(
+                        title: "Couldn’t save the template",
+                        message: "Your changes have not been applied. Check that the disk isn’t full and that VectorLabel can write to ~/Documents/VectorLabel/Templates/.",
+                        details: nil, in: window, appName: reportAppName)
                     return   // keep the designer open so the user can retry / copy their work
                 }
             }

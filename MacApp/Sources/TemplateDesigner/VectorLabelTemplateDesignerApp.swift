@@ -32,6 +32,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pendingOpenURLs: [URL] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Log capture + crash reporting first, so everything after is covered.
+        VLLog.install(appName: "Template Designer")
+        ErrorReporter.installCrashCapture(appName: "Template Designer")
         if Bundle.main.bundleIdentifier == nil || Bundle.main.bundleIdentifier!.isEmpty {
             UserDefaults.standard.set("com.sai.vectorlabel.templatedesigner", forKey: "CFBundleIdentifier")
         }
@@ -60,6 +63,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             designer.open()
         }
+
+        // If the app crashed last time, offer to report it now that launch is done.
+        ErrorReporter.offerPendingCrashReportIfAny(appName: "Template Designer")
     }
 
     /// Quit fully when the (only) designer window closes — don't linger in the Dock.
@@ -111,11 +117,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.designer.openTemplate(tpl, displayName: url.deletingPathExtension().lastPathComponent)
             } else {
                 self.designer.open()
-                let alert = NSAlert()
-                alert.alertStyle = .warning
-                alert.messageText = "Couldn’t open “\(url.lastPathComponent)”"
-                alert.informativeText = "The file isn’t a valid VectorLabel template."
-                alert.runModal()
+                ErrorReporter.showErrorAlert(title: "Couldn’t open “\(url.lastPathComponent)”",
+                                             message: "The file isn’t a valid VectorLabel template.",
+                                             details: url.lastPathComponent,
+                                             in: nil, appName: "Template Designer")
             }
         }
     }

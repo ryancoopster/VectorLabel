@@ -548,12 +548,8 @@ final class UpdateChecker: NSObject {
     }
 
     private func presentErrorAlert(_ title: String, message: String) {
-        surfaceForModal()
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = title
-        alert.informativeText = message
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
+        surfaceForModal()   // .accessory app: activate + sweep the stray Settings window
+        ErrorReporter.showErrorAlert(title: title, message: message, details: nil,
+                                     in: nil, appName: "Engine")
     }
 }

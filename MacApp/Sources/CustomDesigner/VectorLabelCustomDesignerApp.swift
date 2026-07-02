@@ -35,6 +35,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var reprintWatcher: FolderWatcher?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Log capture + crash reporting first, so everything after is covered.
+        VLLog.install(appName: "Custom Designer")
+        ErrorReporter.installCrashCapture(appName: "Custom Designer")
         if Bundle.main.bundleIdentifier == nil || Bundle.main.bundleIdentifier!.isEmpty {
             UserDefaults.standard.set("com.sai.vectorlabel.customdesigner", forKey: "CFBundleIdentifier")
         }
@@ -81,6 +84,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pendingOpenURLs.removeAll()
         for r in pendingReprints { handleReprintRequest(r) }
         if !anyPending { designer.open() }
+
+        // If the app crashed last time, offer to report it now that launch is done.
+        ErrorReporter.offerPendingCrashReportIfAny(appName: "Custom Designer")
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -102,11 +108,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         else {
             designer.open()
             NSApp.activate(ignoringOtherApps: true)
-            let alert = NSAlert()
-            alert.alertStyle = .warning
-            alert.messageText = "Can’t reopen “\(recent.title)”"
-            alert.informativeText = "The original design for this print is no longer available to edit."
-            alert.runModal()
+            ErrorReporter.showErrorAlert(title: "Can’t reopen “\(recent.title)”",
+                                         message: "The original design for this print is no longer available to edit.",
+                                         details: recent.title,
+                                         in: nil, appName: "Custom Designer")
             return
         }
         designer.openCustomDocument(doc)
@@ -162,11 +167,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.designer.openCustomDocument(doc, displayName: url.deletingPathExtension().lastPathComponent)
             } else {
                 self.designer.open()
-                let alert = NSAlert()
-                alert.alertStyle = .warning
-                alert.messageText = "Couldn’t open “\(url.lastPathComponent)”"
-                alert.informativeText = "The file isn’t a valid VectorLabel custom label."
-                alert.runModal()
+                ErrorReporter.showErrorAlert(title: "Couldn’t open “\(url.lastPathComponent)”",
+                                             message: "The file isn’t a valid VectorLabel custom label.",
+                                             details: url.lastPathComponent,
+                                             in: nil, appName: "Custom Designer")
             }
         }
     }

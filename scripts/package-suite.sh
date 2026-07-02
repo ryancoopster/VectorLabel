@@ -137,6 +137,12 @@ package_one() {
         "com.sai.vectorlabel${SUFFIX}.vlcus" "vlcus" "VectorLabel Custom Label" ;;
   esac
 
+  # Problem-report delivery token (never in git): release.yml provides
+  # VL_REPORTS_TOKEN from a repo secret; ErrorReporter reads it back as the
+  # bundle resource "VLReportingToken". Builds without it ship with reporting
+  # unconfigured (the report popup offers Copy Report instead of Send).
+  [ -n "${VL_REPORTS_TOKEN:-}" ] && printf '%s' "$VL_REPORTS_TOKEN" > "$APP/Contents/Resources/VLReportingToken"
+
   local DYLIB_PATH=""
   if [ "$LIBUSB" = "1" ]; then
     local SRC LNAME
