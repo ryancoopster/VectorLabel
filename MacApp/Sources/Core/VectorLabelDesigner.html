@@ -2636,7 +2636,9 @@ function startDrag(e,id){
   if(o.t==="tx" && txMode(o)==="static" && (S.selIds||[]).length<=1){
     const now=Date.now();
     if(_txEditClickId===id && (now-_txEditClickT)<DBLCLICK_MS){
-      _txEditClickId=null; _txEditClickT=0; startTextEdit(id); return;
+      _txEditClickId=null; _txEditClickT=0;
+      e.preventDefault();   // or the mousedown's default focus action blurs the editor
+      startTextEdit(id); return;
     }
     _txEditClickId=id; _txEditClickT=now;
   }
@@ -3431,6 +3433,11 @@ function startTblLineDrag(e,id,axis,index){
 // range from the anchor, ⌘/Ctrl = toggle. stopPropagation so the table doesn't drag.
 function tblCellDown(e,id,r,c){
   e.stopPropagation();
+  // preventDefault is LOAD-BEARING: a trusted mousedown's default action moves focus
+  // AFTER this handler runs — which would blur the contenteditable we just focused
+  // when entering edit mode (its blur handler then exits editing instantly). Hit divs
+  // have no useful default behavior, so suppress it unconditionally.
+  if(e.preventDefault)e.preventDefault();
   if(e.button===2)return;   // right-click → tblCtxMenu handles selection
   const o=gobj(id); if(!o||o.t!=="tb")return;
   if(S._tblEdit&&!(S._tblEdit.id===id&&S._tblEdit.r===r&&S._tblEdit.c===c))S._tblEdit=null;
@@ -3475,6 +3482,18 @@ function startTblCellEdit(id,r,c){
   S._tblEdit={id:id,r:r,c:c};
   S.editingId=null; S._ef=undefined;
   R();
+  // Re-assert focus a tick later: if this was entered from a trusted mousedown, any
+  // remaining default processing after the handler can steal focus from the
+  // contenteditable R() just focused (which would blur → exit editing immediately).
+  setTimeout(function(){
+    if(!S._tblEdit||S._tblEdit.id!==id||S._tblEdit.r!==r||S._tblEdit.c!==c)return;
+    const te=document.querySelector('[data-tbltxt="'+id+':'+r+','+c+'"]');
+    if(te&&document.activeElement!==te){
+      te.focus();
+      try{ const sel=window.getSelection(), rg=document.createRange();
+           rg.selectNodeContents(te); rg.collapse(false); sel.removeAllRanges(); sel.addRange(rg); }catch(_){}
+    }
+  },0);
 }
 function endTblCellEdit(){ S._tblEdit=null; R(); }
 // Live update while typing in a cell — no R() (would steal focus); undo point
