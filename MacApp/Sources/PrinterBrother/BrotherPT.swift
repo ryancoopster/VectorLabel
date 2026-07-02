@@ -32,15 +32,15 @@ public enum BrotherPT {
     static let minLabelDots = 174          // shorter rasters misbehave; pad up to this
 
     /// Tape width (mm) → unprintable margin pins on EACH side of the head.
-    static let tapeMargins: [(mm: Double, margin: Int)] = [
-        (3.5, 52), (6, 48), (9, 39), (12, 29), (18, 8), (24, 0),
-    ]
+    /// Canonical table lives in Core (shared with the web overlay's
+    /// `__VL_PRINTER_GEOMETRY__` projection) so driver and UI can never drift.
+    static let tapeMargins = PrinterGeometry.brotherTapeMarginPins
 
     /// All supported TZe tape widths in mm, narrow → wide.
     public static let tapeWidthsMm: [Double] = tapeMargins.map { $0.mm }
 
     static func margin(forTapeMm mm: Double) -> Int? {
-        tapeMargins.first { abs($0.mm - mm) < 0.001 }?.margin
+        tapeMargins.first { abs($0.mm - mm) < 0.001 }?.marginPins
     }
 
     /// Printable height in pins for a tape width (`128 - margin*2`), or nil if the
@@ -53,7 +53,7 @@ public enum BrotherPT {
     /// recover the tape from a rendered+downscaled raster's across-tape dimension.
     public static func nearestTape(forAcrossPx acrossPx: Int) -> Double {
         tapeMargins.min { lhs, rhs in
-            abs((headPins - lhs.margin * 2) - acrossPx) < abs((headPins - rhs.margin * 2) - acrossPx)
+            abs((headPins - lhs.marginPins * 2) - acrossPx) < abs((headPins - rhs.marginPins * 2) - acrossPx)
         }!.mm
     }
 

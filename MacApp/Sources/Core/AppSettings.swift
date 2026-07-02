@@ -122,6 +122,15 @@ public final class AppSettings: ObservableObject {
     @Published public var designerPropsWidth: Double {
         didSet { UserDefaults.standard.set(designerPropsWidth, forKey: "designerPropsWidth") }
     }
+    /// Show the printable-area (unprintable-margin) overlay around the canvas.
+    @Published public var designerShowMargins: Bool {
+        didSet { UserDefaults.standard.set(designerShowMargins, forKey: "designerShowMargins") }
+    }
+    /// Default target printer model for the Template Designer's printable-area
+    /// overlay ("" = none). An opened template's own targetPrinterModel overrides it.
+    @Published public var defaultTargetPrinterModel: String {
+        didSet { UserDefaults.standard.set(defaultTargetPrinterModel, forKey: "defaultTargetPrinterModel") }
+    }
 
     /// Folder last used in the Custom Designer's "Choose data file" panel, so it
     /// reopens where the user last picked a CSV/XLSX instead of always at Exports/.
@@ -394,6 +403,8 @@ public final class AppSettings: ObservableObject {
         designerRecordsHeight = defaults.object(forKey: "designerRecordsHeight") as? Double ?? 160
         designerDatabaseHeight = defaults.object(forKey: "designerDatabaseHeight") as? Double ?? 240
         designerPropsWidth  = defaults.object(forKey: "designerPropsWidth") as? Double ?? 220
+        designerShowMargins = defaults.object(forKey: "designerShowMargins") as? Bool ?? true
+        defaultTargetPrinterModel = defaults.string(forKey: "defaultTargetPrinterModel") ?? ""
         lastDataSourceFolderPath = defaults.string(forKey: "lastDataSourceFolderPath") ?? ""
         if let d = defaults.data(forKey: "printerCalibration"),
            let m = try? JSONDecoder().decode([String: [Double]].self, from: d) {
@@ -462,6 +473,8 @@ public final class AppSettings: ObservableObject {
         designerRecordsHeight = 160
         designerDatabaseHeight = 240
         designerPropsWidth   = 220
+        designerShowMargins  = true
+        defaultTargetPrinterModel = ""
         lastDataSourceFolderPath = ""
         filterSortPresetsJSON = "[]"
         appearance           = "dark"

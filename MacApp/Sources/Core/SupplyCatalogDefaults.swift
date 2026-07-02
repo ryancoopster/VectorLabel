@@ -174,6 +174,7 @@ extension SupplyCatalog {
     /// SKUs where known and are editable in Preferences ▸ Supplies.
     static func brotherPTouchGroup() -> SupplyGroup {
         // (tape mm, printable pins per BrotherPT.printWidth, default part number)
+        // Pin values derive from the canonical head table in PrinterGeometry.brotherTapeMarginPins.
         let tapes: [(mm: Double, pins: Int, pn: String)] = [
             (3.5, 24,  "TZe-3.5mm"),
             (6,   32,  "TZe-211"),

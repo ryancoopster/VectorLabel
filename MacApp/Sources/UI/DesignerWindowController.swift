@@ -257,7 +257,8 @@ public final class DesignerWindowController: NSObject {
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
         contentController.addUserScript(WKUserScript(
             source: "window.__VL_BUILD__='\(BuildInfo.build)'; window.__VL_CATALOG__=\(SupplyCatalogStore.webCatalogJSON(forModel: ""));"
-                  + " window.__VL_FONTS__=\(Self.systemFontFamiliesJSON());",
+                  + " window.__VL_FONTS__=\(Self.systemFontFamiliesJSON());"
+                  + " window.__VL_PRINTER_GEOMETRY__=\(PrinterGeometry.webGeometryJSON());",
             injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController = contentController
         let wv = WKWebView(frame: .zero, configuration: config)
@@ -632,6 +633,7 @@ public final class DesignerWindowController: NSObject {
         cutMode:\(doc.cutMode.rawValue.jsonQuoted),\
         supplyID:\(supplyIDJSON),supplyGeometry:\(geomJSON),\
         labelLengthInches:\(lenInches),canvasRot:\(doc.template.canvasRot ?? 0),\
+        targetPrinterModel:\((doc.template.targetPrinterModel ?? "").jsonQuoted),\
         records:\(recJSON),columns:\(colJSON),filename:\(filename),\
         headerRow:\(doc.dataSourceHeaderRow),isXLSX:\(isXLSX),\
         hasDataSource:\(doc.dataSourceURL != nil)});
@@ -666,7 +668,7 @@ public final class DesignerWindowController: NSObject {
         guard let wv = webView else { return }
         let s = AppSettings.shared
         wv.evaluateJavaScript(
-            "if(typeof initDesignerPrefs==='function')initDesignerPrefs({snapGrid:\(s.designerSnapGrid),snapObjects:\(s.designerSnapObjects),gridSize:\(s.designerGridSize),recH:\(s.designerRecordsHeight),propW:\(s.designerPropsWidth),dbH:\(s.designerDatabaseHeight),feedToClearByPrinter:\(s.feedToClearByPrinterJSON()),feedToClearDefault:\(s.feedToClearBeforePrint)});",
+            "if(typeof initDesignerPrefs==='function')initDesignerPrefs({snapGrid:\(s.designerSnapGrid),snapObjects:\(s.designerSnapObjects),gridSize:\(s.designerGridSize),recH:\(s.designerRecordsHeight),propW:\(s.designerPropsWidth),dbH:\(s.designerDatabaseHeight),showMargins:\(s.designerShowMargins),defaultTargetPrinterModel:\(s.defaultTargetPrinterModel.jsonQuoted),feedToClearByPrinter:\(s.feedToClearByPrinterJSON()),feedToClearDefault:\(s.feedToClearBeforePrint)});",
             completionHandler: nil
         )
     }
@@ -1195,6 +1197,7 @@ public final class DesignerWindowController: NSObject {
         // (mirrors the Save path; keeps the canvas size if the supply is later removed).
         if let sid = payload["supplyID"] as? String, !sid.isEmpty { tplDict["supplyID"] = sid }
         if let geom = payload["supplyGeometry"] as? [String: Any] { tplDict["supplyGeometry"] = geom }
+        if let tpm = payload["targetPrinterModel"] as? String, !tpm.isEmpty { tplDict["targetPrinterModel"] = tpm }
         // A template with no objects (or an unknown spec) can't render — bail.
         guard let objs = tplDict["objs"] as? [Any], !objs.isEmpty,
               let data = try? JSONSerialization.data(withJSONObject: tplDict),
@@ -1408,6 +1411,8 @@ public final class DesignerWindowController: NSObject {
         // later removed from the catalog).
         if let sid = payload["supplyID"] as? String, !sid.isEmpty { tplDict["supplyID"] = sid }
         if let geom = payload["supplyGeometry"] as? [String: Any] { tplDict["supplyGeometry"] = geom }
+        // Target printer model (printable-area overlay) — part of the design, like specN.
+        if let m = payload["targetPrinterModel"] as? String, !m.isEmpty { tplDict["targetPrinterModel"] = m }
         guard let data = try? JSONSerialization.data(withJSONObject: tplDict),
               let template = try? JSONDecoder().decode(VLTemplate.self, from: data)
         else { return }
@@ -1962,6 +1967,8 @@ extension DesignerWindowController: WKScriptMessageHandler {
                 if let v = p["recH"] as? Double { AppSettings.shared.designerRecordsHeight = v }
                 if let v = p["propW"] as? Double { AppSettings.shared.designerPropsWidth = v }
                 if let v = p["dbH"] as? Double { AppSettings.shared.designerDatabaseHeight = v }
+                if let v = p["showMargins"] as? Bool { AppSettings.shared.designerShowMargins = v }
+                if let v = p["defaultTargetPrinterModel"] as? String { AppSettings.shared.defaultTargetPrinterModel = v }
             }
 
         case "setFeedToClear":

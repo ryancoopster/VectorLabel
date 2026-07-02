@@ -269,6 +269,67 @@ function applyCatalog(cat){
   if(Array.isArray(cat.bl)&&cat.bl.length)BL=cat.bl;
   if(typeof R==="function")R();
 }
+
+// ── Printable-area margins (shared helper — identical in the designer) ─────────
+// spec: catalog entry {tw,th,pw,ph,ty,...} in the supply's PHYSICAL frame (inches,
+// ty "continuous"|"dieCut"). model: string or "". liveCass: cassette dict or null
+// ({printableWidthMils, printableHeightMils, labelWidthMils, ...}) from the selected
+// live printer, else null.
+// Returns null (no overlay) or {mt, mb, ml, mr} = unprintable inches on each side of
+// the CURRENT canvas rect, in the same frame the canvas is drawn in (caller applies
+// orientation swaps).
+function vlPrintableMargins(spec,model,liveCass){
+  const geo=(typeof window!=="undefined"&&window.__VL_PRINTER_GEOMETRY__)||null;
+  const models=(geo&&Array.isArray(geo.models))?geo.models:[];
+  const mname=String(model||"").trim().toLowerCase();
+  const entry=mname?(models.find(g=>String(g.model||"").trim().toLowerCase()===mname)||null):null;
+  const live=(liveCass&&Number(liveCass.printableWidthMils)>0)?liveCass:null;
+  if(!entry&&!live)return null;                       // model unknown AND no live data
+  if(!spec)return null;
+  const tw=Number(spec.tw)||0, th=Number(spec.th)||0;
+  const pw=Number(spec.pw)||0, ph=Number(spec.ph)||0;
+  const dieCut=spec.ty==="dieCut";
+  let mt=0,mb=0,ml=0,mr=0;
+  if(live){
+    // Live cassette data WINS over the static table.
+    const cassW=Number(live.labelWidthMils)>0?Number(live.labelWidthMils)/1000:tw;
+    const band=Number(live.printableWidthMils)/1000;
+    ml=mr=Math.max(0,(cassW-band)/2);
+    if(dieCut&&Number(live.printableHeightMils)>0){
+      const cassH=Number(live.labelHeightMils)>0?Number(live.labelHeightMils)/1000:th;
+      const bandH=Number(live.printableHeightMils)/1000;
+      mt=mb=Math.max(0,(cassH-bandH)/2);
+    }
+  }else if(entry.kind==="ptouch"&&!dieCut){
+    // Across-tape band from the shared Brother head table; along-tape margins: none
+    // (feed leader excluded).
+    const tapes=Array.isArray(entry.tapes)?entry.tapes:[];
+    if(!tapes.length)return null;
+    const mm=tw*25.4;
+    let tp=tapes[0];
+    for(const t of tapes)if(Math.abs(t.mm-mm)<Math.abs(tp.mm-mm))tp=t;
+    const band=(entry.headPins-2*tp.marginPins)/entry.dpi;
+    ml=mr=Math.max(0,(tw-band)/2);
+  }else if(dieCut){
+    // Die-cut: printable pw×ph centered in the physical tw×th.
+    ml=mr=(tw-pw)/2;
+    mt=mb=(th-ph)/2;
+  }else{
+    // Continuous: catalog band centered across the tape.
+    ml=mr=Math.max(0,(tw-pw)/2);
+  }
+  if(!mt&&!mb&&!ml&&!mr)return null;                  // all-zero → draw nothing
+  return{mt:mt,mb:mb,ml:ml,mr:mr};
+}
+// Margins for the print preview overlay: geometry from the SELECTED printer's model,
+// with the loaded cassette's printable mils (when reported) winning over the static
+// table. The preview keeps its unrotated, catalog-frame layout, so the margins apply
+// as returned (no orientation swap).
+function printableMarginsForPreview(spec){
+  const p=printer();
+  return vlPrintableMargins(spec,(p&&p.model)||"",loadedCassette());
+}
+
 const SC=185;
 // Objects may be positioned up to this many inches beyond the printable area on
 // any side; only the printable area prints. (Mirrors the standalone designer.)
@@ -342,7 +403,7 @@ function tblRegionMap(cells,nR,nC){
   return {regs:regs,spans:spans};
 }
 
-function renderLabel(tpl,rec,scale=1){
+function renderLabel(tpl,rec,scale=1,withMargins=false){
   const spec=blBy(tpl.specN)||blDefault();
   // Continuous supplies have a user-set printed length (tpl.labelLengthInches);
   // die-cut supplies use the catalog's fixed printable height.
@@ -454,7 +515,26 @@ function renderLabel(tpl,rec,scale=1){
     }
     return"";
   }).join("");
-  return`<div style="width:${pw}px;height:${ph}px;background:#fff;border:1.5px solid var(--bd4);border-radius:2px;position:relative;overflow:hidden;flex-shrink:0">${objs}</div>`;
+  const label=`<div style="width:${pw}px;height:${ph}px;background:#fff;border:1.5px solid var(--bd4);border-radius:2px;position:relative;overflow:hidden;flex-shrink:0">${objs}</div>`;
+  if(!withMargins)return label;
+  // Printable-area overlay: hatched unprintable strips OUTSIDE the label rect,
+  // sized purely scale-relative (margin inches × sc) so they hold up at any zoom,
+  // incl. tiny expanded-grid tiles. Visual only — never affects the raster path.
+  const m=printableMarginsForPreview(spec);
+  if(!m)return label;
+  const mt=Math.max(0,m.mt)*sc, mb=Math.max(0,m.mb)*sc, ml=Math.max(0,m.ml)*sc, mr=Math.max(0,m.mr)*sc;
+  if(!(mt||mb||ml||mr))return label;
+  const W=pw+3+ml+mr, H=ph+3+mt+mb;   // +3 = the label's own 1.5px border ×2
+  // Hatch pitch scales with sc so the texture never collapses or dominates.
+  const hz=`repeating-linear-gradient(45deg,rgba(128,128,128,0.28) 0,rgba(128,128,128,0.28) ${sc*0.008}px,rgba(128,128,128,0.08) ${sc*0.008}px,rgba(128,128,128,0.08) ${sc*0.032}px)`;
+  const strip=st=>`<div style="position:absolute;pointer-events:none;background:${hz};${st}"></div>`;
+  return`<div style="position:relative;width:${W}px;height:${H}px;padding:${mt}px ${mr}px ${mb}px ${ml}px;box-sizing:border-box;flex-shrink:0;border-radius:2px;outline:1px dashed rgba(128,128,128,0.5);outline-offset:-1px">
+    ${mt?strip(`left:0;top:0;right:0;height:${mt}px`):""}
+    ${mb?strip(`left:0;bottom:0;right:0;height:${mb}px`):""}
+    ${ml?strip(`left:0;top:${mt}px;bottom:${mb}px;width:${ml}px`):""}
+    ${mr?strip(`right:0;top:${mt}px;bottom:${mb}px;width:${mr}px`):""}
+    ${label}
+  </div>`;
 }
 
 // ── Sample data ───────────────────────────────────────────────────────────────
@@ -1739,10 +1819,17 @@ function buildPreviewPanel(){
   const nextIdx=vpos>=0&&vpos<total-1?vis[vpos+1]:P.previewIdx;
   if(!t||!rec)return`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:12px">No template selected</div>`;
   const spec=blBy(t.specN)||blDefault();
+  // Printable-area overlay margins (null when no geometry/live data); the fit math
+  // below must reserve room for the strips so they aren't clipped.
+  const pvM=printableMarginsForPreview(spec);
+  const pvMl=pvM?Math.max(0,pvM.ml):0, pvMr=pvM?Math.max(0,pvM.mr):0;
+  const pvMt=pvM?Math.max(0,pvM.mt):0, pvMb=pvM?Math.max(0,pvM.mb):0;
+  const lc=loadedCassette();
+  const pvLive=!!(pvM&&lc&&Number(lc.printableWidthMils)>0);
   // The label is rendered at scale 1 and fitted to the sidebar width by
   // fitPreviewLabel() (after render and while dragging the resize splitter), so
   // it grows/shrinks as the sidebar is resized.
-  const lw=spec.pw*SC, lh=spec.ph*SC;
+  const lw=(spec.pw+pvMl+pvMr)*SC, lh=(spec.ph+pvMt+pvMb)*SC;
   // Continuous supplies use the template's chosen printed length; die-cut use the
   // catalog's fixed printable height (mirrors renderLabel's phIn).
   const printablePh=(spec.ty==="continuous"&&t.labelLengthInches>0)?t.labelLengthInches:spec.ph;
@@ -1754,7 +1841,7 @@ function buildPreviewPanel(){
       <button onclick="openExpandedPreview()" title="Expanded preview — show all labels" class="btn" style="padding:3px 9px;font-size:14px;line-height:1">⊞</button>
     </div>
     <div id="preview-label-wrap" data-lw="${lw}" data-lh="${lh}" style="width:100%;display:flex;justify-content:center;overflow:hidden">
-      <div id="preview-label-inner" style="transform-origin:top center">${renderLabel(t,rec,1)}</div>
+      <div id="preview-label-inner" style="transform-origin:top center">${renderLabel(t,rec,1,true)}</div>
     </div>
     <div style="text-align:center">
       <div style="color:var(--text);font-size:12px;font-weight:600">${esc(rec.Number||"—")} ${esc(rec.Cable||"")}</div>
@@ -1775,6 +1862,7 @@ function buildPreviewPanel(){
         <span style="color:var(--text2)">Printable area</span>
         <span style="color:var(--text);font-family:monospace">${fmtIn(spec.pw)} × ${fmtIn(printablePh)}</span>
       </div>
+      ${pvLive?`<div style="text-align:right;color:var(--text3);font-size:10px;margin-top:1px">(from loaded cassette)</div>`:""}
       ${buyMoreControl(t.specN)}
     </div>
   </div>`;
@@ -2438,7 +2526,7 @@ function buildExpandedPreviewModal(){
     const isSel=P.selected.has(i);
     const ps=pairChkState(i);
     return `<div onclick="P.previewIdx=${i};R()" title="Click to preview this label" style="display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;padding:8px;border-radius:6px;border:1px solid ${isPrev?'var(--accent)':'transparent'};background:${isPrev?'rgba(108,142,245,0.12)':'transparent'}">
-      ${renderLabel(t,rec,scale)}
+      ${renderLabel(t,rec,scale,true)}
       <div style="font-size:11px;color:var(--text2);text-align:center">Label ${vpos+1}</div>
       <div style="display:flex;align-items:center;gap:8px" onclick="event.stopPropagation()">
         <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:10px;color:var(--text2)" title="Enable or disable printing this label">

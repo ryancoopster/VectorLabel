@@ -235,6 +235,67 @@ function applyCatalog(cat){
   if(re)S.spec=re;
   if(typeof R==="function")R();
 }
+
+// ── Printable-area geometry ─────────────────────────────────────────────────
+// Injected from Swift at document start as window.__VL_PRINTER_GEOMETRY__ (see
+// PrinterGeometry.webGeometryJSON): {models:[{model,kind,dpi?,headPins?,tapes?}]}.
+// spec: catalog entry {tw,th,pw,ph,ty,...} in the supply's PHYSICAL frame (inches,
+// ty "continuous"|"dieCut"). model: string or "". liveCass: cassette dict or null
+// ({printableWidthMils, printableHeightMils, labelWidthMils, ...}) from the selected
+// live printer, else null.
+// Returns null (no overlay) or {mt, mb, ml, mr} = unprintable inches on each side of
+// the CURRENT canvas rect, in the same frame the canvas is drawn in (caller applies
+// orientation swaps). Kept IDENTICAL in VectorLabelDesigner.html and
+// VectorLabelPrint.html (the two engines intentionally share no JS).
+function vlPrintableMargins(spec,model,liveCass){
+  const geo=(typeof window!=="undefined"&&window.__VL_PRINTER_GEOMETRY__)||null;
+  const models=(geo&&Array.isArray(geo.models))?geo.models:[];
+  const mname=String(model||"").trim().toLowerCase();
+  const entry=mname?(models.find(g=>String(g.model||"").trim().toLowerCase()===mname)||null):null;
+  const live=(liveCass&&Number(liveCass.printableWidthMils)>0)?liveCass:null;
+  if(!entry&&!live)return null;                       // model unknown AND no live data
+  if(!spec)return null;
+  const tw=Number(spec.tw)||0, th=Number(spec.th)||0;
+  const pw=Number(spec.pw)||0, ph=Number(spec.ph)||0;
+  const dieCut=spec.ty==="dieCut";
+  let mt=0,mb=0,ml=0,mr=0;
+  if(live){
+    // Live cassette data WINS over the static table.
+    const cassW=Number(live.labelWidthMils)>0?Number(live.labelWidthMils)/1000:tw;
+    const band=Number(live.printableWidthMils)/1000;
+    ml=mr=Math.max(0,(cassW-band)/2);
+    if(dieCut&&Number(live.printableHeightMils)>0){
+      const cassH=Number(live.labelHeightMils)>0?Number(live.labelHeightMils)/1000:th;
+      const bandH=Number(live.printableHeightMils)/1000;
+      mt=mb=Math.max(0,(cassH-bandH)/2);
+    }
+  }else if(entry.kind==="ptouch"&&!dieCut){
+    // Across-tape band from the shared Brother head table; along-tape margins: none
+    // (feed leader excluded).
+    const tapes=Array.isArray(entry.tapes)?entry.tapes:[];
+    if(!tapes.length)return null;
+    const mm=tw*25.4;
+    let tp=tapes[0];
+    for(const t of tapes)if(Math.abs(t.mm-mm)<Math.abs(tp.mm-mm))tp=t;
+    const band=(entry.headPins-2*tp.marginPins)/entry.dpi;
+    ml=mr=Math.max(0,(tw-band)/2);
+  }else if(dieCut){
+    // Die-cut: printable pw×ph centered in the physical tw×th.
+    ml=mr=(tw-pw)/2;
+    mt=mb=(th-ph)/2;
+  }else{
+    // Continuous: catalog band centered across the tape.
+    ml=mr=Math.max(0,(tw-pw)/2);
+  }
+  if(!mt&&!mb&&!ml&&!mr)return null;                  // all-zero → draw nothing
+  return{mt:mt,mb:mb,ml:ml,mr:mr};
+}
+// Model list for the template-mode "Printer" dropdown (empty when standalone).
+function vlGeoModels(){
+  const g=(typeof window!=='undefined'&&window.__VL_PRINTER_GEOMETRY__)||null;
+  return (g&&Array.isArray(g.models))?g.models:[];
+}
+
 const FD=[
   {f:"Number",c:"Number"},{f:"Cable Name",c:"Cable"},{f:"Signal",c:"Signal"},
   {f:"Connector",c:"Connector"},{f:"Device Name",c:"Device_Name"},{f:"Device Tag",c:"Device_Tag"},
@@ -413,6 +474,12 @@ let S={
   // Continuous-supply canvas rotation: 0 = landscape (the engine default) or 90 =
   // portrait override. (Die-cut ignores it.) #14.
   canvasRot:0,
+  // Printable-area overlay: showMargins (persisted designer pref) toggles the hatched
+  // unprintable-margin strips around the canvas. targetModel is the TEMPLATE-mode
+  // printer choice driving that overlay — saved into the template as
+  // targetPrinterModel; custom mode uses the live selected printer instead and only
+  // round-trips this value through saves.
+  showMargins:true, targetModel:"",
   // ── Custom Designer database-pane state (custom mode only) ──────────────────
   // Mirrors the Print window's record browser over window._boundData rows.
   // printRange: "all" | "selected" | "range" (which bound rows print).
@@ -453,6 +520,14 @@ function initDesignerPrefs(p){
   if(typeof p.propW==='number'&&p.propW>0)S.propW=Math.max(PROP_MIN,Math.min(PROP_MAX,p.propW));
   if(p.feedToClearByPrinter&&typeof p.feedToClearByPrinter==='object')S.feedToClearByPrinter=p.feedToClearByPrinter;
   if(typeof p.feedToClearDefault==='boolean')S.feedToClearDefault=p.feedToClearDefault;
+  if(typeof p.showMargins==='boolean')S.showMargins=p.showMargins;
+  // Default target printer for the printable-area overlay (template mode). Only
+  // adopted while no opened template has explicitly set one — prefs can arrive
+  // after the template inject, and the template's value must win.
+  if(typeof p.defaultTargetPrinterModel==='string'){
+    S._defTargetModel=p.defaultTargetPrinterModel;
+    if(!isCustomMode()&&!S._tpmExplicit)S.targetModel=p.defaultTargetPrinterModel;
+  }
   R();
 }
 // "Feed to clear" — stable per-printer key (serial → model → id) and effective state for
@@ -474,7 +549,18 @@ function dSetFeedToClear(v){
 }
 function saveDesignerPrefs(){
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel)
-    window.webkit.messageHandlers.vectorlabel.postMessage({action:"setDesignerPrefs",payload:{snapGrid:S.snapGrid,snapObjects:S.snapObjects,gridSize:S.gridSize,recH:S.recH||160,propW:S.propW||PROP_DEFAULT,dbH:S.dbH||240}});
+    window.webkit.messageHandlers.vectorlabel.postMessage({action:"setDesignerPrefs",payload:{snapGrid:S.snapGrid,snapObjects:S.snapObjects,gridSize:S.gridSize,recH:S.recH||160,propW:S.propW||PROP_DEFAULT,dbH:S.dbH||240,showMargins:S.showMargins!==false,defaultTargetPrinterModel:S._defTargetModel||""}});
+}
+// Target printer (template-mode toolbar dropdown): drives the printable-area
+// overlay and is saved WITH the template (targetPrinterModel); the choice also
+// becomes the designer-pref default for new templates.
+function setTargetModel(v){
+  S.targetModel=v||"";
+  S._tpmExplicit=true;
+  S._defTargetModel=S.targetModel;
+  saveDesignerPrefs();
+  markDirty();   // the value is part of the template
+  R();
 }
 function gobj(id){return S.objs.find(o=>o.id===id);}
 function uobj(id,p){S.objs=S.objs.map(o=>o.id===id?Object.assign({},o,p):o);}
@@ -664,12 +750,17 @@ function ghostSupply(specN,g){
     ty:g.isContinuous?"continuous":"dieCut",tw:g.widthInches,th:g.heightInches,
     pw:g.printableWidthInches,ph:g.printableHeightInches,mt:"",lm:false,parts:[]};
 }
-function applyLoadedSpec(specN,lenInches,rot,supplyId,supplyGeom){
+function applyLoadedSpec(specN,lenInches,rot,supplyId,supplyGeom,tpm){
   // Prefer the stable supply id, then the part number; if neither resolves, the
   // supply was removed from the catalog — keep the saved geometry (ghost) so the
   // canvas size doesn't change until the user selects a new supply.
   const sp=(supplyId&&blById(supplyId))||blBy(specN)||ghostSupply(specN,supplyGeom)||blDefault();
   S.spec=sp;
+  // Target printer for the printable-area overlay: the document's saved value wins;
+  // absent → the designer-pref default (template mode) or none (custom mode — the
+  // overlay there follows the live printer, this field only round-trips).
+  if(tpm){ S.targetModel=String(tpm); S._tpmExplicit=true; }
+  else { S.targetModel=isCustomMode()?"":(S._defTargetModel||""); S._tpmExplicit=false; }
   if(sp.ty==="continuous"){
     const n=parseFloat(lenInches);
     S.labelLen=(isFinite(n)&&n>0)?Math.min(LEN_MAX,Math.max(LEN_MIN,n)):(sp.ph||1);
@@ -1194,6 +1285,39 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
       <span style="color:var(--text2);font-size:9px;white-space:nowrap">clear wrap zone</span>
     </div>`:"";
 
+  // Printable-area overlay: hatched strips showing the target printer's unprintable
+  // margins OUTSIDE the canvas rect (the canvas stays exactly the printable area).
+  // Purely visual — the strips sit inside the existing 2" bleed frame, so no
+  // layout/scroll/zoom math changes. Margins are computed in the supply's PHYSICAL
+  // frame and swapped onto the canvas axes exactly as normSpec swaps the supply dims
+  // (continuous default-LANDSCAPE and die-cut-rot90 swap axes). Rebuilt on every
+  // buildCanvas call so it survives renderCanvasOnly per-gesture rebuilds (cheap:
+  // a find over ≤5 models). z-index 1 — above the grid (z0), below snap guides (z5)
+  // and selection handles (z10).
+  let marginsHtml="";
+  if(S.showMargins!==false){
+    const mMdl=isCustomMode()?((dPrinter()||{}).model||""):(S.targetModel||"");
+    const mRaw=blBy(spec.n)||spec;   // the PHYSICAL (unswapped) supply frame
+    const m=vlPrintableMargins(mRaw,mMdl,isCustomMode()?dLoadedCassette():null);
+    if(m){
+      const mSwap=(mRaw.ty==="continuous")?(S.canvasRot!==90):(S.canvasRot===90);
+      const mL=(mSwap?m.mt:m.ml)*sc, mR=(mSwap?m.mb:m.mr)*sc,
+            mT=(mSwap?m.ml:m.mt)*sc, mB=(mSwap?m.mr:m.mb)*sc;
+      const hatch="repeating-linear-gradient(45deg,rgba(128,128,140,0.22) 0,rgba(128,128,140,0.22) 3px,rgba(128,128,140,0.06) 3px,rgba(128,128,140,0.06) 7px)";
+      const tip=escAttr("Unprintable margin — "+(mMdl||"printer"));
+      const strip=(l,t,w,h)=>(w>0.5&&h>0.5)?`<div title="${tip}" style="position:absolute;left:${l.toFixed(1)}px;top:${t.toFixed(1)}px;width:${w.toFixed(1)}px;height:${h.toFixed(1)}px;background:${hatch};pointer-events:none;z-index:1"></div>`:"";
+      marginsHtml=
+        strip(B-mL,B-mT,pw+mL+mR,mT)+   // top (spans the full physical width)
+        strip(B-mL,B+ph,pw+mL+mR,mB)+   // bottom
+        strip(B-mL,B,mL,ph)+            // left (canvas height only — no overlap)
+        strip(B+pw,B,mR,ph)+            // right
+        // Dashed outline = the PHYSICAL label edge; subtle solid line = the canvas
+        // (printable) boundary.
+        `<div title="${tip}" style="position:absolute;left:${(B-mL).toFixed(1)}px;top:${(B-mT).toFixed(1)}px;width:${(pw+mL+mR).toFixed(1)}px;height:${(ph+mT+mB).toFixed(1)}px;border:1px dashed rgba(128,128,140,0.7);box-sizing:border-box;pointer-events:none;z-index:1"></div>`+
+        `<div style="position:absolute;left:${B}px;top:${B}px;width:${pw}px;height:${ph}px;border:1px solid rgba(128,128,140,0.45);box-sizing:border-box;pointer-events:none;z-index:1"></div>`;
+    }
+  }
+
   const objsHtml=objs.map(o=>{
     const x=o.x*SC+B,y=o.y*SC+B,w=(o.w||1)*SC,h=(o.h||0)*SC;
     const sel=!readOnly&&(S.selIds||[]).includes(o.id);
@@ -1390,6 +1514,7 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
     <div onmousedown="${readOnly?'':`if(event.target===this)startMarquee(event)`}" ${canvasDrop} style="width:${bw}px;height:${bh}px;background:transparent;position:relative;overflow:hidden;flex-shrink:0">
       <!-- Printable area (only this prints) -->
       <div id="printable-area" style="position:absolute;left:${B}px;top:${B}px;width:${pw}px;height:${ph}px;background:#fff;box-shadow:0 0 0 1.5px var(--accent);pointer-events:none"></div>
+      ${marginsHtml}
       ${wrapZone}
       ${gridSvg}<div id="snap-guide-layer">${snapSvg}</div>${objsHtml}
     </div>
@@ -1874,6 +1999,16 @@ function R(){
         ${supplyButtonDims(blBy(S.spec.n))}
         <span style="color:var(--text3);font-size:9px">▾</span>
       </button>
+      ${isCustomMode()?"":`<div style="display:flex;align-items:center;gap:5px" title="Target printer — shades that printer's unprintable margins around the label (saved with the template)">
+        <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">⎙ Printer</span>
+        <div style="position:relative">
+          <select class="inp" style="width:auto;padding:4px 24px 4px 8px;font-size:11px;appearance:none;-webkit-appearance:none;cursor:pointer" onchange="setTargetModel(this.value)">
+            <option value=""${S.targetModel?"":" selected"}>None</option>
+            ${vlGeoModels().map(g=>`<option value="${escAttr(g.model)}"${S.targetModel===g.model?" selected":""}>${esc(g.model)}</option>`).join("")}
+          </select>
+          <div style="position:absolute;right:8px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:9px;pointer-events:none">▼</div>
+        </div>
+      </div>`}
       ${dContinuous()?`<div style="display:flex;align-items:center;gap:5px" title="Continuous supply — set the printed label length">
         <span style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:1px">Length</span>
         <input type="number" class="inp" min="${LEN_MIN}" max="${LEN_MAX}" step="0.05" value="${(dEffLen()||dDefaultLen(S.spec.n))}" style="width:64px;padding:4px 6px;font-size:12px" onchange="setLabelLen(this.value)" onblur="setLabelLen(this.value)" onkeydown="if(event.key==='Enter')this.blur()">
@@ -1906,6 +2041,8 @@ function R(){
           ${[0.01,0.025,0.05,0.1,0.125,0.25].map(v=>`<option value="${v}"${S.gridSize===v?" selected":""}>${Math.round(v*1000)/10}mm / ${v.toFixed(3)}"</option>`).join("")}
         </select>
       </div>
+      <div style="width:1px;height:20px;background:var(--bd2)"></div>
+      <button class="btn${S.showMargins!==false?" on":""}" onclick="S.showMargins=!(S.showMargins!==false);saveDesignerPrefs();R()" title="Show the printer's unprintable margins around the label">▧ Margins</button>
     </div>
 
     <!-- Main body -->
@@ -4033,6 +4170,9 @@ function templateData(){
   // (landscape is the engine default), for DIE-CUT a 90° design rotation. Persisted for
   // either; absent = the default (landscape continuous / unrotated die-cut).
   if(S.canvasRot===90) d.canvasRot=90;
+  // Target printer for the printable-area overlay (null = none chosen). In custom
+  // mode this just round-trips the value carried by the loaded document.
+  d.targetPrinterModel=S.targetModel||null;
   return d;
 }
 
@@ -4477,6 +4617,7 @@ function saveCustomDocument(){
   };
   if(data.labelLengthInches) payload.labelLengthInches=data.labelLengthInches;
   if(typeof data.canvasRot==='number') payload.canvasRot=data.canvasRot;   // persist orientation in the .vlcus
+  if(data.targetPrinterModel) payload.targetPrinterModel=data.targetPrinterModel;   // printable-area overlay target
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.vectorlabel){
     window.webkit.messageHandlers.vectorlabel.postMessage({action:"saveCustomDocument",payload});
   }
@@ -4692,7 +4833,7 @@ function initPrintEdit(template){
     S.tplName=template.name||defaultDocName();
     S._loadedId=template.id||null;
     window._preEditLoadedId=template.id||null;   // restored if a Save As is cancelled
-    applyLoadedSpec(template.specN,template.labelLengthInches,template.canvasRot,template.supplyID,template.supplyGeometry);
+    applyLoadedSpec(template.specN,template.labelLengthInches,template.canvasRot,template.supplyID,template.supplyGeometry,template.targetPrinterModel);
     S.objs=sanitizeObjs(template.objs);
     S.selId=null;S._ef=undefined;S.modal=null;
   }
@@ -4704,6 +4845,7 @@ function edPrintSave(){
   const payload={name:S.tplName,specN:data.specN,objs:data.objs,supplyID:data.supplyID,supplyGeometry:data.supplyGeometry};
   if(data.labelLengthInches) payload.labelLengthInches=data.labelLengthInches;
   if(typeof data.canvasRot==='number') payload.canvasRot=data.canvasRot;   // persist portrait override
+  if(data.targetPrinterModel) payload.targetPrinterModel=data.targetPrinterModel;   // printable-area overlay target
   if(S._loadedId)payload.id=S._loadedId;
   // Single message: Swift saves THEN refreshes the print window (ordered).
   _vlPost("editReturn",{save:true,template:payload});
@@ -4762,6 +4904,7 @@ async function saveTemplate(){
     const payload={name:S.tplName,specN:data.specN,objs:data.objs};
     if(data.labelLengthInches) payload.labelLengthInches=data.labelLengthInches;
     if(typeof data.canvasRot==='number') payload.canvasRot=data.canvasRot;   // persist portrait override
+    if(data.targetPrinterModel) payload.targetPrinterModel=data.targetPrinterModel;   // printable-area overlay target
     if(S._loadedId)payload.id=S._loadedId;
     // Save As & Return (print edit): one ordered message — save then return.
     if(window._printEdit&&window._printReturnAfterSave){
@@ -4841,6 +4984,7 @@ function newBlankCustomDesign(){
   S.objs=[];
   S.selId=null;S.selIds=[];S._ef=undefined;
   S.copies=1;S.cutMode=null;
+  S.targetModel="";S._tpmExplicit=false;   // fresh doc carries no overlay target
   clearDataSourceCustom(true);   // empty database pane, single-label canvas
   markClean();
   _centerCanvasNext=true;   // center the fresh canvas in the view on open
@@ -4935,7 +5079,7 @@ function loadSelectedTemplate(){
   snapshot();
   S.tplName=t.name||defaultDocName();
   S._loadedId=t.id||null;   // preserve id so a later Save overwrites in place
-  applyLoadedSpec(t.specN,t.labelLengthInches,t.canvasRot,t.supplyID,t.supplyGeometry);
+  applyLoadedSpec(t.specN,t.labelLengthInches,t.canvasRot,t.supplyID,t.supplyGeometry,t.targetPrinterModel);
   S.objs=sanitizeObjs(t.objs);   // untrusted (Finder-browsed) — sanitize like every other load path
   S.selId=null;S._ef=undefined;
   S.modal=null;
@@ -4952,7 +5096,7 @@ function initOpenTemplate(t){
   S.modal=null;
   S.tplName=t.name||defaultDocName();
   S._loadedId=t.id||null;
-  applyLoadedSpec(t.specN,t.labelLengthInches,t.canvasRot,t.supplyID,t.supplyGeometry);
+  applyLoadedSpec(t.specN,t.labelLengthInches,t.canvasRot,t.supplyID,t.supplyGeometry,t.targetPrinterModel);
   S.objs=sanitizeObjs(t.objs);
   S.selId=null;S._ef=undefined;
   R();
@@ -5157,7 +5301,7 @@ function initCustomDocument(doc){
   // Canvas
   S.tplName=doc.name||"Custom Label";
   S._loadedId=null;
-  applyLoadedSpec(doc.specN,doc.labelLengthInches,doc.canvasRot,doc.supplyID,doc.supplyGeometry);
+  applyLoadedSpec(doc.specN,doc.labelLengthInches,doc.canvasRot,doc.supplyID,doc.supplyGeometry,doc.targetPrinterModel);
   S.objs=sanitizeObjs(doc.objs||[]);
   S.selId=null;S._ef=undefined;
   S.copies=Math.max(1,doc.copies||1);

@@ -231,7 +231,8 @@ public final class PrintWindowController: NSObject {
         let theme = AppSettings.shared.isLight ? "light" : ""
         cc.addUserScript(WKUserScript(source: "document.documentElement.dataset.theme='\(theme)';",
                                       injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        cc.addUserScript(WKUserScript(source: "window.__VL_BUILD__='\(BuildInfo.build)'; window.__VL_CATALOG__=\(SupplyCatalogStore.webCatalogJSON(forModel: ""));",
+        cc.addUserScript(WKUserScript(source: "window.__VL_BUILD__='\(BuildInfo.build)'; window.__VL_CATALOG__=\(SupplyCatalogStore.webCatalogJSON(forModel: ""));"
+                                            + " window.__VL_PRINTER_GEOMETRY__=\(PrinterGeometry.webGeometryJSON());",
                                       injectionTime: .atDocumentStart, forMainFrameOnly: true))
         config.userContentController = cc
         config.preferences.setValue(ProcessInfo.processInfo.environment["VL_DEV_HTML"] != nil, forKey: "developerExtrasEnabled")

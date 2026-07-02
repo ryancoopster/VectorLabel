@@ -112,6 +112,10 @@ public struct VLTemplate: Codable, Identifiable, Hashable {
     /// landscape (the renderer rotates the printed raster to match), else 0/nil.
     /// Optional so older templates decode unchanged. #14.
     public var canvasRot: Int? = nil
+    /// The printer model this design targets (a name from the printer registry),
+    /// driving the designers' printable-area overlay. Purely visual — never
+    /// consulted by the render/print path. Optional so older files decode unchanged.
+    public var targetPrinterModel: String? = nil
 
     /// The catalog Supply.id (UUID string) this design was created against. The
     /// supply catalog is user-editable, so we save the stable id (not just the part
