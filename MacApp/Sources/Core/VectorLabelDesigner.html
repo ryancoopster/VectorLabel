@@ -1349,8 +1349,8 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
           const dropAttr=`ondragenter="onColTextEnter(event,this)" ondragover="event.preventDefault();if(event.dataTransfer)event.dataTransfer.dropEffect='copy'" ondragleave="onColTextLeave(this)" ondrop="onColTextLeave(this);onColDropToCell(event,'${o.id}',${ri},${ci})"`;
           inner+=`<div onmousedown="tblCellDown(event,'${o.id}',${ri},${ci})" oncontextmenu="tblCtxMenu(event,'${o.id}',${ri},${ci})" ${dropAttr} style="position:absolute;left:${ur[0]}px;top:${ur[1]}px;width:${ur[2]}px;height:${ur[3]}px;z-index:3;${on?"outline:2px solid var(--accent);outline-offset:-2px;background:rgba(108,142,245,0.14);":""}"></div>`;
         }
-        for(let i=1;i<cols.length;i++) inner+=`<div onmousedown="startTblLineDrag(event,'${o.id}','col',${i})" title="Drag to resize columns" style="position:absolute;left:${(cumX[i-1]-3).toFixed(1)}px;top:0;width:6px;height:${h}px;cursor:col-resize;z-index:4"></div>`;
-        for(let i=1;i<rows.length;i++) inner+=`<div onmousedown="startTblLineDrag(event,'${o.id}','row',${i})" title="Drag to resize rows" style="position:absolute;left:0;top:${(cumY[i-1]-3).toFixed(1)}px;width:${w}px;height:6px;cursor:row-resize;z-index:4"></div>`;
+        for(let i=1;i<cols.length;i++) inner+=`<div onmousedown="startTblLineDrag(event,'${o.id}','col',${i})" oncontextmenu="tblStripCtx(event,'${o.id}')" title="Drag to resize columns" style="position:absolute;left:${(cumX[i-1]-3).toFixed(1)}px;top:0;width:6px;height:${h}px;cursor:col-resize;z-index:4"></div>`;
+        for(let i=1;i<rows.length;i++) inner+=`<div onmousedown="startTblLineDrag(event,'${o.id}','row',${i})" oncontextmenu="tblStripCtx(event,'${o.id}')" title="Drag to resize rows" style="position:absolute;left:0;top:${(cumY[i-1]-3).toFixed(1)}px;width:${w}px;height:6px;cursor:row-resize;z-index:4"></div>`;
       }
       // lockSize hides the corner handles (the panel W/H inputs are read-only too).
       const rb=single&&!readOnly&&!o.lockSize?resizeHandles(o.id):"";
@@ -3090,6 +3090,25 @@ function tblCellAt(o,e){ return tblCellAtEl(o,e.currentTarget||e.target,e); }
 // (Cell editing is engaged by clicking the already-selected cell — see tblCellDown.
 // A browser-composed dblclick can't be relied on here: the first click's R() rebuild
 // replaces the node under the cursor, so WebKit never composes the event.)
+// Right-clicking a line-drag strip opens the CELL menu for the cell under the pointer
+// (the strips sit above the cell hit divs; without this the native WebView menu leaks).
+function tblStripCtx(e,id){
+  const o=gobj(id); if(!o||o.t!=="tb")return;
+  e.preventDefault(); e.stopPropagation();
+  const host=(e.currentTarget&&e.currentTarget.closest)?e.currentTarget.closest('[data-obj]'):null;
+  if(!host)return;
+  const rc=tblCellAtEl(o,host,e);
+  const rk=(tblRegions(o).reg[rc[0]]||[])[rc[1]]||(rc[0]+','+rc[1]);
+  const rp=rk.split(',');
+  tblCtxMenu(e,id,+rp[0],+rp[1]);
+}
+// The designer never wants WKWebView's own context menu ("Reload") anywhere on the
+// canvas — the app's menus preventDefault on their own elements; this kills the
+// native fallback for everything else (strips, gaps, the label background).
+document.addEventListener('contextmenu',function(ev){
+  const host=document.getElementById('canvas-host');
+  if(host&&ev.target&&host.contains(ev.target))ev.preventDefault();
+});
 // Arrow ↑/↓ in a numeric panel input steps the value AND commits it like clicking the
 // stepper buttons. Native arrow-stepping only fires 'change' on blur, so we dispatch it
 // ourselves — debounced, because the commit re-renders the panel (dropping focus), and
