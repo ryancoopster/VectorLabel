@@ -195,6 +195,48 @@ Delete with table selected deletes the object (existing behavior).
 - Add a FoundationTests round-trip test: fully-populated tb TemplateObject encode→decode
   equality (no template coding test exists today).
 
+## Merged cells (v1.1)
+
+Anchor-based spans, Excel-style:
+- The anchor (top-left) cell of a merged region carries `rs` (row span) and `cs`
+  (col span), integers ≥ 1 (absent/1 = unmerged). Covered cells (inside another
+  anchor's span) still EXIST in `cells[][]` (keeping shape invariants) but render
+  nothing and take no hits; coverage is DERIVED each pass (no `cov` flag).
+- **Merge** (context menu, enabled when ≥2 cells selected): take the selection's
+  bounding rectangle, expand it iteratively to fully contain any merged region it
+  intersects, then set the rect's top-left cell as anchor (rs/cs = rect size). The
+  anchor keeps its content + formatting; other cells in the rect keep their objects
+  (they're just covered). Selection becomes the anchor.
+- **Split** (context menu on a cell in a merged region — anchor or covered): remove
+  rs/cs; copy the anchor's FORMATTING (font, fs, bold, italic, underline, al, valign,
+  wrapText, tracking, stretch, autoScale, sized:true) to every cell of the region;
+  the anchor keeps its text/field/formula content; all other cells become empty
+  static cells (text:"") with that same formatting.
+- **Grid lines with merges** (ALL THREE render paths): draw inner lines as PER-CELL
+  segments, not full-length lines. Region id reg(r,c) = anchor coords of the region
+  containing (r,c) (itself if unmerged). Draw the vertical segment between (r,c) and
+  (r,c+1) iff reg differs; horizontal segment between (r,c) and (r+1,c) iff reg
+  differs. Outer border unchanged. Anchor content renders in the UNION rect of its
+  span (cells' widths/heights summed).
+- **Selection/hit**: the merged region gets ONE hit div (the union rect) that selects
+  the ANCHOR key; range selection uses the rect between anchors (covered keys in the
+  range list are harmless — patch ops skip nothing but covered cells are invisible).
+- **Structural ops**: spans survive naturally (counts shift with splices); normalize
+  after every mutation + in sanitize: clamp rs/cs to table bounds, resolve overlaps
+  row-major first-wins (later overlapping anchors lose their spans). Deleting an
+  anchor's row/col drops the region (cells become normal). Paste: spans clamp/drop
+  through the same normalization.
+- **Swift**: TableCell gains `rs: Int?`, `cs: Int?`. drawTable draws segmented grid
+  lines + anchor text in the union rect; covered cells skipped.
+
+## Clear commands (context menu, single or multi selection)
+
+- **Clear text**: per selected cell — content only: mode→"static", text:"", delete
+  field/f. Formatting AND `sized` flag kept.
+- **Clear text & formatting**: per selected cell — full reset to tblDefaultCell()
+  (also drops `sized`, so the next first value auto-sizes again). Spans (rs/cs) are
+  NOT touched by either clear.
+
 ## Out of scope (v1)
 
 - Merged/spanning cells; per-cell borders/fills; header-row styling; row striping.

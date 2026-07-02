@@ -36,7 +36,18 @@ number (git commit count) + short SHA, shown in the menu-bar footer.
 ### Fixed
 - **Tables:** double-clicking a cell now reliably starts editing regardless of how the
   table was selected — and works for every cell type: static cells edit inline, formula
-  cells open the formula editor, field cells jump to the column picker.
+  cells open the formula editor, field cells jump to the column picker. (Editing engages
+  by clicking the already-selected cell, so one click on an unselected table now selects
+  the cell under the pointer and a second click — at any speed — starts editing.)
+
+### Added (tables, continued)
+- **Merged cells:** select multiple cells and right-click → **Merge cells** (the
+  selection's bounding rectangle merges, Excel-style, expanding over any merged region
+  it touches); right-click a merged cell → **Split cell** to unmerge — the text stays in
+  the top-left cell and every cell comes out with the merged cell's formatting. Merges
+  print identically in the preview and on the printer.
+- **Clear commands:** right-click any cell selection (single or multi) → **Clear text**
+  (content only; formatting kept) or **Clear text & formatting** (full reset).
 
 ## [1.1.0] — 2026-07-01
 

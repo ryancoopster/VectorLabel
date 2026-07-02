@@ -91,6 +91,10 @@ public struct TableCell: Codable, Hashable {
     var sized: Bool?        // one-time first-value auto-size already applied (designer
                             // bookkeeping; must round-trip so re-saving a template
                             // never re-triggers the sizing)
+    var rs: Int?            // merged-region row span — anchor (top-left) cell only;
+                            // nil/1 = unmerged. Covered cells keep their objects but
+                            // render nothing (coverage is derived, never stored).
+    var cs: Int?            // merged-region column span; same rules as `rs`
 }
 
 /// A saved VectorLabel template, matching .vlt.json exactly.

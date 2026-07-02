@@ -317,6 +317,31 @@ function fitAutoScaleText(root){
   }
 }
 
+// Table merged cells: derive per-cell region ids from anchors' rs/cs — row-major
+// first-wins, clamped to the grid (same rules as the designer). regs[r][c] is the
+// "r,c" key of the anchor whose span covers (r,c) (itself when unmerged); spans maps
+// anchor key → {rs,cs} for real (>1×1) merges only. A later anchor whose clamped
+// span would overlap an earlier region loses its WHOLE span.
+function tblRegionMap(cells,nR,nC){
+  const regs=[]; for(let r=0;r<nR;r++) regs.push(new Array(nC).fill(null));
+  const spans={};
+  for(let r=0;r<nR;r++)for(let c=0;c<nC;c++){
+    if(regs[r][c])continue;                     // covered by an earlier anchor (first-wins)
+    const cell=(cells&&cells[r]&&cells[r][c])||{};
+    let rs=Math.floor(Number(cell.rs)); if(!isFinite(rs)||rs<1)rs=1; rs=Math.min(rs,nR-r);
+    let cs=Math.floor(Number(cell.cs)); if(!isFinite(cs)||cs<1)cs=1; cs=Math.min(cs,nC-c);
+    if(rs>1||cs>1){
+      let clash=false;
+      for(let rr=r;rr<r+rs&&!clash;rr++)for(let cc=c;cc<c+cs;cc++)if(regs[rr][cc]){clash=true;break;}
+      if(clash){rs=1;cs=1;}
+    }
+    const key=r+','+c;
+    for(let rr=r;rr<r+rs;rr++)for(let cc=c;cc<c+cs;cc++)regs[rr][cc]=key;
+    if(rs>1||cs>1)spans[key]={rs:rs,cs:cs};
+  }
+  return {regs:regs,spans:spans};
+}
+
 function renderLabel(tpl,rec,scale=1){
   const spec=blBy(tpl.specN)||blDefault();
   // Continuous supplies have a user-set printed length (tpl.labelLengthInches);
@@ -372,19 +397,34 @@ function renderLabel(tpl,rec,scale=1){
     if(o.t==="tb"){
       // Table: outer border + inner grid lines (rc/ln stroke treatment, lw raw px),
       // each non-empty cell rendered with the exact tx recipe above, geometry from
-      // the cumulative col/row offsets. sanitizeObjs guarantees the shape; guard anyway.
+      // the cumulative col/row offsets. Merged cells (rs/cs anchors): coverage is
+      // derived per pass via tblRegionMap — covered cells render nothing, an anchor
+      // renders in the UNION rect of its span, and inner grid lines are PER-CELL
+      // boundary segments drawn only where region ids differ (outer border
+      // unchanged). sanitizeObjs guarantees the shape; guard anyway.
       const cols=Array.isArray(o.cols)?o.cols:[], rows=Array.isArray(o.rows)?o.rows:[];
       if(!cols.length||!rows.length)return"";
       const bw=Math.max(1,o.lw||1);
-      let grid="",off=0;
-      for(let ci=0;ci<cols.length-1;ci++){ off+=cols[ci]*sc; grid+=`<div style="position:absolute;left:${off-bw/2}px;top:0;width:${bw}px;height:${h}px;background:#000"></div>`; }
-      off=0;
-      for(let ri=0;ri<rows.length-1;ri++){ off+=rows[ri]*sc; grid+=`<div style="position:absolute;left:0;top:${off-bw/2}px;width:${w}px;height:${bw}px;background:#000"></div>`; }
-      let cells="",cy=0;
-      for(let ri=0;ri<rows.length;ri++){
-        const rh=rows[ri]*sc; let cx=0;
-        for(let ci=0;ci<cols.length;ci++){
-          const cw=cols[ci]*sc;
+      const nR=rows.length,nC=cols.length;
+      const {regs,spans}=tblRegionMap(o.cells,nR,nC);
+      // Cumulative px offsets: X[i] = left edge of col i, Y[i] = top edge of row i.
+      const X=[0]; for(let ci=0;ci<nC;ci++) X.push(X[ci]+cols[ci]*sc);
+      const Y=[0]; for(let ri=0;ri<nR;ri++) Y.push(Y[ri]+rows[ri]*sc);
+      let grid="";
+      for(let ri=0;ri<nR;ri++)for(let ci=0;ci<nC-1;ci++){   // vertical: between (r,c) and (r,c+1)
+        if(regs[ri][ci]!==regs[ri][ci+1]) grid+=`<div style="position:absolute;left:${X[ci+1]-bw/2}px;top:${Y[ri]}px;width:${bw}px;height:${Y[ri+1]-Y[ri]}px;background:#000"></div>`;
+      }
+      for(let ri=0;ri<nR-1;ri++)for(let ci=0;ci<nC;ci++){   // horizontal: between (r,c) and (r+1,c)
+        if(regs[ri][ci]!==regs[ri+1][ci]) grid+=`<div style="position:absolute;left:${X[ci]}px;top:${Y[ri+1]-bw/2}px;width:${X[ci+1]-X[ci]}px;height:${bw}px;background:#000"></div>`;
+      }
+      let cells="";
+      for(let ri=0;ri<nR;ri++){
+        for(let ci=0;ci<nC;ci++){
+          if(regs[ri][ci]!==ri+','+ci)continue;             // covered by another anchor
+          const sp=spans[ri+','+ci];
+          const cx=X[ci], cy=Y[ri];
+          const cw=(sp?X[ci+sp.cs]:X[ci+1])-cx;
+          const rh=(sp?Y[ri+sp.rs]:Y[ri+1])-cy;
           const cell=(o.cells&&o.cells[ri]&&o.cells[ri][ci])||null;
           if(cell){
             const {v,e}=textValue(cell,rec);
@@ -408,9 +448,7 @@ function renderLabel(tpl,rec,scale=1){
               </div>`;
             }
           }
-          cx+=cw;
         }
-        cy+=rh;
       }
       return`<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;border:${bw}px solid #000;background:transparent;${rc}">${grid}${cells}</div>`;
     }
@@ -2858,6 +2896,16 @@ function sanitizeObjs(objs){
           return cell;
         });
       });
+      // Merged cells: normalize rs/cs so a crafted file can't produce weird geometry —
+      // integers ≥ 1, clamped to the grid, overlapping spans stripped row-major
+      // first-wins (tblRegionMap applies the same rules the renderer derives with).
+      // Covered cells and 1×1 spans carry no rs/cs at all.
+      const spans=tblRegionMap(c.cells,c.rows.length,c.cols.length).spans;
+      c.cells.forEach(function(row,r){ row.forEach(function(cell,cl){
+        delete cell.rs; delete cell.cs;
+        const sp=spans[r+','+cl];
+        if(sp){ cell.rs=sp.rs; cell.cs=sp.cs; }
+      });});
     }
     return c;
   }).filter(function(c){return c!=null;});

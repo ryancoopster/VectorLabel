@@ -1295,14 +1295,32 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
       const cumX=[]; let axx=0; for(const cv of cols){ axx+=cv*sc; cumX.push(axx); }
       const cumY=[]; let ayy=0; for(const rv of rows){ ayy+=rv*sc; cumY.push(ayy); }
       const selCells=(S._tblSel&&S._tblSel.id===o.id)?(S._tblSel.cells||[]):[];
+      // Merged regions (derived each pass from rs/cs): covered cells render nothing;
+      // an anchor renders over the UNION rect of its span.
+      const rg=tblRegions(o), reg=rg.reg;
+      const unionRect=function(ri,ci){
+        const sp=tblRegionSpan(reg,ri,ci);
+        const ux=ci?cumX[ci-1]:0, uy=ri?cumY[ri-1]:0;
+        return [ux,uy,cumX[ci+sp[1]-1]-ux,cumY[ri+sp[0]-1]-uy];
+      };
       // Grid: outer border + inner lines as thin divs (lw raw px — the rc convention).
+      // Inner lines are PER-CELL boundary segments, drawn only where the regions on
+      // either side differ — merged regions get no internal lines.
       let inner=`<div style="position:absolute;left:0;top:0;width:${w}px;height:${h}px;border:${lw}px solid #000;box-sizing:border-box;pointer-events:none"></div>`;
-      for(let i=0;i<cols.length-1;i++) inner+=`<div style="position:absolute;left:${(cumX[i]-lw/2).toFixed(1)}px;top:0;width:${lw}px;height:${h}px;background:#000;pointer-events:none"></div>`;
-      for(let i=0;i<rows.length-1;i++) inner+=`<div style="position:absolute;left:0;top:${(cumY[i]-lw/2).toFixed(1)}px;width:${w}px;height:${lw}px;background:#000;pointer-events:none"></div>`;
-      // Cells — the EXACT tx text recipe (textValue/autoFitPx/data-autofit/clip) in each cell rect.
+      for(let ri=0;ri<rows.length;ri++)for(let ci=0;ci<cols.length-1;ci++){
+        if(reg[ri][ci]===reg[ri][ci+1])continue;
+        inner+=`<div style="position:absolute;left:${(cumX[ci]-lw/2).toFixed(1)}px;top:${(ri?cumY[ri-1]:0).toFixed(1)}px;width:${lw}px;height:${(rows[ri]*sc).toFixed(1)}px;background:#000;pointer-events:none"></div>`;
+      }
+      for(let ri=0;ri<rows.length-1;ri++)for(let ci=0;ci<cols.length;ci++){
+        if(reg[ri][ci]===reg[ri+1][ci])continue;
+        inner+=`<div style="position:absolute;left:${(ci?cumX[ci-1]:0).toFixed(1)}px;top:${(cumY[ri]-lw/2).toFixed(1)}px;width:${(cols[ci]*sc).toFixed(1)}px;height:${lw}px;background:#000;pointer-events:none"></div>`;
+      }
+      // Cells — the EXACT tx text recipe (textValue/autoFitPx/data-autofit/clip) in each
+      // cell rect (a merged anchor's union rect; covered cells render no content).
       for(let ri=0;ri<rows.length;ri++)for(let ci=0;ci<cols.length;ci++){
+        if(rg.covered(ri,ci))continue;
         const cl=(o.cells&&o.cells[ri]&&o.cells[ri][ci])||{};
-        const cx0=ci?cumX[ci-1]:0, cy0=ri?cumY[ri-1]:0, cw=cols[ci]*sc, chh=rows[ri]*sc;
+        const ur=unionRect(ri,ci), cx0=ur[0], cy0=ur[1], cw=ur[2], chh=ur[3];
         const {v,e}=textValue(cl,rec);
         const va=cl.valign==="top"?"flex-start":cl.valign==="bottom"?"flex-end":"center";
         let fz=Math.max(7,(cl.fs||14)*(sc/100));
@@ -1324,11 +1342,12 @@ function buildCanvas(spec,objs,selId,rec,wrap,readOnly){
       // INNER row/col boundary (col-resize / row-resize cursors).
       if(single&&!readOnly){
         for(let ri=0;ri<rows.length;ri++)for(let ci=0;ci<cols.length;ci++){
+          if(rg.covered(ri,ci))continue;   // ONE hit div per merged region — it selects the anchor
           if(S._tblEdit&&S._tblEdit.id===o.id&&S._tblEdit.r===ri&&S._tblEdit.c===ci)continue;   // keep the caret clickable
-          const cx0=ci?cumX[ci-1]:0, cy0=ri?cumY[ri-1]:0;
+          const ur=unionRect(ri,ci);
           const on=selCells.includes(ri+','+ci);
           const dropAttr=`ondragenter="onColTextEnter(event,this)" ondragover="event.preventDefault();if(event.dataTransfer)event.dataTransfer.dropEffect='copy'" ondragleave="onColTextLeave(this)" ondrop="onColTextLeave(this);onColDropToCell(event,'${o.id}',${ri},${ci})"`;
-          inner+=`<div onmousedown="tblCellDown(event,'${o.id}',${ri},${ci})" oncontextmenu="tblCtxMenu(event,'${o.id}',${ri},${ci})" ${dropAttr} style="position:absolute;left:${cx0}px;top:${cy0}px;width:${cols[ci]*sc}px;height:${rows[ri]*sc}px;z-index:3;${on?"outline:2px solid var(--accent);outline-offset:-2px;background:rgba(108,142,245,0.14);":""}"></div>`;
+          inner+=`<div onmousedown="tblCellDown(event,'${o.id}',${ri},${ci})" oncontextmenu="tblCtxMenu(event,'${o.id}',${ri},${ci})" ${dropAttr} style="position:absolute;left:${ur[0]}px;top:${ur[1]}px;width:${ur[2]}px;height:${ur[3]}px;z-index:3;${on?"outline:2px solid var(--accent);outline-offset:-2px;background:rgba(108,142,245,0.14);":""}"></div>`;
         }
         for(let i=1;i<cols.length;i++) inner+=`<div onmousedown="startTblLineDrag(event,'${o.id}','col',${i})" title="Drag to resize columns" style="position:absolute;left:${(cumX[i-1]-3).toFixed(1)}px;top:0;width:6px;height:${h}px;cursor:col-resize;z-index:4"></div>`;
         for(let i=1;i<rows.length;i++) inner+=`<div onmousedown="startTblLineDrag(event,'${o.id}','row',${i})" title="Drag to resize rows" style="position:absolute;left:0;top:${(cumY[i-1]-3).toFixed(1)}px;width:${w}px;height:6px;cursor:row-resize;z-index:4"></div>`;
@@ -2621,14 +2640,18 @@ function startDrag(e,id){
     }
     _txEditClickId=id; _txEditClickT=now;
   }
-  // First click on an UNSELECTED table arms the same cell double-click timer that
-  // tblCellDown uses. Selecting the table renders the per-cell hit divs, so the
-  // second click of a double-click lands on the cell itself — tblCellDown sees the
-  // armed timer and goes straight into editing. Net effect: double-click a cell of
-  // any table (selected or not) to edit it directly.
+  // First click on an UNSELECTED table selects the table AND the cell under the
+  // pointer in one gesture. Clicking that already-selected cell again then starts
+  // editing (see tblCellDown) — so a physical double-click is mechanically
+  // select+edit, with NO click-pair timing anywhere. (Timing-based approaches fail
+  // in WKWebView: the first click's R() rebuild replaces the node under the cursor,
+  // so the OS never composes a dblclick and per-element timers race the rebuild.)
   if(o.t==="tb" && (S.selIds||[]).length<=1 && Array.isArray(o.cols) && Array.isArray(o.rows)){
     const rc=tblCellAt(o,e);
-    _tblClickKey=id+':'+rc[0]+','+rc[1]; _tblClickT=Date.now();
+    // A covered cell selects its merged-region ANCHOR.
+    const rk=(tblRegions(o).reg[rc[0]]||[])[rc[1]]||(rc[0]+','+rc[1]);
+    const rp=rk.split(',');
+    S._tblSel={id:id,anchor:[+rp[0],+rp[1]],cells:[rk]};
   }
   // Grabbing an object already part of a multi-selection drags the whole group;
   // grabbing anything else selects just it first.
@@ -3019,6 +3042,36 @@ const TBL_MIN=0.05;   // minimum column width / row height (inches)
 function tblDefaultCell(){
   return {mode:"static",text:"",al:"left",valign:"middle",fs:15,bold:false,italic:false,underline:false,font:"Arial",wrapText:false,tracking:0,stretch:100};
 }
+// ── Merged-cell coverage (derived each pass; rs/cs live only on anchor cells) ──
+// reg[r][c] = the "ar,ac" anchor key of the region containing (r,c) — its own key
+// when unmerged. Spans coerce to integers ≥1 and clamp to the table bounds;
+// overlaps resolve row-major FIRST-WINS: a later anchor whose span would land on
+// an already-claimed cell contributes no span at all. Pure — safe in buildCanvas.
+// covered(r,c) = (r,c) lies inside ANOTHER anchor's span.
+function tblRegions(o){
+  const nr=(o.rows||[]).length, nc=(o.cols||[]).length, reg=[];
+  for(let r=0;r<nr;r++){ const row=[]; for(let c=0;c<nc;c++)row.push(null); reg.push(row); }
+  for(let r=0;r<nr;r++)for(let c=0;c<nc;c++){
+    if(reg[r][c])continue;   // claimed by an earlier region — this cell's span is ignored
+    const cl=((o.cells||[])[r]||[])[c]||{};
+    let rs=Math.min(Math.max(1,Math.floor(+cl.rs)||1),nr-r);
+    let cs=Math.min(Math.max(1,Math.floor(+cl.cs)||1),nc-c);
+    let clash=false;
+    for(let rr=r;rr<r+rs&&!clash;rr++)for(let cc=c;cc<c+cs;cc++)if(reg[rr][cc]){clash=true;break;}
+    if(clash){rs=1;cs=1;}   // first-wins: an overlapping later anchor loses its span
+    const key=r+','+c;
+    for(let rr=r;rr<r+rs;rr++)for(let cc=c;cc<c+cs;cc++)reg[rr][cc]=key;
+  }
+  return {reg:reg, covered:function(r,c){ return !!(reg[r]&&reg[r][c]&&reg[r][c]!==r+','+c); }};
+}
+// The rectangular extent [rs,cs] of the region ANCHORED at (r,c) — [1,1] when
+// unmerged. Reads a tblRegions() map (regions are always rectangles).
+function tblRegionSpan(reg,r,c){
+  const key=r+','+c; let rs=1,cs=1;
+  while(reg[r+rs]&&reg[r+rs][c]===key)rs++;
+  while(reg[r][c+cs]===key)cs++;
+  return [rs,cs];
+}
 // Resolve which [row,col] of table `o` a mouse event is over. `el` is the table's
 // rendered object div ([data-obj]). Object-relative px → inches → cumulative sums.
 function tblCellAtEl(o,el,e){
@@ -3032,28 +3085,9 @@ function tblCellAtEl(o,el,e){
   return [r,c];
 }
 function tblCellAt(o,e){ return tblCellAtEl(o,e.currentTarget||e.target,e); }
-// Native double-click → edit the cell under the cursor, regardless of the table's
-// selection state or cell mode. The mousedown timers remain as the fast path, but a
-// full R() re-render runs BETWEEN the two clicks (selecting the table/cell), which
-// replaces the DOM and can defeat per-element click timing — the browser-composed
-// dblclick event is immune to that (it fires on the second click's target).
-document.addEventListener('dblclick',function(ev){
-  const host=document.getElementById('canvas-host');
-  if(!host||!ev.target||!host.contains(ev.target))return;
-  const el=ev.target.closest?ev.target.closest('[data-obj]'):null; if(!el)return;
-  const id=el.getAttribute('data-obj'); const o=gobj(id); if(!o||o.t!=="tb")return;
-  if(!Array.isArray(o.cols)||!Array.isArray(o.rows))return;
-  const rc=tblCellAtEl(o,el,ev), r=rc[0], c=rc[1];
-  if(S._tblEdit&&S._tblEdit.id===id&&S._tblEdit.r===r&&S._tblEdit.c===c)return;  // already editing → let word-select work
-  const cl=(o.cells[r]||[])[c]; if(!cl)return;
-  ev.preventDefault(); ev.stopPropagation();
-  const m=txMode(cl);
-  if(m==="static"){ startTblCellEdit(id,r,c); return; }
-  // Field / formula cells: select the cell and open its natural editor.
-  setSel(id); S._tblSel={id:id,anchor:[r,c],cells:[r+','+c]}; S._tblEdit=null; S._ef=undefined; R();
-  if(m==="formula"){ openTblCellFormulaEditor(id); }
-  else { const s=document.getElementById('tbl-cell-field'); if(s)s.focus(); }
-},true);
+// (Cell editing is engaged by clicking the already-selected cell — see tblCellDown.
+// A browser-composed dblclick can't be relied on here: the first click's R() rebuild
+// replaces the node under the cursor, so WebKit never composes the event.)
 // Arrow ↑/↓ in a numeric panel input steps the value AND commits it like clicking the
 // stepper buttons. Native arrow-stepping only fires 'change' on blur, so we dispatch it
 // ourselves — debounced, because the commit re-renders the panel (dropping focus), and
@@ -3187,11 +3221,24 @@ function tblNorm(t){
     cells.push(row);
   }
   t.cells=cells;
+  // Merged-cell spans: integers ≥1 clamped to the grid; a span that would overlap
+  // an earlier region is stripped (row-major first-wins). tblRegions applies those
+  // rules when READING — rewrite each cell's rs/cs to that derived truth.
+  const reg=tblRegions(t).reg;
+  for(let r=0;r<t.rows.length;r++)for(let c=0;c<t.cols.length;c++){
+    const cl=t.cells[r][c];
+    if(reg[r][c]!==r+','+c){ delete cl.rs; delete cl.cs; continue; }   // covered cell
+    const sp=tblRegionSpan(reg,r,c);
+    if(sp[0]>1)cl.rs=sp[0]; else delete cl.rs;
+    if(sp[1]>1)cl.cs=sp[1]; else delete cl.cs;
+  }
   t.w=+t.cols.reduce((a,b)=>a+b,0).toFixed(4);
   t.h=+t.rows.reduce((a,b)=>a+b,0).toFixed(4);
   return t;
 }
-function tblCommit(id,t){ uobj(id,{cols:t.cols,rows:t.rows,cells:t.cells,w:t.w,h:t.h,lockCols:!!t.lockCols,lockRows:!!t.lockRows,lockSize:!!t.lockSize}); }
+// Commit normalizes first, so EVERY mutation path (row/col splices, paste,
+// merge/split) lands with the invariants — incl. span clamping — enforced.
+function tblCommit(id,t){ tblNorm(t); uobj(id,{cols:t.cols,rows:t.rows,cells:t.cells,w:t.w,h:t.h,lockCols:!!t.lockCols,lockRows:!!t.lockRows,lockSize:!!t.lockSize}); }
 // Keep the cell selection meaningful across row/col inserts/deletes (indices
 // shift). fn(r,c) → [r,c] remapped, or null to drop the cell from the selection.
 function tblSelRemap(id,fn){
@@ -3379,15 +3426,9 @@ function startTblLineDrag(e,id,axis,index){
 }
 
 // ── Cell selection / inline editing ────────────────────────────────────────────
-// Cell mousedown on the SELECTED table: plain = select the cell (a second click
-// within 350ms = inline edit for static cells, like tx), ⇧ = rectangular range
-// from the anchor, ⌘/Ctrl = toggle. stopPropagation so the table doesn't drag.
-let _tblClickKey=null,_tblClickT=0;
-// Table cells use a longer double-click window than DBLCLICK_MS: a full R()
-// re-render runs BETWEEN the two clicks (click 1 selects the table/cell), so the
-// strict 350ms window can expire on slower machines before the second click is
-// even possible. 700ms matches the macOS default double-click feel.
-const TBL_DBLCLICK_MS=700;
+// Cell mousedown on the SELECTED table: plain = select the cell (clicking the
+// already-selected cell starts editing — no click timing involved), ⇧ = rectangular
+// range from the anchor, ⌘/Ctrl = toggle. stopPropagation so the table doesn't drag.
 function tblCellDown(e,id,r,c){
   e.stopPropagation();
   if(e.button===2)return;   // right-click → tblCtxMenu handles selection
@@ -3405,14 +3446,20 @@ function tblCellDown(e,id,r,c){
     if(i>=0)cells.splice(i,1); else cells.push(key);
     S._tblSel=cells.length?{id:id,anchor:[r,c],cells:cells}:null;
   }else{
-    const now=Date.now();
-    if(_tblClickKey===id+':'+key&&(now-_tblClickT)<TBL_DBLCLICK_MS){
-      _tblClickKey=null;_tblClickT=0;
+    // Clicking the ALREADY-selected (sole) cell starts editing — no click-pair
+    // timing anywhere, so a physical double-click is simply select+edit and works
+    // regardless of how long the in-between re-render takes (see startDrag's tb
+    // block for why timing-based approaches fail in WKWebView). Slow click-click
+    // also edits, like renaming in Finder.
+    const already=!S._tblEdit && S._tblSel && S._tblSel.id===id &&
+                  (S._tblSel.cells||[]).length===1 && S._tblSel.cells[0]===key;
+    if(already){
       const cl=(o.cells[r]||[])[c];
-      // Static cells edit inline; field/formula cells edit via the props panel
-      // (already open through the cell selection).
-      if(cl&&txMode(cl)==="static"){ startTblCellEdit(id,r,c); return; }
-    }else{ _tblClickKey=id+':'+key; _tblClickT=now; }
+      const m=cl?txMode(cl):null;
+      if(m==="static"){ startTblCellEdit(id,r,c); return; }
+      if(m==="formula"){ setSel(id); R(); openTblCellFormulaEditor(id); return; }
+      if(m==="field"){ setSel(id); R(); const s=document.getElementById('tbl-cell-field'); if(s)s.focus(); return; }
+    }
     S._tblSel={id:id,anchor:[r,c],cells:[key]};
   }
   setSel(id); S.editingId=null; S._ef=undefined;
@@ -3476,6 +3523,7 @@ function tblPatchCellsAt(id,keys,patch){
     if(typeof patch==='function')patch(cl); else Object.assign(cl,patch);
     tblMaybeAutoSize(t,+p[0],+p[1],prevEmpty);   // one-time first-value font sizing
   });
+  tblNorm(t);   // keep the span/shape invariants through cell patches too
   uobj(id,{cells:t.cells}); R();
 }
 function tblPatchCells(patch){ if(S._tblSel)tblPatchCellsAt(S._tblSel.id,S._tblSel.cells,patch); }
@@ -3505,16 +3553,11 @@ function setTblCellsStatic(id,val){
   });
   markDirty();
 }
-// Delete/Backspace with cells selected: clear their CONTENT (per mode), never
-// the table itself.
+// Delete/Backspace with cells selected: clear their CONTENT — the same semantics
+// as the context menu's "Clear text" — never the table itself.
 function tblClearCells(){
   if(!S._tblSel||!(S._tblSel.cells||[]).length)return;
-  tblPatchCellsAt(S._tblSel.id,S._tblSel.cells,function(cl){
-    const m=txMode(cl);
-    if(m==="field")cl.field="";
-    else if(m==="formula")cl.f='=""';
-    else cl.text="";
-  });
+  tblClearText(S._tblSel.id);
 }
 // Formula editor for table CELLS — reuses the fx modal; fxApply routes tblCells
 // back through tblPatchCellsAt.
@@ -3562,9 +3605,95 @@ function tblPasteCells(){
     t.cells[tr][tc]=JSON.parse(JSON.stringify(clip.cells[r][c]));
     pasted.push(tr+','+tc);
   }
+  tblNorm(t);   // pasted rs/cs spans clamp/drop through the standard normalization
   uobj(ts.id,{cells:t.cells});
   if(pasted.length)S._tblSel={id:ts.id,anchor:[ar,ac],cells:pasted};
   R();
+}
+
+// ── Merge / split (anchor-based spans, Excel-style) ────────────────────────────
+// Merge: bounding rect of the cell selection, expanded iteratively until it fully
+// contains every merged region it intersects; the rect's top-left cell becomes the
+// anchor (rs/cs = rect size). Content stays put — covered cells just stop rendering.
+function tblMergeCells(id){
+  const o=gobj(id); if(!o||o.t!=="tb"||!S._tblSel||S._tblSel.id!==id)return;
+  const keys=S._tblSel.cells||[];
+  if(keys.length<2){ showToast("Select two or more cells to merge"); return; }
+  const reg=tblRegions(o).reg;
+  let r0=Infinity,r1=-1,c0=Infinity,c1=-1;
+  keys.forEach(function(k){
+    const p=k.split(',');
+    r0=Math.min(r0,+p[0]); r1=Math.max(r1,+p[0]);
+    c0=Math.min(c0,+p[1]); c1=Math.max(c1,+p[1]);
+  });
+  for(let grew=true;grew;){
+    grew=false;
+    for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++){
+      const p=reg[r][c].split(','), ar=+p[0], ac=+p[1];
+      const sp=tblRegionSpan(reg,ar,ac);
+      if(ar<r0){r0=ar;grew=true;} if(ac<c0){c0=ac;grew=true;}
+      if(ar+sp[0]-1>r1){r1=ar+sp[0]-1;grew=true;} if(ac+sp[1]-1>c1){c1=ac+sp[1]-1;grew=true;}
+    }
+  }
+  if(r0===r1&&c0===c1){ showToast("Select two or more cells to merge"); return; }
+  snapshot();
+  const t=JSON.parse(JSON.stringify(o));
+  for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++){ delete t.cells[r][c].rs; delete t.cells[r][c].cs; }
+  t.cells[r0][c0].rs=r1-r0+1; t.cells[r0][c0].cs=c1-c0+1;
+  tblNorm(t); tblCommit(id,t);
+  S._tblSel={id:id,anchor:[r0,c0],cells:[r0+','+c0]};   // selection becomes the anchor
+  R();
+}
+// Formatting fields a split copies from the merged anchor onto the region's cells.
+const TBL_FMT_KEYS=['font','fs','bold','italic','underline','al','valign','wrapText','tracking','stretch','autoScale'];
+// Split: (r,c) may be the anchor OR a covered cell — resolve to the region, drop
+// its span, and stamp the anchor's formatting (plus sized:true, so the one-time
+// first-value sizing doesn't refire) onto every cell. The anchor keeps its
+// content; the rest become empty static cells. Selects the region's cells.
+function tblSplitCell(id,r,c){
+  const o=gobj(id); if(!o||o.t!=="tb")return;
+  const reg=tblRegions(o).reg;
+  if(!reg[r]||!reg[r][c])return;
+  const p=reg[r][c].split(','), ar=+p[0], ac=+p[1];
+  const sp=tblRegionSpan(reg,ar,ac);
+  if(sp[0]===1&&sp[1]===1)return;   // not merged — nothing to split
+  snapshot();
+  const t=JSON.parse(JSON.stringify(o));
+  const anchor=t.cells[ar][ac];
+  delete anchor.rs; delete anchor.cs;
+  const fmt={sized:true};
+  TBL_FMT_KEYS.forEach(function(k){ if(anchor[k]!==undefined)fmt[k]=anchor[k]; });
+  const keys=[];
+  for(let rr=ar;rr<ar+sp[0];rr++)for(let cc=ac;cc<ac+sp[1];cc++){
+    keys.push(rr+','+cc);
+    if(rr===ar&&cc===ac){ Object.assign(anchor,fmt); continue; }   // keeps its content
+    t.cells[rr][cc]=Object.assign({mode:"static",text:""},fmt);
+  }
+  tblNorm(t); tblCommit(id,t);
+  S._tblSel={id:id,anchor:[ar,ac],cells:keys};
+  R();
+}
+
+// ── Clear commands (context menu; single or multi selection) ───────────────────
+// Clear text: content only — mode→static, text emptied, field/formula dropped.
+// Formatting AND the pinned font size (sized) survive.
+function tblClearText(id){
+  if(!S._tblSel||S._tblSel.id!==id||!(S._tblSel.cells||[]).length)return;
+  tblPatchCellsAt(id,S._tblSel.cells,function(cl){
+    cl.mode="static"; cl.text=""; delete cl.field; delete cl.f;
+  });
+}
+// Clear text & formatting: full reset to tblDefaultCell() — drops sized (the next
+// first value auto-sizes again) but never touches the merge spans (rs/cs).
+function tblClearAll(id){
+  if(!S._tblSel||S._tblSel.id!==id||!(S._tblSel.cells||[]).length)return;
+  tblPatchCellsAt(id,S._tblSel.cells,function(cl){
+    const rs=cl.rs, cs=cl.cs;
+    Object.keys(cl).forEach(function(k){ delete cl[k]; });
+    Object.assign(cl,tblDefaultCell());
+    if(rs!=null)cl.rs=rs;
+    if(cs!=null)cl.cs=cs;
+  });
 }
 
 // ── Cell context menu (right-click a cell of the selected table) ───────────────
@@ -3617,6 +3746,19 @@ function tblCtxMenu(e,id,r,c){
       tblSetColWidth(id,c,n);
     });
   });
+  sep();
+  // Merge/split — merge needs ≥2 selected cells; split needs the clicked cell to
+  // sit inside a merged region (hit divs pass the anchor, but covered coords from
+  // other entry points resolve the same way).
+  const selN=(S._tblSel&&S._tblSel.id===id)?(S._tblSel.cells||[]).length:0;
+  const reg=tblRegions(o).reg;
+  const rp=((reg[r]||[])[c]||key).split(','), rsp=tblRegionSpan(reg,+rp[0],+rp[1]);
+  const inMerged=rsp[0]>1||rsp[1]>1;
+  if(selN>=2)item('Merge cells',function(){ tblMergeCells(id); });
+  if(inMerged)item('Split cell',function(){ tblSplitCell(id,r,c); });
+  if(selN>=2||inMerged)sep();
+  item('Clear text',function(){ tblClearText(id); });
+  item('Clear text & formatting',function(){ tblClearAll(id); });
   sep();
   item('Copy cells',function(){ tblCopyCells(); });
   item('Paste cells',function(){ tblPasteCells(); },!window._vlCellClip);
@@ -3692,7 +3834,7 @@ function buildTblCellProps(o){
       ? `<div style="color:var(--text2);font-size:11px;line-height:1.5">Mixed sources — pick a mode above to set every selected cell.</div>`
     : tmode==="static"
       ? `<textarea class="inp" rows="2" style="resize:vertical;font-family:inherit" placeholder="${shT.multi?'Multiple values':'Type cell text…'}" onfocus="snapshot()" oninput="setTblCellsStatic('${o.id}',this.value)" onblur="R()">${shT.multi?'':esc(shT.v||'')}</textarea>
-         <div style="color:var(--text3);font-size:10px;margin-top:5px;line-height:1.4">…or double-click the cell on the canvas to type directly.</div>`
+         <div style="color:var(--text3);font-size:10px;margin-top:5px;line-height:1.4">…or click the selected cell on the canvas (double-click from anywhere) to type directly.</div>`
     : tmode==="field"
       ? `<select id="tbl-cell-field" class="inp" onchange="tblPatchCells({field:this.value})">
            <option value="">${shField.multi?'— multiple —':'— choose column —'}</option>
@@ -4472,6 +4614,9 @@ function sanitizeObjs(objs){
           cl.valign=VALIGN.indexOf(s.valign)>=0?s.valign:'middle';
           ['fs','tracking','stretch'].forEach(function(k){ if(s[k]!=null){ const n=Number(s[k]); if(isFinite(n))cl[k]=n; } });
           ['bold','italic','underline','wrapText','autoScale','sized'].forEach(function(k){ if(s[k]!=null)cl[k]=s[k]===true; });
+          // Merged-cell spans: integers ≥2 only (absent/1 = unmerged); clamped +
+          // overlap-stripped below once the full grid shape is known.
+          ['rs','cs'].forEach(function(k){ if(s[k]!=null){ const n=Math.floor(Number(s[k])); if(isFinite(n)&&n>1)cl[k]=n; } });
           // A cell with no source at all becomes an empty static cell (so txMode
           // doesn't infer "formula" for padded cells).
           if(cl.mode==null&&cl.text==null&&cl.field==null&&cl.f==null){ cl.mode='static'; cl.text=''; }
@@ -4482,6 +4627,17 @@ function sanitizeObjs(objs){
           row.push(cl);
         }
         cells.push(row);
+      }
+      // Span pass (needs the final grid shape): clamp rs/cs to the bounds and strip
+      // spans overlapping an earlier region (row-major first-wins) — the same rules
+      // tblNorm enforces on every mutation and tblRegions applies when reading.
+      const reg=tblRegions({rows:rows,cols:cols,cells:cells}).reg;
+      for(let r=0;r<rows.length;r++)for(let ci=0;ci<cols.length;ci++){
+        const cl=cells[r][ci];
+        if(reg[r][ci]!==r+','+ci){ delete cl.rs; delete cl.cs; continue; }   // covered cell
+        const sp=tblRegionSpan(reg,r,ci);
+        if(sp[0]>1)cl.rs=sp[0]; else delete cl.rs;
+        if(sp[1]>1)cl.cs=sp[1]; else delete cl.cs;
       }
       c.cols=cols.map(v=>+v.toFixed(4)); c.rows=rows.map(v=>+v.toFixed(4));
       c.cells=cells;

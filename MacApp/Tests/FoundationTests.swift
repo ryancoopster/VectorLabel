@@ -629,7 +629,8 @@ final class FoundationTests: XCTestCase {
         let cellA = TableCell(mode: "static", text: "Hdr", field: "Number", f: "=Cable",
                               font: "Helvetica Neue", fs: 12, bold: true, italic: true,
                               underline: true, al: "center", valign: "top", wrapText: true,
-                              tracking: 0.5, stretch: 110, autoScale: true, sized: true)
+                              tracking: 0.5, stretch: 110, autoScale: true, sized: true,
+                              rs: 2, cs: 2)                  // merged-region anchor spans (v1.1)
         let cellB = TableCell(mode: "field", field: "Cable", fs: 9, al: "right", valign: "bottom")
         let cellC = TableCell(mode: "formula", f: #"=IF(Number<>"",Number,"")"#, stretch: 80)
         let cellD = TableCell()                              // empty cell stays empty
@@ -656,6 +657,10 @@ final class FoundationTests: XCTestCase {
         XCTAssertEqual(o.cells?[0][1], cellB)
         XCTAssertEqual(o.cells?[1][0], cellC)
         XCTAssertEqual(o.cells?[1][1], cellD)
+        XCTAssertEqual(o.cells?[0][0].rs, 2)                 // merge spans survive the trip
+        XCTAssertEqual(o.cells?[0][0].cs, 2)
+        XCTAssertNil(o.cells?[0][1].rs)                      // unmerged cells stay span-less
+        XCTAssertNil(o.cells?[0][1].cs)
     }
 
     /// Pin the wire format: the JSON the HTML designers write (JS-style key names)
@@ -669,7 +674,7 @@ final class FoundationTests: XCTestCase {
            "cells":[
              [{"mode":"static","text":"A","font":"Arial","fs":10,"bold":true,"italic":false,
                "underline":true,"al":"center","valign":"middle","wrapText":false,
-               "tracking":0.5,"stretch":110,"autoScale":true},
+               "tracking":0.5,"stretch":110,"autoScale":true,"rs":2,"cs":2},
               {"mode":"field","field":"Number"}],
              [{"mode":"formula","f":"=Cable"},{}]
            ]}
@@ -697,7 +702,11 @@ final class FoundationTests: XCTestCase {
         XCTAssertEqual(c00.tracking, 0.5)
         XCTAssertEqual(c00.stretch, 110)
         XCTAssertEqual(c00.autoScale, true)
+        XCTAssertEqual(c00.rs, 2)                            // merge spans decode from JS keys
+        XCTAssertEqual(c00.cs, 2)
         XCTAssertEqual(o.cells?[0][1].field, "Number")
+        XCTAssertNil(o.cells?[0][1].rs)                      // pre-merge cells (no rs/cs) → nil
+        XCTAssertNil(o.cells?[0][1].cs)
         XCTAssertEqual(o.cells?[1][0].f, "=Cable")
         XCTAssertEqual(o.cells?[1][1], TableCell())          // {} → all-nil cell
     }

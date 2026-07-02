@@ -261,15 +261,21 @@ public enum LabelRenderer {
         drawTextBox(text, style: style, in: rect(for: obj, dpi: dpi), ctx: ctx, dpi: dpi)
     }
 
-    /// Table ("tb") — a grid of text cells. Strokes the outer border + inner grid
-    /// lines at the cumulative column/row offsets (same stroke treatment as ln/rc:
-    /// designer px scaled to print DPI, floor 1px), then renders each cell exactly
-    /// like a tx object whose box is the cell rect inset by the designer's 1px
-    /// horizontal padding. Empty cells (and formula errors, which resolve to "")
-    /// draw nothing — the grid is still drawn.
+    /// Table ("tb") — a grid of text cells. Strokes the outer border, then the inner
+    /// grid as PER-CELL boundary segments (same stroke treatment as ln/rc: designer
+    /// px scaled to print DPI, floor 1px): a segment between two adjacent cells is
+    /// drawn only where their merged-region ids differ, so merged regions (anchor
+    /// `rs`/`cs` spans) show no interior lines. Coverage is DERIVED each pass —
+    /// row-major first-wins, spans clamped to the table bounds, exactly the JS
+    /// paths' rules. Covered cells render nothing; an anchor's text renders in the
+    /// UNION rect of its span, exactly like a tx object whose box is that rect inset
+    /// by the designer's 1px horizontal padding. Empty cells (and formula errors,
+    /// which resolve to "") draw nothing — the grid is still drawn.
     private static func drawTable(_ obj: TemplateObject, record: WireRecord, in ctx: CGContext, dpi: Int) {
         guard let cols = obj.cols, !cols.isEmpty,
               let rows = obj.rows, !rows.isEmpty else { return }
+        let nC = cols.count
+        let nR = rows.count
         let s  = Double(dpi)
         let x0 = obj.x * s
         let y0 = obj.y * s
@@ -278,52 +284,84 @@ public enum LabelRenderer {
         guard tw > 0, th > 0, tw.isFinite, th.isFinite else { return }
         let lw = max(1.0, (obj.lw ?? 1.0) * s / designerDPI)
 
-        ctx.setStrokeColor(gray: 0.0, alpha: 1.0)
-        ctx.setLineWidth(CGFloat(lw))
-        ctx.stroke(CGRect(x: x0, y: y0, width: tw, height: th))
-        // Inner vertical lines at cumulative column offsets (the last edge is the border).
-        var gx = x0
-        for c in 0 ..< (cols.count - 1) {
-            gx += cols[c] * s
-            ctx.move(to: CGPoint(x: gx, y: y0))
-            ctx.addLine(to: CGPoint(x: gx, y: y0 + th))
-            ctx.strokePath()
-        }
-        var gy = y0
-        for r in 0 ..< (rows.count - 1) {
-            gy += rows[r] * s
-            ctx.move(to: CGPoint(x: x0, y: gy))
-            ctx.addLine(to: CGPoint(x: x0 + tw, y: gy))
-            ctx.strokePath()
+        // Cumulative grid offsets: xs[c] = left edge of column c (xs[nC] = right border).
+        var xs = [Double](repeating: x0, count: nC + 1)
+        for c in 0 ..< nC { xs[c + 1] = xs[c] + cols[c] * s }
+        var ys = [Double](repeating: y0, count: nR + 1)
+        for r in 0 ..< nR { ys[r + 1] = ys[r] + rows[r] * s }
+
+        let cells = obj.cells ?? []
+        func cellAt(_ r: Int, _ c: Int) -> TableCell? {   // `cells` may be short/ragged
+            guard r < cells.count, c < cells[r].count else { return nil }
+            return cells[r][c]
         }
 
-        guard let cells = obj.cells else { return }
+        // Merged-cell coverage, derived every pass (never stored): reg[i] is the flat
+        // index (r*nC+c) of the anchor of the region containing cell i — itself when
+        // unmerged. Row-major scan, first region wins: a covered cell's own rs/cs are
+        // ignored, and an anchor whose clamped span would overlap an earlier region
+        // loses its span entirely (the same rules as the JS render paths).
+        var reg = Array(0 ..< nR * nC)
+        var spanRows = [Int](repeating: 1, count: nR * nC)   // clamped extents (anchors only)
+        var spanCols = [Int](repeating: 1, count: nR * nC)
+        for r in 0 ..< nR {
+            for c in 0 ..< nC {
+                let i = r * nC + c
+                guard reg[i] == i, let cell = cellAt(r, c) else { continue }
+                let rs = min(max(cell.rs ?? 1, 1), nR - r)   // clamp to table bounds
+                let cs = min(max(cell.cs ?? 1, 1), nC - c)
+                guard rs > 1 || cs > 1 else { continue }
+                var clear = true
+                for rr in r ..< r + rs {
+                    for cc in c ..< c + cs where reg[rr * nC + cc] != rr * nC + cc {
+                        clear = false
+                    }
+                }
+                guard clear else { continue }
+                for rr in r ..< r + rs {
+                    for cc in c ..< c + cs { reg[rr * nC + cc] = i }
+                }
+                spanRows[i] = rs
+                spanCols[i] = cs
+            }
+        }
+
+        ctx.setStrokeColor(gray: 0.0, alpha: 1.0)
+        ctx.setLineWidth(CGFloat(lw))
+        ctx.stroke(CGRect(x: x0, y: y0, width: tw, height: th))   // outer border unchanged
+        // Inner vertical segments: between (r,c) and (r,c+1) only where regions differ.
+        for c in 0 ..< (nC - 1) {
+            for r in 0 ..< nR where reg[r * nC + c] != reg[r * nC + c + 1] {
+                ctx.move(to: CGPoint(x: xs[c + 1], y: ys[r]))
+                ctx.addLine(to: CGPoint(x: xs[c + 1], y: ys[r + 1]))
+            }
+        }
+        // Inner horizontal segments: between (r,c) and (r+1,c) only where regions differ.
+        for r in 0 ..< (nR - 1) {
+            for c in 0 ..< nC where reg[r * nC + c] != reg[(r + 1) * nC + c] {
+                ctx.move(to: CGPoint(x: xs[c], y: ys[r + 1]))
+                ctx.addLine(to: CGPoint(x: xs[c + 1], y: ys[r + 1]))
+            }
+        }
+        ctx.strokePath()
+
         // The designer gives each cell's text a 1px horizontal padding; scale it.
         let pad = 1.0 * s / designerDPI
-        var rowY = y0
-        for r in 0 ..< rows.count {
-            let rowH = rows[r] * s
-            if r < cells.count {
-                let rowCells = cells[r]
-                var colX = x0
-                for c in 0 ..< cols.count {
-                    let colW = cols[c] * s
-                    if c < rowCells.count {
-                        let cell = rowCells[c]
-                        let text = resolveText(mode: cell.mode, text: cell.text,
-                                               field: cell.field, f: cell.f, record: record)
-                        if !text.isEmpty {
-                            let box = CGRect(x: colX, y: rowY, width: colW, height: rowH)
-                                .insetBy(dx: CGFloat(pad), dy: 0)
-                            if box.width > 0 {
-                                drawTextBox(text, style: cell, in: box, ctx: ctx, dpi: dpi)
-                            }
-                        }
-                    }
-                    colX += colW
+        for r in 0 ..< nR {
+            for c in 0 ..< nC {
+                let i = r * nC + c
+                guard reg[i] == i, let cell = cellAt(r, c) else { continue }   // covered → skip
+                let text = resolveText(mode: cell.mode, text: cell.text,
+                                       field: cell.field, f: cell.f, record: record)
+                guard !text.isEmpty else { continue }
+                let box = CGRect(x: xs[c], y: ys[r],                 // UNION rect of the span
+                                 width:  xs[c + spanCols[i]] - xs[c],
+                                 height: ys[r + spanRows[i]] - ys[r])
+                    .insetBy(dx: CGFloat(pad), dy: 0)
+                if box.width > 0 {
+                    drawTextBox(text, style: cell, in: box, ctx: ctx, dpi: dpi)
                 }
             }
-            rowY += rowH
         }
     }
 
