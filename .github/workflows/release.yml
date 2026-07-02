@@ -115,7 +115,15 @@ jobs:
         env:
           SIGN_IDENTITY: ${{ secrets.DEVELOPER_ID_IDENTITY }}
           VL_REPORTS_TOKEN: ${{ secrets.VL_REPORTS_TOKEN }}
-        run: ./scripts/package-suite.sh   # → dist/VectorLabel/ (4 signed apps)
+        run: |
+          set -euo pipefail
+          # In-app error reporting ships as of 1.4.0 — a release without the token
+          # silently degrades every "Send Report" to copy-only. Fail fast instead.
+          if [ -z "${VL_REPORTS_TOKEN:-}" ] && [[ "${GITHUB_REF:-}" == refs/tags/* ]]; then
+            echo "::error::VL_REPORTS_TOKEN secret is empty — the apps could not send error reports. Set the secret (fine-grained PAT, Issues:write on VectorLabel-reports) before releasing."
+            exit 1
+          fi
+          ./scripts/package-suite.sh   # → dist/VectorLabel/ (4 signed apps)
 
       - name: Notarize & staple
         env:

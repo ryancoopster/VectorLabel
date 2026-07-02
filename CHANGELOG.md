@@ -12,6 +12,8 @@ number (git commit count) + short SHA, shown in the menu-bar footer.
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-07-02
+
 ### Added
 - **Built-in error reporting.** When any of the four apps hits an error — a failed
   print, a file that won't open or save, a download/update failure, or a crash on the
