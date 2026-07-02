@@ -141,6 +141,13 @@ public final class DesignerWindowController: NSObject {
         /// The tab loads its page while hidden; when true, `didFinish` switches to it once
         /// it's painted (so a new "+" tab never flashes a blank white web view).
         var activateOnLoad = false
+        /// What this tab holds, for open-request deduplication (see `TabIdentity`): a
+        /// store template ("tpl:<id>"), a backing file ("file:<path>" — a Finder/Open…
+        /// .vltmp/.vlcus or an unsaved .BWT/.lbx import's source), or nil for
+        /// new/untitled and reprint-opened docs (never deduped). Updated on save (a
+        /// Save As re-keys the tab to its new file/id) and by the page's docIdentity
+        /// message (picker load / New).
+        var identityKey: String?
         var title: String
         init(webView: WKWebView, title: String) { self.webView = webView; self.title = title }
     }
@@ -195,22 +202,54 @@ public final class DesignerWindowController: NSObject {
 
     /// Open (or focus) the designer and load `template` (template mode — used by the
     /// Template Designer's Finder ".vltmp" open handler). If a window is already on
-    /// screen it's reused and the template injected immediately.
-    public func openTemplate(_ template: VLTemplate, displayName: String? = nil) {
+    /// screen it's reused and the template injected immediately. `sourceURL` is the
+    /// file the template came from (Finder / Open… dialog), used for deduplication.
+    public func openTemplate(_ template: VLTemplate, displayName: String? = nil, sourceURL: URL? = nil) {
+        // Dedupe: a file that IS the store's own record (same id AND same file) keys on
+        // the id, so the Finder route and the in-page picker route land on ONE tab; any
+        // other file keys on its path. The path check matters: a Finder-DUPLICATED copy
+        // of a store template carries the same embedded id (ids are duplicable — see
+        // applyPendingEdit), and keying it "tpl:" would select the store template's tab
+        // instead of opening the copy. If a tab already holds this identity, select it.
+        let isStoreFile: Bool = {
+            guard mode == .template,
+                  TemplateStore.shared.templates.contains(where: { $0.id == template.id })
+            else { return false }
+            guard let sourceURL else { return true }   // no backing file → the store record itself
+            guard let storeURL = TemplateStore.shared.fileURL(forTemplateId: template.id) else { return false }
+            return storeURL.standardizedFileURL.path
+                .caseInsensitiveCompare(sourceURL.standardizedFileURL.path) == .orderedSame
+        }()
+        let identity: String? = isStoreFile ? TabIdentity.template(template.id)
+                                            : sourceURL.map(TabIdentity.file)
+        if let existing = tabs.first(where: { TabIdentity.matches($0.identityKey, identity) }) {
+            activateTab(existing.id)
+            return
+        }
         // Each open lands in its own tab (full live state), so there's never a canvas to
         // clobber. A fresh tab applies its pending template on didFinish. The tab title is
         // the file name (preferred) — hosts pass it in; falls back to the template's name.
-        newDocTab(title: displayName ?? (template.name.isEmpty ? nil : template.name))?
-            .pendingOpenTemplate = template
+        let tab = newDocTab(title: displayName ?? (template.name.isEmpty ? nil : template.name))
+        tab?.identityKey = identity
+        tab?.pendingOpenTemplate = template
     }
 
     /// Open the designer and load `doc`'s canvas + embedded data in a new tab (custom
     /// mode — used by the Custom Designer's Finder ".vlcus" open handler and Reprint).
     /// The tab title is the file name (preferred); falls back to the doc's name.
-    public func openCustomDocument(_ doc: CustomLabelDocument, displayName: String? = nil) {
+    /// `sourceURL` is the ".vlcus" the doc came from, used for deduplication —
+    /// reprint-opened docs pass none (no file → never deduped).
+    public func openCustomDocument(_ doc: CustomLabelDocument, displayName: String? = nil, sourceURL: URL? = nil) {
         guard mode == .custom else { return }
-        newDocTab(title: displayName ?? (doc.name.isEmpty ? nil : doc.name))?
-            .pendingOpenCustomDoc = doc
+        // Dedupe: if this file is already open in a tab, select it instead.
+        let identity = sourceURL.map(TabIdentity.file)
+        if let existing = tabs.first(where: { TabIdentity.matches($0.identityKey, identity) }) {
+            activateTab(existing.id)
+            return
+        }
+        let tab = newDocTab(title: displayName ?? (doc.name.isEmpty ? nil : doc.name))
+        tab?.identityKey = identity
+        tab?.pendingOpenCustomDoc = doc
     }
 
     /// The tab a new document / in-app open / import loads into: cold → build the window +
@@ -728,7 +767,8 @@ public final class DesignerWindowController: NSObject {
                     let ext = url.pathExtension.lowercased()
                     if ext == "bwt" || ext == "lbx" { self.performImport(from: url) }
                     else if let tpl = TemplateStore.loadTemplate(from: url) {
-                        self.openTemplate(tpl, displayName: url.deletingPathExtension().lastPathComponent)
+                        self.openTemplate(tpl, displayName: url.deletingPathExtension().lastPathComponent,
+                                          sourceURL: url)
                     } else {
                         self.presentImportError(url, reason: "This file isn’t a valid VectorLabel template.")
                     }
@@ -765,7 +805,8 @@ public final class DesignerWindowController: NSObject {
                     if ext == "bwt" || ext == "lbx" {
                         self.performImport(from: url)
                     } else if let doc = CustomLabelStore.load(from: url) {
-                        self.openCustomDocument(doc, displayName: url.deletingPathExtension().lastPathComponent)
+                        self.openCustomDocument(doc, displayName: url.deletingPathExtension().lastPathComponent,
+                                                sourceURL: url)
                     } else {
                         self.presentImportError(url, reason: "This file couldn't be opened. Choose a .vlcus, .BWT or .lbx file.")
                     }
@@ -777,6 +818,14 @@ public final class DesignerWindowController: NSObject {
     /// Import a third-party template — Brady ".BWT" or Brother P-touch ".lbx" — dispatching
     /// by file type, and load it as a new unsaved document.
     private func performImport(from url: URL) {
+        // Dedupe: re-importing a file whose (still-unsaved) conversion is already open
+        // selects that tab instead of converting a second copy. Saving the import
+        // re-keys the tab to the saved file/template, after which a fresh import opens.
+        let identity = TabIdentity.file(url)
+        if let existing = tabs.first(where: { TabIdentity.matches($0.identityKey, identity) }) {
+            activateTab(existing.id)
+            return
+        }
         guard let data = try? Data(contentsOf: url) else {
             presentImportError(url, reason: "The file couldn't be read.")
             return
@@ -797,7 +846,9 @@ public final class DesignerWindowController: NSObject {
             presentImportError(url, reason: "The imported label couldn’t be prepared.")
             return
         }
-        newDocTab(title: sourceName)?.pendingInjectJS = js
+        let tab = newDocTab(title: sourceName)
+        tab?.identityKey = identity
+        tab?.pendingInjectJS = js
     }
 
     /// Build the JS doc the page's `initImportedDocument` expects (applied into a fresh tab).
@@ -1450,8 +1501,14 @@ public final class DesignerWindowController: NSObject {
                 if let t = savedTab, self.tabs.contains(where: { $0.id == t.id }) { self.activeID = t.id }
                 do {
                     try CustomLabelStore.save(doc, to: url)
-                    // The tab now carries the saved file name (the header no longer shows it).
-                    if let t = self.activeTab { t.title = CustomLabelStore.stem(url); self.refreshTabBar() }
+                    // The tab now carries the saved file name (the header no longer shows
+                    // it) and is re-keyed to that file so opens of it dedupe here (a Save
+                    // As to a new path moves the identity with it).
+                    if let t = self.activeTab {
+                        t.title = CustomLabelStore.stem(url)
+                        t.identityKey = TabIdentity.file(url)
+                        self.refreshTabBar()
+                    }
                     self.webView?.evaluateJavaScript(
                         "if(typeof showToast==='function')showToast('Saved: '+\(CustomLabelStore.stem(url).jsonQuoted));",
                         completionHandler: nil)
@@ -1795,11 +1852,20 @@ extension DesignerWindowController: WKScriptMessageHandler {
 
         switch action {
         case "saveTemplate":
-            if TemplateStore.shared.save(fromPayload: body["payload"]) {
+            // Assign the id HERE when the payload has none (new doc / Save As) — the
+            // store would generate one internally without telling us, and the tab's
+            // dedupe identity must re-key to the template it now holds.
+            var payload = body["payload"] as? [String: Any]
+            if payload?["id"] == nil { payload?["id"] = UUID().uuidString }
+            if TemplateStore.shared.save(fromPayload: payload) {
                 injectDesignerTemplates()   // refresh the Open list with the new file
                 // The tab carries the saved name (the header no longer shows it).
-                if let nm = (body["payload"] as? [String: Any])?["name"] as? String, !nm.isEmpty {
+                if let nm = payload?["name"] as? String, !nm.isEmpty {
                     (msgTab ?? activeTab)?.title = nm; refreshTabBar()
+                }
+                // The tab now holds this store template — opens of it dedupe here.
+                if let id = payload?["id"] as? String, !id.isEmpty {
+                    (msgTab ?? activeTab)?.identityKey = TabIdentity.template(id)
                 }
                 finishSave()
             }
@@ -1924,6 +1990,22 @@ extension DesignerWindowController: WKScriptMessageHandler {
             if let nm = p?["name"] as? String, !nm.isEmpty { tab?.title = nm }
             if tab?.isDirty == true { afterSave = .none }   // a new edit cancels a pending close
             refreshTabBar()                                 // reflect the dot + title on the chip
+
+        case "docIdentity":
+            // The page swapped this tab's DOCUMENT in place (template picker load / New),
+            // so re-key the tab's dedupe identity: a store-template id when the picker
+            // loaded one, nil after New (an untitled doc is never deduped). Routed to the
+            // sending tab; ids that aren't in the store (shouldn't happen — the in-app
+            // picker lists the store) leave nothing to dedupe against, so clear too.
+            if let tab = msgTab ?? activeTab {
+                let id = (body["payload"] as? [String: Any])?["id"] as? String
+                if mode == .template, let id, !id.isEmpty,
+                   TemplateStore.shared.templates.contains(where: { $0.id == id }) {
+                    tab.identityKey = TabIdentity.template(id)
+                } else {
+                    tab.identityKey = nil
+                }
+            }
 
         case "jsError":
             // Uncaught error inside the WKWebView — log prominently and offer a report.

@@ -26,6 +26,10 @@ final class PrintTab {
     var reprinting: RecentPrint?
     var writebackWork: DispatchWorkItem?
     var title: String
+    /// Dedupe identity — the source data file (export CSV/XLSX) this tab shows: a new
+    /// export or reprint of a file already open SELECTS this tab instead of adding one.
+    /// Reprint tabs carry the file in `csvWritebackURL` (sourceFileURL is nil).
+    var sourceIdentity: String? { (sourceFileURL ?? csvWritebackURL).map(TabIdentity.file) }
     init(webView: WKWebView, records: [WireRecord], sourceFileURL: URL?,
          csvWritebackURL: URL?, reprinting: RecentPrint?, title: String) {
         self.webView = webView; self.records = records; self.sourceFileURL = sourceFileURL
@@ -132,11 +136,14 @@ public final class PrintWindowController: NSObject {
         guard !isEditing else { return }   // don't interrupt an open template edit
         capturePreviousApp()
         openWindowIfNeeded()
-        // New exports surface on the newest tab. If this export already has a tab open,
-        // refresh it in place; otherwise open a new tab for it.
-        if let existing = tabs.first(where: { $0.sourceFileURL == fileURL }) {
+        // New exports surface on the newest tab. If this file already has a tab open
+        // (as an export, or a reprint of the same source), refresh it in place;
+        // otherwise open a new tab for it.
+        if let existing = tabs.first(where: { TabIdentity.matches($0.sourceIdentity, TabIdentity.file(fileURL)) }) {
             flushWriteback(existing)
             existing.records = records
+            existing.sourceFileURL = fileURL      // a matched reprint tab becomes a plain export tab
+            existing.csvWritebackURL = fileURL
             existing.reprinting = nil
             existing.title = fileURL.lastPathComponent
             activateTab(existing.id)
@@ -195,6 +202,19 @@ public final class PrintWindowController: NSObject {
             return
         }
         openWindowIfNeeded()
+        // If the reprint's source file is already open in a tab (an export or an earlier
+        // reprint), land on THAT tab: refresh it with the reprint's records + saved
+        // print-time state (selection/filter/sort) instead of opening a duplicate.
+        if let existing = tabs.first(where: { TabIdentity.matches($0.sourceIdentity, TabIdentity.file(url)) }) {
+            flushWriteback(existing)
+            existing.records = csv
+            existing.csvWritebackURL = url
+            existing.reprinting = recent
+            existing.title = recent.sourceFileName.isEmpty ? recent.title : recent.sourceFileName
+            activateTab(existing.id)
+            sendInitialState(for: existing)
+            return
+        }
         // Reprints open in their own tab (source URL nil so the recorded filename comes
         // from the reprint record; csvWritebackURL set so inline edits still persist).
         addTab(records: csv, sourceFileURL: nil, csvWritebackURL: url, reprinting: recent,

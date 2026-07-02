@@ -311,6 +311,30 @@ public final class TemplateStore: ObservableObject {
         return tpl
     }
 
+    /// The store's own on-disk file for the template with `id`, or nil if none. Scans
+    /// the templates folder the same way `reload()` resolves records: files sorted by
+    /// name, with a ".vltmp" preferred over a legacy ".vlt.json"/".json" migration
+    /// source sharing the id. Used to tell the store's file apart from an outside
+    /// COPY of it — Finder's "Duplicate" keeps the embedded id — when deduplicating
+    /// open requests.
+    public func fileURL(forTemplateId id: String) -> URL? {
+        let fm = FileManager.default
+        guard let contents = try? fm.contentsOfDirectory(
+            at: folderURL, includingPropertiesForKeys: nil, options: .skipsHiddenFiles
+        ) else { return nil }
+        let decoder = JSONDecoder()
+        var legacyMatch: URL?
+        for url in contents.filter({ Self.isTemplateFile($0) })
+            .sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+            guard let data = try? Data(contentsOf: url),
+                  let t = try? decoder.decode(VLTemplate.self, from: data),
+                  t.id == id else { continue }
+            if Self.isVLTMP(url) { return url }
+            if legacyMatch == nil { legacyMatch = url }
+        }
+        return legacyMatch
+    }
+
     /// Decode a template from a JS editor payload ({id?, name, specN, objs}) and
     /// persist it. VLTemplate's synthesized Codable ignores property defaults, so
     /// id/version are filled in when the payload omits them.

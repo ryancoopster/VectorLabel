@@ -13,6 +13,12 @@ number (git commit count) + short SHA, shown in the menu-bar footer.
 ## [Unreleased]
 
 ### Changed
+- **No more duplicate tabs.** Opening a file that's already open now switches to its
+  existing tab instead of opening a second copy — in the Template Designer (.vltmp,
+  whether opened from Finder, the Open… dialog, or the built-in template picker), the
+  Custom Designer (.vlcus and not-yet-saved .BWT/.lbx imports), and the print window
+  (a new export or a Reprint of a file that's already showing lands on its open tab).
+  New/untitled documents and reprint-reopened designs are never deduplicated.
 - **One shared suite log.** All four apps now write to a single rolling log file
   (~/Library/Logs/VectorLabel/VectorLabel.log, lines tagged per app) instead of one
   log per app, and error reports attach the combined suite timeline instead of a

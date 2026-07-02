@@ -264,3 +264,21 @@ final class BrowserTabBar: NSView {
     @objc private func closeClicked(_ sender: NSButton) { if let id = sender.identifier?.rawValue { onClose?(id) } }
     @objc private func addClicked() { onAdd?() }
 }
+
+/// Identity keys for tab deduplication, shared by the print + designer windows: a tab
+/// holding a document with an identity — a TemplateStore template id or a backing file —
+/// is never duplicated. Opening the same document again SELECTS the existing tab instead.
+/// File keys use the standardized path and compare case-insensitively (APFS is
+/// case-insensitive by default); new/untitled and reprint-opened docs have no identity.
+enum TabIdentity {
+    /// Identity key for a document backed by a file on disk.
+    static func file(_ url: URL) -> String { "file:" + url.standardizedFileURL.path }
+    /// Identity key for a TemplateStore template (dedupes the Finder-open and
+    /// picker routes of the same store template to one tab).
+    static func template(_ id: String) -> String { "tpl:" + id }
+    /// True when both identities exist and match (case-insensitively).
+    static func matches(_ a: String?, _ b: String?) -> Bool {
+        guard let a, let b else { return false }
+        return a.caseInsensitiveCompare(b) == .orderedSame
+    }
+}

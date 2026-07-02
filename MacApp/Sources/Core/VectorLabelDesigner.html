@@ -4960,6 +4960,7 @@ function newTemplate(){
   snapshot();
   S.tplName=name;
   S._loadedId=null;   // new template → new file on save
+  _vlPost('docIdentity',{id:null});   // fresh doc → the tab no longer holds any file/template (never deduped)
   applyLoadedSpec(specN);
   S.objs=[];
   S.selId=null;
@@ -5079,6 +5080,7 @@ function loadSelectedTemplate(){
   snapshot();
   S.tplName=t.name||defaultDocName();
   S._loadedId=t.id||null;   // preserve id so a later Save overwrites in place
+  _vlPost('docIdentity',{id:S._loadedId});   // re-key the tab: it now holds this store template (opens of it dedupe here)
   applyLoadedSpec(t.specN,t.labelLengthInches,t.canvasRot,t.supplyID,t.supplyGeometry,t.targetPrinterModel);
   S.objs=sanitizeObjs(t.objs);   // untrusted (Finder-browsed) — sanitize like every other load path
   S.selId=null;S._ef=undefined;

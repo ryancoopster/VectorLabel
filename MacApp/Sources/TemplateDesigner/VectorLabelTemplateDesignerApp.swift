@@ -114,7 +114,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         CloudFile.materialize([url], for: designer.hostWindow) { [weak self] result in
             guard case .ready = result, let self else { return }
             if let tpl = TemplateStore.loadTemplate(from: url) {
-                self.designer.openTemplate(tpl, displayName: url.deletingPathExtension().lastPathComponent)
+                // sourceURL keys the tab: reopening the same file (or the same store
+                // template via the picker) selects the existing tab, no duplicate.
+                self.designer.openTemplate(tpl, displayName: url.deletingPathExtension().lastPathComponent,
+                                           sourceURL: url)
             } else {
                 self.designer.open()
                 ErrorReporter.showErrorAlert(title: "Couldn’t open “\(url.lastPathComponent)”",
