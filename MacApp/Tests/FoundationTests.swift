@@ -729,6 +729,30 @@ final class FoundationTests: XCTestCase {
         XCTAssertNil(o.lockSize)
         XCTAssertNil(o.cells)
     }
+
+    // MARK: – Cloud placeholders (CloudFile)
+
+    /// A plain local file is never a placeholder, and materialize takes the
+    /// synchronous fast path — .ready delivered before the call returns, no UI.
+    @MainActor
+    func testCloudFileLocalFastPath() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cloudfile-\(UUID().uuidString).txt")
+        try Data("fully local".utf8).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        XCTAssertFalse(CloudFile.isPlaceholder(url))
+
+        let exp = expectation(description: "materialize completes .ready")
+        var readySynchronously = false
+        CloudFile.materialize([url], for: nil) { result in
+            if case .ready = result { readySynchronously = true }
+            exp.fulfill()
+        }
+        // Fast path: the callback already ran, synchronously — no panel ever appeared.
+        XCTAssertTrue(readySynchronously)
+        wait(for: [exp], timeout: 1)
+    }
 }
 
 // MARK: – Group 1: cross-process recents + reprint + progress/cancel IPC

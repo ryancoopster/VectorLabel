@@ -150,15 +150,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Load the ".vlcus" at `url` into the Custom Designer (or report a read failure).
     private func openCustomDocument(at url: URL) {
-        if let doc = CustomLabelStore.load(from: url) {
-            designer.openCustomDocument(doc, displayName: url.deletingPathExtension().lastPathComponent)
-        } else {
-            designer.open()
-            let alert = NSAlert()
-            alert.alertStyle = .warning
-            alert.messageText = "Couldn’t open “\(url.lastPathComponent)”"
-            alert.informativeText = "The file isn’t a valid VectorLabel custom label."
-            alert.runModal()
+        // A Finder-opened file may be an online-only cloud stub — download it first
+        // (sheet on the designer window when one is up, floating panel otherwise; local
+        // files take the synchronous fast path). Cancelling opens nothing.
+        CloudFile.materialize([url], for: designer.hostWindow) { [weak self] result in
+            guard case .ready = result, let self else { return }
+            if let doc = CustomLabelStore.load(from: url) {
+                self.designer.openCustomDocument(doc, displayName: url.deletingPathExtension().lastPathComponent)
+            } else {
+                self.designer.open()
+                let alert = NSAlert()
+                alert.alertStyle = .warning
+                alert.messageText = "Couldn’t open “\(url.lastPathComponent)”"
+                alert.informativeText = "The file isn’t a valid VectorLabel custom label."
+                alert.runModal()
+            }
         }
     }
 

@@ -12,6 +12,8 @@ number (git commit count) + short SHA, shown in the menu-bar footer.
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-07-01
+
 ### Added
 - **Table object** in both designers: insert a grid of rows × columns, where every cell
   behaves like its own text box — static text, a data **field** (drag a column header
@@ -24,6 +26,27 @@ number (git commit count) + short SHA, shown in the menu-bar footer.
   into a cell (typed or bound) one-time auto-sizes its font to fit ~10 characters in the
   cell — after that the size is never changed automatically. Tables render identically
   in the designers, the print preview, and the printed output.
+- **Auto-update from GitHub releases:** the Engine can now check GitHub for a newer
+  VectorLabel — on every launch, every N days, or manually (a one-time prompt on first
+  launch asks which; changeable any time in Preferences ▸ **Updates**, the new tab).
+  When a newer version is found, a popup shows the release notes with **Update Now**
+  (downloads the installer to ~/Downloads with progress, opens it, and quits the suite
+  so it can be replaced cleanly), **Remind Me Tomorrow**, and **Don't Update** (skips
+  that version only). The menu bar gains a "Check for Updates…" row, and Preferences ▸
+  Updates shows the last-checked time plus a "Version X.Y.Z available" summary card —
+  even for a skipped/snoozed version.
+- **Online-only cloud files download before opening.** Files kept "online-only" by
+  Dropbox, iCloud Drive, OneDrive or any similar sync service used to fail or stall when
+  opened. Now every file the app opens — CSV/Excel data sources, templates, custom
+  labels, Brady/Brother imports, images, supply-catalog imports, Finder double-clicks —
+  first shows a small "Downloading …" popup with Cancel while the service fetches the
+  file, then continues exactly where you left off. Cancel returns you to where you were.
+- **Merged cells** in tables: select multiple cells and right-click → **Merge cells**
+  (Excel-style bounding rectangle); right-click a merged cell → **Split cell** — the
+  text stays in the top-left cell and every cell keeps the merged cell's formatting.
+  Merges print identically in the preview and on the printer.
+- **Clear commands** in tables: right-click any cell selection (single or multi) →
+  **Clear text** (content only; formatting kept) or **Clear text & formatting**.
 
 ### Changed
 - **Installer:** on macOS older than 14 (Sonoma) the installer now **warns** that the apps
@@ -39,15 +62,6 @@ number (git commit count) + short SHA, shown in the menu-bar footer.
   cells open the formula editor, field cells jump to the column picker. (Editing engages
   by clicking the already-selected cell, so one click on an unselected table now selects
   the cell under the pointer and a second click — at any speed — starts editing.)
-
-### Added (tables, continued)
-- **Merged cells:** select multiple cells and right-click → **Merge cells** (the
-  selection's bounding rectangle merges, Excel-style, expanding over any merged region
-  it touches); right-click a merged cell → **Split cell** to unmerge — the text stays in
-  the top-left cell and every cell comes out with the merged cell's formatting. Merges
-  print identically in the preview and on the printer.
-- **Clear commands:** right-click any cell selection (single or multi) → **Clear text**
-  (content only; formatting kept) or **Clear text & formatting** (full reset).
 
 ## [1.1.0] — 2026-07-01
 
@@ -87,5 +101,6 @@ First public release (open alpha).
   **Brother P-touch** drivers are built but **not yet hardware-confirmed** — see
   [`docs/PTOUCH-DRIVER-STATUS.md`](docs/PTOUCH-DRIVER-STATUS.md).
 
-[Unreleased]: https://github.com/ryancoopster/VectorLabel/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/ryancoopster/VectorLabel/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/ryancoopster/VectorLabel/releases/tag/v1.2.0
 [1.1.0]: https://github.com/ryancoopster/VectorLabel/releases/tag/v1.1.0

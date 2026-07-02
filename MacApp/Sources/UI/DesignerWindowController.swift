@@ -709,15 +709,20 @@ public final class DesignerWindowController: NSObject {
             guard response == .OK, let url = panel.url else { return }
             MainActor.assumeIsolated {
                 guard let self = self else { return }
-                // Route by file type: ".BWT"/".lbx" are converted; anything else opens as a
-                // VectorLabel template — each into its own new tab (like a Finder open), so the
-                // active canvas is never clobbered and there's no stale-active-tab race.
-                let ext = url.pathExtension.lowercased()
-                if ext == "bwt" || ext == "lbx" { self.performImport(from: url) }
-                else if let tpl = TemplateStore.loadTemplate(from: url) {
-                    self.openTemplate(tpl, displayName: url.deletingPathExtension().lastPathComponent)
-                } else {
-                    self.presentImportError(url, reason: "This file isn’t a valid VectorLabel template.")
+                // The pick may be an online-only cloud stub (Dropbox/iCloud) — make it
+                // local before reading; cancelling the download simply does nothing.
+                CloudFile.materialize([url], for: self.window) { [weak self] result in
+                    guard case .ready = result, let self else { return }
+                    // Route by file type: ".BWT"/".lbx" are converted; anything else opens as a
+                    // VectorLabel template — each into its own new tab (like a Finder open), so the
+                    // active canvas is never clobbered and there's no stale-active-tab race.
+                    let ext = url.pathExtension.lowercased()
+                    if ext == "bwt" || ext == "lbx" { self.performImport(from: url) }
+                    else if let tpl = TemplateStore.loadTemplate(from: url) {
+                        self.openTemplate(tpl, displayName: url.deletingPathExtension().lastPathComponent)
+                    } else {
+                        self.presentImportError(url, reason: "This file isn’t a valid VectorLabel template.")
+                    }
                 }
             }
         }
@@ -743,13 +748,18 @@ public final class DesignerWindowController: NSObject {
         panel.begin { [weak self] response in
             guard response == .OK, let url = panel.url else { return }
             MainActor.assumeIsolated {
-                let ext = url.pathExtension.lowercased()
-                if ext == "bwt" || ext == "lbx" {
-                    self?.performImport(from: url)
-                } else if let doc = CustomLabelStore.load(from: url) {
-                    self?.openCustomDocument(doc, displayName: url.deletingPathExtension().lastPathComponent)
-                } else {
-                    self?.presentImportError(url, reason: "This file couldn't be opened. Choose a .vlcus, .BWT or .lbx file.")
+                guard let self = self else { return }
+                // Online-only stub? Download before reading (cancel → nothing happens).
+                CloudFile.materialize([url], for: self.window) { [weak self] result in
+                    guard case .ready = result, let self else { return }
+                    let ext = url.pathExtension.lowercased()
+                    if ext == "bwt" || ext == "lbx" {
+                        self.performImport(from: url)
+                    } else if let doc = CustomLabelStore.load(from: url) {
+                        self.openCustomDocument(doc, displayName: url.deletingPathExtension().lastPathComponent)
+                    } else {
+                        self.presentImportError(url, reason: "This file couldn't be opened. Choose a .vlcus, .BWT or .lbx file.")
+                    }
                 }
             }
         }
@@ -882,20 +892,26 @@ public final class DesignerWindowController: NSObject {
             guard response == .OK, let url = panel.url else { return }
             MainActor.assumeIsolated {
                 guard let self = self else { return }
-                let prevActive = self.activeID
-                if let t = targetTab, self.tabs.contains(where: { $0.id == t.id }) { self.activeID = t.id }
-                defer { if let p = prevActive, self.tabs.contains(where: { $0.id == p }) { self.activeID = p } }
-                if self.mode == .custom {
-                    AppSettings.shared.lastDataSourceFolderPath = url.deletingLastPathComponent().path
-                    self.loadAndBindDataSource(from: url, headerRow: headerRow)
-                } else {
-                    // Template mode: original preview-only CSV path.
-                    guard let wv = self.webView,
-                          let records = WireExportParser.parse(fileURL: url),
-                          let data = try? JSONEncoder().encode(records),
-                          let json = String(data: data, encoding: .utf8) else { return }
-                    let fnJSON = url.lastPathComponent.jsonQuoted
-                    wv.evaluateJavaScript("if(typeof initDesignerRecords==='function')initDesignerRecords(\(json),\(fnJSON));", completionHandler: nil)
+                // Online-only stub? Download first. The tab swap happens INSIDE the
+                // ready callback so the binding still targets the tab that opened the
+                // browser (`targetTab` was captured before the panel began).
+                CloudFile.materialize([url], for: self.window) { [weak self] result in
+                    guard case .ready = result, let self else { return }
+                    let prevActive = self.activeID
+                    if let t = targetTab, self.tabs.contains(where: { $0.id == t.id }) { self.activeID = t.id }
+                    defer { if let p = prevActive, self.tabs.contains(where: { $0.id == p }) { self.activeID = p } }
+                    if self.mode == .custom {
+                        AppSettings.shared.lastDataSourceFolderPath = url.deletingLastPathComponent().path
+                        self.loadAndBindDataSource(from: url, headerRow: headerRow)
+                    } else {
+                        // Template mode: original preview-only CSV path.
+                        guard let wv = self.webView,
+                              let records = WireExportParser.parse(fileURL: url),
+                              let data = try? JSONEncoder().encode(records),
+                              let json = String(data: data, encoding: .utf8) else { return }
+                        let fnJSON = url.lastPathComponent.jsonQuoted
+                        wv.evaluateJavaScript("if(typeof initDesignerRecords==='function')initDesignerRecords(\(json),\(fnJSON));", completionHandler: nil)
+                    }
                 }
             }
         }
@@ -975,7 +991,12 @@ public final class DesignerWindowController: NSObject {
         // A from-scratch dataset (no source file) has nothing to refresh from.
         guard let srcPath = ds.path else { return }
         if FileManager.default.fileExists(atPath: srcPath.path) {
-            loadAndBindDataSource(from: srcPath, headerRow: ds.headerRow)
+            // fileExists is true for an online-only stub too — materialize before the
+            // re-read (cancel → the previous binding stays as-is).
+            CloudFile.materialize([srcPath], for: window) { [weak self] result in
+                guard case .ready = result, let self else { return }
+                self.loadAndBindDataSource(from: srcPath, headerRow: ds.headerRow)
+            }
         } else {
             let panel = NSOpenPanel()
             var types: [UTType] = [.commaSeparatedText]
@@ -993,11 +1014,16 @@ public final class DesignerWindowController: NSObject {
                 guard response == .OK, let url = panel.url else { return }
                 MainActor.assumeIsolated {
                     guard let self = self else { return }
-                    let prevActive = self.activeID
-                    if let t = targetTab, self.tabs.contains(where: { $0.id == t.id }) { self.activeID = t.id }
-                    defer { if let p = prevActive, self.tabs.contains(where: { $0.id == p }) { self.activeID = p } }
-                    AppSettings.shared.lastDataSourceFolderPath = url.deletingLastPathComponent().path
-                    self.loadAndBindDataSource(from: url, headerRow: ds.headerRow)
+                    // Online-only stub? Download first — the tab swap happens inside the
+                    // ready callback so the re-bind still targets `targetTab`.
+                    CloudFile.materialize([url], for: self.window) { [weak self] result in
+                        guard case .ready = result, let self else { return }
+                        let prevActive = self.activeID
+                        if let t = targetTab, self.tabs.contains(where: { $0.id == t.id }) { self.activeID = t.id }
+                        defer { if let p = prevActive, self.tabs.contains(where: { $0.id == p }) { self.activeID = p } }
+                        AppSettings.shared.lastDataSourceFolderPath = url.deletingLastPathComponent().path
+                        self.loadAndBindDataSource(from: url, headerRow: ds.headerRow)
+                    }
                 }
             }
         }
@@ -1600,6 +1626,10 @@ extension DesignerWindowController: NSWindowDelegate {
     /// WKWebView popup (e.g. a `<select>` dropdown) closes while the designer is
     /// still open.
     public var hasVisibleWindow: Bool { window?.isVisible ?? false }
+
+    /// The designer's window (nil before the first open) — lets the app delegates host
+    /// sheets (e.g. the cloud-download panel for Finder-opened documents) on it.
+    public var hostWindow: NSWindow? { window }
 }
 
 // MARK: – WKUIDelegate (file picker for the designer's <input type=file>)
@@ -1616,8 +1646,19 @@ extension DesignerWindowController: WKUIDelegate {
         panel.allowedFileTypes = ["png", "jpg", "jpeg", "svg"]
         panel.prompt = "Choose Image"
         NSApp.activate(ignoringOtherApps: true)   // .nonactivatingPanel → make the image picker clickable
-        panel.begin { response in
-            completionHandler(response == .OK ? panel.urls : nil)
+        panel.begin { [weak self] response in
+            guard response == .OK else { completionHandler(nil); return }
+            let urls = panel.urls
+            MainActor.assumeIsolated {
+                guard let self = self else { completionHandler(urls); return }
+                // Online-only images must download before the page sees them. The page's
+                // file input hangs unless the handler fires EXACTLY once on every path:
+                // ready → the urls, cancelled/failed → nil (same as dismissing the panel).
+                CloudFile.materialize(urls, for: self.window) { result in
+                    if case .ready = result { completionHandler(urls) }
+                    else { completionHandler(nil) }
+                }
+            }
         }
     }
 }

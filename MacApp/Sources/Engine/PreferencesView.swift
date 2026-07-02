@@ -86,8 +86,10 @@ struct PreferencesView: View {
         _selectedTab = State(initialValue: initialTab)
     }
 
-    private let tabs = ["Export", "Printing", "Templates", "Recent", "Printers", "Advanced"]
-    private let icons = ["arrow.down.doc", "printer", "doc.richtext", "clock", "cable.connector", "gearshape.2"]
+    // "Updates" must stay LAST — earlier tab indices are hardcoded elsewhere
+    // (e.g. the menu's Printers shortcut opens tab 4). Append only.
+    private let tabs = ["Export", "Printing", "Templates", "Recent", "Printers", "Advanced", "Updates"]
+    private let icons = ["arrow.down.doc", "printer", "doc.richtext", "clock", "cable.connector", "gearshape.2", "arrow.triangle.2.circlepath"]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -124,7 +126,8 @@ struct PreferencesView: View {
                     case 2: templatesTab
                     case 3: recentTab
                     case 4: printersTab
-                    default: advancedTab
+                    case 5: advancedTab
+                    default: updatesTab
                     }
                 }
                 .padding(.bottom, 20)
@@ -470,6 +473,88 @@ PrefSection(title: "App Behaviour") {
                                 settings.resetToDefaults()
                             }
                         }
+                }
+            }
+        }
+    }
+
+    // MARK: – Updates
+
+    /// Adapter: updatePolicy "" (unset — the first-run prompt hasn't been answered)
+    /// displays as "Manually" without persisting anything; picking any segment
+    /// persists the real value (which also retires the first-run prompt).
+    private var updatePolicyBinding: Binding<String> {
+        Binding(get: { settings.updatePolicy.isEmpty ? "manual" : settings.updatePolicy },
+                set: { settings.updatePolicy = $0 })
+    }
+
+    /// The cached last-found update, shown only while it's still NEWER than the
+    /// running build (installing it clears the card naturally). Deliberately shown
+    /// even when the version was skipped or snoozed — this is the recovery path.
+    private var cachedAvailableUpdate: AvailableUpdate? {
+        guard let update = UpdateChecker.decodeAvailableUpdate(settings.updateAvailableJSON),
+              UpdateChecker.isNewer(update.version, than: BuildInfo.version) else { return nil }
+        return update
+    }
+
+    private static let lastCheckedFormatter = RelativeDateTimeFormatter()
+
+    private var lastCheckedCaption: String {
+        let ts = settings.updateLastCheckTimestamp
+        guard ts > 0 else { return "Last checked: Never" }
+        let relative = Self.lastCheckedFormatter.localizedString(
+            for: Date(timeIntervalSince1970: ts), relativeTo: Date())
+        return "Last checked: \(relative)"
+    }
+
+    /// First few lines of the release notes (plain-textified) for the summary card.
+    private func notesPreview(_ update: AvailableUpdate) -> String {
+        UpdateChecker.plainTextNotes(update.notes)
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .prefix(4)
+            .joined(separator: "\n")
+    }
+
+    private var updatesTab: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            PrefSection(title: "Check for Updates") {
+                PrefRow(
+                    label: "Check for new versions",
+                    caption: "VectorLabel checks its GitHub releases for a newer installer. No account or data is sent — just the version list."
+                ) {
+                    Picker("", selection: updatePolicyBinding) {
+                        Text("On launch").tag("launch")
+                        Text("Every N days").tag("interval")
+                        Text("Manually").tag("manual")
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 280)
+                    .labelsHidden()
+                }
+                if settings.updatePolicy == "interval" {
+                    PrefDivider()
+                    PrefRow(label: "Days between checks") {
+                        Stepper("\(max(1, settings.updateIntervalDays)) day\(settings.updateIntervalDays == 1 ? "" : "s")",
+                                value: $settings.updateIntervalDays, in: 1...365)
+                            .fixedSize()
+                    }
+                }
+                PrefDivider()
+                PrefRow(label: "Check now", caption: lastCheckedCaption) {
+                    Button("Check for Updates Now") {
+                        UpdateChecker.shared.checkNow(userInitiated: true)
+                    }
+                    .buttonStyle(VLButtonStyle())
+                }
+            }
+
+            if let update = cachedAvailableUpdate {
+                PrefSection(title: "Available Update") {
+                    PrefRow(label: "Version \(update.version) available",
+                            caption: notesPreview(update)) {
+                        Button("Update Now") { UpdateChecker.shared.beginUpdate(update) }
+                            .buttonStyle(VLButtonStyle())
+                    }
                 }
             }
         }

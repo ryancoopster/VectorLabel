@@ -218,6 +218,10 @@ struct MenuBarView: View {
 
             vlDivider
 
+            MenuActionRow(icon: "arrow.triangle.2.circlepath", title: "Check for Updates…", shortcut: "") {
+                appDelegate.checkForUpdates()
+            }
+
             MenuActionRow(icon: "power", title: "Quit VectorLabel", shortcut: "⌘Q") {
                 NSApplication.shared.terminate(nil)
             }

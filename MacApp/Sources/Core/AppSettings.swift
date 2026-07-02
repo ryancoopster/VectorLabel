@@ -284,6 +284,48 @@ public final class AppSettings: ObservableObject {
         }
     }
 
+    // MARK: – Software updates (Engine checks GitHub releases; see Engine/UpdateChecker)
+
+    /// How the Engine checks GitHub for new releases: "launch" (on every launch),
+    /// "interval" (every `updateIntervalDays` days), or "manual" (only via the
+    /// Check-for-Updates button/menu row). "" = not chosen yet → the one-time
+    /// first-launch policy prompt runs (and returns after a factory reset).
+    @Published public var updatePolicy: String {
+        didSet { UserDefaults.standard.set(updatePolicy, forKey: "updatePolicy") }
+    }
+
+    /// Days between automatic checks when updatePolicy == "interval". Default 7;
+    /// clamped to >= 1 by consumers (UpdateChecker + the Preferences stepper).
+    @Published public var updateIntervalDays: Int {
+        didSet { UserDefaults.standard.set(updateIntervalDays, forKey: "updateIntervalDays") }
+    }
+
+    /// Unix timestamp of the last COMPLETED check (0 = never). Drives the
+    /// "interval" policy and the "Last checked:" caption in Preferences. Failed
+    /// checks don't update it, so an interval user retries on the next launch.
+    @Published public var updateLastCheckTimestamp: Double {
+        didSet { UserDefaults.standard.set(updateLastCheckTimestamp, forKey: "updateLastCheckTimestamp") }
+    }
+
+    /// The version the user chose "Don't Update" for ("" = none). That exact
+    /// version never re-prompts automatically; a NEWER release prompts normally.
+    @Published public var updateSkippedVersion: String {
+        didSet { UserDefaults.standard.set(updateSkippedVersion, forKey: "updateSkippedVersion") }
+    }
+
+    /// Unix timestamp before which automatic checks don't re-prompt (0 = none).
+    /// "Remind Me Tomorrow" sets now+24h; user-initiated checks ignore it.
+    @Published public var updateRemindAfterTimestamp: Double {
+        didSet { UserDefaults.standard.set(updateRemindAfterTimestamp, forKey: "updateRemindAfterTimestamp") }
+    }
+
+    /// The newest update found by the last check, cached as AvailableUpdate JSON
+    /// ("" = nothing newer). Lets Preferences show the "Version X.Y.Z available"
+    /// summary — including for a skipped/snoozed version — without re-checking.
+    @Published public var updateAvailableJSON: String {
+        didSet { UserDefaults.standard.set(updateAvailableJSON, forKey: "updateAvailableJSON") }
+    }
+
     /// Apply a column config payload {order, hidden, widths} posted from a web view.
     public func applyColumnConfigPayload(_ payload: Any?) {
         guard let dict = payload as? [String: Any] else { return }
@@ -368,6 +410,12 @@ public final class AppSettings: ObservableObject {
         filterSortPresetsJSON = defaults.string(forKey: "filterSortPresetsJSON") ?? "[]"
         appearance        = defaults.string(forKey: "appearance") ?? "dark"
         showInDock        = defaults.object(forKey: "showInDock") as? Bool ?? false
+        updatePolicy      = defaults.string(forKey: "updatePolicy") ?? ""
+        updateIntervalDays = max(1, defaults.object(forKey: "updateIntervalDays") as? Int ?? 7)
+        updateLastCheckTimestamp = defaults.object(forKey: "updateLastCheckTimestamp") as? Double ?? 0
+        updateSkippedVersion = defaults.string(forKey: "updateSkippedVersion") ?? ""
+        updateRemindAfterTimestamp = defaults.object(forKey: "updateRemindAfterTimestamp") as? Double ?? 0
+        updateAvailableJSON = defaults.string(forKey: "updateAvailableJSON") ?? ""
 
         // Sync ExportSettings singleton
         ExportSettings.maxExportsPerProject = maxExportsPerProject
@@ -418,5 +466,11 @@ public final class AppSettings: ObservableObject {
         filterSortPresetsJSON = "[]"
         appearance           = "dark"
         showInDock           = false
+        updatePolicy         = ""    // factory reset re-arms the first-launch update prompt
+        updateIntervalDays   = 7
+        updateLastCheckTimestamp = 0
+        updateSkippedVersion = ""
+        updateRemindAfterTimestamp = 0
+        updateAvailableJSON  = ""
     }
 }

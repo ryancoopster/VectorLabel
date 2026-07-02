@@ -169,6 +169,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // embed the full .vlcus design for reprint). Keeps a comfortable margin above the
         // menu's recent-history cap so every reachable recent keeps its backing done file.
         PrintQueue().pruneDoneJobs(keep: 1000)
+
+        // GitHub auto-update: ask once how updates should be checked (only when
+        // updatePolicy is still unset), THEN run the launch-time policy. Last in
+        // launch so the modal prompt can't delay the queue consumer, watchers, or
+        // status publisher coming up.
+        UpdateChecker.shared.firstRunPromptIfNeeded {
+            UpdateChecker.shared.maybeAutoCheck()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -368,6 +376,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         let url = AppSettings.shared.exportsFolderURL
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         NSWorkspace.shared.open(url)
+    }
+
+    /// Menu action: user-initiated update check — always allowed regardless of
+    /// policy, and alerts on errors / "up to date" (unlike the silent auto checks).
+    func checkForUpdates() {
+        UpdateChecker.shared.checkNow(userInitiated: true)
     }
 
     func openPreferences(selectTab: Int? = nil) {

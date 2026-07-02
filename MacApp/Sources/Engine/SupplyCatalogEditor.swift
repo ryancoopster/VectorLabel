@@ -636,32 +636,38 @@ struct SupplyCatalogEditorView: View {
         saveExport(SupplyExport(category: cat), suggestedName: cat.name)
     }
     private func importGroup() {
-        guard let exp = openExport() else { return }
-        guard let g = exp.group else {
-            showAlert("Import failed", "That file is a category, not a supply group. Use “Import category…” below the category list.")
-            return
-        }
-        draft.groups.append(g.withFreshIDs().sanitized())   // fresh ids so it can't collide; clamp untrusted dims
-        groupIndex = draft.groups.count - 1
-        selectedSupply = nil
-        // If another group already serves the same printer model, both stay selectable by
-        // name in the designer's group picker — note it so the import isn't silently shadowed.
-        let models = Set(g.printerModels.map { $0.trimmingCharacters(in: .whitespaces).lowercased() })
-        if !models.isEmpty,
-           draft.groups.dropLast().contains(where: { other in
-               other.printerModels.contains { models.contains($0.trimmingCharacters(in: .whitespaces).lowercased()) } }) {
-            showAlert("Imported “\(g.name)”",
-                      "Another supply group already serves the same printer model. Both are available — pick the one you want from the group selector in the designer.")
+        openExport { exp in
+            guard let exp else { return }
+            guard let g = exp.group else {
+                showAlert("Import failed", "That file is a category, not a supply group. Use “Import category…” below the category list.")
+                return
+            }
+            draft.groups.append(g.withFreshIDs().sanitized())   // fresh ids so it can't collide; clamp untrusted dims
+            groupIndex = draft.groups.count - 1
+            selectedSupply = nil
+            // If another group already serves the same printer model, both stay selectable by
+            // name in the designer's group picker — note it so the import isn't silently shadowed.
+            let models = Set(g.printerModels.map { $0.trimmingCharacters(in: .whitespaces).lowercased() })
+            if !models.isEmpty,
+               draft.groups.dropLast().contains(where: { other in
+                   other.printerModels.contains { models.contains($0.trimmingCharacters(in: .whitespaces).lowercased()) } }) {
+                showAlert("Imported “\(g.name)”",
+                          "Another supply group already serves the same printer model. Both are available — pick the one you want from the group selector in the designer.")
+            }
         }
     }
     private func importCategory() {
         guard draft.groups.indices.contains(groupIndex) else { return }
-        guard let exp = openExport() else { return }
-        guard let cat = exp.category else {
-            showAlert("Import failed", "That file is a supply group, not a category. Use the Import button next to the supply-group selector.")
-            return
+        openExport { exp in
+            guard let exp else { return }
+            guard let cat = exp.category else {
+                showAlert("Import failed", "That file is a supply group, not a category. Use the Import button next to the supply-group selector.")
+                return
+            }
+            // Re-check: a cloud download-wait means the draft may have changed meanwhile.
+            guard draft.groups.indices.contains(groupIndex) else { return }
+            draft.groups[groupIndex].categories.append(cat.withFreshIDs().sanitized())
         }
-        draft.groups[groupIndex].categories.append(cat.withFreshIDs().sanitized())
     }
 
     private static let supplyFileTypes: [UTType] = [UTType(filenameExtension: "vlsupply") ?? .json, .json]
@@ -677,23 +683,30 @@ struct SupplyCatalogEditorView: View {
         do { try data.write(to: url) }
         catch { showAlert("Export failed", "Couldn’t write the file: \(error.localizedDescription)") }
     }
-    private func openExport() -> SupplyExport? {
+    /// Open panel → (if the pick is an online-only cloud stub) download-wait → decode.
+    /// Hands `completion` the decoded export, or nil after cancel / a shown error —
+    /// callers simply return on nil, back where they were.
+    private func openExport(completion: @escaping (SupplyExport?) -> Void) {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = Self.supplyFileTypes
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        guard panel.runModal() == .OK, let url = panel.url else { return nil }
-        guard let data = try? Data(contentsOf: url),
-              let exp = try? JSONDecoder().decode(SupplyExport.self, from: data),
-              exp.format == SupplyExport.formatTag else {
-            showAlert("Import failed", "That file isn’t a VectorLabel supply export.")
-            return nil
+        guard panel.runModal() == .OK, let url = panel.url else { completion(nil); return }
+        // No host window here (the editor is SwiftUI) → materialize uses its floating panel.
+        CloudFile.materialize([url], for: nil) { result in
+            guard case .ready = result else { completion(nil); return }   // cancelled → no-op
+            guard let data = try? Data(contentsOf: url),
+                  let exp = try? JSONDecoder().decode(SupplyExport.self, from: data),
+                  exp.format == SupplyExport.formatTag else {
+                showAlert("Import failed", "That file isn’t a VectorLabel supply export.")
+                completion(nil); return
+            }
+            guard exp.version <= SupplyExport.currentVersion else {
+                showAlert("Import failed", "That file was made by a newer version of VectorLabel. Update VectorLabel to import it.")
+                completion(nil); return
+            }
+            completion(exp)
         }
-        guard exp.version <= SupplyExport.currentVersion else {
-            showAlert("Import failed", "That file was made by a newer version of VectorLabel. Update VectorLabel to import it.")
-            return nil
-        }
-        return exp
     }
     private func sanitizeFileName(_ s: String) -> String {
         let cleaned = s.components(separatedBy: CharacterSet(charactersIn: "/\\:?%*|\"<>"))

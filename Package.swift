@@ -109,7 +109,10 @@ let package = Package(
 
         .testTarget(
             name: "VectorLabelTests",
-            dependencies: ["VectorLabelCore", "PrinterM611", "PrinterM610", "PrinterBrother"],
+            // VectorLabelEngine (an executable target — allowed as a test dependency
+            // since Swift 5.5) is here so UpdateCheckerTests can exercise the
+            // updater's pure logic (semver / gating / asset regex / release picking).
+            dependencies: ["VectorLabelCore", "PrinterM611", "PrinterM610", "PrinterBrother", "VectorLabelEngine"],
             path: "MacApp/Tests",
             resources: [
                 // Tiny inline-string .xlsx (no xl/sharedStrings.xml) used to verify
