@@ -69,3 +69,5 @@ update the JSON in [`embeds/vl-demo.js`](embeds/vl-demo.js). See [`embeds/README
 Re-check before claiming these as fully working — they are not hardware-confirmed yet:
 Brady **M610 cut** behavior and **all Brother P-touch** drivers. (The Brady **M611** IS
 hardware-validated.) Keep the docs honest about alpha status until verified.
+
+| Update prompt "what's new" span (changelog between installed → offered) | `MacApp/Sources/Engine/UpdateChecker.swift` (changelogSections / composeNotesSpan), `.github/workflows/release.yml` (release body from CHANGELOG) | `guide.html` #software-updates — update the popup description when the span feature ships in a release |
