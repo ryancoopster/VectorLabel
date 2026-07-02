@@ -63,7 +63,7 @@ private func vlHandleUncaughtException(_ exception: NSException) {
 /// popup (error summary + user comment + one-time contact capture) that files an
 /// issue in the PRIVATE ryancoopster/VectorLabel-reports repo via the GitHub REST
 /// API. Reports attach system info, contact info, the Engine's published printer
-/// status, and the app's recent log output (see VLLog).
+/// status, and the suite's recent combined log output (see VLLog).
 @MainActor
 public enum ErrorReporter {
 
@@ -323,12 +323,14 @@ public enum ErrorReporter {
         return lines.joined(separator: "\n")
     }
 
-    /// Fenced log tail — the first thing trimmed when the body would exceed the budget.
+    /// Fenced tail of the shared suite log — the first thing trimmed when the body
+    /// would exceed the budget.
     private static func logSection(headLength: Int) -> String {
-        let path = VLLog.currentLogPath ?? "(no log file)"
+        let path = VLLog.currentLogPath
         var tail = VLLog.recentTail(maxBytes: 40_000)
         if tail.isEmpty { return "\n\n## Log\n\n_No log output captured (\(path))._" }
-        let prefix = "\n\n## Log\n\n_Tail of \(path):_\n\n```\n"
+        let prefix = "\n\n## Log\n\n_Tail of the shared suite log \(path)"
+            + " (all four apps, lines tagged per app):_\n\n```\n"
         let suffix = "\n```"
         let budget = maxBodyLength - headLength - prefix.count - suffix.count
         if budget <= 0 { return "\n\n## Log\n\n_Omitted — report at the size limit._" }

@@ -12,6 +12,12 @@ number (git commit count) + short SHA, shown in the menu-bar footer.
 
 ## [Unreleased]
 
+### Changed
+- **One shared suite log.** All four apps now write to a single rolling log file
+  (~/Library/Logs/VectorLabel/VectorLabel.log, lines tagged per app) instead of one
+  log per app, and error reports attach the combined suite timeline instead of a
+  per-app log.
+
 ## [1.4.0] — 2026-07-02
 
 ### Added
