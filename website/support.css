@@ -235,28 +235,22 @@ mark.vl-mark{background:var(--accent-soft);color:var(--accent);border-radius:3px
 .vl-flash{outline:2px solid var(--accent);outline-offset:8px;border-radius:6px;transition:outline-color .5s ease}
 .vl-flash.vl-flash-fade{outline-color:transparent}
 
-/* ---------- App screenshots: CSS mockups of the actual VectorLabel UI ---------- */
+/* ---------- Real-app screenshots (PNG figures in website/img/) ----------
+   Native windows (the Engine's Preferences etc.) have no HTML front-end to embed
+   live, so they're shown as real screenshots of the shipping app. The window
+   chrome in the image is the real macOS chrome — nothing extra is drawn. */
+.shot-frame{margin:22px 0 8px;text-align:center}
+.shot-frame img{display:inline-block;max-width:100%;height:auto;border:1px solid var(--line);
+  border-radius:10px;box-shadow:0 18px 40px -24px rgba(14,17,22,.35)}
+
+/* ---------- App windows: framed LIVE embeds of the actual VectorLabel UI ---------- */
 .appshot{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;
   box-shadow:0 18px 40px -24px rgba(14,17,22,.35);margin:22px 0 8px}
 .appshot .bar{height:32px;display:flex;align-items:center;gap:7px;padding:0 12px;background:#f3f5f9;border-bottom:1px solid var(--line)}
 .appshot .tl{width:11px;height:11px;border-radius:50%}
 .appshot .tl.r{background:#ff5f57}.appshot .tl.y{background:#febc2e}.appshot .tl.g{background:#28c840}
 .appshot .bar b{margin-left:8px;font-size:11.5px;font-weight:600;color:var(--muted)}
-.appshot .tabs{display:flex;align-items:center;gap:4px;padding:5px 8px;background:#eef1f6;border-bottom:1px solid var(--line)}
-.appshot .tabs span{font-size:11px;padding:4px 10px;border-radius:6px;color:var(--muted);white-space:nowrap}
-.appshot .tabs .on{background:rgba(47,87,255,.14);color:var(--accent);font-weight:600}
-.appshot .tabs .add{margin-left:2px;font-size:15px;color:var(--muted);padding:0 6px}
-.appshot .body{padding:14px 16px}
-.appshot .toolbar{display:flex;gap:8px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--bg-soft);flex-wrap:wrap;font-size:12px;color:var(--muted)}
-.appshot .abtn{font-size:12px;padding:4px 10px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink-soft);font-weight:500}
-.appshot .abtn.p{background:var(--accent);border-color:var(--accent);color:#fff}
 .shot-cap{font-size:12.5px;color:var(--muted);margin:0 0 24px;text-align:center}
 /* Live app-HTML preview inside an .appshot frame: an <iframe> rendering the REAL
    VectorLabel front-end (website/embeds/). The wrapper sets its height on load. */
 .appshot .embed-frame{display:block;width:100%;height:440px;border:0;background:#fff}
-/* printer rows (Preferences ▸ Printers) */
-.prow{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;margin:8px 0;font-size:13.5px}
-.prow .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
-.prow .dot.ok{background:#28c840;box-shadow:0 0 0 3px rgba(40,200,64,.16)}
-.prow .dot.off{background:#c4c9d2}
-.prow .pn{font-weight:600}.prow .ps{color:var(--muted);font-size:12px;margin-left:auto}

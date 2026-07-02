@@ -68,7 +68,13 @@
     // Crop to a single element and size the outer frame to its exact aspect, so
     // nothing but that element shows (no sibling caption/supply bleeding in).
     var sel = view === 'label' ? '#preview-label-wrap' : '#recPane';
-    var t = d.querySelector(sel) || (view === 'table' && d.getElementById('recScroll'));
+    var t = d.querySelector(sel);
+    if (!t && view === 'table') {
+      // The records pane has no id of its own: crop to the container holding both
+      // the search/filter/columns toolbar and the #recScroll grid.
+      var rs = d.getElementById('recScroll');
+      t = (rs && rs.parentElement) || rs;
+    }
     var r = t && t.getBoundingClientRect();
     if (!r || r.width < 4 || r.height < 4) { if (tries++ < 30) return void setTimeout(frame, 120); fitFull(); return; }
     var cw = clip.clientWidth;

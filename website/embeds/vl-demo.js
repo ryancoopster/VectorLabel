@@ -58,5 +58,56 @@ window.VL_DEMO = {
         {id:"o50",mode:"formula",wrapText:true,t:"tx",al:"center",stretch:100,bold:false,italic:false,valign:"middle",tracking:0,w:1.45,underline:false,y:1.2,autoScale:true,fs:12,x:0.025,f:'=IF(Device_Name<>"","@ "&Device_Name&IF(Socket_Name<>""," : "&Socket_Name,""),"")',h:0.3,font:"Arial Narrow"}
       ]
     }
+  },
+
+  /* window.__VL_PRINTER_GEOMETRY__ for the previews — the printable-area overlay's
+   * per-printer geometry, normally injected by Swift. Mirror of
+   * MacApp/Sources/Core/PrinterGeometry.swift (webGeometryJSON): the default printer
+   * registry + the shared Brother 128-pin/180-DPI head table. If the Swift table
+   * changes, update this to match. */
+  printerGeometry: (function () {
+    var tapes = [
+      {mm: 3.5, marginPins: 52}, {mm: 6, marginPins: 48}, {mm: 9, marginPins: 39},
+      {mm: 12, marginPins: 29}, {mm: 18, marginPins: 8}, {mm: 24, marginPins: 0}
+    ];
+    return { models: [
+      {model: "M611", kind: "brady"},
+      {model: "M610", kind: "brady"},
+      {model: "PT-E550W",  kind: "ptouch", dpi: 180, headPins: 128, tapes: tapes},
+      {model: "PT-P750W",  kind: "ptouch", dpi: 180, headPins: 128, tapes: tapes},
+      {model: "PT-E560BT", kind: "ptouch", dpi: 180, headPins: 128, tapes: tapes}
+    ] };
+  })(),
+
+  /* Demo documents for the CUSTOM-mode preview (designer.html?mode=custom&doc=…):
+   * a small sample data set bound to a continuous-tape design, so the support docs
+   * can show the real Database pane / record browser. Sample data only — the UI
+   * rendering it is the real Custom Designer front-end. */
+  customDocs: {
+    "asset_tags": {
+      name: "Asset tags",
+      specN: "M6C-2000-595",         // 2" continuous vinyl (in the front-end's fallback catalog)
+      labelLengthInches: 3,
+      copies: 1,
+      filename: "asset-tags.csv",
+      headerRow: true,
+      isXLSX: false,
+      columns: ["Asset", "Description", "Serial", "Location"],
+      records: [
+        {Asset:"AMP-01",  Description:"Stage amp rack A",     Serial:"CAS-40211", Location:"Stage left"},
+        {Asset:"AMP-02",  Description:"Stage amp rack B",     Serial:"CAS-40212", Location:"Stage right"},
+        {Asset:"DSP-01",  Description:"Loudspeaker DSP",      Serial:"CAS-40320", Location:"Amp room"},
+        {Asset:"SW-06",   Description:"Dante network switch", Serial:"CAS-40415", Location:"FOH rack"},
+        {Asset:"IO-1.01", Description:"Stage box 32×16",      Serial:"CAS-40501", Location:"Stage right"},
+        {Asset:"UPS-02",  Description:"Rack UPS 1500 VA",     Serial:"CAS-40633", Location:"Amp room"}
+      ],
+      objs: [
+        {id:"a1",t:"tx",mode:"field",field:"Asset",x:0.15,y:0.18,w:2.7,h:0.5,fs:28,font:"Arial Narrow",bold:true,italic:false,underline:false,al:"left",valign:"middle",wrapText:false,autoScale:true,stretch:100,tracking:0},
+        {id:"a2",t:"ln",x:0.15,y:0.72,w:2.7,h:0,lw:2},
+        {id:"a3",t:"tx",mode:"field",field:"Description",x:0.15,y:0.78,w:2.7,h:0.28,fs:14,font:"Arial",bold:false,italic:false,underline:false,al:"left",valign:"middle",wrapText:false,autoScale:true,stretch:100,tracking:0},
+        {id:"a4",t:"tx",mode:"field",field:"Location",x:0.15,y:1.08,w:2.7,h:0.24,fs:12,font:"Arial",bold:false,italic:false,underline:false,al:"left",valign:"middle",wrapText:false,autoScale:true,stretch:100,tracking:0},
+        {id:"a5",t:"bc",bcType:"code128",mode:"field",field:"Serial",x:0.15,y:1.4,w:1.9,h:0.42}
+      ]
+    }
   }
 };

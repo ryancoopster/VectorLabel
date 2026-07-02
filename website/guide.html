@@ -403,7 +403,11 @@ VectorworksPlugin/export_all.py</code></pre>
 <p>There are two kinds of supply. Die-cut supplies are pre-cut to a FIXED size (for example 1" × 1.5"); both their overall size and printable area are fixed, shown as width × height. Continuous (tape) supplies have a fixed width but NO fixed length — you choose how long each label is. Continuous rows show their size as width × "definable".</p>
 <p>When a continuous supply is selected, a "Length" field (in inches) and a "⤢ Fit" button appear in the top bar. Type a length, or click Fit to set the length automatically to the farthest edge of your content (plus a small trailing margin). Die-cut supplies ignore length.</p>
 <p>If a printer is connected and reports a loaded cassette, the picker shows a "Use currently installed" button that jumps to the matching defined supply, and the matching row is tagged "● installed". If nothing is loaded it shows "No cassette detected". When more than one supply group exists, a "Supply group" dropdown lets you switch groups.</p>
-
+<div class="appshot">
+  <div class="bar"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><b>VectorLabel — Template Designer</b></div>
+  <iframe class="embed-frame" src="embeds/designer.html?tpl=1_5x4&modal=supply" title="The Choose a label supply picker" loading="lazy" scrolling="no"></iframe>
+</div>
+<p class="shot-cap">The real "Choose a label supply" picker — supplies grouped by category with Type, Label size, Printable and Buy columns; ● marks the supply the open design uses.</p>
 <ol class="steps">
   <li>Click the "Supply" button in the top bar.</li>
   <li>In the "Choose a label supply" window, find your part in the grouped list (use the "Supply group" dropdown if shown).</li>
@@ -432,7 +436,11 @@ VectorworksPlugin/export_all.py</code></pre>
 <p>Which printer's margins are shown depends on the window. The Custom Designer and the Print window follow the printer currently selected in their printer dropdown. The Template Designer has no live printer, so it gains a "⎙ Printer" dropdown next to the Supply button: pick the model you intend to print on, or "None" for no overlay. The choice is saved with the template, and it also becomes the default for new templates.</p>
 <p>Where the numbers come from: for Brother P-touch models, the across-tape band comes from the per-tape print-head table (each tape width exposes a fixed set of head pins — for example, 12&nbsp;mm tape prints a centered band of about 0.39"/9.9&nbsp;mm, while 24&nbsp;mm tape uses the full head). For Brady printers, the printable area comes from the supply catalog — die-cut: the printable size centered in the physical label; continuous: the printable band centered across the tape. When a connected printer reports its loaded cassette's printable area (M611 telemetry), that live reading overrides the static tables.</p>
 <p>A "▧ Margins" toggle sits in the designers' Snap toolbar next to the grid controls; it hides or shows the overlay and is remembered between sessions. The Print window's preview shows the margins automatically whenever they're known for the selected printer.</p>
-
+<div class="appshot">
+  <div class="bar"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><b>VectorLabel — Template Designer</b></div>
+  <iframe class="embed-frame" src="embeds/designer.html?tpl=1_5x4&printer=M611&anim=1" title="VectorLabel designer showing the printable-area margins overlay" loading="lazy" scrolling="no"></iframe>
+</div>
+<p class="shot-cap">The real designer with the overlay on: the <strong>1_5x4 V1</strong> wrap template targeted at an <strong>M611</strong> (the "⎙ Printer" dropdown in the top bar). The white canvas is the printable 1.5″ × 1.5″ panel; the hatched strips are the unprintable rest of the physical 1.5″ × 4″ label, with a dashed outline at its edge.</p>
 <ol class="steps">
   <li>Template Designer: pick your target model in the "⎙ Printer" dropdown next to the Supply button ("None" = no overlay).</li>
   <li>Custom Designer / Print window: just select the printer — the overlay follows it (and its loaded cassette, when reported).</li>
@@ -570,7 +578,11 @@ VectorworksPlugin/export_all.py</code></pre>
   <li><strong>Export…</strong> — write the current data set out as a CSV or Excel (.xlsx) file (you can overwrite your original import if you want).</li>
 </ul>
 <p>The print header's "Print" range control appears when data is bound and a field on the canvas actually uses it: "All", "Selected" (the checked rows), or "Range" (from–to). Filters, sorts, and saved presets are shared with the Print window, so a preset saved in either place shows up in both. The pane can be resized by dragging its top edge.</p>
-
+<div class="appshot">
+  <div class="bar"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><b>VectorLabel — Custom Designer</b></div>
+  <iframe class="embed-frame" src="embeds/designer.html?mode=custom&doc=asset_tags&view=db&anim=1" title="The Custom Designer Database pane with a bound data file" loading="lazy" scrolling="no"></iframe>
+</div>
+<p class="shot-cap">The real Database pane with a sample CSV bound — the header shows the file, row/column counts and selection; row checkboxes choose what prints; the toolbar carries "+ Row" / "+ Column", "Free edit", "Export…" and the shared search / filter / columns controls.</p>
 <ol class="steps">
   <li>In the Custom Designer, click "Choose data file…" in the Database pane and pick a CSV or .xlsx.</li>
   <li>Bind a canvas field to a column (Field mode, or drag a column header onto a text/barcode object).</li>
@@ -735,7 +747,11 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
 <p>Inline editing: hover a cell and click the ✎ pencil (or use the inline editor) to change a value. Enter saves, Escape cancels. Edits update the previewed/printed label and are written back to the source CSV file (so a later reprint uses the corrected value).</p>
 <p>Editing on the fly: a "+ Row" button adds a blank row (saved back to the CSV), and a "Free edit" mode (the button flashes while active) turns the list into a spreadsheet-style grid — click any cell to edit directly, drag or Shift-click to multi-select, copy/paste ranges (⌘C / ⌘V), and drag a cell's corner handle to fill down (auto-increments when the value ends in a number; hold <kbd>Option</kbd> to repeat instead). A "Ripple" action (a button by the cell editor, or right-click in Free edit) auto-enumerates a value down many rows via a prefix / start / increment / postfix / count dialog. The Print window can add rows but not columns — the columns come from the export. (These on-the-fly editing tools are in the Print window and Custom Designer only; the Template Designer is for building reusable templates and has no record editing.)</p>
 <p>Selection / which labels print: each row has a print checkbox and a pair checkbox (the ⇅ icon toggles a Source+Destination pair together). The header checkbox selects/deselects all visible rows. Shift+click a checkbox extends the selection across all visible rows in between. "Sources" and "Destinations" buttons in the Print bar select one side at a time.</p>
-
+<div class="appshot">
+  <div class="bar"><span class="tl r"></span><span class="tl y"></span><span class="tl g"></span><b>VectorLabel — Print</b></div>
+  <iframe class="embed-frame" src="embeds/print.html?tpl=1_5x1_5&view=table" title="The Labels list in the Print window" loading="lazy" scrolling="no"></iframe>
+</div>
+<p class="shot-cap">The real Labels list — print and pair (⇅) checkboxes, Source/Destination sides, and the "Search all fields…" / "⧩ Filter &amp; sort" / "Columns ▾" / "+ Row" / "Free edit" toolbar above the records.</p>
 <ol class="steps">
   <li>Use the search box or "⧩ Filter &amp; sort" to narrow the list.</li>
   <li>Tick the rows (or pairs) you want, or use Select all / Sources / Destinations.</li>
@@ -1188,7 +1204,7 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
       <a href="faq.html">FAQ</a>
       <a href="https://github.com/ryancoopster/VectorLabel">GitHub</a>
     </div>
-    <div class="copy">VectorLabel · Open alpha · Docs synced to commit 180577d · 2026-07-02 · Brady and Brother are trademarks of their respective owners.</div>
+    <div class="copy">VectorLabel · Open alpha · Docs synced to commit 1e6f57f · 2026-07-02 · Brady and Brother are trademarks of their respective owners.</div>
   </div>
 </footer>
 <script>

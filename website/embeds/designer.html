@@ -3,8 +3,15 @@
      bootstrapped with a current template on the canvas + the app's own sample
      records, forced to light mode. Embedded in the marketing pages via <iframe>.
      Query params:
-       tpl  = 1_5x1_5 | 1_5x4     (which current template to open on the canvas)
-       view = full | canvas       (whole window, or just the canvas)  -->
+       tpl     = 1_5x1_5 | 1_5x4  (which current template to open on the canvas)
+       view    = full | canvas | db  (whole window, just the canvas, or the custom
+                                      Database pane)
+       printer = M611 | M610 | PT-E550W | …  (inject the printable-area geometry —
+                 VL_DEMO.printerGeometry, mirroring PrinterGeometry.swift — and
+                 target that model, so the hatched unprintable-margin overlay shows)
+       modal   = supply           (open the real "Choose a label supply" picker)
+       mode    = custom, doc = asset_tags  (boot the CUSTOM-designer front-end with
+                 a VL_DEMO.customDocs demo document + its bound sample data)  -->
 <html lang="en" data-theme="light">
 <head>
 <meta charset="utf-8">
@@ -24,10 +31,18 @@
 <script>
 (function(){
   var P    = new URLSearchParams(location.search);
-  var view = P.get('view') || 'full';        // full | canvas
+  var view = P.get('view') || 'full';        // full | canvas | db
   var key  = P.get('tpl')  || '1_5x4';
   var anim = P.get('anim') === '1';          // slowly cycle records so the canvas label updates
+  var printer = P.get('printer') || '';      // target model for the printable-area overlay
+  var modal   = P.get('modal')   || '';      // 'supply' opens the real supply picker
+  var custom  = P.get('mode') === 'custom';  // boot the Custom-designer front-end
+  var doc  = custom && window.VL_DEMO && VL_DEMO.customDocs[P.get('doc') || 'asset_tags'] || null;
   var tpl  = (window.VL_DEMO && VL_DEMO.templates[key]) || null;
+  if (tpl && printer) {                      // target the model so the margins overlay shows
+    tpl = JSON.parse(JSON.stringify(tpl));
+    tpl.targetPrinterModel = printer;
+  }
 
   var APPW = 1060, APPH = 940;
   var f = document.getElementById('f'), clip = document.getElementById('clip');
@@ -36,7 +51,14 @@
 
   f.addEventListener('load', function(){
     var w = f.contentWindow;
-    try { if (tpl) w.initOpenTemplate(tpl); } catch(e){}
+    // The overlay geometry Swift normally injects; needed for the "printer" target
+    // and for the custom print header. Harmless otherwise.
+    try { if (window.VL_DEMO && VL_DEMO.printerGeometry) w.__VL_PRINTER_GEOMETRY__ = VL_DEMO.printerGeometry; } catch(e){}
+    try {
+      if (custom && doc) { w._designerMode = 'custom'; w.initCustomDocument(doc); }
+      else if (tpl) w.initOpenTemplate(tpl);
+    } catch(e){}
+    try { if (modal === 'supply') w.openSupplyPicker(); } catch(e){}
     try { w.setTheme('light'); } catch(e){}
     try { if (w.centerCanvasWhenReady) w.centerCanvasWhenReady(0); else w.centerCanvas && w.centerCanvas(); } catch(e){}
     requestAnimationFrame(function(){ requestAnimationFrame(frame); });
@@ -69,6 +91,20 @@
       var s = Math.min(cw / r.width, ch / r.height);
       var ox = (cw - r.width * s) / 2;
       f.style.transform = 'translate(' + ox + 'px,0) scale(' + s + ') translate(' + (-r.left) + 'px,' + (-r.top) + 'px)';
+      return;
+    }
+    if (view === 'db') {
+      // Crop to the custom Database pane and size the outer frame to its exact
+      // aspect (same approach as print.html's view=table).
+      var t2 = d.getElementById('db-panel');
+      var r2 = t2 && t2.getBoundingClientRect();
+      if (!r2 || r2.width < 4 || r2.height < 4) { if (tries++ < 25) return void setTimeout(frame,120); fitFull(); return; }
+      var cw2 = clip.clientWidth;
+      var s2  = cw2 / r2.width;
+      var fh  = Math.round(r2.height * s2);
+      clip.style.height = fh + 'px';
+      if (window.frameElement) window.frameElement.style.height = fh + 'px';
+      f.style.transform = 'scale(' + s2 + ') translate(' + (-r2.left) + 'px,' + (-r2.top) + 'px)';
       return;
     }
     fitFull();
