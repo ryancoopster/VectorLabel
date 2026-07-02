@@ -12,6 +12,13 @@ number (git commit count) + short SHA, shown in the menu-bar footer.
 
 ## [Unreleased]
 
+### Fixed
+- **All four apps:** the blank "… Settings" window (an empty settings scene macOS 26
+  presents when an app launches or activates) is now closed the instant it appears —
+  on launch, after the installer relaunches the apps, on Dock/reopen, and around the
+  update prompts. The 1.3.0 fix only covered the Engine's update prompts, which is why
+  the window still opened on launch; Auto Print had the same stray window.
+
 ## [1.3.0] — 2026-07-02
 
 ### Changed

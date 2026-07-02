@@ -117,6 +117,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         if Bundle.main.bundleIdentifier == nil || Bundle.main.bundleIdentifier!.isEmpty {
             UserDefaults.standard.set("com.sai.vectorlabel.engine", forKey: "CFBundleIdentifier")
         }
+        // macOS (26+) presents the lone SwiftUI Settings scene as an empty window at
+        // launch/activation — close it on sight, for the whole process lifetime.
+        StraySettingsWindowGuard.install()
         // Refuse to start a second Engine on the same IPC root (resolved from the
         // bundle id above): it would double-own the USB device and race the status file.
         guard acquireSingleInstanceLock() else {

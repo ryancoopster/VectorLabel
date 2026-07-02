@@ -297,32 +297,14 @@ final class UpdateChecker: NSObject {
     }
 
     /// Activate the (.accessory) Engine so an app-modal alert surfaces in front —
-    /// and clean up after SwiftUI: activating an app whose only scene is
-    /// `Settings { EmptyView() }` can make SwiftUI present that scene as an empty
-    /// "VectorLabel Engine Settings" window. The sweeps run immediately, on the
-    /// next main-queue drain, and again at +1s — the main queue keeps draining
-    /// during `runModal` (the modal panel mode is a run-loop common mode), so the
-    /// stray window is caught whenever SwiftUI presents it within ~1s of activation
-    /// (empirically it appears during activation itself).
+    /// and clean up after SwiftUI: activation can make macOS present the app's
+    /// lone `Settings { EmptyView() }` scene as an empty "VectorLabel Engine
+    /// Settings" window. StraySettingsWindowGuard (installed at launch) already
+    /// closes it whenever it becomes key, but sweep around the modal too so the
+    /// window can't even linger unfocused behind the alert.
     private func surfaceForModal() {
         NSApp.activate(ignoringOtherApps: true)
-        Self.closeStraySettingsWindows()
-        DispatchQueue.main.async { Self.closeStraySettingsWindows() }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { Self.closeStraySettingsWindows() }
-    }
-
-    /// Close the empty SwiftUI Settings-scene window if it appeared. Matches ONLY
-    /// the SwiftUI-generated settings window (identifier prefix or exact title) —
-    /// never the Engine's real Preferences panel (an NSPanel titled
-    /// "VectorLabel Preferences") nor the "Software Update" download panel.
-    static func closeStraySettingsWindows() {
-        for window in NSApp.windows {
-            let ident = window.identifier?.rawValue ?? ""
-            if ident.hasPrefix("com_apple_SwiftUI_Settings") ||
-               window.title == "VectorLabel Engine Settings" {
-                window.close()
-            }
-        }
+        StraySettingsWindowGuard.sweepSoon()
     }
 
     private func presentUpdatePrompt(_ update: AvailableUpdate) {

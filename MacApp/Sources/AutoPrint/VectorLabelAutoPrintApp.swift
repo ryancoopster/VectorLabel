@@ -42,6 +42,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         if Bundle.main.bundleIdentifier == nil || Bundle.main.bundleIdentifier!.isEmpty {
             UserDefaults.standard.set("com.sai.vectorlabel.autoprint", forKey: "CFBundleIdentifier")
         }
+        // macOS (26+) presents the lone SwiftUI Settings scene as an empty window at
+        // launch/activation — close it on sight, for the whole process lifetime.
+        StraySettingsWindowGuard.install()
         AppSettings.shared.applyNativeAppearance()
         AppSettings.shared.requestAppearanceSync()   // sync light/dark with the Engine on launch
         if let appIcon = CoreResources.appIcon() {
