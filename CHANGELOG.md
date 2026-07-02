@@ -12,6 +12,8 @@ number (git commit count) + short SHA, shown in the menu-bar footer.
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-07-02
+
 ### Changed
 - **Updates:** the first-launch "How should VectorLabel check for updates?" prompt now
   defaults to **Every 7 days** (was: on every launch). Every option can still be chosen,

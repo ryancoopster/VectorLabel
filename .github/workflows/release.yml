@@ -34,6 +34,22 @@ jobs:
         with:
           fetch-depth: 0   # full history → correct build-number stamp
 
+      # The installer filename, CFBundleShortVersionString and BuildInfo.version all come
+      # from the VERSION file at the tagged commit — the tag name is only cosmetic (zip/DMG
+      # names, release title). If the two disagree, the release ships a mislabeled installer
+      # whose apps self-report the old version, so the updater re-offers the "update"
+      # forever. Fail in seconds instead.
+      - name: Verify tag matches VERSION (fail fast)
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          set -euo pipefail
+          v="v$(tr -d '[:space:]' < VERSION)"
+          if [ "$v" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match the VERSION file ($v). Bump VERSION in the tagged commit before releasing."
+            exit 1
+          fi
+          echo "✓ Tag $GITHUB_REF_NAME matches VERSION."
+
       - name: Install libusb
         run: brew install libusb
 
