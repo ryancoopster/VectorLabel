@@ -389,12 +389,12 @@ VectorworksPlugin/export_all.py</code></pre>
 <p>Both designers and the Print window are <strong>tabbed</strong>, so you can keep several labels open at once. A bar of tabs runs across the top of the window; each tab is one open document (or, in the Print window, one exported job) and keeps its own full state — canvas, selection, zoom, undo history and bound data.</p>
 <ul>
   <li><strong>New tab / new document</strong> — click the <strong>+</strong> at the end of the tab bar (in the two designers). In the Custom Designer this gives you a fresh blank design; in the Template Designer it opens the template picker.</li>
-  <li><strong>Opening a file opens a new tab.</strong> Using "Open…", double-clicking a <code>.vltmp</code>/<code>.vlcus</code> in the Finder, or importing a Brady <code>.BWT</code> / Brother <code>.lbx</code> all open in their <em>own</em> new tab — whatever you were working on is left untouched. You can select several files at once and each opens in its own tab.</li>
+  <li><strong>Opening a file opens a new tab.</strong> Using "Open…", double-clicking a <code>.vltmp</code>/<code>.vlcus</code> in the Finder, or importing a Brady <code>.BWT</code> / Brother <code>.lbx</code> all open in their <em>own</em> new tab — whatever you were working on is left untouched. You can select several files at once and each opens in its own tab. If a file is <em>already open</em>, you don't get a second copy — the window simply switches to its existing tab (a same-named copy elsewhere on disk is a different file and still opens separately). New "Untitled…" documents are never treated as duplicates.</li>
   <li><strong>The tab shows the document name</strong> (the file name, or "Untitled…" until you save). A dot (•) in front of the name means that tab has unsaved changes.</li>
   <li><strong>Too many tabs to fit?</strong> The strip scrolls, and <strong>‹ ›</strong> arrows appear at the ends so you can page through them.</li>
   <li><strong>Closing.</strong> Click a tab's <strong>✕</strong> to close just that document — you'll be asked to save if it has unsaved changes. Closing the whole window (its title-bar ✕) closes every tab; a designer prompts for each unsaved document, and the Print window asks once before clearing all tabs.</li>
 </ul>
-<p>In the Print window, each export from Vectorworks arrives as a new tab and the window jumps to the most recent one; printing or cancelling closes just that tab when others are open, or the whole window when it's the last one.</p>
+<p>In the Print window, each export from Vectorworks arrives as a new tab and the window jumps to the most recent one; printing or cancelling closes just that tab when others are open, or the whole window when it's the last one. A re-export or Reprint of a data file that's already showing doesn't add a duplicate — it lands on the open tab and refreshes it.</p>
 </section>
 
 <section class="doc-sec" id="choosing-supply">
@@ -1204,7 +1204,7 @@ Stretch to fill box: Code 128, GS1-128, Code 39, Code 93, EAN-13/8, UPC-A/E, Int
       <a href="faq.html">FAQ</a>
       <a href="https://github.com/ryancoopster/VectorLabel">GitHub</a>
     </div>
-    <div class="copy">VectorLabel · Open alpha · Docs synced to commit 99999f9 · 2026-07-02 · Brady and Brother are trademarks of their respective owners.</div>
+    <div class="copy">VectorLabel · Open alpha · Docs synced to commit 9cb04a4 · 2026-07-02 · Brady and Brother are trademarks of their respective owners.</div>
   </div>
 </footer>
 <script>
