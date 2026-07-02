@@ -1832,17 +1832,14 @@ function buildPreviewPanel(){
   const nextIdx=vpos>=0&&vpos<total-1?vis[vpos+1]:P.previewIdx;
   if(!t||!rec)return`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:12px">No template selected</div>`;
   const spec=blBy(t.specN)||blDefault();
-  // Printable-area overlay margins (null when no geometry/live data); the fit math
-  // below must reserve room for the strips so they aren't clipped.
-  const pvM=printableMarginsForPreview(spec);
-  const pvMl=pvM?Math.max(0,pvM.ml):0, pvMr=pvM?Math.max(0,pvM.mr):0;
-  const pvMt=pvM?Math.max(0,pvM.mt):0, pvMb=pvM?Math.max(0,pvM.mb):0;
+  // The print preview shows ONLY the printable area (the designers show the
+  // physical label + hatched margins; here dead space would crowd out content).
   const lc=loadedCassette();
-  const pvLive=!!(pvM&&lc&&Number(lc.printableWidthMils)>0);
+  const pvLive=!!(lc&&Number(lc.printableWidthMils)>0&&printableMarginsForPreview(spec));
   // The label is rendered at scale 1 and fitted to the sidebar width by
   // fitPreviewLabel() (after render and while dragging the resize splitter), so
   // it grows/shrinks as the sidebar is resized.
-  const lw=(spec.pw+pvMl+pvMr)*SC, lh=(spec.ph+pvMt+pvMb)*SC;
+  const lw=spec.pw*SC, lh=spec.ph*SC;
   // Continuous supplies use the template's chosen printed length; die-cut use the
   // catalog's fixed printable height (mirrors renderLabel's phIn).
   const printablePh=(spec.ty==="continuous"&&t.labelLengthInches>0)?t.labelLengthInches:spec.ph;
@@ -1854,7 +1851,7 @@ function buildPreviewPanel(){
       <button onclick="openExpandedPreview()" title="Expanded preview — show all labels" class="btn" style="padding:3px 9px;font-size:14px;line-height:1">⊞</button>
     </div>
     <div id="preview-label-wrap" data-lw="${lw}" data-lh="${lh}" style="width:100%;display:flex;justify-content:center;overflow:hidden">
-      <div id="preview-label-inner" style="transform-origin:top center">${renderLabel(t,rec,1,true)}</div>
+      <div id="preview-label-inner" style="transform-origin:top center">${renderLabel(t,rec,1)}</div>
     </div>
     <div style="text-align:center">
       <div style="color:var(--text);font-size:12px;font-weight:600">${esc(rec.Number||"—")} ${esc(rec.Cable||"")}</div>
@@ -2539,7 +2536,7 @@ function buildExpandedPreviewModal(){
     const isSel=P.selected.has(i);
     const ps=pairChkState(i);
     return `<div onclick="P.previewIdx=${i};R()" title="Click to preview this label" style="display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;padding:8px;border-radius:6px;border:1px solid ${isPrev?'var(--accent)':'transparent'};background:${isPrev?'rgba(108,142,245,0.12)':'transparent'}">
-      ${renderLabel(t,rec,scale,true)}
+      ${renderLabel(t,rec,scale)}
       <div style="font-size:11px;color:var(--text2);text-align:center">Label ${vpos+1}</div>
       <div style="display:flex;align-items:center;gap:8px" onclick="event.stopPropagation()">
         <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:10px;color:var(--text2)" title="Enable or disable printing this label">

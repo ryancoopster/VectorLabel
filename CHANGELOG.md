@@ -20,6 +20,11 @@ number (git commit count) + short SHA, shown in the menu-bar footer.
   instead of boilerplate.
 
 ### Fixed
+- **Print preview shows only the printable area again.** The print window's label
+  preview (and expanded grid) no longer draw the physical label with hatched margins —
+  on wrap supplies the dead space crowded out the label content. The hatched-margins
+  view stays in the designers, where the physical context matters; the preview's
+  "Printable area" row still notes when dimensions come from the loaded cassette.
 - **Correct M611 USB id in the printer registry.** The default printer-model list
   recorded the Brady M611's USB product id as 0x010C (an early unverified guess);
   the real, hardware-confirmed id is 0x0013. Fresh installs now seed the correct id,
